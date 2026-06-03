@@ -240,9 +240,10 @@ export default function App(){
   const addMetricFilter=()=>{if(metricFilters.length<10)setMetricFilters(f=>[...f,{key:'',label:'',min:0,max:100}]);};
 
   const filtered=useMemo(()=>{
-    const q=search.trim().toLowerCase();
+    const _norm=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+    const q=_norm(search.trim());
     return all.filter(p=>{
-      if(q&&!p.name.toLowerCase().includes(q)&&!p.team.toLowerCase().includes(q)) return false;
+      if(q&&!_norm(p.name).includes(q)&&!_norm(p.team).includes(q)) return false;
       // RecentOnly: skip if no recent data, BUT allow all if a specific season is selected
       if(recentOnly&&!p.hasRecentData&&seasonFilter==='all'&&!played2526) return false;
       if(minMins>0&&(p.minutesLatest||0)<minMins) return false;
@@ -516,7 +517,7 @@ export default function App(){
               </label>
             </div>
             <div style={{...T.cg,maxHeight:200,overflowY:'auto'}}>
-              {ALL_LEAGUES.filter(lg=>showHidden||!HIDDEN_LEAGUES.has(lg)).filter(lg=>showYouth||!YOUTH_LEAGUES.has(lg)).map(lg=>(
+              {[...ALL_LEAGUES].filter(lg=>showHidden||!HIDDEN_LEAGUES.has(lg)).filter(lg=>showYouth||!YOUTH_LEAGUES.has(lg)).sort((a,b)=>a.localeCompare(b)).map(lg=>(
                 <label key={lg} style={T.cr} onClick={()=>{setLeagues(p=>{const n=new Set(p);n.has(lg)?n.delete(lg):n.add(lg);return n;});setActivePreset('');setPage(0);}}>
                   <div style={T.cb(leagues.has(lg))}>{leagues.has(lg)&&<span style={{color:'#fff',fontSize:8,lineHeight:1}}>✓</span>}</div>
                   <span style={T.cl(leagues.has(lg))}>{lg}</span>
