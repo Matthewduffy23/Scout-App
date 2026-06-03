@@ -422,54 +422,6 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
               </div>
             </div>
 
-            {/* GBE / Visa Points */}
-            {(()=>{
-              const RECENT = new Set(['2025-26','2026','2025']);
-              const band = GBE_LEAGUE_BANDS[player.league]||6;
-              // Find most recent qualifying season
-              const recentSh = (player.allSeasonsSummary||[]).find(s=>RECENT.has(s.s)&&!INTERNATIONAL_LEAGUES.has(s.l)&&!CONTINENTAL_LEAGUES.has(s.l));
-              if(!recentSh) return null;
-              const mins = recentSh.mins||0;
-              // Approximate max minutes: 38 games × 90 = 3420 for top leagues, 36×90=3240 for others
-              const maxMins = band<=2 ? 3420 : band<=4 ? 3240 : 3060;
-              const minsPct = Math.min(100, Math.round(mins/maxMins*100));
-              // Table 2 domestic minutes points
-              const idx = Math.max(0,Math.min(5,band-1));
-              const rows = [[12,10,8,6,4,2],[11,9,7,5,3,1],[10,8,6,4,2,0],[9,7,5,3,1,0],[8,6,4,2,0,0],[7,5,3,1,0,0],[6,4,2,0,0,0]];
-              const pRow = minsPct>=90?0:minsPct>=80?1:minsPct>=70?2:minsPct>=60?3:minsPct>=50?4:minsPct>=40?5:minsPct>=30?6:-1;
-              const domPts = pRow>=0 ? rows[pRow][idx] : 0;
-              const total = domPts; // just domestic for now
-              const status = total>=15?'Pass':total>=10?'Exceptions Panel':'Fail / ESC';
-              const statusColor = total>=15?'#22c55e':total>=10?'#f59e0b':'#ef4444';
-              return(
-                <div style={{background:'#0d1624',border:'1px solid #1e2d45',borderRadius:9,padding:'14px'}}>
-                  <div style={{...SEC,marginBottom:8}}>GBE / Visa Points</div>
-                  <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8,marginBottom:8}}>
-                    <div style={{background:'#07090f',borderRadius:7,padding:'10px',textAlign:'center'}}>
-                      <div style={{fontSize:8,fontWeight:700,color:'#475569',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:4}}>League Band</div>
-                      <div style={{fontSize:20,fontWeight:800,color:'#94a3b8'}}>Band {band}</div>
-                      <div style={{fontSize:9,color:'#475569',marginTop:2}}>{recentSh.s}</div>
-                    </div>
-                    <div style={{background:'#07090f',borderRadius:7,padding:'10px',textAlign:'center'}}>
-                      <div style={{fontSize:8,fontWeight:700,color:'#475569',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:4}}>Minutes</div>
-                      <div style={{fontSize:20,fontWeight:800,color:'#94a3b8'}}>{mins.toLocaleString()}</div>
-                      <div style={{fontSize:9,color:'#475569',marginTop:2}}>{minsPct}% of max</div>
-                    </div>
-                    <div style={{background:'#07090f',borderRadius:7,padding:'10px',textAlign:'center'}}>
-                      <div style={{fontSize:8,fontWeight:700,color:'#475569',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:4}}>Dom. Points</div>
-                      <div style={{fontSize:20,fontWeight:800,color:'#60a5fa'}}>{domPts}</div>
-                      <div style={{fontSize:9,color:'#475569',marginTop:2}}>Table 2</div>
-                    </div>
-                    <div style={{background:'#07090f',borderRadius:7,padding:'10px',textAlign:'center'}}>
-                      <div style={{fontSize:8,fontWeight:700,color:'#475569',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:4}}>Est. Total</div>
-                      <div style={{fontSize:20,fontWeight:800,color:statusColor}}>{total}</div>
-                      <div style={{fontSize:9,color:statusColor,marginTop:2,fontWeight:600}}>{status}</div>
-                    </div>
-                  </div>
-                  <div style={{fontSize:9,color:'#475569'}}>Domestic minutes only · Continental/International points added manually · 0–9 = Fail/ESC · 10–14 = Exceptions Panel · 15+ = Pass</div>
-                </div>
-              );
-            })()}
             {player.xValue&&(
               <div style={{background:'#0d1624',border:'1px solid #1e2d45',borderRadius:9,padding:'14px'}}>
                 <div style={{...SEC,marginBottom:8}}>xValue Analysis</div>
@@ -633,6 +585,78 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
                 </div>
               </div>
             )}
+
+            {/* GBE / Visa Points — exact Table 2 logic */}
+            {(()=>{
+              const RECENT = new Set(['2025-26','2026','2025']);
+              // Find most recent qualifying domestic season
+              const recentSh = (player.allSeasonsSummary||[])
+                .filter(s=>RECENT.has(s.s)&&!INTERNATIONAL_LEAGUES.has(s.l)&&!CONTINENTAL_LEAGUES.has(s.l))
+                .sort((a,b)=>{
+                  const o=['2025-26','2026','2025'];
+                  return (o.indexOf(a.s)||99)-(o.indexOf(b.s)||99);
+                })[0];
+              if(!recentSh) return null;
+              const band = GBE_LEAGUE_BANDS[recentSh.l]||6;
+              const mins = recentSh.mins||0;
+              // Max minutes approximation by league games: Band 1-2 = 38 games, Band 3-4 = 36 games, Band 5-6 = 34 games
+              const maxMins = band<=2?3420:band<=4?3240:3060;
+              const rawPct = mins/maxMins*100;
+              const minsPct = Math.min(100, Math.round(rawPct+0.5));
+
+              // Exact Table 2 — idx = band-1 (0-indexed), rows indexed by pct bracket
+              const idx = Math.max(0, Math.min(5, band-1));
+              const ROW_90=[12,10,8,6,4,2];
+              const ROW_80=[11,9,7,5,3,1];
+              const ROW_70=[10,8,6,4,2,0];
+              const ROW_60=[9,7,5,3,1,0];
+              const ROW_50=[8,6,4,2,0,0];
+              const ROW_40=[7,5,3,1,0,0];
+              const ROW_30=[6,4,2,0,0,0];
+              let domPts=0;
+              if(minsPct>=90) domPts=ROW_90[idx];
+              else if(minsPct>=80) domPts=ROW_80[idx];
+              else if(minsPct>=70) domPts=ROW_70[idx];
+              else if(minsPct>=60) domPts=ROW_60[idx];
+              else if(minsPct>=50) domPts=ROW_50[idx];
+              else if(minsPct>=40) domPts=ROW_40[idx];
+              else if(minsPct>=30) domPts=ROW_30[idx];
+
+              const total = domPts;
+              const status = total>=15?'Pass':total>=10?'Exceptions Panel':'Fail / ESC';
+              const statusColor = total>=15?'#22c55e':total>=10?'#f59e0b':'#ef4444';
+
+              return(
+                <div style={{background:'#0d1624',border:'1px solid #1e2d45',borderRadius:9,padding:'14px'}}>
+                  <div style={{...SEC,marginBottom:10}}>GBE / Visa Points</div>
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8,marginBottom:10}}>
+                    <div style={{background:'#07090f',borderRadius:7,padding:'10px',textAlign:'center'}}>
+                      <div style={{fontSize:8,fontWeight:700,color:'#475569',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:4}}>League Band</div>
+                      <div style={{fontSize:22,fontWeight:800,color:'#94a3b8'}}>Band {band}</div>
+                      <div style={{fontSize:9,color:'#475569',marginTop:2}}>{recentSh.l}</div>
+                    </div>
+                    <div style={{background:'#07090f',borderRadius:7,padding:'10px',textAlign:'center'}}>
+                      <div style={{fontSize:8,fontWeight:700,color:'#475569',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:4}}>Minutes</div>
+                      <div style={{fontSize:22,fontWeight:800,color:'#94a3b8'}}>{mins.toLocaleString()}</div>
+                      <div style={{fontSize:9,color:'#475569',marginTop:2}}>{minsPct}% · {recentSh.s}</div>
+                    </div>
+                    <div style={{background:'#07090f',borderRadius:7,padding:'10px',textAlign:'center'}}>
+                      <div style={{fontSize:8,fontWeight:700,color:'#475569',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:4}}>Dom. Pts (T2)</div>
+                      <div style={{fontSize:22,fontWeight:800,color:'#60a5fa'}}>{domPts}</div>
+                      <div style={{fontSize:9,color:'#475569',marginTop:2}}>of 12 max</div>
+                    </div>
+                    <div style={{background:'#07090f',borderRadius:7,padding:'10px',textAlign:'center'}}>
+                      <div style={{fontSize:8,fontWeight:700,color:'#475569',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:4}}>Est. Total</div>
+                      <div style={{fontSize:22,fontWeight:800,color:statusColor}}>{total}</div>
+                      <div style={{fontSize:9,color:statusColor,marginTop:2,fontWeight:700}}>{status}</div>
+                    </div>
+                  </div>
+                  <div style={{fontSize:9,color:'#475569',lineHeight:1.5}}>
+                    Domestic minutes only (Table 2) · Minutes % vs estimated season max · Continental/International/League position points not included · 0–9 = Fail/ESC · 10–14 = Exceptions Panel · 15+ = Pass
+                  </div>
+                </div>
+              );
+            })()}
           </>)}
 
           {tab==='forecast'&&<ForecastTab player={player}/>}
