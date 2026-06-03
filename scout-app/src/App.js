@@ -175,6 +175,8 @@ export default function App(){
   const [showYouth,setShowYouth]=useState(false);
   const [activeBands,setActiveBands]=useState(new Set());
   const [activeRegions,setActiveRegions]=useState(new Set());
+  const [lsMin,setLsMin]=useState(0);
+  const [lsMax,setLsMax]=useState(101);
   const [ageMin,setAgeMin]=useState(16);
   const [ageMax,setAgeMax]=useState(38);
   const [foot,setFoot]=useState('Any');
@@ -253,6 +255,8 @@ export default function App(){
       if(seasonFilter!=='all'&&!p.sh?.find(x=>x.s===seasonFilter)) return false;
       if(pos!=='All'&&ROLE_KEY_LABELS[p.roleKey]!==pos) return false;
       if(!leagues.has(p.league)) return false;
+      const pls=LEAGUE_STRENGTHS[p.league]||0;
+      if(pls<lsMin||pls>lsMax) return false;
       if(p.age<ageMin||p.age>ageMax) return false;
       if(foot!=='Any'&&p.foot!==foot) return false;
       const ds=getDisplayScore(p);
@@ -292,7 +296,7 @@ export default function App(){
       }
       return true;
     });
-  },[all,search,pos,leagues,ageMin,ageMax,foot,minScore,minSeas,showMvFilter,mvMax,showContractFilter,contractBefore,roleFilter,roleScoreMin,seasonFilter,metricFilters,xValueFilter,onlyElite,getDisplayScore,recentOnly,showXValueFilter,xValueMin,xValueMax,attrFilters,minMins,currentLeagueOnly,played2526,potentialMin,showHidden,showYouth]);
+  },[all,search,pos,leagues,ageMin,ageMax,foot,minScore,minSeas,showMvFilter,mvMax,showContractFilter,contractBefore,roleFilter,roleScoreMin,seasonFilter,metricFilters,xValueFilter,onlyElite,getDisplayScore,recentOnly,showXValueFilter,xValueMin,xValueMax,attrFilters,minMins,currentLeagueOnly,played2526,potentialMin,showHidden,showYouth,lsMin,lsMax]);
 
   const sorted=useMemo(()=>{
     const a=[...filtered];
@@ -324,7 +328,7 @@ export default function App(){
     avgAge:filtered.length?filtered.reduce((s,p)=>s+p.age,0)/filtered.length:0,
   }),[filtered,getDisplayScore]);
 
-  const reset=()=>{setSearch('');setPos('All');setRoleFilter('');setRoleScoreMin(50);setActivePreset('');setLeagues(new Set(DEFAULT_LEAGUES));setShowHidden(false);setShowYouth(false);setActiveBands(new Set());setActiveRegions(new Set());setAgeMin(16);setAgeMax(38);setFoot('Any');setMinScore(40);setMinSeas(1);setShowMvFilter(false);setMvMax(50);setShowContractFilter(false);setContractBefore(2028);setSeasonFilter('all');setScoreMode('complete');setMetricFilters([]);setXValueFilter('');setRawMode(false);setOnlyElite(false);setRecentOnly(true);setShowXValueFilter(false);setXValueMin(0);setXValueMax(50);setAttrFilters(new Set());setMinMins(500);setCurrentLeagueOnly(false);setPotentialMin(40);setPlayed2526(false);setPage(0);};
+  const reset=()=>{setSearch('');setPos('All');setRoleFilter('');setRoleScoreMin(50);setActivePreset('');setLeagues(new Set(DEFAULT_LEAGUES));setShowHidden(false);setShowYouth(false);setActiveBands(new Set());setActiveRegions(new Set());setLsMin(0);setLsMax(101);setAgeMin(16);setAgeMax(38);setFoot('Any');setMinScore(40);setMinSeas(1);setShowMvFilter(false);setMvMax(50);setShowContractFilter(false);setContractBefore(2028);setSeasonFilter('all');setScoreMode('complete');setMetricFilters([]);setXValueFilter('');setRawMode(false);setOnlyElite(false);setRecentOnly(true);setShowXValueFilter(false);setXValueMin(0);setXValueMax(50);setAttrFilters(new Set());setMinMins(500);setCurrentLeagueOnly(false);setPotentialMin(40);setPlayed2526(false);setPage(0);};
 
   if(loading) return <div style={{...T.app,alignItems:'center',justifyContent:'center'}}><style>{'@keyframes spin{to{transform:rotate(360deg)}}'}</style><div style={{width:24,height:24,border:'2px solid #1e2d45',borderTop:'2px solid #3b7de8',borderRadius:'50%',animation:'spin 0.8s linear infinite'}}/><div style={{color:'#94a3b8',fontSize:11,marginTop:8}}>Loading…</div></div>;
 
@@ -496,25 +500,48 @@ export default function App(){
             {/* Hidden / Youth toggles */}
             <div style={{display:'flex',gap:8,marginBottom:6}}>
               <label style={{display:'flex',alignItems:'center',gap:5,cursor:'pointer'}} onClick={()=>{
-                setShowHidden(p=>{
-                  const next=!p;
-                  setLeagues(prev=>{const n=new Set(prev);if(next){[...HIDDEN_LEAGUES].forEach(l=>n.add(l));}else{[...HIDDEN_LEAGUES].forEach(l=>n.delete(l));}return n;});
-                  return next;
-                });setPage(0);
+                const next=!showHidden;
+                setShowHidden(next);
+                setLeagues(prev=>{
+                  const n=new Set(prev);
+                  if(next){[...HIDDEN_LEAGUES].forEach(l=>n.add(l));}
+                  else{[...HIDDEN_LEAGUES].forEach(l=>n.delete(l));}
+                  return n;
+                });
+                setPage(0);
               }}>
                 <div style={T.cb(showHidden)}>{showHidden&&<span style={{color:'#fff',fontSize:8}}>✓</span>}</div>
                 <span style={{fontSize:9.5,color:showHidden?'#e2e8f4':'#94a3b8'}}>Show Hidden</span>
               </label>
               <label style={{display:'flex',alignItems:'center',gap:5,cursor:'pointer'}} onClick={()=>{
-                setShowYouth(p=>{
-                  const next=!p;
-                  setLeagues(prev=>{const n=new Set(prev);if(next){[...YOUTH_LEAGUES].forEach(l=>n.add(l));}else{[...YOUTH_LEAGUES].forEach(l=>n.delete(l));}return n;});
-                  return next;
-                });setPage(0);
+                const next=!showYouth;
+                setShowYouth(next);
+                setLeagues(prev=>{
+                  const n=new Set(prev);
+                  if(next){[...YOUTH_LEAGUES].forEach(l=>n.add(l));}
+                  else{[...YOUTH_LEAGUES].forEach(l=>n.delete(l));}
+                  return n;
+                });
+                setPage(0);
               }}>
                 <div style={T.cb(showYouth)}>{showYouth&&<span style={{color:'#fff',fontSize:8}}>✓</span>}</div>
                 <span style={{fontSize:9.5,color:showYouth?'#e2e8f4':'#94a3b8'}}>Show Youth</span>
               </label>
+            </div>
+            {/* League Strength Range */}
+            <div style={{marginBottom:8}}>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
+                <span style={{fontSize:10,color:'#64748b'}}>League Strength: <strong style={{color:'#60a5fa'}}>{lsMin}–{lsMax}</strong></span>
+                {(lsMin>0||lsMax<101)&&<button onClick={()=>{setLsMin(0);setLsMax(101);setPage(0);}} style={{fontSize:8,padding:'1px 5px',borderRadius:3,border:'1px solid #1e2d45',background:'transparent',color:'#64748b',cursor:'pointer'}}>Reset</button>}
+              </div>
+              <div style={{display:'flex',alignItems:'center',gap:6}}>
+                <input type="number" min={0} max={lsMax-1} value={lsMin} onChange={e=>{setLsMin(Number(e.target.value));setPage(0);}}
+                  style={{width:40,background:'#07090f',border:'1px solid #1e2d45',borderRadius:4,color:'#60a5fa',padding:'3px 5px',fontSize:11,fontWeight:700,textAlign:'center',outline:'none'}}/>
+                <input type="range" min={0} max={101} step={1} value={lsMin} onChange={e=>{setLsMin(Number(e.target.value));setPage(0);}} style={{flex:1,accentColor:'#3b7de8'}}/>
+                <input type="range" min={0} max={101} step={1} value={lsMax} onChange={e=>{setLsMax(Number(e.target.value));setPage(0);}} style={{flex:1,accentColor:'#3b7de8'}}/>
+                <input type="number" min={lsMin+1} max={101} value={lsMax} onChange={e=>{setLsMax(Number(e.target.value));setPage(0);}}
+                  style={{width:40,background:'#07090f',border:'1px solid #1e2d45',borderRadius:4,color:'#60a5fa',padding:'3px 5px',fontSize:11,fontWeight:700,textAlign:'center',outline:'none'}}/>
+              </div>
             </div>
             <div style={{...T.cg,maxHeight:200,overflowY:'auto'}}>
               {[...ALL_LEAGUES].filter(lg=>showHidden||!HIDDEN_LEAGUES.has(lg)).filter(lg=>showYouth||!YOUTH_LEAGUES.has(lg)).sort((a,b)=>a.localeCompare(b)).map(lg=>(
