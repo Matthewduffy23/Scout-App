@@ -180,17 +180,17 @@ export default function App(){
 
   // Derive the active leagues set from all filter states
   const leagues=useMemo(()=>{
+    if(showYouth) return new Set(YOUTH_LEAGUES);
     let base;
-    if(activePresetLeagues) base=new Set(activePresetLeagues);
+    if(activePresetLeagues!==null) base=new Set(activePresetLeagues);
     else if(activeBands.size>0||activeRegions.size>0){
       base=new Set();
       if(activeBands.size>0) ALL_LEAGUES.filter(l=>{const b=leagueToBand(l);return activeBands.has(b)||(activeBands.has(6)&&b===6);}).forEach(l=>base.add(l));
       if(activeRegions.size>0) ALL_LEAGUES.filter(l=>activeRegions.has(leagueToRegion(l))).forEach(l=>base.add(l));
-    } else base=new Set(DEFAULT_LEAGUES);
+    } else {
+      base=new Set(DEFAULT_LEAGUES);
+    }
     if(showHidden)[...HIDDEN_LEAGUES].forEach(l=>base.add(l));
-    else [...HIDDEN_LEAGUES].forEach(l=>base.delete(l));
-    if(showYouth)[...YOUTH_LEAGUES].forEach(l=>base.add(l));
-    else [...YOUTH_LEAGUES].forEach(l=>base.delete(l));
     return base;
   },[activePresetLeagues,activeBands,activeRegions,showHidden,showYouth]);
   const [ageMin,setAgeMin]=useState(16);
