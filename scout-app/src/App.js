@@ -3,7 +3,6 @@ import PlayerCard from './PlayerCard';
 import ClubTool from './ClubTool';
 import { Photo as PhotoUtil, Crest as CrestUtil, photoUrl as photoUrlUtil } from './utils';
 import { scoreBandColor, formatMV, formatFoot, ROLE_KEY_LABELS, ROLES_BY_KEY, POSITION_ATTRIBUTES, playerHasAttribute, ALL_LEAGUES, DEFAULT_LEAGUES, HIDDEN_LEAGUES, YOUTH_LEAGUES, PRESET_LEAGUES, COUNTRY_TO_REGION, GBE_LEAGUE_BANDS, leagueToRegion, leagueToBand, scoreLabel, scoreToStars, promotionBadge, ALL_SEASONS, LEAGUE_STRENGTHS } from './constants';
-
 const PHOTO_BASE = 'https://raw.githubusercontent.com/Matthewduffy23/scouting-photos/main/photos/';
 const CREST_BASE = 'https://images.fotmob.com/image_resources/logo/teamlogo/';
 const PAGE = 50;
@@ -210,6 +209,7 @@ export default function App(){
   const [showXValueFilter,setShowXValueFilter]=useState(false);
   const [potentialMin,setPotentialMin]=useState(40);
   const [played2526,setPlayed2526]=useState(false);
+  const [escOnly,setEscOnly]=useState(false);
   const [rawMode,setRawMode]=useState(false); // no league weight
   const [onlyElite,setOnlyElite]=useState(false); // only elite in their division
   const [sort,setSort]=useState({col:'careerScore',asc:false});
@@ -277,6 +277,28 @@ export default function App(){
       if(p.seasons<minSeas) return false;
       if(potentialMin>40&&(p.potentialScore||p.careerScore)<potentialMin) return false;
       if(played2526&&!p.sh?.find(x=>x.s==='2025-26'||x.s==='2026')) return false;
+      if(escOnly){
+        const HOME_NATIONS=new Set(['england','scotland','wales','ireland','northern ireland','republic of ireland']);
+        const CONT_L=new Set(['Conference League.','Conference League Qualifiers.','Europa League.','Europa League Qualifiers.','Champions League.','Champions League Qualifiers.','Asia Champions League.','Africa Champions League.','Copa Libertadores.','U20 Copa.','Club World Cup.','UEFA Youth League.']);
+        const INTL_L=new Set(['UEFA WC Qualifiers.','UEFA U21 Euros.','UEFA U19 Euros.','Asia WC Qualifiers.','AFCON.','AFCON U20.','AFCON U17.','AFCON Qualifiers.','S.America Qualifiers.','U20 World Cup.','U17 World Cup.']);
+        const YOUTH_L=new Set(['Sweden 4.','Switzerland 3.','Ukraine 3.','Brazil 4.','Czech 3.','Denmark 4.','Germany 5.','Germany 6.','Italy 5.','Portugal 4.','Serbia 3.','England 7.','England 8.','England 9.','England 10.']);
+        const QUAL_SEASONS=new Set(['2025-26','2026','2025','2024-25','2024']);
+        const allS=p.allSeasonsSummary||[];
+        // 1. Home nation by birth or passport
+        const birth=(p.birthCountry||'').toLowerCase();
+        const passport=(p.passportCountries||'').toLowerCase();
+        const isHomeNation=[...HOME_NATIONS].some(n=>birth.includes(n)||passport.includes(n));
+        if(isHomeNation){/* qualifies */}
+        // 2. Continental or international history
+        else if(allS.some(s=>CONT_L.has(s.l)||INTL_L.has(s.l))){/* qualifies */}
+        // 3. Youth league history
+        else if(allS.some(s=>YOUTH_L.has(s.l))){/* qualifies */}
+        // 4. 5+ games in Band 1-5 league in qualifying seasons
+        else {
+          const qualGames=allS.filter(s=>QUAL_SEASONS.has(s.s)&&(GBE_LEAGUE_BANDS[s.l]||6)<=5).reduce((sum,s)=>sum+(s.m||0),0);
+          if(qualGames<5) return false;
+        }
+      }
       if(showMvFilter&&p.marketValue&&p.marketValue>mvMax*1000000) return false;
       if(showContractFilter&&p.contractYear&&p.contractYear>contractBefore) return false;
       if(roleFilter){
@@ -308,7 +330,7 @@ export default function App(){
       }
       return true;
     });
-  },[all,search,pos,leagues,ageMin,ageMax,foot,minScore,minSeas,showMvFilter,mvMax,showContractFilter,contractBefore,roleFilter,roleScoreMin,seasonFilter,metricFilters,xValueFilter,onlyElite,getDisplayScore,recentOnly,showXValueFilter,xValueMin,xValueMax,attrFilters,minMins,currentLeagueOnly,played2526,potentialMin,lsMin,lsMax]);
+  },[all,search,pos,leagues,ageMin,ageMax,foot,minScore,minSeas,showMvFilter,mvMax,showContractFilter,contractBefore,roleFilter,roleScoreMin,seasonFilter,metricFilters,xValueFilter,onlyElite,getDisplayScore,recentOnly,showXValueFilter,xValueMin,xValueMax,attrFilters,minMins,currentLeagueOnly,played2526,potentialMin,lsMin,lsMax,escOnly]);
 
   const sorted=useMemo(()=>{
     const a=[...filtered];
@@ -340,7 +362,7 @@ export default function App(){
     avgAge:filtered.length?filtered.reduce((s,p)=>s+p.age,0)/filtered.length:0,
   }),[filtered,getDisplayScore]);
 
-  const reset=()=>{setSearch('');setPos('All');setRoleFilter('');setRoleScoreMin(50);setActivePreset('');setActivePresetLeagues(null);setShowHidden(false);setShowYouth(false);setActiveBands(new Set());setActiveRegions(new Set());setLsMin(0);setLsMax(101);setAgeMin(16);setAgeMax(38);setFoot('Any');setMinScore(40);setMinSeas(1);setShowMvFilter(false);setMvMax(50);setShowContractFilter(false);setContractBefore(2028);setSeasonFilter('all');setScoreMode('complete');setMetricFilters([]);setXValueFilter('');setRawMode(false);setOnlyElite(false);setRecentOnly(true);setShowXValueFilter(false);setXValueMin(0);setXValueMax(50);setAttrFilters(new Set());setMinMins(500);setCurrentLeagueOnly(false);setPotentialMin(40);setPlayed2526(false);setPage(0);};
+  const reset=()=>{setSearch('');setPos('All');setRoleFilter('');setRoleScoreMin(50);setActivePreset('');setActivePresetLeagues(null);setShowHidden(false);setShowYouth(false);setActiveBands(new Set());setActiveRegions(new Set());setLsMin(0);setLsMax(101);setAgeMin(16);setAgeMax(38);setFoot('Any');setMinScore(40);setMinSeas(1);setShowMvFilter(false);setMvMax(50);setShowContractFilter(false);setContractBefore(2028);setSeasonFilter('all');setScoreMode('complete');setMetricFilters([]);setXValueFilter('');setRawMode(false);setOnlyElite(false);setRecentOnly(true);setShowXValueFilter(false);setXValueMin(0);setXValueMax(50);setAttrFilters(new Set());setMinMins(500);setCurrentLeagueOnly(false);setPotentialMin(40);setPlayed2526(false);setEscOnly(false);setPage(0);};
 
   if(loading) return <div style={{...T.app,alignItems:'center',justifyContent:'center'}}><style>{'@keyframes spin{to{transform:rotate(360deg)}}'}</style><div style={{width:24,height:24,border:'2px solid #1e2d45',borderTop:'2px solid #3b7de8',borderRadius:'50%',animation:'spin 0.8s linear infinite'}}/><div style={{color:'#94a3b8',fontSize:11,marginTop:8}}>Loading…</div></div>;
 
@@ -577,6 +599,13 @@ export default function App(){
               <div style={T.cb(played2526)}>{played2526&&<span style={{color:'#fff',fontSize:8,lineHeight:1}}>✓</span>}</div>
               <span style={T.cl(played2526)}>Played in 2025-26 only</span>
             </label>
+          </div>
+          <div style={T.fg}>
+            <label style={T.cr} onClick={()=>{setEscOnly(p=>!p);setPage(0);}}>
+              <div style={T.cb(escOnly)}>{escOnly&&<span style={{color:'#fff',fontSize:8,lineHeight:1}}>✓</span>}</div>
+              <span style={T.cl(escOnly)}>ESC eligible only</span>
+            </label>
+            <div style={{fontSize:9,color:'#475569',marginTop:2,lineHeight:1.4}}>Home nations · Continental/Intl history · Youth league · 5+ games Band 1-5 (24-25/25-26)</div>
           </div>
           <div style={T.fg}>
             <span style={T.fl}>Min Seasons: <strong style={{color:'#60a5fa'}}>{minSeas}</strong></span>

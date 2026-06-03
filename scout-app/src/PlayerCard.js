@@ -1,7 +1,10 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { scoreBandColor, formatMV, formatFoot, ROLE_KEY_LABELS, divColor, LEAGUE_STRENGTHS, scoreLabel, scoreToStars, starLabel, POSITION_ATTRIBUTES, playerHasAttribute } from './constants';
+import { scoreBandColor, formatMV, formatFoot, ROLE_KEY_LABELS, divColor, LEAGUE_STRENGTHS, scoreLabel, scoreToStars, starLabel, POSITION_ATTRIBUTES, playerHasAttribute, GBE_LEAGUE_BANDS } from './constants';
 import { openOnePager } from './PlayerOnePager';
 import { Photo, Crest } from './utils';
+
+const INTERNATIONAL_LEAGUES = new Set(['UEFA WC Qualifiers.','UEFA U21 Euros.','UEFA U19 Euros.','Asia WC Qualifiers.','AFCON.','AFCON U20.','AFCON U17.','AFCON Qualifiers.','S.America Qualifiers.','U20 World Cup.','U17 World Cup.']);
+const CONTINENTAL_LEAGUES = new Set(['Conference League.','Conference League Qualifiers.','Europa League.','Europa League Qualifiers.','Champions League.','Champions League Qualifiers.','Asia Champions League.','Africa Champions League.','Copa Libertadores.','U20 Copa.','Club World Cup.','UEFA Youth League.']);
 
 const CREST_BASE = 'https://images.fotmob.com/image_resources/logo/teamlogo/';
 const SEC = { fontSize:9, fontWeight:700, color:'#c8d4e8', letterSpacing:'0.12em', textTransform:'uppercase', marginBottom:10 };
@@ -330,8 +333,12 @@ function getSimilar(player, allPlayers){
 }
 
 export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=false}) {
-  const seasons=Object.keys(player.seasonsDetail||{});
-  const [selS,setSelS]=useState(player.season||seasons[0]);
+  const SEASON_ORDER_ARR=['2025-26','2026','2025','2024-25','2024','2023-24','2023','2022-23','2022','2021-22','2021','2020-21','2020','2019-20','2018-19'];
+  const seasons=Object.keys(player.seasonsDetail||{}).sort((a,b)=>{
+    const ai=SEASON_ORDER_ARR.indexOf(a); const bi=SEASON_ORDER_ARR.indexOf(b);
+    return (ai===-1?99:ai)-(bi===-1?99:bi);
+  });
+  const [selS,setSelS]=useState(seasons[0]||player.season);
   const [tab,setTab]=useState('profile');
   const [grpTab,setGrpTab]=useState('A');
   const [rawModeLocal,setRawModeLocal]=useState(false);
@@ -415,7 +422,54 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
               </div>
             </div>
 
-            {/* xValue section */}
+            {/* GBE / Visa Points */}
+            {(()=>{
+              const RECENT = new Set(['2025-26','2026','2025']);
+              const band = GBE_LEAGUE_BANDS[player.league]||6;
+              // Find most recent qualifying season
+              const recentSh = (player.allSeasonsSummary||[]).find(s=>RECENT.has(s.s)&&!INTERNATIONAL_LEAGUES.has(s.l)&&!CONTINENTAL_LEAGUES.has(s.l));
+              if(!recentSh) return null;
+              const mins = recentSh.mins||0;
+              // Approximate max minutes: 38 games × 90 = 3420 for top leagues, 36×90=3240 for others
+              const maxMins = band<=2 ? 3420 : band<=4 ? 3240 : 3060;
+              const minsPct = Math.min(100, Math.round(mins/maxMins*100));
+              // Table 2 domestic minutes points
+              const idx = Math.max(0,Math.min(5,band-1));
+              const rows = [[12,10,8,6,4,2],[11,9,7,5,3,1],[10,8,6,4,2,0],[9,7,5,3,1,0],[8,6,4,2,0,0],[7,5,3,1,0,0],[6,4,2,0,0,0]];
+              const pRow = minsPct>=90?0:minsPct>=80?1:minsPct>=70?2:minsPct>=60?3:minsPct>=50?4:minsPct>=40?5:minsPct>=30?6:-1;
+              const domPts = pRow>=0 ? rows[pRow][idx] : 0;
+              const total = domPts; // just domestic for now
+              const status = total>=15?'Pass':total>=10?'Exceptions Panel':'Fail / ESC';
+              const statusColor = total>=15?'#22c55e':total>=10?'#f59e0b':'#ef4444';
+              return(
+                <div style={{background:'#0d1624',border:'1px solid #1e2d45',borderRadius:9,padding:'14px'}}>
+                  <div style={{...SEC,marginBottom:8}}>GBE / Visa Points</div>
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8,marginBottom:8}}>
+                    <div style={{background:'#07090f',borderRadius:7,padding:'10px',textAlign:'center'}}>
+                      <div style={{fontSize:8,fontWeight:700,color:'#475569',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:4}}>League Band</div>
+                      <div style={{fontSize:20,fontWeight:800,color:'#94a3b8'}}>Band {band}</div>
+                      <div style={{fontSize:9,color:'#475569',marginTop:2}}>{recentSh.s}</div>
+                    </div>
+                    <div style={{background:'#07090f',borderRadius:7,padding:'10px',textAlign:'center'}}>
+                      <div style={{fontSize:8,fontWeight:700,color:'#475569',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:4}}>Minutes</div>
+                      <div style={{fontSize:20,fontWeight:800,color:'#94a3b8'}}>{mins.toLocaleString()}</div>
+                      <div style={{fontSize:9,color:'#475569',marginTop:2}}>{minsPct}% of max</div>
+                    </div>
+                    <div style={{background:'#07090f',borderRadius:7,padding:'10px',textAlign:'center'}}>
+                      <div style={{fontSize:8,fontWeight:700,color:'#475569',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:4}}>Dom. Points</div>
+                      <div style={{fontSize:20,fontWeight:800,color:'#60a5fa'}}>{domPts}</div>
+                      <div style={{fontSize:9,color:'#475569',marginTop:2}}>Table 2</div>
+                    </div>
+                    <div style={{background:'#07090f',borderRadius:7,padding:'10px',textAlign:'center'}}>
+                      <div style={{fontSize:8,fontWeight:700,color:'#475569',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:4}}>Est. Total</div>
+                      <div style={{fontSize:20,fontWeight:800,color:statusColor}}>{total}</div>
+                      <div style={{fontSize:9,color:statusColor,marginTop:2,fontWeight:600}}>{status}</div>
+                    </div>
+                  </div>
+                  <div style={{fontSize:9,color:'#475569'}}>Domestic minutes only · Continental/International points added manually · 0–9 = Fail/ESC · 10–14 = Exceptions Panel · 15+ = Pass</div>
+                </div>
+              );
+            })()}
             {player.xValue&&(
               <div style={{background:'#0d1624',border:'1px solid #1e2d45',borderRadius:9,padding:'14px'}}>
                 <div style={{...SEC,marginBottom:8}}>xValue Analysis</div>
@@ -466,7 +520,7 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
                     ))}
                   </tr></thead>
                   <tbody>
-                    {(player.allSeasonsSummary||[]).map((s,i)=>(
+                    {(player.allSeasonsSummary||[]).sort((a,b)=>{const ai=SEASON_ORDER_ARR.indexOf(a.s);const bi=SEASON_ORDER_ARR.indexOf(b.s);return (ai===-1?99:ai)-(bi===-1?99:bi);}).map((s,i)=>(
                       <tr key={s.s} style={{background:i%2===0?'transparent':'#07090f'}}>
                         <td style={{padding:'5px 8px',fontSize:11,color:'#e2e8f4',fontWeight:selS===s.s?700:400,borderBottom:'1px solid #0d1525'}}>{s.s}</td>
                         <td style={{padding:'5px 8px',fontSize:11,color:'#94a3b8',borderBottom:'1px solid #0d1525'}}>{s.team}</td>
