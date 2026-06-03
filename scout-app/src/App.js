@@ -170,13 +170,29 @@ export default function App(){
   const [roleScoreMin,setRoleScoreMin]=useState(50);
   const [scoreMode,setScoreMode]=useState('complete');
   const [activePreset,setActivePreset]=useState('');
-  const [leagues,setLeagues]=useState(()=>new Set(DEFAULT_LEAGUES));
   const [showHidden,setShowHidden]=useState(false);
   const [showYouth,setShowYouth]=useState(false);
   const [activeBands,setActiveBands]=useState(new Set());
   const [activeRegions,setActiveRegions]=useState(new Set());
+  const [activePresetLeagues,setActivePresetLeagues]=useState(null); // null = default
   const [lsMin,setLsMin]=useState(0);
   const [lsMax,setLsMax]=useState(101);
+
+  // Derive the active leagues set from all filter states
+  const leagues=useMemo(()=>{
+    let base;
+    if(activePresetLeagues) base=new Set(activePresetLeagues);
+    else if(activeBands.size>0||activeRegions.size>0){
+      base=new Set();
+      if(activeBands.size>0) ALL_LEAGUES.filter(l=>{const b=leagueToBand(l);return activeBands.has(b)||(activeBands.has(6)&&b===6);}).forEach(l=>base.add(l));
+      if(activeRegions.size>0) ALL_LEAGUES.filter(l=>activeRegions.has(leagueToRegion(l))).forEach(l=>base.add(l));
+    } else base=new Set(DEFAULT_LEAGUES);
+    if(showHidden)[...HIDDEN_LEAGUES].forEach(l=>base.add(l));
+    else [...HIDDEN_LEAGUES].forEach(l=>base.delete(l));
+    if(showYouth)[...YOUTH_LEAGUES].forEach(l=>base.add(l));
+    else [...YOUTH_LEAGUES].forEach(l=>base.delete(l));
+    return base;
+  },[activePresetLeagues,activeBands,activeRegions,showHidden,showYouth]);
   const [ageMin,setAgeMin]=useState(16);
   const [ageMax,setAgeMax]=useState(38);
   const [foot,setFoot]=useState('Any');
@@ -212,11 +228,7 @@ export default function App(){
       .catch(()=>setLoading(false));
   },[]);
   useEffect(()=>{setRoleFilter('');setRoleScoreMin(50);setScoreMode('complete');},[pos]);
-  useEffect(()=>{
-    if(!activePreset) return;
-    const p=PRESET_LEAGUES[activePreset];
-    if(p) setLeagues(new Set([...p].filter(l=>showHidden||!HIDDEN_LEAGUES.has(l)).filter(l=>showYouth||!YOUTH_LEAGUES.has(l))));
-  },[activePreset]);
+  useEffect(()=>{if(activePreset&&PRESET_LEAGUES[activePreset]){setActivePresetLeagues([...PRESET_LEAGUES[activePreset]]);}  },[activePreset]);
 
   const rk=useMemo(()=>Object.entries(ROLE_KEY_LABELS).find(([,v])=>v===pos)?.[0]||'',[pos]);
   const onSort=useCallback(col=>{setSort(p=>p.col===col?{col,asc:!p.asc}:{col,asc:false});setPage(0);},[]);
@@ -296,7 +308,7 @@ export default function App(){
       }
       return true;
     });
-  },[all,search,pos,leagues,ageMin,ageMax,foot,minScore,minSeas,showMvFilter,mvMax,showContractFilter,contractBefore,roleFilter,roleScoreMin,seasonFilter,metricFilters,xValueFilter,onlyElite,getDisplayScore,recentOnly,showXValueFilter,xValueMin,xValueMax,attrFilters,minMins,currentLeagueOnly,played2526,potentialMin,showHidden,showYouth,lsMin,lsMax]);
+  },[all,search,pos,leagues,ageMin,ageMax,foot,minScore,minSeas,showMvFilter,mvMax,showContractFilter,contractBefore,roleFilter,roleScoreMin,seasonFilter,metricFilters,xValueFilter,onlyElite,getDisplayScore,recentOnly,showXValueFilter,xValueMin,xValueMax,attrFilters,minMins,currentLeagueOnly,played2526,potentialMin,lsMin,lsMax]);
 
   const sorted=useMemo(()=>{
     const a=[...filtered];
@@ -328,7 +340,7 @@ export default function App(){
     avgAge:filtered.length?filtered.reduce((s,p)=>s+p.age,0)/filtered.length:0,
   }),[filtered,getDisplayScore]);
 
-  const reset=()=>{setSearch('');setPos('All');setRoleFilter('');setRoleScoreMin(50);setActivePreset('');setLeagues(new Set(DEFAULT_LEAGUES));setShowHidden(false);setShowYouth(false);setActiveBands(new Set());setActiveRegions(new Set());setLsMin(0);setLsMax(101);setAgeMin(16);setAgeMax(38);setFoot('Any');setMinScore(40);setMinSeas(1);setShowMvFilter(false);setMvMax(50);setShowContractFilter(false);setContractBefore(2028);setSeasonFilter('all');setScoreMode('complete');setMetricFilters([]);setXValueFilter('');setRawMode(false);setOnlyElite(false);setRecentOnly(true);setShowXValueFilter(false);setXValueMin(0);setXValueMax(50);setAttrFilters(new Set());setMinMins(500);setCurrentLeagueOnly(false);setPotentialMin(40);setPlayed2526(false);setPage(0);};
+  const reset=()=>{setSearch('');setPos('All');setRoleFilter('');setRoleScoreMin(50);setActivePreset('');setActivePresetLeagues(null);setShowHidden(false);setShowYouth(false);setActiveBands(new Set());setActiveRegions(new Set());setLsMin(0);setLsMax(101);setAgeMin(16);setAgeMax(38);setFoot('Any');setMinScore(40);setMinSeas(1);setShowMvFilter(false);setMvMax(50);setShowContractFilter(false);setContractBefore(2028);setSeasonFilter('all');setScoreMode('complete');setMetricFilters([]);setXValueFilter('');setRawMode(false);setOnlyElite(false);setRecentOnly(true);setShowXValueFilter(false);setXValueMin(0);setXValueMax(50);setAttrFilters(new Set());setMinMins(500);setCurrentLeagueOnly(false);setPotentialMin(40);setPlayed2526(false);setPage(0);};
 
   if(loading) return <div style={{...T.app,alignItems:'center',justifyContent:'center'}}><style>{'@keyframes spin{to{transform:rotate(360deg)}}'}</style><div style={{width:24,height:24,border:'2px solid #1e2d45',borderTop:'2px solid #3b7de8',borderRadius:'50%',animation:'spin 0.8s linear infinite'}}/><div style={{color:'#94a3b8',fontSize:11,marginTop:8}}>Loading…</div></div>;
 
@@ -440,8 +452,11 @@ export default function App(){
             <div style={{display:'flex',flexWrap:'wrap',gap:4,marginTop:4}}>
               {Object.keys(PRESET_LEAGUES).map(p=>(
                 <button key={p} onClick={()=>{
-                  if(activePreset===p){setActivePreset('');setLeagues(new Set(DEFAULT_LEAGUES));setPage(0);}
-                  else{setActivePreset(p);setPage(0);}
+                  const isActive=activePreset===p;
+                  setActivePreset(isActive?'':'');
+                  setActivePresetLeagues(isActive?null:[...PRESET_LEAGUES[p]]);
+                  if(!isActive){setActiveBands(new Set());setActiveRegions(new Set());}
+                  setPage(0);
                 }} style={{padding:'3px 7px',borderRadius:5,border:`1px solid ${activePreset===p?'#3b7de8':'#1e2d45'}`,background:activePreset===p?'#0e2040':'transparent',color:activePreset===p?'#60a5fa':'#64748b',fontSize:9.5,fontWeight:activePreset===p?700:400,cursor:'pointer'}}>{p}</button>
               ))}
             </div>
@@ -453,16 +468,8 @@ export default function App(){
             <div style={{display:'flex',flexWrap:'wrap',gap:4,marginTop:4}}>
               {[1,2,3,4,5,6].map(b=>(
                 <button key={b} onClick={()=>{
-                  setActiveBands(prev=>{
-                    const n=new Set(prev);
-                    n.has(b)?n.delete(b):n.add(b);
-                    if(n.size>0){
-                      const bandLeagues=ALL_LEAGUES.filter(l=>leagueToBand(l)===b||(b===6&&(leagueToBand(l)||6)===6));
-                      setLeagues(prev2=>{const m=new Set(prev2);n.has(b)?bandLeagues.forEach(l=>m.add(l)):bandLeagues.forEach(l=>m.delete(l));return m;});
-                    }
-                    return n;
-                  });
-                  setPage(0);
+                  setActiveBands(prev=>{const n=new Set(prev);n.has(b)?n.delete(b):n.add(b);return n;});
+                  setActivePresetLeagues(null);setActivePreset('');setPage(0);
                 }} style={{padding:'3px 7px',borderRadius:5,border:`1px solid ${activeBands.has(b)?'#3b7de8':'#1e2d45'}`,background:activeBands.has(b)?'#0e2040':'transparent',color:activeBands.has(b)?'#60a5fa':'#64748b',fontSize:9.5,fontWeight:activeBands.has(b)?700:400,cursor:'pointer'}}>Band {b}</button>
               ))}
             </div>
@@ -474,14 +481,8 @@ export default function App(){
             <div style={{display:'flex',flexWrap:'wrap',gap:4,marginTop:4}}>
               {['Europe','South America','North America','Africa','Asia'].map(r=>(
                 <button key={r} onClick={()=>{
-                  setActiveRegions(prev=>{
-                    const n=new Set(prev);
-                    n.has(r)?n.delete(r):n.add(r);
-                    const regionLeagues=ALL_LEAGUES.filter(l=>leagueToRegion(l)===r);
-                    setLeagues(prev2=>{const m=new Set(prev2);n.has(r)?regionLeagues.forEach(l=>m.add(l)):regionLeagues.forEach(l=>m.delete(l));return m;});
-                    return n;
-                  });
-                  setPage(0);
+                  setActiveRegions(prev=>{const n=new Set(prev);n.has(r)?n.delete(r):n.add(r);return n;});
+                  setActivePresetLeagues(null);setActivePreset('');setPage(0);
                 }} style={{padding:'3px 7px',borderRadius:5,border:`1px solid ${activeRegions.has(r)?'#3b7de8':'#1e2d45'}`,background:activeRegions.has(r)?'#0e2040':'transparent',color:activeRegions.has(r)?'#60a5fa':'#64748b',fontSize:9.5,fontWeight:activeRegions.has(r)?700:400,cursor:'pointer'}}>{r}</button>
               ))}
             </div>
@@ -492,38 +493,18 @@ export default function App(){
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:5}}>
               <span style={T.fl}>Leagues <span style={{color:'#4a5a78',fontSize:9}}>({leagues.size} active)</span></span>
               <div style={{display:'flex',gap:4}}>
-                <button onClick={()=>{setLeagues(new Set(DEFAULT_LEAGUES));setActivePreset('');setActiveBands(new Set());setActiveRegions(new Set());setPage(0);}} style={{fontSize:9,padding:'2px 6px',borderRadius:3,border:'1px solid #1e3d7a',background:'#0e2040',color:'#93c5fd',cursor:'pointer',fontWeight:700}}>Default</button>
-                <button onClick={()=>{setLeagues(new Set(ALL_LEAGUES));setPage(0);}} style={{fontSize:9,padding:'2px 6px',borderRadius:3,border:'1px solid #1e3d7a',background:'#0e2040',color:'#93c5fd',cursor:'pointer',fontWeight:700}}>All</button>
-                <button onClick={()=>{setLeagues(new Set());setPage(0);}} style={{fontSize:9,padding:'2px 6px',borderRadius:3,border:'1px solid #1e2d45',background:'#0d1220',color:'#94a3b8',cursor:'pointer',fontWeight:700}}>None</button>
+                <button onClick={()=>{setActivePresetLeagues(null);setActivePreset('');setActiveBands(new Set());setActiveRegions(new Set());setShowHidden(false);setShowYouth(false);setPage(0);}} style={{fontSize:9,padding:'2px 6px',borderRadius:3,border:'1px solid #1e3d7a',background:'#0e2040',color:'#93c5fd',cursor:'pointer',fontWeight:700}}>Default</button>
+                <button onClick={()=>{setActivePresetLeagues([...ALL_LEAGUES]);setActivePreset('');setActiveBands(new Set());setActiveRegions(new Set());setPage(0);}} style={{fontSize:9,padding:'2px 6px',borderRadius:3,border:'1px solid #1e3d7a',background:'#0e2040',color:'#93c5fd',cursor:'pointer',fontWeight:700}}>All</button>
+                <button onClick={()=>{setActivePresetLeagues([]);setActivePreset('');setActiveBands(new Set());setActiveRegions(new Set());setPage(0);}} style={{fontSize:9,padding:'2px 6px',borderRadius:3,border:'1px solid #1e2d45',background:'#0d1220',color:'#94a3b8',cursor:'pointer',fontWeight:700}}>None</button>
               </div>
             </div>
             {/* Hidden / Youth toggles */}
             <div style={{display:'flex',gap:8,marginBottom:6}}>
-              <label style={{display:'flex',alignItems:'center',gap:5,cursor:'pointer'}} onClick={()=>{
-                const next=!showHidden;
-                setShowHidden(next);
-                setLeagues(prev=>{
-                  const n=new Set(prev);
-                  if(next){[...HIDDEN_LEAGUES].forEach(l=>n.add(l));}
-                  else{[...HIDDEN_LEAGUES].forEach(l=>n.delete(l));}
-                  return n;
-                });
-                setPage(0);
-              }}>
+              <label style={{display:'flex',alignItems:'center',gap:5,cursor:'pointer'}} onClick={()=>{setShowHidden(p=>!p);setPage(0);}}>
                 <div style={T.cb(showHidden)}>{showHidden&&<span style={{color:'#fff',fontSize:8}}>✓</span>}</div>
                 <span style={{fontSize:9.5,color:showHidden?'#e2e8f4':'#94a3b8'}}>Show Hidden</span>
               </label>
-              <label style={{display:'flex',alignItems:'center',gap:5,cursor:'pointer'}} onClick={()=>{
-                const next=!showYouth;
-                setShowYouth(next);
-                setLeagues(prev=>{
-                  const n=new Set(prev);
-                  if(next){[...YOUTH_LEAGUES].forEach(l=>n.add(l));}
-                  else{[...YOUTH_LEAGUES].forEach(l=>n.delete(l));}
-                  return n;
-                });
-                setPage(0);
-              }}>
+              <label style={{display:'flex',alignItems:'center',gap:5,cursor:'pointer'}} onClick={()=>{setShowYouth(p=>!p);setPage(0);}}>
                 <div style={T.cb(showYouth)}>{showYouth&&<span style={{color:'#fff',fontSize:8}}>✓</span>}</div>
                 <span style={{fontSize:9.5,color:showYouth?'#e2e8f4':'#94a3b8'}}>Show Youth</span>
               </label>
@@ -545,8 +526,11 @@ export default function App(){
             </div>
             <div style={{...T.cg,maxHeight:200,overflowY:'auto'}}>
               {[...ALL_LEAGUES].filter(lg=>showHidden||!HIDDEN_LEAGUES.has(lg)).filter(lg=>showYouth||!YOUTH_LEAGUES.has(lg)).sort((a,b)=>a.localeCompare(b)).map(lg=>(
-                <label key={lg} style={T.cr} onClick={()=>{setLeagues(p=>{const n=new Set(p);n.has(lg)?n.delete(lg):n.add(lg);return n;});setActivePreset('');setPage(0);}}>
-                  <div style={T.cb(leagues.has(lg))}>{leagues.has(lg)&&<span style={{color:'#fff',fontSize:8,lineHeight:1}}>✓</span>}</div>
+                <label key={lg} style={T.cr} onClick={()=>{
+                  const newList=leagues.has(lg)?[...leagues].filter(l=>l!==lg):[...leagues,lg];
+                  setActivePresetLeagues(newList);
+                  setActiveBands(new Set());setActiveRegions(new Set());setActivePreset('');setPage(0);
+                }}>                  <div style={T.cb(leagues.has(lg))}>{leagues.has(lg)&&<span style={{color:'#fff',fontSize:8,lineHeight:1}}>✓</span>}</div>
                   <span style={T.cl(leagues.has(lg))}>{lg}</span>
                 </label>
               ))}
