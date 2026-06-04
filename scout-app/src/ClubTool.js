@@ -233,7 +233,6 @@ export default function ClubTool({players}){
   const [leaguePenalty,setLeaguePenalty]=useState(true);
   const [sideFilter,setSideFilter]=useState('Any'); // 'Any'|'L'|'R'|'C'
   const [footFilter,setFootFilter]=useState('Any');
-  const [searchLeagues,setSearchLeagues]=useState(new Set(ALL_LEAGUES));
   const [activePreset,setActivePreset]=useState('');
   const [activeBands,setActiveBands]=useState(new Set());
   const [activeRegions,setActiveRegions]=useState(new Set());
