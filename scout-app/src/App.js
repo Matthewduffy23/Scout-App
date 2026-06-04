@@ -715,7 +715,7 @@ export default function App(){
 
           <div style={T.tw}>
             {sorted.length===0
-              ?<div style={T.es}><div style={{fontSize:26}}>⚽</div><div style={{fontSize:12,color:'#94a3b8'}}>No players match filters</div></div>
+              ?<div style={T.es}><div style={{fontSize:26}}>⚽</div><div style={{fontSize:12,color:'#94a3b8'}}>{showYouth?'Youth league players not in current data — will appear after next pipeline rebuild':'No players match filters'}</div></div>
               :(
                 <table style={T.tbl}>
                   <thead style={T.th_}><tr>
