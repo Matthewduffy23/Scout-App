@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import PlayerCard from './PlayerCard';
 import { scoreBandColor, scoreLabel, formatMV, ROLE_KEY_LABELS, ROLES_BY_KEY,
-         ALL_LEAGUES, LEAGUE_STRENGTHS, promotionBadge, divColor,
+         ALL_LEAGUES, LEAGUE_STRENGTHS, promotionBadge, divColor, PRESET_LEAGUES,
+         HIDDEN_LEAGUES, YOUTH_LEAGUES, leagueToRegion, leagueToBand,
          POSITION_ATTRIBUTES, playerHasAttribute } from './constants';
 import { Photo, Crest } from './utils';
 
@@ -233,11 +234,29 @@ export default function ClubTool({players}){
   const [sideFilter,setSideFilter]=useState('Any'); // 'Any'|'L'|'R'|'C'
   const [footFilter,setFootFilter]=useState('Any');
   const [searchLeagues,setSearchLeagues]=useState(new Set(ALL_LEAGUES));
-  const [smartFilter,setSmartFilter]=useState(true); // auto-restrict leagues
-  const [results,setResults]=useState([]);
+  const [activePreset,setActivePreset]=useState('');
+  const [activeBands,setActiveBands]=useState(new Set());
+  const [activeRegions,setActiveRegions]=useState(new Set());
+  const [showHidden,setShowHidden]=useState(false);
+  const [showYouth,setShowYouth]=useState(false);
+  const [smartFilter,setSmartFilter]=useState(true);
+  const searchLeagues=useMemo(()=>{
+    if(showYouth) return new Set(YOUTH_LEAGUES);
+    let base;
+    if(activePreset&&PRESET_LEAGUES[activePreset]) base=new Set(PRESET_LEAGUES[activePreset]);
+    else if(activeBands.size>0||activeRegions.size>0){
+      base=new Set(ALL_LEAGUES.filter(l=>{
+        const bandOk=activeBands.size===0||activeBands.has(leagueToBand(l));
+        const regionOk=activeRegions.size===0||activeRegions.has(leagueToRegion(l));
+        return bandOk&&regionOk;
+      }));
+    } else base=new Set(ALL_LEAGUES);
+    if(showHidden)[...HIDDEN_LEAGUES].forEach(l=>base.add(l));
+    return base;
+  },[activePreset,activeBands,activeRegions,showHidden,showYouth]);
   const [tmplMetrics,setTmplMetrics]=useState([]);
   const [tmplInfo,setTmplInfo]=useState(null);
-  const [ran,setRan]=useState(false);
+  const [results,setResults]=useState([]);
   const [attrFilters,setAttrFilters]=useState(new Set());
   const [xValueOnly,setXValueOnly]=useState(false);
   const [xValueFilter,setXValueFilter]=useState('');
@@ -248,6 +267,17 @@ export default function ClubTool({players}){
   const [played2526,setPlayed2526]=useState(false);
   const [metricFilters,setMetricFilters]=useState([]);
   const [bestSeasonMode,setBestSeasonMode]=useState(false);
+  const [ageMin,setAgeMin]=useState(15);
+  const [minMins,setMinMins]=useState(0);
+  const [minSeas,setMinSeas]=useState(1);
+  const [showMvFilter,setShowMvFilter]=useState(false);
+  const [mvMax,setMvMax]=useState(50);
+  const [showContractFilter,setShowContractFilter]=useState(false);
+  const [contractBefore,setContractBefore]=useState(2028);
+  const [lsMin,setLsMin]=useState(0);
+  const [lsMax,setLsMax]=useState(101);
+  const [escOnly,setEscOnly]=useState(false);
+  const [currentLeagueOnly,setCurrentLeagueOnly]=useState(false);
   const addMetricFilter=()=>{if(metricFilters.length<10)setMetricFilters(f=>[...f,{key:'',label:'',min:0,max:100}]);};
 
   // Teams for selected league - from players who played in that season
@@ -356,10 +386,17 @@ export default function ClubTool({players}){
       if(p.roleKey!==pos) return false;
       if(p.team===tmplTeam&&p.league===tmplLeague) return false;
       if(!(smartFilter?effectiveLeagues:searchLeagues).has(p.league)) return false;
-      if(p.age>ageMax) return false;
+      if(p.age<ageMin||p.age>ageMax) return false;
       if(minScore>0&&p.careerScore<minScore) return false;
+      if(minSeas>1&&(p.seasons||1)<minSeas) return false;
+      if(minMins>0&&(p.minutesLatest||0)<minMins) return false;
       if(potentialMin>40&&(p.potentialScore||p.careerScore)<potentialMin) return false;
       if(played2526&&!p.sh?.find(x=>x.s==='2025-26'||x.s==='2026')) return false;
+      if(showMvFilter&&p.marketValue>mvMax*1000000) return false;
+      if(showContractFilter&&p.contractYear&&p.contractYear>contractBefore) return false;
+      const pls=LEAGUE_STRENGTHS[p.league]||0;
+      if(pls<lsMin||pls>lsMax) return false;
+      if(escOnly&&!p.escEligible) return false;
       if(role&&!(p.roleCareerScores||{})[role]) return false;
       if(sideFilter!=='Any'&&p.side&&p.side!=='C'&&p.side!==sideFilter) return false;
       if(footFilter!=='Any'&&p.foot&&p.foot!=='unknown'&&p.foot!=='nan'&&p.foot!==footFilter) return false;
@@ -591,12 +628,60 @@ export default function ClubTool({players}){
         </div>
 
         <div style={T.fg}>
-          <span style={T.fl}>Max Candidate Age: <strong style={{color:'#60a5fa'}}>{ageMax}</strong></span>
-          <input type="range" min={16} max={40} value={ageMax} onChange={e=>setAgeMax(Number(e.target.value))} style={{width:'100%',accentColor:'#3b7de8'}}/>
+          <span style={T.fl}>Age: <strong style={{color:'#60a5fa'}}>{ageMin}–{ageMax}</strong></span>
+          <div style={{display:'flex',gap:6}}>
+            <input type="range" min={15} max={ageMax-1} value={ageMin} onChange={e=>setAgeMin(Number(e.target.value))} style={{flex:1,accentColor:'#3b7de8'}}/>
+            <input type="range" min={ageMin+1} max={45} value={ageMax} onChange={e=>setAgeMax(Number(e.target.value))} style={{flex:1,accentColor:'#3b7de8'}}/>
+          </div>
         </div>
         <div style={T.fg}>
           <span style={T.fl}>Min Career Score: <strong style={{color:'#60a5fa'}}>{minScore||'Any'}</strong></span>
-          <input type="range" min={0} max={75} step={1} value={minScore} onChange={e=>setMinScore(Number(e.target.value))} style={{width:'100%',accentColor:'#3b7de8'}}/>
+          <input type="range" min={0} max={90} step={1} value={minScore} onChange={e=>setMinScore(Number(e.target.value))} style={{width:'100%',accentColor:'#3b7de8'}}/>
+        </div>
+        <div style={T.fg}>
+          <span style={T.fl}>Min Seasons: <strong style={{color:'#60a5fa'}}>{minSeas}</strong></span>
+          <input type="range" min={1} max={8} step={1} value={minSeas} onChange={e=>setMinSeas(Number(e.target.value))} style={{width:'100%',accentColor:'#3b7de8'}}/>
+        </div>
+        <div style={T.fg}>
+          <span style={T.fl}>Min Minutes</span>
+          <div style={{display:'flex',flexWrap:'wrap',gap:4,marginTop:4}}>
+            {[0,200,400,500,750,1000].map(v=>(
+              <button key={v} onClick={()=>setMinMins(v)} style={{padding:'3px 7px',borderRadius:5,border:`1px solid ${minMins===v?'#3b7de8':'#1e2d45'}`,background:minMins===v?'#0e2040':'transparent',color:minMins===v?'#60a5fa':'#64748b',fontSize:9.5,cursor:'pointer'}}>{v||'Any'}</button>
+            ))}
+          </div>
+        </div>
+        <div style={T.fg}>
+          <label style={T.cr} onClick={()=>setShowMvFilter(p=>!p)}>
+            <div style={T.cb(showMvFilter)}>{showMvFilter&&<span style={{color:'#fff',fontSize:8}}>✓</span>}</div>
+            <span style={T.cl(showMvFilter)}>Max Market Value</span>
+          </label>
+          {showMvFilter&&<>
+            <span style={{fontSize:10,color:'#64748b',marginTop:4,display:'block'}}>Max: <strong style={{color:'#60a5fa'}}>£{mvMax}m</strong></span>
+            <input type="range" min={1} max={200} step={1} value={mvMax} onChange={e=>setMvMax(Number(e.target.value))} style={{width:'100%',accentColor:'#3b7de8'}}/>
+          </>}
+        </div>
+        <div style={T.fg}>
+          <label style={T.cr} onClick={()=>setShowContractFilter(p=>!p)}>
+            <div style={T.cb(showContractFilter)}>{showContractFilter&&<span style={{color:'#fff',fontSize:8}}>✓</span>}</div>
+            <span style={T.cl(showContractFilter)}>Contract expires before</span>
+          </label>
+          {showContractFilter&&<>
+            <span style={{fontSize:10,color:'#64748b',marginTop:4,display:'block'}}><strong style={{color:'#60a5fa'}}>{contractBefore}</strong></span>
+            <input type="range" min={2025} max={2032} step={1} value={contractBefore} onChange={e=>setContractBefore(Number(e.target.value))} style={{width:'100%',accentColor:'#3b7de8'}}/>
+          </>}
+        </div>
+        <div style={T.fg}>
+          <span style={T.fl}>League Strength: <strong style={{color:'#60a5fa'}}>{lsMin}–{lsMax}</strong></span>
+          <div style={{display:'flex',gap:6}}>
+            <input type="range" min={0} max={101} step={1} value={lsMin} onChange={e=>setLsMin(Number(e.target.value))} style={{flex:1,accentColor:'#3b7de8'}}/>
+            <input type="range" min={0} max={101} step={1} value={lsMax} onChange={e=>setLsMax(Number(e.target.value))} style={{flex:1,accentColor:'#3b7de8'}}/>
+          </div>
+        </div>
+        <div style={T.fg}>
+          <label style={T.cr} onClick={()=>setEscOnly(p=>!p)}>
+            <div style={T.cb(escOnly)}>{escOnly&&<span style={{color:'#fff',fontSize:8}}>✓</span>}</div>
+            <span style={T.cl(escOnly)}>ESC eligible only</span>
+          </label>
         </div>
 
         <div style={T.fg}>
@@ -604,7 +689,7 @@ export default function ClubTool({players}){
             <div style={T.cb(smartFilter)}>{smartFilter&&<span style={{color:'#fff',fontSize:8}}>✓</span>}</div>
             <span style={{fontSize:11,color:smartFilter?'#e2e8f4':'#94a3b8'}}>Smart league filter</span>
           </label>
-          <div style={{fontSize:9,color:'#475569',marginTop:2}}>Only searches within ±2 league tiers of template. Disable to search all leagues.</div>
+          <div style={{fontSize:9,color:'#475569',marginTop:2}}>Only searches within ±2 league tiers of template.</div>
         </div>
         <div style={T.fg}>
           <label style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer'}} onClick={()=>setLeaguePenalty(p=>!p)}>
@@ -613,21 +698,34 @@ export default function ClubTool({players}){
           </label>
         </div>
 
+        {/* LEAGUE PRESETS */}
         <div style={T.fg}>
-          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:5}}>
-            <span style={T.fl}>Search Leagues</span>
-            <div style={{display:'flex',gap:3}}>
-              <button onClick={()=>setSearchLeagues(new Set(ALL_LEAGUES))} style={{fontSize:8,padding:'1px 5px',borderRadius:3,border:'1px solid #1e3d7a',background:'#0e2040',color:'#93c5fd',cursor:'pointer'}}>All</button>
-              <button onClick={()=>setSearchLeagues(new Set())} style={{fontSize:8,padding:'1px 5px',borderRadius:3,border:'1px solid #1e2d45',background:'transparent',color:'#64748b',cursor:'pointer'}}>None</button>
-            </div>
+          <span style={T.fl}>League Presets</span>
+          <div style={{display:'flex',flexWrap:'wrap',gap:4,marginTop:4}}>
+            {Object.keys(PRESET_LEAGUES).map(p=>(
+              <button key={p} onClick={()=>{setActivePreset(activePreset===p?'':p);setActiveBands(new Set());setActiveRegions(new Set());}} style={{padding:'3px 7px',borderRadius:5,border:`1px solid ${activePreset===p?'#3b7de8':'#1e2d45'}`,background:activePreset===p?'#0e2040':'transparent',color:activePreset===p?'#60a5fa':'#64748b',fontSize:9.5,fontWeight:activePreset===p?700:400,cursor:'pointer'}}>{p}</button>
+            ))}
           </div>
-          {ALL_LEAGUES.map(lg=>(
-            <label key={lg} style={{display:'flex',alignItems:'center',gap:5,cursor:'pointer',marginBottom:3}}
-              onClick={()=>setSearchLeagues(p=>{const n=new Set(p);n.has(lg)?n.delete(lg):n.add(lg);return n;})}>
-              <div style={T.cb(searchLeagues.has(lg))}>{searchLeagues.has(lg)&&<span style={{color:'#fff',fontSize:8}}>✓</span>}</div>
-              <span style={{fontSize:10.5,color:searchLeagues.has(lg)?'#e2e8f4':'#64748b'}}>{lg}</span>
-            </label>
-          ))}
+        </div>
+
+        {/* LEAGUE BANDS */}
+        <div style={T.fg}>
+          <span style={T.fl}>League Bands</span>
+          <div style={{display:'flex',flexWrap:'wrap',gap:4,marginTop:4}}>
+            {[1,2,3,4,5,6].map(b=>(
+              <button key={b} onClick={()=>{setActiveBands(prev=>{const n=new Set(prev);n.has(b)?n.delete(b):n.add(b);return n;});setActivePreset('');}} style={{padding:'3px 7px',borderRadius:5,border:`1px solid ${activeBands.has(b)?'#3b7de8':'#1e2d45'}`,background:activeBands.has(b)?'#0e2040':'transparent',color:activeBands.has(b)?'#60a5fa':'#64748b',fontSize:9.5,cursor:'pointer'}}>Band {b}</button>
+            ))}
+          </div>
+        </div>
+
+        {/* REGIONS */}
+        <div style={T.fg}>
+          <span style={T.fl}>Regions</span>
+          <div style={{display:'flex',flexWrap:'wrap',gap:4,marginTop:4}}>
+            {['Europe','South America','North America','Africa','Asia'].map(r=>(
+              <button key={r} onClick={()=>{setActiveRegions(prev=>{const n=new Set(prev);n.has(r)?n.delete(r):n.add(r);return n;});setActivePreset('');}} style={{padding:'3px 7px',borderRadius:5,border:`1px solid ${activeRegions.has(r)?'#3b7de8':'#1e2d45'}`,background:activeRegions.has(r)?'#0e2040':'transparent',color:activeRegions.has(r)?'#60a5fa':'#64748b',fontSize:9.5,cursor:'pointer'}}>{r}</button>
+            ))}
+          </div>
         </div>
 
         <button onClick={run} style={{width:'100%',padding:'9px',background:'#0e2040',border:'1px solid #3b7de8',borderRadius:6,color:'#60a5fa',fontSize:12,fontWeight:700,cursor:'pointer'}}>
