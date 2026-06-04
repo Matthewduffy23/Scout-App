@@ -258,6 +258,7 @@ export default function ClubTool({players}){
   const [tmplMetrics,setTmplMetrics]=useState([]);
   const [tmplInfo,setTmplInfo]=useState(null);
   const [results,setResults]=useState([]);
+  const [ran,setRan]=useState(false);
   const [attrFilters,setAttrFilters]=useState(new Set());
   const [xValueOnly,setXValueOnly]=useState(false);
   const [xValueFilter,setXValueFilter]=useState('');
