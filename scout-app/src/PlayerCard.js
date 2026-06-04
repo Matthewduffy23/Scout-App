@@ -70,16 +70,8 @@ function Trajectory({history:historyProp,showForecast,estPeakScore,rawMode=false
   const ref=useRef(null);
   useEffect(()=>{
     const canvas=ref.current;
-    if(!canvas||!history||history.length<2) return;
-    const W=canvas.offsetWidth||700,H=150;
-    const dpr=window.devicePixelRatio||1;
-    canvas.width=W*dpr;canvas.height=H*dpr;
-    canvas.style.width=W+'px';canvas.style.height=H+'px';
-    const ctx=canvas.getContext('2d');ctx.scale(dpr,dpr);ctx.clearRect(0,0,W,H);
-    const pad={t:12,r:20,b:28,l:34};
-    const pw=W-pad.l-pad.r,ph=H-pad.t-pad.b;
     const history=historyProp.filter(h=>h.sc!=null);
-    if(!history.length) return;
+    if(!canvas||!history||history.length<2) return;
     const scores=history.map(h=>rawMode?(h.r??h.sc):h.sc);
     const allScores=showForecast&&estPeakScore?[...scores,estPeakScore]:scores;
     const minS=Math.max(40,Math.min(...allScores)-8),maxS=Math.min(100,Math.max(...allScores)+10);
