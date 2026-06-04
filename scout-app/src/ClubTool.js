@@ -217,6 +217,8 @@ const T={
   fl:{fontSize:9,fontWeight:700,color:'#94a3b8',letterSpacing:'0.12em',textTransform:'uppercase',marginBottom:4,display:'block'},
   fg:{marginBottom:12},
   cb:(on)=>({width:13,height:13,borderRadius:2,flexShrink:0,border:`1px solid ${on?'#3b7de8':'#475569'}`,background:on?'#3b7de8':'transparent',display:'flex',alignItems:'center',justifyContent:'center'}),
+  cl:(on)=>({fontSize:11,color:on?'#e2e8f4':'#94a3b8'}),
+  cr:{display:'flex',alignItems:'center',gap:6,cursor:'pointer',marginBottom:4},
 };
 
 export default function ClubTool({players}){
