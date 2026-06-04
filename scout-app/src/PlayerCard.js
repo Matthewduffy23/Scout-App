@@ -70,8 +70,16 @@ function Trajectory({history:historyProp,showForecast,estPeakScore,rawMode=false
   const ref=useRef(null);
   useEffect(()=>{
     const canvas=ref.current;
-    const history=historyProp.filter(h=>h.sc!=null);
-    if(!canvas||!history||history.length<2) return;
+    if(!canvas) return;
+    const history=(historyProp||[]).filter(h=>h.sc!=null);
+    if(history.length<2) return;
+    const W=canvas.offsetWidth||700,H=150;
+    const dpr=window.devicePixelRatio||1;
+    canvas.width=W*dpr;canvas.height=H*dpr;
+    canvas.style.width=W+'px';canvas.style.height=H+'px';
+    const ctx=canvas.getContext('2d');ctx.scale(dpr,dpr);ctx.clearRect(0,0,W,H);
+    const pad={t:12,r:20,b:28,l:34};
+    const pw=W-pad.l-pad.r,ph=H-pad.t-pad.b;
     const scores=history.map(h=>rawMode?(h.r??h.sc):h.sc);
     const allScores=showForecast&&estPeakScore?[...scores,estPeakScore]:scores;
     const minS=Math.max(40,Math.min(...allScores)-8),maxS=Math.min(100,Math.max(...allScores)+10);
@@ -102,17 +110,14 @@ function Trajectory({history:historyProp,showForecast,estPeakScore,rawMode=false
       ctx.fillText(`Proj: ${estPeakScore.toFixed(0)}`,lx+pw*0.25+4,py2+3);
     }
     pts.forEach(p=>{
-      if(p.sc==null) return;
       ctx.beginPath();ctx.arc(p.x,p.y,3.5,0,Math.PI*2);
       ctx.fillStyle='#3b7de8';ctx.fill();ctx.strokeStyle='#07090f';ctx.lineWidth=1.5;ctx.stroke();
-      // Season label below
       ctx.fillStyle='#94a3b8';ctx.font='8px Inter,sans-serif';ctx.textAlign='center';
       ctx.fillText(p.s.replace('20','').replace('-','/'),p.x,H-4);
-      // Score label above point
       ctx.fillStyle='#e2e8f4';ctx.font='bold 9px Inter,sans-serif';ctx.textAlign='center';
       ctx.fillText(p.sc.toFixed(0),p.x,p.y-7);
     });
-  },[history,showForecast,estPeakScore]);
+  },[historyProp,showForecast,estPeakScore,rawMode]);
   return <canvas ref={ref} style={{display:'block',width:'100%',height:150,borderRadius:6,background:'#07090f'}}/>;
 }
 
