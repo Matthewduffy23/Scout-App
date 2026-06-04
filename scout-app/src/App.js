@@ -173,7 +173,7 @@ export default function App(){
   const [showYouth,setShowYouth]=useState(false);
   const [activeBands,setActiveBands]=useState(new Set());
   const [activeRegions,setActiveRegions]=useState(new Set());
-  const [activePresetLeagues,setActivePresetLeagues]=useState(null); // null = default
+  const [manualOverrides,setManualOverrides]=useState(null); // null = use derived, Set = manual additions/removals on top
   const [lsMin,setLsMin]=useState(0);
   const [lsMax,setLsMax]=useState(101);
 
@@ -181,11 +181,13 @@ export default function App(){
   const leagues=useMemo(()=>{
     if(showYouth) return new Set(YOUTH_LEAGUES);
     let base;
-    if(activePresetLeagues!==null) base=new Set(activePresetLeagues);
-    else if(activeBands.size>0||activeRegions.size>0){
-      base=new Set();
-      if(activeBands.size>0) ALL_LEAGUES.filter(l=>{const b=leagueToBand(l);return activeBands.has(b)||(activeBands.has(6)&&b===6);}).forEach(l=>base.add(l));
-      if(activeRegions.size>0) ALL_LEAGUES.filter(l=>activeRegions.has(leagueToRegion(l))).forEach(l=>base.add(l));
+    if(activePresetLeagues!==null) return new Set(activePresetLeagues);
+    if(activeBands.size>0||activeRegions.size>0){
+      base=new Set(ALL_LEAGUES.filter(l=>{
+        const bandOk = activeBands.size===0 || activeBands.has(leagueToBand(l));
+        const regionOk = activeRegions.size===0 || activeRegions.has(leagueToRegion(l));
+        return bandOk && regionOk;
+      }));
     } else {
       base=new Set(DEFAULT_LEAGUES);
     }
@@ -522,7 +524,16 @@ export default function App(){
             </div>
             {/* Hidden / Youth toggles */}
             <div style={{display:'flex',gap:8,marginBottom:6}}>
-              <label style={{display:'flex',alignItems:'center',gap:5,cursor:'pointer'}} onClick={()=>{setShowHidden(p=>!p);setPage(0);}}>
+              <label style={{display:'flex',alignItems:'center',gap:5,cursor:'pointer'}} onClick={()=>{
+                const next=!showHidden;
+                setShowHidden(next);
+                // Snapshot current leagues and add/remove hidden ones
+                const current=new Set(leagues);
+                if(next)[...HIDDEN_LEAGUES].forEach(l=>current.add(l));
+                else[...HIDDEN_LEAGUES].forEach(l=>current.delete(l));
+                setActivePresetLeagues([...current]);
+                setActiveBands(new Set());setActiveRegions(new Set());setPage(0);
+              }}>
                 <div style={T.cb(showHidden)}>{showHidden&&<span style={{color:'#fff',fontSize:8}}>✓</span>}</div>
                 <span style={{fontSize:9.5,color:showHidden?'#e2e8f4':'#94a3b8'}}>Show Hidden</span>
               </label>
@@ -549,8 +560,9 @@ export default function App(){
             <div style={{...T.cg,maxHeight:200,overflowY:'auto'}}>
               {[...ALL_LEAGUES].filter(lg=>showHidden||!HIDDEN_LEAGUES.has(lg)).filter(lg=>showYouth||!YOUTH_LEAGUES.has(lg)).sort((a,b)=>a.localeCompare(b)).map(lg=>(
                 <label key={lg} style={T.cr} onClick={()=>{
-                  const newList=leagues.has(lg)?[...leagues].filter(l=>l!==lg):[...leagues,lg];
-                  setActivePresetLeagues(newList);
+                  const current=new Set(leagues);
+                  current.has(lg)?current.delete(lg):current.add(lg);
+                  setActivePresetLeagues([...current]);
                   setActiveBands(new Set());setActiveRegions(new Set());setActivePreset('');setPage(0);
                 }}>                  <div style={T.cb(leagues.has(lg))}>{leagues.has(lg)&&<span style={{color:'#fff',fontSize:8,lineHeight:1}}>✓</span>}</div>
                   <span style={T.cl(leagues.has(lg))}>{lg}</span>

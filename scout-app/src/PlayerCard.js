@@ -66,7 +66,7 @@ function TabBtn({label,active,onClick}) {
   return <button onClick={onClick} style={{padding:'10px 16px',background:'none',border:'none',borderBottom:`2px solid ${active?'#3b7de8':'transparent'}`,color:active?'#93c5fd':'#64748b',fontSize:11,fontWeight:700,cursor:'pointer',letterSpacing:'0.04em',whiteSpace:'nowrap'}}>{label}</button>;
 }
 
-function Trajectory({history,showForecast,estPeakScore,rawMode=false}) {
+function Trajectory({history:historyProp,showForecast,estPeakScore,rawMode=false}) {
   const ref=useRef(null);
   useEffect(()=>{
     const canvas=ref.current;
@@ -78,6 +78,8 @@ function Trajectory({history,showForecast,estPeakScore,rawMode=false}) {
     const ctx=canvas.getContext('2d');ctx.scale(dpr,dpr);ctx.clearRect(0,0,W,H);
     const pad={t:12,r:20,b:28,l:34};
     const pw=W-pad.l-pad.r,ph=H-pad.t-pad.b;
+    const history=historyProp.filter(h=>h.sc!=null);
+    if(!history.length) return;
     const scores=history.map(h=>rawMode?(h.r??h.sc):h.sc);
     const allScores=showForecast&&estPeakScore?[...scores,estPeakScore]:scores;
     const minS=Math.max(40,Math.min(...allScores)-8),maxS=Math.min(100,Math.max(...allScores)+10);
@@ -108,6 +110,7 @@ function Trajectory({history,showForecast,estPeakScore,rawMode=false}) {
       ctx.fillText(`Proj: ${estPeakScore.toFixed(0)}`,lx+pw*0.25+4,py2+3);
     }
     pts.forEach(p=>{
+      if(p.sc==null) return;
       ctx.beginPath();ctx.arc(p.x,p.y,3.5,0,Math.PI*2);
       ctx.fillStyle='#3b7de8';ctx.fill();ctx.strokeStyle='#07090f';ctx.lineWidth=1.5;ctx.stroke();
       // Season label below
@@ -145,7 +148,7 @@ function ScoreCard({label,score,league,sub,showStars=true}) {
 
 function ForecastTab({player}) {
   const fc=player.forecast||{};
-  const history=player.sh||[];
+  const history=(player.sh||[]).filter(h=>h.sc!=null);
   if(history.length<2) return <div style={{color:'#475569',fontSize:12,padding:16}}>Insufficient data.</div>;
   const scores=history.map(h=>h.sc);
   const n=scores.length;
@@ -256,9 +259,9 @@ function ForecastTab({player}) {
               <div style={{width:78,fontSize:10,color:'#94a3b8',flexShrink:0}}>{(h.l||'').replace('England','Eng').replace('Scotland','Sco').replace(' ','')}</div>
               <div style={{width:22,fontSize:10,color:'#94a3b8',flexShrink:0,textAlign:'right'}}>{h.a}</div>
               <div style={{flex:1,background:'#0c1120',borderRadius:3,height:6}}>
-                <div style={{width:`${Math.min(((h.sc-40)/55)*100,100)}%`,height:'100%',borderRadius:3,background:scoreBandColor(h.sc)}}/>
+                <div style={{width:`${h.sc!=null?Math.min(((h.sc-40)/55)*100,100):0}%`,height:'100%',borderRadius:3,background:h.sc!=null?scoreBandColor(h.sc):'#1e2d45'}}/>
               </div>
-              <div style={{width:30,fontSize:11,fontWeight:700,color:scoreBandColor(h.sc),textAlign:'right'}}>{h.sc}</div>
+              <div style={{width:30,fontSize:11,fontWeight:700,color:h.sc!=null?scoreBandColor(h.sc):'#475569',textAlign:'right'}}>{h.sc!=null?h.sc:'—'}</div>
             </div>
           ))}
         </div>
