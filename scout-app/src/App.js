@@ -173,7 +173,7 @@ export default function App(){
   const [showYouth,setShowYouth]=useState(false);
   const [activeBands,setActiveBands]=useState(new Set());
   const [activeRegions,setActiveRegions]=useState(new Set());
-  const [manualOverrides,setManualOverrides]=useState(null); // null = use derived, Set = manual additions/removals on top
+  const [activePresetLeagues,setActivePresetLeagues]=useState(null); // null = use derived, Set = manual additions/removals on top
   const [lsMin,setLsMin]=useState(0);
   const [lsMax,setLsMax]=useState(101);
 
