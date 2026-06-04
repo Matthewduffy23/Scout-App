@@ -259,8 +259,8 @@ export default function App(){
     return all.filter(p=>{
       if(q&&!_norm(p.name).includes(q)&&!_norm(p.team).includes(q)) return false;
       // RecentOnly: skip if no recent data, BUT allow all if a specific season is selected
-      if(recentOnly&&!p.hasRecentData&&seasonFilter==='all'&&!played2526) return false;
-      if(minMins>0&&(p.minutesLatest||0)<minMins) return false;
+      if(recentOnly&&!p.hasRecentData&&seasonFilter==='all'&&!played2526&&!showYouth) return false;
+      if(minMins>0&&(p.minutesLatest||0)<(showYouth?100:minMins)) return false;
       // Current league only: player must be currently in one of the selected leagues
       if(currentLeagueOnly&&!leagues.has(p.league)) return false;
       // When specific season selected, player must have data for that season
