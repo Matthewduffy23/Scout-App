@@ -16,12 +16,13 @@ export function photoUrl(name,team){
   const parts=name.trim().split('.');let ini,sur;
   if(parts.length>=2){ini=parts[0].trim();sur=parts.slice(1).join('.').trim();}
   else{const b=name.trim().split(' ');ini=b[0]||'';sur=b.slice(1).join(' ')||b[0]||'';}
-  const t=String(team||'').toLowerCase().trim().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
+  const t=String(team||'').trim().split(/\s+/).map(w=>slugN(w)).join('_').replace(/^_|_$/g,'');
   return `${PHOTO_BASE}${slugN(ini)}_${slugN(sur)}__${t}.png`;
 }
 export function Photo({name,team,size=34}){
   const [src,set]=useState(()=>photoUrl(name,team));
   const [tried,setT]=useState(false);
+  React.useEffect(()=>{set(photoUrl(name,team));setT(false);},[name,team]);
   return <img src={src} alt="" onError={()=>{if(!tried){set('/fallback.png');setT(true);}}} style={{width:size,height:size,borderRadius:'50%',objectFit:'cover',background:'#111827',flexShrink:0,border:'2px solid #1a2740'}}/>;
 }
 export function Crest({id,name,size=20}){
