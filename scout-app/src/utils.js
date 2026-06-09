@@ -21,6 +21,7 @@ import React, { useState } from 'react';
 export function Photo({name,team,size=34}){
   const [src,set]=useState(()=>photoUrl(name,team));
   const [tried,setT]=useState(false);
+  React.useEffect(()=>{set(photoUrl(name,team));setT(false);},[name,team]);
   return <img src={src} alt="" onError={()=>{if(!tried){set('/fallback.png');setT(true);}}} style={{width:size,height:size,borderRadius:'50%',objectFit:'cover',background:'#111827',flexShrink:0,border:'2px solid #1a2740'}}/>;
 }
 
