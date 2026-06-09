@@ -12,7 +12,7 @@ export function photoUrl(name, team) {
   let ini, sur;
   if(parts.length>=2){ini=parts[0].trim();sur=parts.slice(1).join('.').trim();}
   else{const b=name.trim().split(' ');ini=b[0]||'';sur=b.slice(1).join(' ')||b[0]||'';}
-  const t=String(team||'').toLowerCase().trim().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
+  const t=slugN(String(team||'')).replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
   return `${PHOTO_BASE}${slugN(ini)}_${slugN(sur)}__${t}.png`;
 }
 
