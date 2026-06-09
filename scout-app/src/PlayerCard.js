@@ -593,7 +593,7 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
               const HOME_NATIONS = new Set(['england','scotland','wales','ireland','northern ireland','republic of ireland']);
               const YOUTH_LEAGUES_GBE = new Set(['Sweden 4.','Switzerland 3.','Ukraine 3.','Brazil 4.','Czech 3.','Denmark 4.','Germany 5.','Germany 6.','Italy 5.','Portugal 4.','Serbia 3.','England 7.','England 8.','England 9.','England 10.']);
               const INTL_LEAGUES_GBE = new Set(['UEFA WC Qualifiers.','UEFA U21 Euros.','UEFA U19 Euros.','Asia WC Qualifiers.','AFCON.','AFCON U20.','AFCON U17.','AFCON Qualifiers.','S.America Qualifiers.','U20 World Cup.','U17 World Cup.']);
-              const CONT_BAND = {'Champions League.':1,'Europa League.':2,'Conference League.':2,'Copa Libertadores.':2,'Club World Cup.':2,'Asia Champions League.':3,'Africa Champions League.':3};
+              const CONT_BAND = {'Champions League.':1,'Europa League.':2,'Conference League.':2,'Copa Libertadores.':2,'Club World Cup.':2,'Asia Champions League.':3,'Africa Champions League.':3,'CAF Champions League.':3};
               const CONT_ESC_ONLY = new Set(['Champions League Qualifiers.','Europa League Qualifiers.','Conference League Qualifiers.','UEFA Youth League.','U20 Copa.']);
 
               // Use pre-computed if available, otherwise calculate live
@@ -602,7 +602,9 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
               const domPts = player.gbeDomPts ?? 0;
               const contPts = player.gbeContPts ?? 0;
               const lqPts = player.gbeLqPts ?? [12,10,8,6,4,2][Math.max(0,Math.min(5,band-1))];
-              const total = player.gbeTotal ?? (domPts+contPts+lqPts);
+              const finishPts = player.gbeFinishPts ?? 0;
+              const progPts = player.gbeProgPts ?? 0;
+              const total = player.gbeTotal ?? (domPts+contPts+lqPts+finishPts+progPts);
               const minsPct = player.gbeMinsPct ?? 0;
 
               // ESC — use pre-computed if available, else calculate
@@ -646,13 +648,15 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
                     <div style={SEC}>GBE / Visa Points</div>
                     <div style={{padding:'4px 12px',borderRadius:20,background:statusColor+'22',border:`1px solid ${statusColor}`,color:statusColor,fontSize:11,fontWeight:700}}>{status}</div>
                   </div>
-                  <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:6,marginBottom:10}}>
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:6,marginBottom:10}}>
                     {[
                       {label:'Band',val:`Band ${band}`,sub:domSh?.l||player.league,color:'#94a3b8'},
                       {label:'Minutes',val:(domSh?.mins||0).toLocaleString(),sub:`${minsPct}% · ${domSh?.s||'—'}`,color:'#94a3b8'},
                       {label:'Dom. (T2)',val:domPts,sub:'of 12',color:'#60a5fa'},
                       {label:'Cont. (T3)',val:contPts,sub:'of 10',color:'#60a5fa'},
                       {label:'Band (T6)',val:lqPts,sub:'quality',color:'#60a5fa'},
+                      {label:'Finish (T4)',val:finishPts,sub:'of 6',color:'#a78bfa'},
+                      {label:'Prog. (T5)',val:progPts,sub:'of 10',color:'#a78bfa'},
                     ].map(({label,val,sub,color})=>(
                       <div key={label} style={{background:'#07090f',borderRadius:7,padding:'8px',textAlign:'center'}}>
                         <div style={{fontSize:8,fontWeight:700,color:'#475569',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:3}}>{label}</div>
@@ -669,7 +673,7 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
                     ESC eligible: {escReasons.join(' · ')}
                   </div>}
                   <div style={{fontSize:9,color:'#475569',lineHeight:1.5}}>
-                    T2 (domestic) + T3 (continental) + T6 (league band) · 2025-26/2026/2025 only · Continental: 1+ min = ESC eligible · 0–9 = Fail · 10–14 = Exceptions Panel · 15+ = Pass
+                    T2 (domestic) + T3 (continental mins) + T4 (league finish) + T5 (continental progression) + T6 (league band) · 2025-26/2026/2025 only · 0–9 = Fail · 10–14 = Exceptions Panel · 15+ = Pass
                   </div>
                 </div>
               );

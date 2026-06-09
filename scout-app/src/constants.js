@@ -67,12 +67,12 @@ export const GBE_LEAGUE_BANDS = {
   'England 6.':1,'England 7.':1,'England 8.':1,'England 9.':1,'England 10.':1,
   'Scotland 1.':1,'Scotland 2.':1,'Scotland 3.':1,'Wales 1.':1,'Ireland 1.':1,'Northern Ireland 1.':1,
   'Spain 1.':1,'Germany 1.':1,'Italy 1.':1,'France 1.':1,
-  'Portugal 1.':2,'Netherlands 1.':2,'Belgium 1.':2,'Turkey 1.':2,
-  'USA 1.':3,'Brazil 1.':3,'Argentina 1.':3,'Mexico 1.':3,
+  'Portugal 1.':2,'Netherlands 1.':2,'Belgium 1.':2,'Turkey 1.':3,'Brazil 1.':2,
+  'USA 1.':3,'Argentina 1.':3,'Mexico 1.':3,
   'Czech 1.':4,'Croatia 1.':4,'Switzerland 1.':4,'Spain 2.':4,'Germany 2.':4,
-  'Ukraine 1.':4,'Greece 1.':4,'Colombia 1.':4,'Austria 1.':4,'Denmark 1.':4,'France 2.':4,'Russia 1.':4,
-  'Serbia 1.':5,'Poland 1.':5,'Slovenia 1.':5,'Chile 1.':5,'Uruguay 1.':5,
-  'Sweden 1.':5,'Norway 1.':5,'Italy 2.':5,'Hungary 1.':5,'Japan 1.':5,'Korea 1.':5,'Australia 1.':5,
+  'Ukraine 1.':4,'Greece 1.':4,'Colombia 1.':4,'Austria 1.':4,'Denmark 1.':4,'France 2.':4,'Russia 1.':4,'Japan 1.':4,
+  'Serbia 1.':5,'Poland 1.':5,'Chile 1.':5,'Uruguay 1.':5,
+  'Sweden 1.':5,'Norway 1.':5,'Italy 2.':5,'Hungary 1.':5,'Korea 1.':5,'Australia 1.':5,'Slovenia 1.':6,
 };
 
 export const COUNTRY_TO_REGION = {
