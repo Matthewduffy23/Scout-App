@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import PlayerCard from './PlayerCard';
 import {
-  scoreBand, scoreBandColor, formatMarketValue, formatFoot,
+  scoreBand, scoreBandColor, formatMV, formatFoot,
   ROLE_KEY_LABELS, ROLES_BY_KEY, ALL_LEAGUES, LEAGUE_PRESETS,
 } from './constants';
 
@@ -415,7 +415,7 @@ export default function App() {
                         </td>
                         <td style={{...css.td,color:'#8898b4'}}>{p.peakScore.toFixed(1)}</td>
                         <td style={{...css.td,color:'#8898b4'}}>{p.seasons}</td>
-                        <td style={{...css.td,color:'#8898b4'}}>{formatMarketValue(p.marketValue)}</td>
+                        <td style={{...css.td,color:'#8898b4'}}>{formatMV(p.marketValue)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -443,3 +443,4 @@ export default function App() {
     </div>
   );
 }
+
