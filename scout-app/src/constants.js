@@ -60,3 +60,4 @@ export function divColor(v) {
   if (n>=20) return '#f97316';
   return '#ef4444';
 }
+
