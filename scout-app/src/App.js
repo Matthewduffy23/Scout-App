@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import PlayerCard from './PlayerCard';
 import ClubTool from './ClubTool';
 import { Photo as PhotoUtil, Crest as CrestUtil, photoUrl as photoUrlUtil } from './utils';
@@ -9,7 +9,7 @@ const PAGE = 50;
 
 function slugN(s) {
   s = String(s||'').toLowerCase();
-  '├╕,o|┼ô,oe|├ª,ae|├Ñ,a|├ñ,a|├╢,o|├╝,u|├ƒ,ss|┼é,l|─æ,d|├░,d|├╛,th|├º,c|┼ƒ,s|─ƒ,g|─▒,i'.split('|').forEach(p=>{const[k,v]=p.split(',');s=s.split(k).join(v);});
+  'ø,o|œ,oe|æ,ae|å,a|ä,a|ö,o|ü,u|ß,ss|ł,l|đ,d|ð,d|þ,th|ç,c|ş,s|ğ,g|ı,i'.split('|').forEach(p=>{const[k,v]=p.split(',');s=s.split(k).join(v);});
   return s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'');
 }
 export function photoUrl(name,team){
@@ -96,13 +96,13 @@ function MetricFilterRow({filter,onChange,onRemove}){
     <div style={{background:'#0d1220',border:'1px solid #1e2d45',borderRadius:6,padding:'8px',marginBottom:6}}>
       <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:6}}>
         <select style={{flex:1,background:'#0d1220',border:'1px solid #1e2d45',borderRadius:5,color:'#e2e8f4',padding:'5px 6px',fontSize:10.5,outline:'none'}} value={filter.key} onChange={e=>onChange({...filter,key:e.target.value,label:METRIC_OPTIONS.find(m=>m.key===e.target.value)?.label||e.target.value})}>
-          <option value="">Select metricΓÇª</option>
+          <option value="">Select metric…</option>
           {METRIC_OPTIONS.map(m=><option key={m.key} value={m.key}>{m.label}</option>)}
         </select>
-        <button onClick={onRemove} style={{background:'none',border:'1px solid #1e2d45',color:'#94a3b8',borderRadius:4,width:22,height:22,cursor:'pointer',fontSize:14,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,lineHeight:1}}>├ù</button>
+        <button onClick={onRemove} style={{background:'none',border:'1px solid #1e2d45',color:'#94a3b8',borderRadius:4,width:22,height:22,cursor:'pointer',fontSize:14,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,lineHeight:1}}>×</button>
       </div>
       {filter.key&&(<>
-        <div style={{fontSize:9,color:'#94a3b8',marginBottom:2}}>Percentile: <strong style={{color:'#60a5fa'}}>{filter.min}</strong>ΓÇô<strong style={{color:'#60a5fa'}}>{filter.max}</strong></div>
+        <div style={{fontSize:9,color:'#94a3b8',marginBottom:2}}>Percentile: <strong style={{color:'#60a5fa'}}>{filter.min}</strong>–<strong style={{color:'#60a5fa'}}>{filter.max}</strong></div>
         <DualSlider min={filter.min} max={filter.max} onChange={(mn,mx)=>onChange({...filter,min:mn,max:mx})}/>
       </>)}
     </div>
@@ -155,7 +155,7 @@ const T={
 
 function Th({col,label,sort,onSort}){
   const a=sort.col===col;
-  return <th style={{...T.th,...(a?T.tha:{})}} onClick={()=>onSort(col)}>{label}{a?(sort.asc?' Γåæ':' Γåô'):''}</th>;
+  return <th style={{...T.th,...(a?T.tha:{})}} onClick={()=>onSort(col)}>{label}{a?(sort.asc?' ↑':' ↓'):''}</th>;
 }
 
 export default function App(){
@@ -367,9 +367,9 @@ export default function App(){
 
   const reset=()=>{setSearch('');setPos('All');setRoleFilter('');setRoleScoreMin(50);setActivePreset('');setActivePresetLeagues(null);setShowHidden(false);setShowYouth(false);setActiveBands(new Set());setActiveRegions(new Set());setLsMin(0);setLsMax(101);setAgeMin(16);setAgeMax(38);setFoot('Any');setMinScore(40);setMinSeas(1);setShowMvFilter(false);setMvMax(50);setShowContractFilter(false);setContractBefore(2028);setSeasonFilter('all');setScoreMode('complete');setMetricFilters([]);setXValueFilter('');setRawMode(false);setOnlyElite(false);setRecentOnly(true);setShowXValueFilter(false);setXValueMin(0);setXValueMax(50);setAttrFilters(new Set());setMinMins(500);setCurrentLeagueOnly(false);setPotentialMin(40);setPlayed2526(false);setEscOnly(false);setPage(0);};
 
-  if(loading) return <div style={{...T.app,alignItems:'center',justifyContent:'center'}}><style>{'@keyframes spin{to{transform:rotate(360deg)}}'}</style><div style={{width:24,height:24,border:'2px solid #1e2d45',borderTop:'2px solid #3b7de8',borderRadius:'50%',animation:'spin 0.8s linear infinite'}}/><div style={{color:'#94a3b8',fontSize:11,marginTop:8}}>LoadingΓÇª</div></div>;
+  if(loading) return <div style={{...T.app,alignItems:'center',justifyContent:'center'}}><style>{'@keyframes spin{to{transform:rotate(360deg)}}'}</style><div style={{width:24,height:24,border:'2px solid #1e2d45',borderTop:'2px solid #3b7de8',borderRadius:'50%',animation:'spin 0.8s linear infinite'}}/><div style={{color:'#94a3b8',fontSize:11,marginTop:8}}>Loading…</div></div>;
 
-  const colLabel=rawMode?'Raw':scoreMode!=='complete'?scoreMode.split(' ')[0]+'ΓÇª':seasonFilter!=='all'?seasonFilter.slice(2):'Career';
+  const colLabel=rawMode?'Raw':scoreMode!=='complete'?scoreMode.split(' ')[0]+'…':seasonFilter!=='all'?seasonFilter.slice(2):'Career';
 
   return(
     <div style={T.app}>
@@ -381,14 +381,14 @@ export default function App(){
           <button onClick={()=>setActiveTab('scout')} style={{padding:'4px 10px',borderRadius:5,border:`1px solid ${activeTab==='scout'?'#3b7de8':'transparent'}`,background:activeTab==='scout'?'#0e2040':'transparent',color:activeTab==='scout'?'#60a5fa':'#94a3b8',fontSize:10,fontWeight:600,cursor:'pointer'}}>Scout Index</button>
           <button onClick={()=>setActiveTab('club')} style={{padding:'4px 10px',borderRadius:5,border:`1px solid ${activeTab==='club'?'#3b7de8':'transparent'}`,background:activeTab==='club'?'#0e2040':'transparent',color:activeTab==='club'?'#60a5fa':'#94a3b8',fontSize:10,fontWeight:600,cursor:'pointer'}}>Club Tool</button>
         </div>
-        {rawMode&&<div style={{padding:'2px 8px',borderRadius:4,background:'#1e3a5f',color:'#60a5fa',fontSize:10,fontWeight:700}}>RAW MODE ΓÇö no league weighting</div>}
+        {rawMode&&<div style={{padding:'2px 8px',borderRadius:4,background:'#1e3a5f',color:'#60a5fa',fontSize:10,fontWeight:700}}>RAW MODE — no league weighting</div>}
         <div style={{marginLeft:'auto',fontSize:9,color:'#94a3b8',background:'#0d1220',border:'1px solid #1e2d45',borderRadius:4,padding:'2px 6px'}}>{all.length.toLocaleString()} players</div>
       </div>
 
       {activeTab==='club'?<ClubTool players={all}/>:(<div style={T.layout}>
         <aside style={T.sb}>
           <div style={T.fg}>
-            <div style={T.sw}><span style={T.si3}>Γîò</span><input style={T.si2} placeholder="Player or teamΓÇª" value={search} onChange={e=>{setSearch(e.target.value);setPage(0);}}/></div>
+            <div style={T.sw}><span style={T.si3}>⌕</span><input style={T.si2} placeholder="Player or team…" value={search} onChange={e=>{setSearch(e.target.value);setPage(0);}}/></div>
           </div>
           <div style={T.dv}/>
 
@@ -459,11 +459,11 @@ export default function App(){
             <span style={T.fl}>Scoring Options</span>
             <div style={{display:'flex',flexDirection:'column',gap:6}}>
               <label style={T.cr} onClick={()=>{setRawMode(p=>!p);setPage(0);}}>
-                <div style={T.cb(rawMode)}>{rawMode&&<span style={{color:'#fff',fontSize:8}}>Γ£ô</span>}</div>
+                <div style={T.cb(rawMode)}>{rawMode&&<span style={{color:'#fff',fontSize:8}}>✓</span>}</div>
                 <span style={T.cl(rawMode)}>Raw score (no league weight)</span>
               </label>
               <label style={T.cr} onClick={()=>{setOnlyElite(p=>!p);setPage(0);}}>
-                <div style={T.cb(onlyElite)}>{onlyElite&&<span style={{color:'#fff',fontSize:8}}>Γ£ô</span>}</div>
+                <div style={T.cb(onlyElite)}>{onlyElite&&<span style={{color:'#fff',fontSize:8}}>✓</span>}</div>
                 <span style={T.cl(onlyElite)}>Elite in division only</span>
               </label>
             </div>
@@ -535,18 +535,18 @@ export default function App(){
                 setActivePresetLeagues([...current]);
                 setActiveBands(new Set());setActiveRegions(new Set());setPage(0);
               }}>
-                <div style={T.cb(showHidden)}>{showHidden&&<span style={{color:'#fff',fontSize:8}}>Γ£ô</span>}</div>
+                <div style={T.cb(showHidden)}>{showHidden&&<span style={{color:'#fff',fontSize:8}}>✓</span>}</div>
                 <span style={{fontSize:9.5,color:showHidden?'#e2e8f4':'#94a3b8'}}>Show Hidden</span>
               </label>
               <label style={{display:'flex',alignItems:'center',gap:5,cursor:'pointer'}} onClick={()=>{setShowYouth(p=>!p);setPage(0);}}>
-                <div style={T.cb(showYouth)}>{showYouth&&<span style={{color:'#fff',fontSize:8}}>Γ£ô</span>}</div>
+                <div style={T.cb(showYouth)}>{showYouth&&<span style={{color:'#fff',fontSize:8}}>✓</span>}</div>
                 <span style={{fontSize:9.5,color:showYouth?'#e2e8f4':'#94a3b8'}}>Show Youth</span>
               </label>
             </div>
             {/* League Strength Range */}
             <div style={{marginBottom:8}}>
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
-                <span style={{fontSize:10,color:'#64748b'}}>League Strength: <strong style={{color:'#60a5fa'}}>{lsMin}ΓÇô{lsMax}</strong></span>
+                <span style={{fontSize:10,color:'#64748b'}}>League Strength: <strong style={{color:'#60a5fa'}}>{lsMin}–{lsMax}</strong></span>
                 {(lsMin>0||lsMax<101)&&<button onClick={()=>{setLsMin(0);setLsMax(101);setPage(0);}} style={{fontSize:8,padding:'1px 5px',borderRadius:3,border:'1px solid #1e2d45',background:'transparent',color:'#64748b',cursor:'pointer'}}>Reset</button>}
               </div>
               <div style={{display:'flex',alignItems:'center',gap:6}}>
@@ -565,7 +565,7 @@ export default function App(){
                   current.has(lg)?current.delete(lg):current.add(lg);
                   setActivePresetLeagues([...current]);
                   setActiveBands(new Set());setActiveRegions(new Set());setActivePreset('');setPage(0);
-                }}>                  <div style={T.cb(leagues.has(lg))}>{leagues.has(lg)&&<span style={{color:'#fff',fontSize:8,lineHeight:1}}>Γ£ô</span>}</div>
+                }}>                  <div style={T.cb(leagues.has(lg))}>{leagues.has(lg)&&<span style={{color:'#fff',fontSize:8,lineHeight:1}}>✓</span>}</div>
                   <span style={T.cl(leagues.has(lg))}>{lg}</span>
                 </label>
               ))}
@@ -578,7 +578,7 @@ export default function App(){
             <span style={T.fl}>Age</span>
             <div style={T.rr}>
               <input style={T.ri} type="number" min={14} max={50} value={ageMin} onChange={e=>{setAgeMin(Number(e.target.value));setPage(0);}}/>
-              <span style={T.rs}>ΓÇô</span>
+              <span style={T.rs}>–</span>
               <input style={T.ri} type="number" min={14} max={50} value={ageMax} onChange={e=>{setAgeMax(Number(e.target.value));setPage(0);}}/>
             </div>
           </div>
@@ -609,16 +609,16 @@ export default function App(){
           </div>
           <div style={T.fg}>
             <label style={T.cr} onClick={()=>{setPlayed2526(p=>!p);setPage(0);}}>
-              <div style={T.cb(played2526)}>{played2526&&<span style={{color:'#fff',fontSize:8,lineHeight:1}}>Γ£ô</span>}</div>
+              <div style={T.cb(played2526)}>{played2526&&<span style={{color:'#fff',fontSize:8,lineHeight:1}}>✓</span>}</div>
               <span style={T.cl(played2526)}>Played in 2025-26 only</span>
             </label>
           </div>
           <div style={T.fg}>
             <label style={T.cr} onClick={()=>{setEscOnly(p=>!p);setPage(0);}}>
-              <div style={T.cb(escOnly)}>{escOnly&&<span style={{color:'#fff',fontSize:8,lineHeight:1}}>Γ£ô</span>}</div>
+              <div style={T.cb(escOnly)}>{escOnly&&<span style={{color:'#fff',fontSize:8,lineHeight:1}}>✓</span>}</div>
               <span style={T.cl(escOnly)}>ESC eligible only</span>
             </label>
-            <div style={{fontSize:9,color:'#475569',marginTop:2,lineHeight:1.4}}>Home nations ┬╖ Continental/Intl history ┬╖ Youth league ┬╖ 5+ games Band 1-5 (24-25/25-26)</div>
+            <div style={{fontSize:9,color:'#475569',marginTop:2,lineHeight:1.4}}>Home nations · Continental/Intl history · Youth league · 5+ games Band 1-5 (24-25/25-26)</div>
           </div>
           <div style={T.fg}>
             <span style={T.fl}>Min Seasons: <strong style={{color:'#60a5fa'}}>{minSeas}</strong></span>
@@ -637,21 +637,21 @@ export default function App(){
           </div>
           <div style={T.fg}>
             <label style={T.cr} onClick={()=>{setShowXValueFilter(p=>!p);setPage(0);}}>
-              <div style={T.cb(showXValueFilter)}>{showXValueFilter&&<span style={{color:'#fff',fontSize:8,lineHeight:1}}>Γ£ô</span>}</div>
+              <div style={T.cb(showXValueFilter)}>{showXValueFilter&&<span style={{color:'#fff',fontSize:8,lineHeight:1}}>✓</span>}</div>
               <span style={T.cl(showXValueFilter)}>Filter by xValue range</span>
             </label>
             {showXValueFilter&&(
               <div style={{marginTop:6}}>
                 <div style={{display:'flex',alignItems:'center',gap:6,marginTop:4}}>
                   <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:2}}>
-                    <span style={{fontSize:8,color:'#64748b',textTransform:'uppercase',letterSpacing:'0.08em'}}>Min ┬úm</span>
+                    <span style={{fontSize:8,color:'#64748b',textTransform:'uppercase',letterSpacing:'0.08em'}}>Min £m</span>
                     <input type="number" min={0} max={xValueMax-1} step={0.5} value={xValueMin}
                       onChange={e=>{setXValueMin(Number(e.target.value));setPage(0);}}
                       style={{width:52,background:'#07090f',border:'1px solid #3b7de8',borderRadius:5,color:'#60a5fa',padding:'4px 6px',fontSize:12,fontWeight:700,textAlign:'center',outline:'none'}}/>
                   </div>
                   <div style={{flex:1,height:2,background:'#3b7de8',borderRadius:2,marginTop:10}}/>
                   <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:2}}>
-                    <span style={{fontSize:8,color:'#64748b',textTransform:'uppercase',letterSpacing:'0.08em'}}>Max ┬úm</span>
+                    <span style={{fontSize:8,color:'#64748b',textTransform:'uppercase',letterSpacing:'0.08em'}}>Max £m</span>
                     <input type="number" min={xValueMin+1} max={200} step={0.5} value={xValueMax}
                       onChange={e=>{setXValueMax(Number(e.target.value));setPage(0);}}
                       style={{width:52,background:'#07090f',border:'1px solid #3b7de8',borderRadius:5,color:'#60a5fa',padding:'4px 6px',fontSize:12,fontWeight:700,textAlign:'center',outline:'none'}}/>
@@ -676,14 +676,14 @@ export default function App(){
 
           <div style={T.fg}>
             <label style={T.cr} onClick={()=>{setShowMvFilter(p=>!p);setPage(0);}}>
-              <div style={T.cb(showMvFilter)}>{showMvFilter&&<span style={{color:'#fff',fontSize:8,lineHeight:1}}>Γ£ô</span>}</div>
+              <div style={T.cb(showMvFilter)}>{showMvFilter&&<span style={{color:'#fff',fontSize:8,lineHeight:1}}>✓</span>}</div>
               <span style={T.cl(showMvFilter)}>Filter by Market Value</span>
             </label>
-            {showMvFilter&&<div style={{marginTop:6}}><span style={{fontSize:9,color:'#94a3b8',display:'block',marginBottom:4}}>Max: <strong style={{color:'#60a5fa'}}>┬ú{mvMax}m</strong></span><input type="range" style={T.sl} min={0} max={50} step={0.5} value={mvMax} onChange={e=>{setMvMax(Number(e.target.value));setPage(0);}}/></div>}
+            {showMvFilter&&<div style={{marginTop:6}}><span style={{fontSize:9,color:'#94a3b8',display:'block',marginBottom:4}}>Max: <strong style={{color:'#60a5fa'}}>£{mvMax}m</strong></span><input type="range" style={T.sl} min={0} max={50} step={0.5} value={mvMax} onChange={e=>{setMvMax(Number(e.target.value));setPage(0);}}/></div>}
           </div>
           <div style={T.fg}>
             <label style={T.cr} onClick={()=>{setShowContractFilter(p=>!p);setPage(0);}}>
-              <div style={T.cb(showContractFilter)}>{showContractFilter&&<span style={{color:'#fff',fontSize:8,lineHeight:1}}>Γ£ô</span>}</div>
+              <div style={T.cb(showContractFilter)}>{showContractFilter&&<span style={{color:'#fff',fontSize:8,lineHeight:1}}>✓</span>}</div>
               <span style={T.cl(showContractFilter)}>Filter by Contract</span>
             </label>
             {showContractFilter&&<div style={{marginTop:6}}><span style={{fontSize:9,color:'#94a3b8',display:'block',marginBottom:4}}>Expires before: <strong style={{color:'#60a5fa'}}>{contractBefore}</strong></span><input type="range" style={T.sl} min={2025} max={2030} step={1} value={contractBefore} onChange={e=>{setContractBefore(Number(e.target.value));setPage(0);}}/></div>}
@@ -703,14 +703,14 @@ export default function App(){
             <div style={T.si}><div style={T.sv}>{stats.elite}</div><div style={T.sl2}>Score 80+</div></div>
             <div style={{marginLeft:'auto',display:'flex',gap:3,flexWrap:'wrap',alignItems:'center'}}>
               <div style={{position:'relative'}}>
-                <button onClick={()=>setShowColPicker(p=>!p)} style={{padding:'4px 9px',borderRadius:4,border:'1px solid #1e2d45',background:showColPicker?'#0e2040':'transparent',color:'#94a3b8',fontSize:10,fontWeight:600,cursor:'pointer'}}>Γè₧ Columns</button>
+                <button onClick={()=>setShowColPicker(p=>!p)} style={{padding:'4px 9px',borderRadius:4,border:'1px solid #1e2d45',background:showColPicker?'#0e2040':'transparent',color:'#94a3b8',fontSize:10,fontWeight:600,cursor:'pointer'}}>⊞ Columns</button>
                 {showColPicker&&(
                   <div style={{position:'absolute',right:0,top:30,background:'#0d1220',border:'1px solid #1e2d45',borderRadius:8,padding:'10px',zIndex:50,minWidth:160,boxShadow:'0 4px 20px rgba(0,0,0,.5)'}}>
                     <div style={{fontSize:9,color:'#94a3b8',fontWeight:700,letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:8}}>Show / Hide Columns</div>
                     {[['marketValue','Mkt Val'],['xValue','xValue'],['xValueGapPct','Value Gap'],['peakScore','Peak'],['seasons','Seasons'],['potentialScore','Potential'],['contract','Contract']].map(([col,label])=>(
                       <label key={col} style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer',marginBottom:5}} onClick={()=>setHiddenCols(p=>{const n=new Set(p);n.has(col)?n.delete(col):n.add(col);return n;})}>
                         <div style={{width:12,height:12,borderRadius:2,border:`1px solid ${!hiddenCols.has(col)?'#3b7de8':'#475569'}`,background:!hiddenCols.has(col)?'#3b7de8':'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-                          {!hiddenCols.has(col)&&<span style={{color:'#fff',fontSize:8,lineHeight:1}}>Γ£ô</span>}
+                          {!hiddenCols.has(col)&&<span style={{color:'#fff',fontSize:8,lineHeight:1}}>✓</span>}
                         </div>
                         <span style={{fontSize:11,color:!hiddenCols.has(col)?'#e2e8f4':'#94a3b8'}}>{label}</span>
                       </label>
@@ -720,7 +720,7 @@ export default function App(){
               </div>
               {['careerScore','potentialScore','peakScore','xValue','xValueGapPct','age',...(scoreMode!=='complete'||roleFilter?['roleScore']:[])].map(col=>(
                 <button key={col} onClick={()=>onSort(col)} style={{padding:'4px 9px',borderRadius:4,border:`1px solid ${sort.col===col?'#3b7de8':'#1e2d45'}`,background:sort.col===col?'#0e2040':'transparent',color:sort.col===col?'#93c5fd':'#94a3b8',fontSize:10,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>
-                  {col==='careerScore'?'Career':col==='potentialScore'?'Potential':col==='peakScore'?'Peak':col==='xValue'?'xValue':col==='xValueGapPct'?'Value Gap':col==='age'?'Age':'Role'}{sort.col===col?(sort.asc?' Γåæ':' Γåô'):''}
+                  {col==='careerScore'?'Career':col==='potentialScore'?'Potential':col==='peakScore'?'Peak':col==='xValue'?'xValue':col==='xValueGapPct'?'Value Gap':col==='age'?'Age':'Role'}{sort.col===col?(sort.asc?' ↑':' ↓'):''}
                 </button>
               ))}
             </div>
@@ -728,7 +728,7 @@ export default function App(){
 
           <div style={T.tw}>
             {sorted.length===0
-              ?<div style={T.es}><div style={{fontSize:26}}>ΓÜ╜</div><div style={{fontSize:12,color:'#94a3b8'}}>{showYouth?'Youth league players not in current data ΓÇö will appear after next pipeline rebuild':'No players match filters'}</div></div>
+              ?<div style={T.es}><div style={{fontSize:26}}>⚽</div><div style={{fontSize:12,color:'#94a3b8'}}>{showYouth?'Youth league players not in current data — will appear after next pipeline rebuild':'No players match filters'}</div></div>
               :(
                 <table style={T.tbl}>
                   <thead style={T.th_}><tr>
@@ -754,7 +754,7 @@ export default function App(){
                     {pageData.map((p,i)=>{
                       const rcs=p.roleCareerScores||{};
                       const bestEntry=Object.entries(rcs).sort((a,b)=>b[1]-a[1])[0];
-                      const bestRole=bestEntry?bestEntry[0]:'ΓÇö';
+                      const bestRole=bestEntry?bestEntry[0]:'—';
                       const ds=getDisplayScore(p)??p.careerScore;
                       const roleModeScore=scoreMode!=='complete'?(rcs[scoreMode]||null):null;
                       const promo=promotionBadge(p.careerScore,p.league);
@@ -769,7 +769,7 @@ export default function App(){
                           <td style={T.td}><div style={{display:'flex',alignItems:'center',gap:5}}><Crest id={p.teamFotmobId} name={p.team} size={16}/><span style={{...T.tdm,fontSize:11}}>{p.team}</span></div></td>
                           <td style={{...T.td,...T.tdm,fontSize:11}}>{p.league}</td>
                           <td style={T.td}>{p.age}</td>
-                          <td style={T.td}>{p.foot&&p.foot!=='unknown'&&p.foot!=='nan'?<span style={T.fp(p.foot)}>{formatFoot(p.foot)}</span>:<span style={{color:'#64748b'}}>ΓÇö</span>}</td>
+                          <td style={T.td}>{p.foot&&p.foot!=='unknown'&&p.foot!=='nan'?<span style={T.fp(p.foot)}>{formatFoot(p.foot)}</span>:<span style={{color:'#64748b'}}>—</span>}</td>
                           <td style={T.td}><span style={T.rp}>{bestRole}</span></td>
                           <td style={T.td}>
                             <div style={{display:'flex',flexDirection:'column',gap:2}}>
@@ -781,14 +781,14 @@ export default function App(){
                               {promo&&<span style={{fontSize:8,color:'#22c55e',fontWeight:600}}>{promo}</span>}
                             </div>
                           </td>
-                          {scoreMode!=='complete'&&<td style={T.td}>{roleModeScore!=null?<span style={{fontWeight:700,color:scoreBandColor(roleModeScore)}}>{roleModeScore.toFixed(1)}</span>:<span style={{color:'#64748b'}}>ΓÇö</span>}</td>}
+                          {scoreMode!=='complete'&&<td style={T.td}>{roleModeScore!=null?<span style={{fontWeight:700,color:scoreBandColor(roleModeScore)}}>{roleModeScore.toFixed(1)}</span>:<span style={{color:'#64748b'}}>—</span>}</td>}
                           {!hiddenCols.has('peakScore')&&<td style={{...T.td,color:'#94a3b8'}}>{p.peakScore.toFixed(1)}</td>}
                           {!hiddenCols.has('seasons')&&<td style={{...T.td,color:'#94a3b8'}}>{p.seasons}</td>}
                           {!hiddenCols.has('potentialScore')&&<td style={T.td}><div style={{display:'flex',alignItems:'center',gap:4}}><div style={{width:6,height:6,borderRadius:'50%',background:'#22c55e',flexShrink:0}}/><span style={{fontWeight:600,color:'#22c55e',fontSize:11}}>{(p.potentialScore||p.careerScore).toFixed(1)}</span></div></td>}
-                          {!hiddenCols.has('xValue')&&<td style={T.td}>{p.xValue?<span style={{fontSize:11,fontWeight:700,color:'#93c5fd'}}>{formatMV(p.xValue)}</span>:<span style={{color:'#475569'}}>ΓÇö</span>}</td>}
-                          {!hiddenCols.has('xValueGapPct')&&<td style={T.td}>{p.xValue&&p.marketValue>0&&p.xValueGapPct!=null?<span style={{fontSize:11,fontWeight:700,color:p.xValueGapPct>20?'#22c55e':p.xValueGapPct<-20?'#ef4444':'#94a3b8'}}>{p.xValueGapPct>0?'+':''}{p.xValueGapPct.toFixed(0)}%</span>:<span style={{color:'#475569'}}>ΓÇö</span>}</td>}
+                          {!hiddenCols.has('xValue')&&<td style={T.td}>{p.xValue?<span style={{fontSize:11,fontWeight:700,color:'#93c5fd'}}>{formatMV(p.xValue)}</span>:<span style={{color:'#475569'}}>—</span>}</td>}
+                          {!hiddenCols.has('xValueGapPct')&&<td style={T.td}>{p.xValue&&p.marketValue>0&&p.xValueGapPct!=null?<span style={{fontSize:11,fontWeight:700,color:p.xValueGapPct>20?'#22c55e':p.xValueGapPct<-20?'#ef4444':'#94a3b8'}}>{p.xValueGapPct>0?'+':''}{p.xValueGapPct.toFixed(0)}%</span>:<span style={{color:'#475569'}}>—</span>}</td>}
                           {!hiddenCols.has('marketValue')&&<td style={{...T.td,color:'#94a3b8'}}>{formatMV(p.marketValue)}</td>}
-                          {!hiddenCols.has('contract')&&<td style={{...T.td,color:p.contractYear<=2026?'#fbbf24':'#94a3b8',fontSize:11}}>{p.contract&&p.contract!=='nan'?p.contract:'ΓÇö'}</td>}
+                          {!hiddenCols.has('contract')&&<td style={{...T.td,color:p.contractYear<=2026?'#fbbf24':'#94a3b8',fontSize:11}}>{p.contract&&p.contract!=='nan'?p.contract:'—'}</td>}
                         </tr>
                       );
                     })}
@@ -800,9 +800,9 @@ export default function App(){
 
           {totalPages>1&&(
             <div style={T.pg}>
-              <span style={{fontSize:9,color:'#64748b',marginRight:4}}>{page*PAGE+1}ΓÇô{Math.min((page+1)*PAGE,sorted.length)} of {sorted.length.toLocaleString()}</span>
+              <span style={{fontSize:9,color:'#64748b',marginRight:4}}>{page*PAGE+1}–{Math.min((page+1)*PAGE,sorted.length)} of {sorted.length.toLocaleString()}</span>
               {[...Array(Math.min(totalPages,12))].map((_,i)=><button key={i} onClick={()=>setPage(i)} style={T.pb(page===i)}>{i+1}</button>)}
-              {totalPages>12&&<span style={{color:'#64748b',fontSize:9}}>ΓÇª{totalPages}</span>}
+              {totalPages>12&&<span style={{color:'#64748b',fontSize:9}}>…{totalPages}</span>}
             </div>
           )}
         </main>
