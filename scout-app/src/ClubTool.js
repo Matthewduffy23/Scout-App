@@ -279,6 +279,7 @@ export default function ClubTool({players}){
   const [lsMin,setLsMin]=useState(0);
   const [lsMax,setLsMax]=useState(101);
   const [escOnly,setEscOnly]=useState(false);
+  const [gbeMin,setGbeMin]=useState(0);
   const [currentLeagueOnly,setCurrentLeagueOnly]=useState(false);
   const addMetricFilter=()=>{if(metricFilters.length<10)setMetricFilters(f=>[...f,{key:'',label:'',min:0,max:100}]);};
 
@@ -399,6 +400,7 @@ export default function ClubTool({players}){
       const pls=LEAGUE_STRENGTHS[p.league]||0;
       if(pls<lsMin||pls>lsMax) return false;
       if(escOnly&&!p.escEligible) return false;
+      if(gbeMin>0&&(p.gbeTotal||0)<gbeMin) return false;
       if(role&&!(p.roleCareerScores||{})[role]) return false;
       if(sideFilter!=='Any'&&p.side&&p.side!=='C'&&p.side!==sideFilter) return false;
       if(footFilter!=='Any'&&p.foot&&p.foot!=='unknown'&&p.foot!=='nan'&&p.foot!==footFilter) return false;
@@ -684,6 +686,14 @@ export default function ClubTool({players}){
             <div style={T.cb(escOnly)}>{escOnly&&<span style={{color:'#fff',fontSize:8}}>✓</span>}</div>
             <span style={T.cl(escOnly)}>ESC eligible only</span>
           </label>
+          <div style={{marginTop:6}}>
+            <div style={{fontSize:10,color:'#94a3b8',marginBottom:3}}>MIN GBE POINTS</div>
+            <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+              {[0,5,10,15,20,25].map(v=>(
+                <span key={v} onClick={()=>setGbeMin(v)} style={{padding:'2px 7px',borderRadius:4,fontSize:10,cursor:'pointer',background:gbeMin===v?'#3b82f6':'#1e293b',color:gbeMin===v?'#fff':'#94a3b8',border:`1px solid ${gbeMin===v?'#3b82f6':'#334155'}`}}>{v===0?'Any':v+'+'}</span>
+              ))}
+            </div>
+          </div>
         </div>
 
         <div style={T.fg}>
