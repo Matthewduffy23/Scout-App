@@ -8,7 +8,7 @@ function flagUrl(country) {
   for(const p of parts) {
     const c = p.trim();
     const code = COUNTRY_CODES[c];
-    if(code) return \`https://flagcdn.com/16x12/\${code}.png\`;
+    if(code) return `https://flagcdn.com/16x12/${code}.png`;
   }
   return '';
 }
