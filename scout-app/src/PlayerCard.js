@@ -1,5 +1,17 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { scoreBandColor, formatMV, formatFoot, ROLE_KEY_LABELS, divColor, LEAGUE_STRENGTHS, scoreLabel, scoreToStars, starLabel, POSITION_ATTRIBUTES, playerHasAttribute, GBE_LEAGUE_BANDS } from './constants';
+
+const COUNTRY_CODES = {'England':'gb-eng','Scotland':'gb-sct','Wales':'gb-wls','Northern Ireland':'gb-nir','Ireland':'ie','Republic of Ireland':'ie','France':'fr','Germany':'de','Spain':'es','Italy':'it','Portugal':'pt','Netherlands':'nl','Belgium':'be','Brazil':'br','Argentina':'ar','USA':'us','Mexico':'mx','Colombia':'co','Uruguay':'uy','Chile':'cl','Paraguay':'py','Ecuador':'ec','Peru':'pe','Venezuela':'ve','Morocco':'ma','Algeria':'dz','Egypt':'eg','Nigeria':'ng','Tunisia':'tn','South Africa':'za','Senegal':'sn','Ghana':'gh','Ivory Coast':'ci','Cameroon':'cm','Mali':'ml','Guinea':'gn','Japan':'jp','Korea':'kr','Saudi Arabia':'sa','Australia':'au','China':'cn','Turkey':'tr','Ukraine':'ua','Russia':'ru','Poland':'pl','Czech Republic':'cz','Hungary':'hu','Romania':'ro','Serbia':'rs','Croatia':'hr','Slovakia':'sk','Slovenia':'si','Bulgaria':'bg','Greece':'gr','Austria':'at','Switzerland':'ch','Denmark':'dk','Sweden':'se','Norway':'no','Finland':'fi','Iceland':'is','Albania':'al','Bosnia':'ba','Kosovo':'xk','North Macedonia':'mk','Montenegro':'me','Armenia':'am','Georgia':'ge','Azerbaijan':'az','Kazakhstan':'kz','Latvia':'lv','Lithuania':'lt','Estonia':'ee','Moldova':'md','Belarus':'by','Iceland':'is','Canada':'ca','Panama':'pa','Costa Rica':'cr','Jamaica':'jm','Trinidad and Tobago':'tt','Martinique':'mq','Guadeloupe':'gp','Curacao':'cw','Honduras':'hn','Guatemala':'gt','El Salvador':'sv','Nicaragua':'ni','Haiti':'ht','Dominican Republic':'do','Cuba':'cu','Angola':'ao','Zambia':'zm','Zimbabwe':'zw','Mozambique':'mz','Tanzania':'tz','Kenya':'ke','Uganda':'ug','Ethiopia':'et','Sudan':'sd','Libya':'ly','Mauritania':'mr','Sierra Leone':'sl','Liberia':'lr','Guinea-Bissau':'gw','Gambia':'gm','Burkina Faso':'bf','Niger':'ne','Chad':'td','Benin':'bj','Togo':'tg','Rwanda':'rw','Burundi':'bi','DR Congo':'cd','Congo':'cg','Gabon':'ga','Equatorial Guinea':'gq','Comoros':'km','Cape Verde':'cv','Sao Tome':'st','Israel':'il','Lebanon':'lb','Jordan':'jo','Syria':'sy','Iraq':'iq','Iran':'ir','Kuwait':'kw','Qatar':'qa','UAE':'ae','Bahrain':'bh','Oman':'om','Yemen':'ye','Afghanistan':'af','Pakistan':'pk','India':'in','Sri Lanka':'lk','Bangladesh':'bd','Nepal':'np','Thailand':'th','Vietnam':'vn','Indonesia':'id','Malaysia':'my','Philippines':'ph','Myanmar':'mm','Cambodia':'kh','Laos':'la','Mongolia':'mn','New Zealand':'nz','Papua New Guinea':'pg','Fiji':'fj','Palestine':'ps','Kosovo':'xk','Taiwan':'tw','Hong Kong':'hk','Bolivia':'bo'};
+function flagUrl(country) {
+  if(!country) return '';
+  const parts = country.split(',');
+  for(const p of parts) {
+    const c = p.trim();
+    const code = COUNTRY_CODES[c];
+    if(code) return \`https://flagcdn.com/16x12/\${code}.png\`;
+  }
+  return '';
+}
 import { openOnePager } from './PlayerOnePager';
 import { Photo, Crest } from './utils';
 
@@ -129,9 +141,7 @@ function ScoreCard({label,score,league,sub,showStars=true}) {
       <div style={{fontSize:8,fontWeight:700,color:'#94a3b8',letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:5}}>{label}</div>
       <div style={{fontSize:24,fontWeight:800,color,lineHeight:1}}>{typeof score==='number'?score.toFixed(1):score}</div>
       <div style={{fontSize:10,color,marginTop:3,fontWeight:600,lineHeight:1.2}}>{lbl}</div>
-      {lbl.startsWith('Elite')&&league&&lbl.includes('League Two')&&<div style={{fontSize:9,color:'#22c55e',marginTop:2,fontWeight:600}}>→ L1 Level</div>}
-      {lbl.startsWith('Elite')&&league&&lbl.includes('League One')&&<div style={{fontSize:9,color:'#22c55e',marginTop:2,fontWeight:600}}>→ Champ Level</div>}
-      {lbl.startsWith('Elite')&&league&&lbl.includes('Championship')&&<div style={{fontSize:9,color:'#22c55e',marginTop:2,fontWeight:600}}>→ PL Level</div>}
+
       {showStars&&typeof score==='number'&&(
         <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:2,marginTop:5}}>
           <Stars score={score} size={12}/>
@@ -388,6 +398,10 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
               <Tag label={`Age ${player.age}`} bg='#0d1220' color='#94a3b8'/>
               <Tag label={`${player.seasons} seasons`} bg='#0d1220' color='#94a3b8'/>
               {player.contract&&player.contract!=='nan'&&<Tag label={`📋 ${player.contract}`} bg='#0d1220' color={player.contractYear<=2026?'#fbbf24':'#94a3b8'}/>}
+              {(player.birthCountry||player.passportCountries)&&<div style={{display:'flex',alignItems:'center',gap:4,marginTop:2}}>
+                {player.birthCountry&&player.birthCountry!=='nan'&&<span style={{display:'flex',alignItems:'center',gap:3,fontSize:10,color:'#64748b'}}>{flagUrl(player.birthCountry)&&<img src={flagUrl(player.birthCountry)} alt="" style={{width:16,height:12,objectFit:'cover',borderRadius:1}}/>}<span>Born: {player.birthCountry}</span></span>}
+                {player.passportCountries&&player.passportCountries!=='nan'&&player.passportCountries!==player.birthCountry&&<span style={{display:'flex',alignItems:'center',gap:3,fontSize:10,color:'#64748b',marginLeft:6}}>{flagUrl(player.passportCountries)&&<img src={flagUrl(player.passportCountries)} alt="" style={{width:16,height:12,objectFit:'cover',borderRadius:1}}/>}<span>Passport: {player.passportCountries}</span></span>}
+              </div>}
               {player.marketValue&&<Tag label={`💰 ${formatMV(player.marketValue)}`} bg='#0d1220' color='#94a3b8'/>}
               {player.onLoan&&<Tag label='On Loan' bg='#160f30' color='#a78bfa'/>}
             </div>
