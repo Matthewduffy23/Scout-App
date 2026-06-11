@@ -8,7 +8,7 @@ function flagUrl(country) {
   for(const p of parts) {
     const c = p.trim();
     const code = COUNTRY_CODES[c];
-    if(code) return `https://flagcdn.com/16x12/${code}.png`;
+    if(code) return `https://flagcdn.com/w20/${code}.png`;
   }
   return '';
 }
@@ -398,9 +398,17 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
               <Tag label={`Age ${player.age}`} bg='#0d1220' color='#94a3b8'/>
               <Tag label={`${player.seasons} seasons`} bg='#0d1220' color='#94a3b8'/>
               {player.contract&&player.contract!=='nan'&&<Tag label={`📋 ${player.contract}`} bg='#0d1220' color={player.contractYear<=2026?'#fbbf24':'#94a3b8'}/>}
-              {(player.birthCountry||player.passportCountries)&&<div style={{display:'flex',alignItems:'center',gap:4,marginTop:2}}>
-                {player.birthCountry&&player.birthCountry!=='nan'&&<span style={{display:'flex',alignItems:'center',gap:3,fontSize:10,color:'#64748b'}}>{flagUrl(player.birthCountry)&&<img src={flagUrl(player.birthCountry)} alt="" style={{width:16,height:12,objectFit:'cover',borderRadius:1}}/>}<span>Born: {player.birthCountry}</span></span>}
-                {player.passportCountries&&player.passportCountries!=='nan'&&player.passportCountries!==player.birthCountry&&<span style={{display:'flex',alignItems:'center',gap:3,fontSize:10,color:'#64748b',marginLeft:6}}>{flagUrl(player.passportCountries)&&<img src={flagUrl(player.passportCountries)} alt="" style={{width:16,height:12,objectFit:'cover',borderRadius:1}}/>}<span>Passport: {player.passportCountries}</span></span>}
+              {(player.birthCountry||player.passportCountries)&&<div style={{display:'flex',alignItems:'center',gap:5,marginTop:2}}>
+                {(()=>{
+                const pass=player.passportCountries&&player.passportCountries!=='nan'?player.passportCountries:null;
+                const birth=player.birthCountry&&player.birthCountry!=='nan'?player.birthCountry:null;
+                const primary=pass||birth;
+                const secondary=pass&&birth&&pass!==birth?birth:null;
+                return <>
+                  {primary&&flagUrl(primary)&&<img src={flagUrl(primary)} alt={primary} title={primary} style={{width:20,height:15,objectFit:'cover',borderRadius:1}}/>}
+                  {secondary&&flagUrl(secondary)&&<img src={flagUrl(secondary)} alt={secondary} title={secondary} style={{width:20,height:15,objectFit:'cover',borderRadius:1,opacity:0.7}}/>}
+                </>;
+              })()}
               </div>}
               {player.marketValue&&<Tag label={`💰 ${formatMV(player.marketValue)}`} bg='#0d1220' color='#94a3b8'/>}
               {player.onLoan&&<Tag label='On Loan' bg='#160f30' color='#a78bfa'/>}
