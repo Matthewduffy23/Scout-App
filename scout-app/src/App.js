@@ -297,9 +297,9 @@ export default function App(){
       if(natFilter&&!(p.passportCountries||'').toLowerCase().includes(natFilter.toLowerCase())&&!(p.birthCountry||'').toLowerCase().includes(natFilter.toLowerCase())) return false;
       if(showShortlist&&!shortlist.includes(p.id)) return false;
       if(notPlayingOnly){
-        const sh=p.sh||[];
-        const curr=sh.filter(x=>x.s==='2025-26'||x.s==='2026');
-        const prev=sh.filter(x=>x.s==='2024-25'||x.s==='2025');
+        const allS=p.allSeasonsSummary||[];
+        const curr=allS.filter(x=>x.s==='2025-26'||x.s==='2026');
+        const prev=allS.filter(x=>x.s==='2024-25'||x.s==='2025');
         const currMins=curr.reduce((a,x)=>a+(x.mins||0),0);
         const prevMins=prev.reduce((a,x)=>a+(x.mins||0),0);
         if(!(prevMins>400&&currMins<prevMins*0.4)) return false;
