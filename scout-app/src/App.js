@@ -166,6 +166,7 @@ export default function App(){
 
   const [search,setSearch]=useState('');
   const [pos,setPos]=useState('All');
+  const [roleFilters,setRoleFilters]=useState(new Set());
   const [roleFilter,setRoleFilter]=useState('');
   const [roleScoreMin,setRoleScoreMin]=useState(50);
   const [scoreMode,setScoreMode]=useState('complete');
@@ -215,16 +216,6 @@ export default function App(){
   const [escOnly,setEscOnly]=useState(false);
   const [gbeMin,setGbeMin]=useState(0);
   const [natFilter,setNatFilter]=useState('');
-  const [shortlist,setShortlist]=React.useState(()=>{try{return JSON.parse(localStorage.getItem('scout_shortlist')||'[]')}catch{return []}});
-  const [showShortlist,setShowShortlist]=React.useState(false);
-  const [notPlayingOnly,setNotPlayingOnly]=React.useState(false);
-  const toggleShortlist=(id)=>{
-    setShortlist(prev=>{
-      const next=prev.includes(id)?prev.filter(x=>x!==id):[...prev,id];
-      try{localStorage.setItem('scout_shortlist',JSON.stringify(next))}catch{}
-      return next;
-    });
-  };
   const [rawMode,setRawMode]=useState(false); // no league weight
   const [onlyElite,setOnlyElite]=useState(false); // only elite in their division
   const [sort,setSort]=useState({col:'careerScore',asc:false});
@@ -295,18 +286,15 @@ export default function App(){
       if(escOnly&&!p.escEligible) return false;
       if(gbeMin>0&&(p.gbeTotal||0)<gbeMin) return false;
       if(natFilter&&!(p.passportCountries||'').toLowerCase().includes(natFilter.toLowerCase())&&!(p.birthCountry||'').toLowerCase().includes(natFilter.toLowerCase())) return false;
-      if(showShortlist&&!shortlist.includes(p.id)) return false;
-      if(notPlayingOnly){
-        const allS=p.allSeasonsSummary||[];
-        const curr=allS.filter(x=>x.s==='2025-26'||x.s==='2026');
-        const prev=allS.filter(x=>x.s==='2024-25'||x.s==='2025');
-        const currMins=curr.reduce((a,x)=>a+(x.mins||0),0);
-        const prevMins=prev.reduce((a,x)=>a+(x.mins||0),0);
-        if(!(prevMins>400&&currMins<prevMins*0.4)) return false;
-      }
       if(showMvFilter&&p.marketValue&&p.marketValue>mvMax*1000000) return false;
-      if(showContractFilter&&p.contractYear&&p.contractYear>0&&p.contractYear>contractBefore) return false;
-      if(roleFilter){
+      if(showContractFilter&&p.contractYear&&p.contractYear>contractBefore) return false;
+      if(roleFilters.size>0){
+        const hasRole=[...roleFilters].some(rf=>{
+          const rs=(p.roleCareerScores||{})[rf]||0;
+          return roleScoreMin>0?rs>=roleScoreMin:rs>0;
+        });
+        if(!hasRole) return false;
+      } else if(roleFilter){
         const rs=(p.roleCareerScores||{})[roleFilter]||0;
         if(roleScoreMin>0&&rs<roleScoreMin) return false;
         if(!roleScoreMin&&!rs) return false;
@@ -319,7 +307,10 @@ export default function App(){
         const posAttrs=POSITION_ATTRIBUTES[rk]||[];
         for(const key of attrFilters){
           const attr=posAttrs.find(a=>a.key===key);
-          if(attr&&!playerHasAttribute(attr,g)) return false;
+          if(attr){
+            const adj=softMode?{...attr,tests:attr.tests.map(t=>({...t,p:Math.max(0,t.p-10)}))}:attr;
+            if(!playerHasAttribute(adj,g)) return false;
+          }
         }
       }
       if(showXValueFilter&&p.xValue&&p.xValue<xValueMin*1000000) return false;
@@ -330,12 +321,12 @@ export default function App(){
       for(const mf of metricFilters){
         if(!mf.key) continue;
         const m=getMetricPct(p,mf.key);
-        if(!m) return false;
+        if(!m) continue;
         if(m.pct<mf.min||m.pct>mf.max) return false;
       }
       return true;
     });
-  },[all,search,pos,leagues,ageMin,ageMax,foot,minScore,minSeas,showMvFilter,mvMax,showContractFilter,contractBefore,roleFilter,roleScoreMin,seasonFilter,metricFilters,xValueFilter,onlyElite,getDisplayScore,recentOnly,showXValueFilter,xValueMin,xValueMax,attrFilters,minMins,currentLeagueOnly,played2526,potentialMin,lsMin,lsMax,escOnly,gbeMin,natFilter,shortlist,showShortlist,notPlayingOnly]);
+  },[all,search,pos,leagues,ageMin,ageMax,foot,minScore,minSeas,showMvFilter,mvMax,showContractFilter,contractBefore,roleFilter,roleScoreMin,seasonFilter,metricFilters,xValueFilter,onlyElite,getDisplayScore,recentOnly,showXValueFilter,xValueMin,xValueMax,attrFilters,minMins,currentLeagueOnly,played2526,potentialMin,lsMin,lsMax,escOnly,gbeMin,natFilter]);
 
   const sorted=useMemo(()=>{
     const a=[...filtered];
@@ -367,7 +358,7 @@ export default function App(){
     avgAge:filtered.length?filtered.reduce((s,p)=>s+p.age,0)/filtered.length:0,
   }),[filtered,getDisplayScore]);
 
-  const reset=()=>{setSearch('');setPos('All');setRoleFilter('');setRoleScoreMin(50);setActivePreset('');setActivePresetLeagues(null);setShowHidden(false);setShowYouth(false);setActiveBands(new Set());setActiveRegions(new Set());setLsMin(0);setLsMax(101);setAgeMin(16);setAgeMax(38);setFoot('Any');setMinScore(40);setMinSeas(1);setShowMvFilter(false);setMvMax(50);setShowContractFilter(false);setContractBefore(2028);setSeasonFilter('all');setScoreMode('complete');setMetricFilters([]);setXValueFilter('');setRawMode(false);setOnlyElite(false);setRecentOnly(true);setShowXValueFilter(false);setXValueMin(0);setXValueMax(50);setAttrFilters(new Set());setMinMins(500);setCurrentLeagueOnly(false);setPotentialMin(40);setPlayed2526(false);setEscOnly(false);setGbeMin(0);setNatFilter('');setNotPlayingOnly(false);setShowShortlist(false);setPage(0);};
+  const reset=()=>{setSearch('');setPos('All');setRoleFilter('');setRoleFilters(new Set());setSoftMode(false);setRoleScoreMin(50);setActivePreset('');setActivePresetLeagues(null);setShowHidden(false);setShowYouth(false);setActiveBands(new Set());setActiveRegions(new Set());setLsMin(0);setLsMax(101);setAgeMin(16);setAgeMax(38);setFoot('Any');setMinScore(40);setMinSeas(1);setShowMvFilter(false);setMvMax(50);setShowContractFilter(false);setContractBefore(2028);setSeasonFilter('all');setScoreMode('complete');setMetricFilters([]);setXValueFilter('');setRawMode(false);setOnlyElite(false);setRecentOnly(true);setShowXValueFilter(false);setXValueMin(0);setXValueMax(50);setAttrFilters(new Set());setMinMins(500);setCurrentLeagueOnly(false);setPotentialMin(40);setPlayed2526(false);setEscOnly(false);setGbeMin(0);setNatFilter('');setPage(0);};
 
   if(loading) return <div style={{...T.app,alignItems:'center',justifyContent:'center'}}><style>{'@keyframes spin{to{transform:rotate(360deg)}}'}</style><div style={{width:24,height:24,border:'2px solid #1e2d45',borderTop:'2px solid #3b7de8',borderRadius:'50%',animation:'spin 0.8s linear infinite'}}/><div style={{color:'#94a3b8',fontSize:11,marginTop:8}}>Loading…</div></div>;
 
@@ -408,6 +399,10 @@ export default function App(){
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:5}}>
                 <span style={T.fl}>Attributes{attrFilters.size>0&&<span style={{color:'#60a5fa'}}> ({attrFilters.size} active)</span>}</span>
                 {attrFilters.size>0&&<button onClick={()=>setAttrFilters(new Set())} style={{fontSize:8,padding:'1px 6px',borderRadius:3,border:'1px solid #1e2d45',background:'transparent',color:'#f87171',cursor:'pointer'}}>Clear</button>}
+                <label style={{...T.cr,marginLeft:'auto'}} onClick={()=>setSoftMode(p=>!p)}>
+                  <div style={T.cb(softMode)}>{softMode&&<span style={{color:'#fff',fontSize:8,lineHeight:1}}>✓</span>}</div>
+                  <span style={T.cl(softMode)}>Soft (-10%)</span>
+                </label>
               </div>
               <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
                 {(POSITION_ATTRIBUTES[rk]||[]).map(attr=>{
@@ -433,7 +428,7 @@ export default function App(){
             </div>
             <div style={T.fg}>
               <span style={T.fl}>Filter by Role</span>
-              <select style={T.sel} value={roleFilter} onChange={e=>{setRoleFilter(e.target.value);setPage(0);}}>
+              <select style={T.sel} value={roleFilter} onChange={e=>{const v=e.target.value;setRoleFilter(v);if(v){setRoleFilters(s=>{const n=new Set(s);n.has(v)?n.delete(v):n.add(v);return n;});}else{setRoleFilters(new Set());}setPage(0);}}>
                 <option value="">Any role</option>
                 {(ROLES_BY_KEY[rk]||[]).map(r=><option key={r}>{r}</option>)}
               </select>
@@ -632,14 +627,6 @@ export default function App(){
               <div style={{fontSize:10,color:'#94a3b8',marginBottom:3}}>NATIONALITY</div>
               <input value={natFilter} onChange={e=>{setNatFilter(e.target.value);setPage(0);}} placeholder="e.g. France, Brazil" style={{width:'100%',background:'#1e293b',border:'1px solid #334155',borderRadius:4,padding:'4px 7px',fontSize:10,color:'#e2e8f4',outline:'none'}}/>
             </div>
-            <label style={T.cr} onClick={()=>{setNotPlayingOnly(p=>!p);setPage(0);}}>
-              <div style={T.cb(notPlayingOnly)}>{notPlayingOnly&&<span style={{color:'#fff',fontSize:8,lineHeight:1}}>✓</span>}</div>
-              <span style={T.cl(notPlayingOnly)}>Not Playing (mins ↓60%+)</span>
-            </label>
-            <label style={T.cr} onClick={()=>{setShowShortlist(p=>!p);setPage(0);}}>
-              <div style={T.cb(showShortlist)}>{showShortlist&&<span style={{color:'#fff',fontSize:8,lineHeight:1}}>✓</span>}</div>
-              <span style={T.cl(showShortlist)}>★ Shortlist ({shortlist.length})</span>
-            </label>
             <div style={{fontSize:9,color:'#475569',marginTop:2,lineHeight:1.4}}>Home nations · Continental/Intl history · Youth league · 5+ games Band 1-5 (24-25/25-26)</div>
           </div>
           <div style={T.fg}>
@@ -787,7 +774,6 @@ export default function App(){
                           <td style={T.td}><Photo name={p.name} team={p.team} size={30}/></td>
                           <td style={T.td}>
                             <span style={{display:'flex',alignItems:'center',gap:4}}>
-                              <span onClick={e=>{e.stopPropagation();toggleShortlist(p.id);}} style={{cursor:'pointer',fontSize:14,opacity:shortlist.includes(p.id)?1:0.3}} title={shortlist.includes(p.id)?'Remove from shortlist':'Add to shortlist'}>{shortlist.includes(p.id)?'★':'☆'}</span>
                               {(()=>{const CC={'England':'gb-eng','Scotland':'gb-sct','Wales':'gb-wls','Northern Ireland':'gb-nir','Ireland':'ie','Republic of Ireland':'ie','France':'fr','Germany':'de','Spain':'es','Italy':'it','Portugal':'pt','Netherlands':'nl','Belgium':'be','Brazil':'br','Argentina':'ar','USA':'us','Mexico':'mx','Colombia':'co','Uruguay':'uy','Chile':'cl','Paraguay':'py','Ecuador':'ec','Peru':'pe','Venezuela':'ve','Morocco':'ma','Algeria':'dz','Egypt':'eg','Nigeria':'ng','Tunisia':'tn','South Africa':'za','Senegal':'sn','Ghana':'gh','Ivory Coast':'ci','Cameroon':'cm','Japan':'jp','Korea':'kr','Saudi Arabia':'sa','Australia':'au','China':'cn','Turkey':'tr','Ukraine':'ua','Russia':'ru','Poland':'pl','Czech Republic':'cz','Hungary':'hu','Romania':'ro','Serbia':'rs','Croatia':'hr','Slovakia':'sk','Slovenia':'si','Bulgaria':'bg','Greece':'gr','Austria':'at','Switzerland':'ch','Denmark':'dk','Sweden':'se','Norway':'no','Finland':'fi','Iceland':'is','Albania':'al','Bosnia':'ba','Kosovo':'xk','Montenegro':'me','Armenia':'am','Georgia':'ge','Azerbaijan':'az','Kazakhstan':'kz','Israel':'il','Canada':'ca','Angola':'ao','Zambia':'zm','DR Congo':'cd','Cape Verde':'cv','Mali':'ml','Guinea':'gn','Burkina Faso':'bf','Bolivia':'bo'};const passRaw=p.passportCountries&&p.passportCountries!=='nan'?p.passportCountries:'';const birthRaw=p.birthCountry&&p.birthCountry!=='nan'?p.birthCountry:'';const p1=(passRaw||birthRaw).split(',')[0].trim();const code=CC[p1];return code?<img src={'https://flagcdn.com/w20/'+code+'.png'} alt="" style={{width:16,height:12,objectFit:'cover',borderRadius:1,flexShrink:0}}/>:null;})()}
                               <span style={{fontWeight:600}}>{p.name}</span>
                             </span>

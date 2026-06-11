@@ -234,11 +234,11 @@ export function leagueToBand(league) {
 
 export const POSITION_ATTRIBUTES = {
   GK: [
-    { key:'shotStopper', label:'Shot Stopper', tests:[{m:'Prevented goals per 90',p:75}] },
-    { key:'sweeper',     label:'Sweeper',      tests:[{m:'Exits per 90',p:75}] },
-    { key:'ballPlayer',  label:'Ball Player',  tests:[{m:'Passes per 90',p:50},{m:'Accurate passes, %',p:75}] },
-    { key:'secure',      label:'Secure',       tests:[{m:'Accurate passes, %',p:75}] },
-    { key:'longPasser',  label:'Long Passer',  tests:[{m:'Accurate long passes, %',p:75}] },
+    { key:'shotStopper', label:'Shot Stopper', tests:[{m:'Prevented goals per 90',p:70}] },
+    { key:'sweeper',     label:'Sweeper',      tests:[{m:'Exits per 90',p:70}] },
+    { key:'ballPlayer',  label:'Ball Player',  tests:[{m:'Passes per 90',p:70},{m:'Accurate passes, %',p:70}] },
+    { key:'secure',      label:'Secure',       tests:[{m:'Accurate passes, %',p:70}] },
+    { key:'longPasser',  label:'Long Passer',  tests:[{m:'Accurate long passes, %',p:70}] },
   ],
   CB: [
     { key:'aerial',       label:'Aerial',         tests:[{m:'Aerial duels won, %',p:70}] },
@@ -246,7 +246,7 @@ export const POSITION_ATTRIBUTES = {
     { key:'tackler',      label:'Tackler',         tests:[{m:'Defensive duels won, %',p:70}] },
     { key:'securePasser', label:'Secure Passer',   tests:[{m:'Accurate passes, %',p:70}] },
     { key:'progressive',  label:'Progressive',     tests:[{m:'Progressive passes per 90',p:70}] },
-    { key:'verticalPass', label:'Vertical Passer', tests:[{m:'Progressive passes per 90',p:60}] },
+    { key:'verticalPass', label:'Vertical Passer', tests:[{m:'Forward passes per 90',p:70},{m:'Accurate forward passes, %',p:60}] },
     { key:'ballCarrier',  label:'Ball Carrier',    tests:[{m:'Dribbles per 90',p:70},{m:'Progressive runs per 90',p:70}] },
   ],
   FB: [
@@ -255,12 +255,12 @@ export const POSITION_ATTRIBUTES = {
     { key:'lockdown',     label:'Lockdown',        tests:[{m:'Defensive duels per 90',p:70},{m:'Defensive duels won, %',p:70}] },
     { key:'securePasser', label:'Secure Passer',   tests:[{m:'Accurate passes, %',p:70}] },
     { key:'progressive',  label:'Progressive',     tests:[{m:'Progressive passes per 90',p:70}] },
-    { key:'verticalPass', label:'Vertical Passer', tests:[{m:'Progressive passes per 90',p:60}] },
+    { key:'verticalPass', label:'Vertical Passer', tests:[{m:'Forward passes per 90',p:70},{m:'Accurate forward passes, %',p:60}] },
     { key:'ballCarrier',  label:'Ball Carrier',    tests:[{m:'Dribbles per 90',p:70},{m:'Progressive runs per 90',p:70}] },
     { key:'veryAttacking',label:'Very Attacking',  tests:[{m:'Touches in box per 90',p:75}] },
   ],
   CM: [
-    { key:'firstPhase',   label:'1st Phase Passer', tests:[{m:'Accurate passes, %',p:70}] },
+    { key:'firstPhase',   label:'1st Phase Passer', tests:[{m:'Passes per 90',p:70}] },
     { key:'secondPhase',  label:'2nd Phase Passer', tests:[{m:'Passes to final third per 90',p:70}] },
     { key:'advPlaymaker', label:'Advanced Playmaker',tests:[{m:'Passes to penalty area per 90',p:70}] },
     { key:'chanceCreator',label:'Chance Creator',   tests:[{m:'xA per 90',p:70}] },
@@ -277,7 +277,7 @@ export const POSITION_ATTRIBUTES = {
     { key:'chancesCreated',label:'Creates Chances', tests:[{m:'xA per 90',p:70}] },
     { key:'playmaker',    label:'Playmaker',         tests:[{m:'Passes to penalty area per 90',p:70},{m:'Smart passes per 90',p:70}] },
     { key:'securePasser', label:'Secure Passer',     tests:[{m:'Accurate passes, %',p:70}] },
-    { key:'deepPlaymaker',label:'Deep Playmaker',    tests:[{m:'Accurate passes, %',p:70},{m:'Progressive passes per 90',p:70}] },
+    { key:'deepPlaymaker',label:'Deep Playmaker',    tests:[{m:'Progressive passes per 90',p:65},{m:'Passes to final third per 90',p:70}] },
     { key:'crosser',      label:'Crosser',           tests:[{m:'Crosses per 90',p:70}] },
     { key:'ballCarrier',  label:'Ball Carrier',      tests:[{m:'Dribbles per 90',p:70},{m:'Progressive runs per 90',p:70}] },
     { key:'goalThreat',   label:'Goal Threat',       tests:[{m:'Non-penalty goals per 90',p:70},{m:'xG per 90',p:70}] },
