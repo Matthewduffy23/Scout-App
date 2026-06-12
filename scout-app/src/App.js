@@ -220,7 +220,6 @@ export default function App(){
   const [showShortlist,setShowShortlist]=React.useState(false);
   const [notPlayingOnly,setNotPlayingOnly]=React.useState(false);
   const [softMode,setSoftMode]=React.useState(false);
-  const [roleFilters,setRoleFilters]=React.useState(new Set());
   const toggleShortlist=(id)=>{
     setShortlist(prev=>{
       const next=prev.includes(id)?prev.filter(x=>x!==id):[...prev,id];
