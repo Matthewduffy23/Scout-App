@@ -141,27 +141,27 @@ export function scoreBandColor(s){
 }
 
 export function scoreLabel(score){
-  if(score>=81) return 'Elite Premier League';
-  if(score>=76) return 'Excellent Premier League';
-  if(score>=70) return 'Premier League Level';
-  if(score>=65) return 'Very Good Championship';
-  if(score>=57) return 'Championship Level';
-  if(score>=53) return 'League One Level';
-  if(score>=50) return 'League Two Level';
-  if(score>=46) return 'National League Level';
-  if(score>=43) return 'Youth / Non-League';
+  if(score>=85) return 'Elite Premier League';
+  if(score>=78) return 'Very Good Premier League';
+  if(score>=71) return 'Premier League Level';
+  if(score>=67) return 'Very Good Championship';
+  if(score>=61) return 'Championship Level';
+  if(score>=57) return 'League One Level';
+  if(score>=54) return 'League Two Level';
+  if(score>=50) return 'National League Level';
+  if(score>=44) return 'Non-League';
   return 'Development';
 }
 export function scoreLabelShort(score){
-  if(score>=81) return 'Elite PL';
-  if(score>=76) return 'Excellent PL';
-  if(score>=70) return 'PL Level';
-  if(score>=65) return 'Top Champ';
-  if(score>=57) return 'Championship';
-  if(score>=53) return 'League One';
-  if(score>=50) return 'League Two';
-  if(score>=46) return 'Non-League';
-  if(score>=43) return 'Youth';
+  if(score>=85) return 'Elite PL';
+  if(score>=78) return 'Very Good PL';
+  if(score>=71) return 'PL Level';
+  if(score>=67) return 'Top Champ';
+  if(score>=61) return 'Championship';
+  if(score>=57) return 'League One';
+  if(score>=54) return 'League Two';
+  if(score>=50) return 'Non-League';
+  if(score>=44) return 'Semi-Pro';
   return 'Dev';
 }
 
@@ -178,27 +178,27 @@ export function promotionBadge(score,league){
 }
 
 export function scoreToStars(score){
-  if(score>=81) return 5.0;
-  if(score>=76) return 4.5;
-  if(score>=70) return 4.0;
-  if(score>=65) return 3.5;
-  if(score>=57) return 3.0;
-  if(score>=53) return 2.5;
-  if(score>=50) return 2.0;
-  if(score>=46) return 1.5;
-  if(score>=43) return 1.0;
+  if(score>=85) return 5.0;
+  if(score>=78) return 4.5;
+  if(score>=71) return 4.0;
+  if(score>=67) return 3.5;
+  if(score>=61) return 3.0;
+  if(score>=57) return 2.5;
+  if(score>=54) return 2.0;
+  if(score>=50) return 1.5;
+  if(score>=44) return 1.0;
   return 0.5;
 }
 export function starLabel(stars){
   if(stars>=5.0) return 'Elite Premier League';
-  if(stars>=4.5) return 'Excellent Premier League';
+  if(stars>=4.5) return 'Very Good Premier League';
   if(stars>=4.0) return 'Premier League Level';
   if(stars>=3.5) return 'Very Good Championship';
   if(stars>=3.0) return 'Championship Level';
   if(stars>=2.5) return 'League One Level';
   if(stars>=2.0) return 'League Two Level';
   if(stars>=1.5) return 'National League Level';
-  if(stars>=1.0) return 'Youth / Non-League';
+  if(stars>=1.0) return 'Non-League';
   return 'Development';
 }
 
