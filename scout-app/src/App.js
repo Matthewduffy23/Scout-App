@@ -423,10 +423,6 @@ export default function App(){
                   <div style={T.cb(softMode)}>{softMode&&<span style={{color:'#fff',fontSize:8,lineHeight:1}}>✓</span>}</div>
                   <span style={T.cl(softMode)}>Soft (-10%)</span>
                 </label>
-                <label style={{...T.cr,marginLeft:'auto'}} onClick={()=>setSoftMode(p=>!p)}>
-                  <div style={T.cb(softMode)}>{softMode&&<span style={{color:'#fff',fontSize:8,lineHeight:1}}>✓</span>}</div>
-                  <span style={T.cl(softMode)}>Soft (-10%)</span>
-                </label>
               </div>
               <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
                 {(POSITION_ATTRIBUTES[rk]||[]).map(attr=>{

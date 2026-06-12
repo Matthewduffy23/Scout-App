@@ -269,7 +269,7 @@ export const POSITION_ATTRIBUTES = {
     { key:'ballCarrier',  label:'Ball Carrier',     tests:[{m:'Dribbles per 90',p:70},{m:'Progressive runs per 90',p:70}] },
     { key:'boxCrasher',   label:'Box Crasher',      tests:[{m:'Touches in box per 90',p:80}] },
     { key:'aerial',       label:'Aerial',           tests:[{m:'Aerial duels won, %',p:70}] },
-    { key:'ballWinner',   label:'Ball Winner',      tests:[{m:'Defensive duels per 90',p:55},{m:'Defensive Duel %',p:55}] },
+    { key:'ballWinner',   label:'Ball Winner',      tests:[{m:'Defensive duels per 90',p:55},{m:'Defensive duels won, %',p:55}] },
     { key:'readsGame',    label:'Reads Game',       tests:[{m:'PAdj Interceptions',p:70}] },
     { key:'goalThreat',   label:'Goal Threat',      tests:[{m:'Non-penalty goals per 90',p:80},{m:'xG per 90',p:80}] },
   ],
