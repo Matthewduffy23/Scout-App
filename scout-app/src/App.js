@@ -322,7 +322,8 @@ export default function App(){
       if(onlyElite&&!promotionBadge(p.careerScore,p.league)) return false;
       // Attribute filters
       if(attrFilters.size>0&&rk){
-        const sd=Object.values(p.seasonsDetail||{})[0]||{};
+        const sdEntries=p.seasonsDetail||{};
+        const sd=sdEntries['2025-26']||sdEntries['2026']||sdEntries['2025']||Object.values(sdEntries)[0]||{};
         const g=sd.g||{};
         const posAttrs=POSITION_ATTRIBUTES[rk]||[];
         for(const key of attrFilters){
