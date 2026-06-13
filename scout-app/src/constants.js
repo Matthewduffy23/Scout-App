@@ -141,9 +141,9 @@ export function scoreBandColor(s){
 }
 
 export function scoreLabel(score){
-  if(score>=85) return 'Elite Premier League';
-  if(score>=78) return 'Very Good Premier League';
-  if(score>=71) return 'Premier League Level';
+  if(score>=82) return 'Elite Premier League';
+  if(score>=78) return 'Excellent Premier League';
+  if(score>=72) return 'Premier League Level';
   if(score>=67) return 'Very Good Championship';
   if(score>=61) return 'Championship Level';
   if(score>=57) return 'League One Level';
@@ -153,9 +153,9 @@ export function scoreLabel(score){
   return 'Development';
 }
 export function scoreLabelShort(score){
-  if(score>=85) return 'Elite PL';
-  if(score>=78) return 'Very Good PL';
-  if(score>=71) return 'PL Level';
+  if(score>=82) return 'Elite PL';
+  if(score>=78) return 'Excellent PL';
+  if(score>=72) return 'PL Level';
   if(score>=67) return 'Top Champ';
   if(score>=61) return 'Championship';
   if(score>=57) return 'League One';
@@ -178,9 +178,9 @@ export function promotionBadge(score,league){
 }
 
 export function scoreToStars(score){
-  if(score>=85) return 5.0;
+  if(score>=82) return 5.0;
   if(score>=78) return 4.5;
-  if(score>=71) return 4.0;
+  if(score>=72) return 4.0;
   if(score>=67) return 3.5;
   if(score>=61) return 3.0;
   if(score>=57) return 2.5;
@@ -191,7 +191,7 @@ export function scoreToStars(score){
 }
 export function starLabel(stars){
   if(stars>=5.0) return 'Elite Premier League';
-  if(stars>=4.5) return 'Very Good Premier League';
+  if(stars>=4.5) return 'Excellent Premier League';
   if(stars>=4.0) return 'Premier League Level';
   if(stars>=3.5) return 'Very Good Championship';
   if(stars>=3.0) return 'Championship Level';
