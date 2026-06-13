@@ -260,6 +260,7 @@ export default function ClubTool({players}){
   const [results,setResults]=useState([]);
   const [ran,setRan]=useState(false);
   const [attrFilters,setAttrFilters]=useState(new Set());
+  const [softMode,setSoftMode]=useState(false);
   const [xValueOnly,setXValueOnly]=useState(false);
   const [xValueFilter,setXValueFilter]=useState('');
   const [showXValueFilter,setShowXValueFilter]=useState(false);
@@ -396,7 +397,7 @@ export default function ClubTool({players}){
       if(potentialMin>40&&(p.potentialScore||p.careerScore)<potentialMin) return false;
       if(played2526&&!p.sh?.find(x=>x.s==='2025-26'||x.s==='2026')) return false;
       if(showMvFilter&&p.marketValue>mvMax*1000000) return false;
-      if(showContractFilter&&p.contractYear&&p.contractYear>contractBefore) return false;
+      if(showContractFilter&&p.contractYear&&p.contractYear>0&&p.contractYear>contractBefore) return false;
       const pls=LEAGUE_STRENGTHS[p.league]||0;
       if(pls<lsMin||pls>lsMax) return false;
       if(escOnly&&!p.escEligible) return false;
@@ -410,21 +411,25 @@ export default function ClubTool({players}){
       if(xValueFilter==='overvalued'&&!(p.xValueGapPct<-20&&p.marketValue>0)) return false;
       if(showXValueFilter&&p.xValue&&p.xValue<xValueMin*1000000) return false;
       if(showXValueFilter&&xValueMax<50&&p.xValue&&p.xValue>xValueMax*1000000) return false;
+      const sdEntries=p.seasonsDetail||{};
+      const sd=sdEntries['2025-26']||sdEntries['2026']||sdEntries['2025']||Object.values(sdEntries)[0]||{};
       for(const mf of metricFilters){
         if(!mf.key) continue;
-        const sd=Object.values(p.seasonsDetail||{})[0]||{};
         let found=null;
         for(const grp of ['A','D','P']){const f=(sd.g?.[grp]||[]).find(x=>x[0]===mf.key);if(f){found=f;break;}}
-        if(!found||found[1]<mf.min||found[1]>mf.max) return false;
+        if(!found) continue;
+        if(found[1]<mf.min||found[1]>mf.max) return false;
       }
       // Attribute filters
       if(attrFilters.size>0){
-        const sd=Object.values(p.seasonsDetail||{})[0]||{};
         const g=sd.g||{};
         const posAttrs=POSITION_ATTRIBUTES[p.roleKey]||[];
         for(const key of attrFilters){
           const attr=posAttrs.find(a=>a.key===key);
-          if(attr&&!playerHasAttribute(attr,g)) return false;
+          if(attr){
+            const adj=softMode?{...attr,tests:attr.tests.map(t=>({...t,p:Math.max(0,t.p-10)}))}:attr;
+            if(!playerHasAttribute(adj,g)) return false;
+          }
         }
       }
       return true;
@@ -537,6 +542,10 @@ export default function ClubTool({players}){
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:5}}>
               <span style={T.fl}>Attributes ({attrFilters.size} active)</span>
               {attrFilters.size>0&&<button onClick={()=>setAttrFilters(new Set())} style={{fontSize:8,padding:'1px 5px',borderRadius:3,border:'1px solid #1e2d45',background:'transparent',color:'#f87171',cursor:'pointer'}}>Clear</button>}
+              <label style={{...T.cr,marginLeft:'auto'}} onClick={()=>setSoftMode(p=>!p)}>
+                <div style={T.cb(softMode)}>{softMode&&<span style={{color:'#fff',fontSize:8,lineHeight:1}}>✓</span>}</div>
+                <span style={T.cl(softMode)}>Soft (-10%)</span>
+              </label>
             </div>
             <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
               {(POSITION_ATTRIBUTES[pos]||[]).map(attr=>{
