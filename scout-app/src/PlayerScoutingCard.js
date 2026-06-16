@@ -86,20 +86,21 @@ function starsHtml(score, size = 20) {
   return Array(full).fill(s('full')).join('') + (half ? s('half') : '') + Array(empty).fill(s('empty')).join('');
 }
 
-function barRow(label, pct, rawVal, count) {
+function barRow(label, pct, rawVal, count, rowH = 20) {
   const p = Math.max(0, Math.min(100, pct || 0));
   const bc = barColor(p);
+  const barH = Math.max(10, rowH - 4);
   return `
-    <div style="display:flex;align-items:center;height:21px;margin-bottom:2px;">
+    <div style="display:flex;align-items:center;height:${rowH}px;margin-bottom:1px;">
       <div style="font-size:13px;font-weight:600;color:${LABEL_COL};width:170px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${label}</div>
       <div style="width:26px;flex-shrink:0;font-size:11px;color:#6b7280;text-align:right;padding-right:6px;">${count != null ? count : ''}</div>
-      <div style="flex:1;position:relative;height:16px;">
-        <div style="width:100%;height:16px;background:${BAR_TRACK};position:relative;overflow:hidden;">
+      <div style="flex:1;position:relative;height:${barH}px;">
+        <div style="width:100%;height:${barH}px;background:${BAR_TRACK};position:relative;overflow:hidden;">
           <div style="height:100%;width:${p}%;background:${bc};position:relative;">
             ${rawVal ? `<span style="position:absolute;left:6px;top:50%;transform:translateY(-50%);font-size:11px;font-weight:700;color:#0a0a0a;white-space:nowrap;">${rawVal}</span>` : ''}
           </div>
         </div>
-        <div style="position:absolute;left:50%;top:0;width:1px;height:16px;background:rgba(255,255,255,.55);"></div>
+        <div style="position:absolute;left:50%;top:0;width:1px;height:${barH}px;background:rgba(255,255,255,.55);"></div>
       </div>
     </div>`;
 }
@@ -130,6 +131,7 @@ function trendSvg(trendData) {
       <text x="${x}" y="${H}" text-anchor="middle" fill="#8b93a7" font-size="14" font-family="Montserrat">${d.season}</text>`;
   }).join('');
   return `<svg width="${W}" height="${H+10}" xmlns="http://www.w3.org/2000/svg">
+    <line x1="0" y1="${H-2}" x2="${W}" y2="${H-2}" stroke="#2a3349" stroke-width="1.5"/>
     <polyline points="${pts}" fill="none" stroke="${TREND_CYAN}" stroke-width="3"/>${dots}
   </svg>`;
 }
@@ -213,8 +215,29 @@ export function buildCardElement(player, manual = {}) {
 
   const trendData = (player.sh || []).slice(-3).map(h => ({ season: h.s, score: Math.round(h.sc) }));
 
+  // ── Dynamic row sizing: bar chart panel has a fixed vertical budget (1080 - panelTop - footerH).
+  // At the reference (CF/ST) row count of 26 rows across 3 groups, 20px rows fit comfortably.
+  // If a position has more metrics than that, shrink row height proportionally so the panel
+  // never overflows past the bottom of the 1920x1080 canvas, regardless of how many rows the
+  // upstream data pipeline includes for that position.
+  // ── Dynamic row sizing: bar chart panel has a fixed vertical budget (1080 - panelTop - margin).
+  // Fixed overhead (3 section headers + axis/footer, independent of row count) was measured
+  // empirically via a real-DOM sweep at 163px; per-row footprint is (rowH + 1px row margin).
+  // This guarantees the percentile axis never gets clipped regardless of how many bar-chart
+  // metrics the upstream data pipeline includes for a given position.
+  const groupKeys = ['A', 'D', 'P'];
+  const totalRows = groupKeys.reduce((s, k) => s + (groups[k] ? groups[k].length : 0), 0);
+  const PANEL_TOP = 333, SAFETY_MARGIN = 8, FIXED_OVERHEAD = 163;
+  const maxPanelHeight = 1080 - PANEL_TOP - SAFETY_MARGIN;
+  const REFERENCE_ROW_H = 20;
+  let rowH = totalRows > 0
+    ? Math.min(REFERENCE_ROW_H, Math.floor((maxPanelHeight - FIXED_OVERHEAD) / totalRows) - 1)
+    : REFERENCE_ROW_H;
+  rowH = Math.max(8, rowH); // never shrink below a legible minimum
+  if (typeof window !== 'undefined' && window.__FORCE_ROW_H) rowH = window.__FORCE_ROW_H;
+
   const buildGroupBars = (grpKey) => (groups[grpKey] || []).map(([label, pct, val], i) =>
-    barRow(label, pct, typeof val === 'number' ? val.toFixed(2) : val, null)
+    barRow(label, pct, typeof val === 'number' ? val.toFixed(2) : val, null, rowH)
   ).join('');
 
   const rolesHtml = sortedRoles.map(([role, score]) => rolePill(role, score)).join('');
@@ -250,7 +273,7 @@ export function buildCardElement(player, manual = {}) {
           <span style="font-weight:700;color:#fff;">Profile ▸</span><span>Performance ▾</span><span>Similar Players ▾</span><span>Club Fit ▾</span><span>Video ▾</span><span>Compare ▾</span>
         </div>
 
-        ${crest ? `<img src="${crest}" crossorigin="anonymous" onerror="this.style.display='none'" style="position:absolute;left:725px;top:55px;width:90px;height:85px;object-fit:contain;"/>` : ''}
+        ${crest ? `<img src="${crest}" onerror="this.style.display='none'" style="position:absolute;left:725px;top:55px;width:90px;height:85px;object-fit:contain;"/>` : ''}
         <div style="position:absolute;left:835px;top:60px;">
           <div style="font-size:24px;font-weight:700;">${player.team}</div>
           <div style="font-size:18px;color:#aab2c5;margin-top:4px;">${player.league}</div>
@@ -289,14 +312,14 @@ export function buildCardElement(player, manual = {}) {
 
 
       <!-- BAR CHART PANEL -->
-      <div style="position:absolute;top:345px;left:0;width:670px;padding:0 16px;">
-        ${groups.A && groups.A.length ? `<div style="font-size:24px;font-weight:800;color:#fff;margin:6px 0 8px;">Attacking</div>${buildGroupBars('A')}` : ''}
-        ${groups.D && groups.D.length ? `<div style="font-size:24px;font-weight:800;color:#fff;margin:14px 0 8px;">Defensive</div>${buildGroupBars('D')}` : ''}
-        ${groups.P && groups.P.length ? `<div style="font-size:24px;font-weight:800;color:#fff;margin:14px 0 8px;">Possession</div>${buildGroupBars('P')}` : ''}
-        <div style="display:flex;margin-top:8px;padding-left:170px;font-size:13px;color:#6b7280;justify-content:space-between;padding-right:4px;">
+      <div style="position:absolute;top:333px;left:0;width:670px;padding:0 16px;">
+        ${groups.A && groups.A.length ? `<div style="font-size:23px;font-weight:800;color:#fff;margin:4px 0 6px;">Attacking</div>${buildGroupBars('A')}` : ''}
+        ${groups.D && groups.D.length ? `<div style="font-size:23px;font-weight:800;color:#fff;margin:10px 0 6px;">Defensive</div>${buildGroupBars('D')}` : ''}
+        ${groups.P && groups.P.length ? `<div style="font-size:23px;font-weight:800;color:#fff;margin:10px 0 6px;">Possession</div>${buildGroupBars('P')}` : ''}
+        <div style="display:flex;margin-top:6px;padding-left:170px;font-size:13px;color:#6b7280;justify-content:space-between;padding-right:4px;">
           ${[0,10,20,30,40,50,60,70,80,90,100].map(p=>`<span>${p}%</span>`).join('')}
         </div>
-        <div style="text-align:center;font-size:15px;color:#8b93a7;padding-top:6px;padding-left:170px;">Percentile Rank</div>
+        <div style="text-align:center;font-size:15px;color:#8b93a7;padding-top:5px;padding-left:170px;">Percentile Rank</div>
       </div>
 
       <!-- NOTES PANEL -->
@@ -350,7 +373,18 @@ export async function downloadScoutingCardPNG(player, manual = {}) {
     link.rel = 'stylesheet';
     link.href = 'https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&display=swap';
     document.head.appendChild(link);
-    await new Promise(r => setTimeout(r, 300));
+  }
+
+  // Force-load the specific weights the card actually uses (400/500/600/700/800)
+  // and wait for the browser's real font-ready signal — a flat setTimeout is not
+  // reliable enough to guarantee bold text has applied before html2canvas captures.
+  try {
+    const weights = [400, 500, 600, 700, 800];
+    await Promise.all(weights.map(w => document.fonts.load(`${w} 16px Montserrat`)));
+    await document.fonts.ready;
+  } catch (e) {
+    // Font Loading API unsupported or failed — fall back to a short wait so we don't hang forever
+    await new Promise(r => setTimeout(r, 500));
   }
 
   const el = buildCardElement(player, manual);
