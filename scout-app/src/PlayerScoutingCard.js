@@ -1,22 +1,24 @@
 // PlayerScoutingCard.js
 // Generates a 1920x1080 scouting card PNG matching the Canva template exactly.
+// Rebuilt against a pixel-accurate 1920x1080 export of the real Canva design.
 // Uses html2canvas to screenshot an offscreen DOM node and trigger a PNG download.
-// Reuses the same photoUrl/Crest logic as utils.js and PlayerOnePager.js.
 
 import { scoreBandColor, scoreLabel, scoreToStars, ROLE_KEY_LABELS, formatMV, formatFoot, LEAGUE_STRENGTHS } from './constants';
 
 const PHOTO_BASE = 'https://raw.githubusercontent.com/Matthewduffy23/scouting-photos/main/photos/';
 const CREST_BASE = 'https://images.fotmob.com/image_resources/logo/teamlogo/';
 
-// ── Exact Canva card colours (confirmed via Canva colour picker) ─────────────
-const BG          = '#0a0f1c';
-const ACCENT_PINK = '#ff66c4';
-const TREND_CYAN  = '#00cadc';
-const LABEL_COL   = '#e8eef8';
-const BAR_TRACK   = '#1a2540';
-const TAB_RED     = [199, 54,  60];   // #C7363C
-const TAB_GOLD    = [240, 197, 106];  // #F0C56A
-const TAB_GREEN   = [61,  166, 91];   // #3DA65B
+// ── Colours sampled directly from the real Canva export ──────────────────────
+const BG          = '#090f1b';          // body background (sampled 9,15,27)
+const HEADER_L     = 'rgb(23,26,77)';   // header gradient left
+const HEADER_R     = 'rgb(17,22,42)';   // header gradient right
+const ACCENT_PINK  = '#ff4fa8';
+const TREND_CYAN   = '#22d3ee';
+const LABEL_COL    = '#e8eef8';
+const BAR_TRACK    = '#0d1424';
+const BAR_RED      = 'rgb(211,90,72)';   // sampled
+const BAR_GOLD     = 'rgb(187,186,103)'; // sampled
+const BAR_GREEN    = 'rgb(73,166,95)';   // sampled
 
 function slugN(s) {
   s = String(s || '').toLowerCase();
@@ -38,34 +40,37 @@ function photoUrl(name, team) {
 function interp(a, b, t) {
   return [0, 1, 2].map(i => Math.round(a[i] + (b[i] - a[i]) * t));
 }
+function parseRgb(s) { return s.match(/\d+/g).map(Number); }
 function barColor(pct) {
   const t = Math.max(0, Math.min(1, pct / 100));
-  const rgb = t <= 0.5 ? interp(TAB_RED, TAB_GOLD, t / 0.5) : interp(TAB_GOLD, TAB_GREEN, (t - 0.5) / 0.5);
+  const RED = parseRgb(BAR_RED), GOLD = parseRgb(BAR_GOLD), GREEN = parseRgb(BAR_GREEN);
+  const rgb = t <= 0.5 ? interp(RED, GOLD, t / 0.5) : interp(GOLD, GREEN, (t - 0.5) / 0.5);
   return `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
 }
 
-function starsHtml(score, size = 18) {
+function starsHtml(score, size = 20) {
   const stars = scoreToStars(score);
   const full = Math.floor(stars);
   const half = (stars - full) >= 0.5 ? 1 : 0;
   const empty = 5 - full - half;
-  const s = (state) => `<span style="color:${state === 'full' ? '#f6c90e' : state === 'half' ? '#f6c90e' : '#2a3450'};font-size:${size}px;line-height:1">${state === 'half' ? '½' : '★'}</span>`;
+  const s = (state) => `<span style="color:${state === 'empty' ? '#3a4566' : '#f6c244'};font-size:${size}px;line-height:1">${state === 'half' ? '⯨' : '★'}</span>`;
   return Array(full).fill(s('full')).join('') + (half ? s('half') : '') + Array(empty).fill(s('empty')).join('');
 }
 
-function barRow(label, pct, rawVal) {
+function barRow(label, pct, rawVal, count) {
   const p = Math.max(0, Math.min(100, pct || 0));
   const bc = barColor(p);
   return `
-    <div style="display:flex;align-items:center;height:13px;padding:1px 5px;">
-      <div style="font-size:7.5px;color:${LABEL_COL};width:152px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${label}</div>
-      <div style="flex:1;position:relative;height:10px;">
-        <div style="width:100%;height:10px;background:${BAR_TRACK};border-radius:2px;overflow:hidden;position:relative;">
-          <div style="height:100%;width:${p}%;border-radius:2px;background:${bc};position:relative;">
-            ${rawVal ? `<span style="position:absolute;left:3px;top:50%;transform:translateY(-50%);font-size:6.2px;font-weight:700;color:#0a0a0a;white-space:nowrap;">${rawVal}</span>` : ''}
+    <div style="display:flex;align-items:center;height:15px;margin-bottom:1px;">
+      <div style="font-size:8.5px;font-weight:600;color:${LABEL_COL};width:148px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${label}</div>
+      <div style="width:16px;flex-shrink:0;font-size:7.5px;color:#6b7280;text-align:right;padding-right:4px;">${count != null ? count : ''}</div>
+      <div style="flex:1;position:relative;height:11px;">
+        <div style="width:100%;height:11px;background:${BAR_TRACK};position:relative;overflow:hidden;">
+          <div style="height:100%;width:${p}%;background:${bc};position:relative;">
+            ${rawVal ? `<span style="position:absolute;left:4px;top:50%;transform:translateY(-50%);font-size:7.5px;font-weight:700;color:#0a0a0a;white-space:nowrap;">${rawVal}</span>` : ''}
           </div>
         </div>
-        <div style="position:absolute;left:50%;top:0;width:1px;height:10px;background:rgba(255,255,255,.45);"></div>
+        <div style="position:absolute;left:50%;top:0;width:1px;height:11px;background:rgba(255,255,255,.55);"></div>
       </div>
     </div>`;
 }
@@ -73,88 +78,114 @@ function barRow(label, pct, rawVal) {
 function rolePill(roleName, score) {
   const sc = Math.round(score);
   const bc = barColor(sc);
-  const fg = sc > 45 ? '#000' : '#fff';
+  const fg = sc > 45 ? '#0a0a0a' : '#fff';
   return `
-    <div style="display:flex;align-items:center;justify-content:space-between;background:#111827;border-radius:7px;padding:5px 8px;margin-bottom:5px;width:196px;">
-      <span style="font-size:9.5px;color:#d1d5db;">${roleName}</span>
-      <span style="font-size:10px;font-weight:800;padding:2px 7px;border-radius:4px;min-width:28px;text-align:center;background:${bc};color:${fg};">${sc}</span>
+    <div style="display:flex;align-items:center;justify-content:space-between;background:#1c2236;border-radius:8px;padding:9px 12px;margin-bottom:8px;width:228px;">
+      <span style="font-size:13px;color:#e2e6ee;font-weight:500;">${roleName}</span>
+      <span style="font-size:13px;font-weight:800;padding:3px 11px;border-radius:5px;min-width:34px;text-align:center;background:${bc};color:${fg};">${sc}</span>
     </div>`;
 }
 
 function trendSvg(trendData) {
   if (!trendData || trendData.length < 2) return '';
-  const W = 220, H = 65;
+  const W = 270, H = 75;
   const scores = trendData.map(d => d.score);
   const mn = Math.min(...scores) - 8, mx = Math.max(...scores) + 8;
-  const tx = i => 10 + i * (W - 20) / (trendData.length - 1);
-  const ty = s => H - 8 - (s - mn) / (mx - mn || 1) * (H - 18);
+  const tx = i => 14 + i * (W - 28) / (trendData.length - 1);
+  const ty = s => H - 16 - (s - mn) / (mx - mn || 1) * (H - 30);
   const pts = trendData.map((d, i) => `${tx(i)},${ty(d.score)}`).join(' ');
   const dots = trendData.map((d, i) => {
     const x = tx(i), y = ty(d.score);
-    return `<circle cx="${x}" cy="${y}" r="5" fill="${TREND_CYAN}"/>
-      <text x="${x}" y="${y - 9}" text-anchor="middle" fill="#fff" font-size="11" font-weight="800" font-family="Montserrat">${d.score}</text>
-      <text x="${x}" y="${H + 12}" text-anchor="middle" fill="#6b7280" font-size="9" font-family="Montserrat">${d.season}</text>`;
+    return `<rect x="${x-15}" y="${y-22}" width="30" height="17" rx="4" fill="${TREND_CYAN}"/>
+      <text x="${x}" y="${y-9.5}" text-anchor="middle" fill="#04222a" font-size="11.5" font-weight="800" font-family="Montserrat">${d.score}</text>
+      <text x="${x}" y="${H}" text-anchor="middle" fill="#8b93a7" font-size="10.5" font-family="Montserrat">${d.season}</text>`;
   }).join('');
-  return `<svg width="${W}" height="${H + 18}" xmlns="http://www.w3.org/2000/svg">
+  return `<svg width="${W}" height="${H+8}" xmlns="http://www.w3.org/2000/svg">
     <polyline points="${pts}" fill="none" stroke="${TREND_CYAN}" stroke-width="2.5"/>${dots}
   </svg>`;
 }
 
 function physicalDotsHtml(physical) {
-  const dotColors = { 5: '#22c55e', 4: '#4ade80', 3: '#facc15', 2: '#f97316', 1: '#ef4444' };
+  const dotColors = { 5: '#22c55e', 4: '#65d17e', 3: '#9ad15a', 2: '#e0c84a', 1: '#e0c84a' };
   return Object.entries(physical).map(([attr, dots]) => {
     const dotsHtml = [0, 1, 2, 3, 4].map(i => {
       const filled = i < dots;
-      const col = filled ? (dotColors[dots] || '#22c55e') : '#1a2540';
-      return `<span style="width:13px;height:13px;border-radius:50%;display:inline-block;background:${col};margin-right:3px;"></span>`;
+      const col = filled ? (dotColors[dots] || '#22c55e') : '#3a4566';
+      return `<span style="width:15px;height:15px;border-radius:50%;display:inline-block;background:${col};margin-right:6px;"></span>`;
     }).join('');
-    return `<div style="display:flex;align-items:center;gap:7px;margin-bottom:4px;">
-      <span style="font-size:10px;color:#9ca3af;width:50px;">${attr}</span>
+    return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+      <span style="font-size:14px;color:#aab2c5;width:66px;">${attr}</span>
       <span style="display:flex;">${dotsHtml}</span>
     </div>`;
   }).join('');
 }
 
 function formBlocksHtml(form) {
-  const fm = { W: '#22c55e', D: '#f59e0b', L: '#ef4444' };
+  const fm = { W: '#3aa65c', D: '#e0904a', L: '#d35a48' };
   return (form || []).slice(0, 5).map(r => {
     const col = fm[r.toUpperCase()] || '#4b5563';
-    return `<span style="width:24px;height:24px;border-radius:3px;display:inline-block;background:${col};margin-right:4px;"></span>`;
+    return `<span style="width:38px;height:38px;border-radius:5px;display:inline-block;background:${col};margin-right:8px;"></span>`;
   }).join('');
 }
 
 // ── Feature F bar chart metric sets by position ──────────────────────────────
 const FEATURE_F = {
   CF: {
-    Attacking: ['Crosses', 'Crossing Accuracy %', 'Goals: Non-Penalty', 'xG', 'Conversion Rate %', 'Header Goals', 'Expected Assists', 'Offensive Duels', 'Progressive Runs', 'Shots', 'Shots on target %', 'Touches in Opposition Box'],
+    Attacking: ['Crosses', 'Crossing Accuracy %', 'Goals: Non-Penalty', 'xG', 'Conversion Rate %', 'Header Goals', 'Expected Assists', 'Offensive Duels', 'Progressive Runs', 'Shots', 'Shooting Accuracy %', 'Touches in Opposition Box'],
     Defensive: ['Aerial Duels', 'Aerial Duel Success %', 'Defensive Duels', 'Defensive Duel Success %', 'PAdj. Interceptions'],
-    Possession: ['Deep Completions', 'Dribbles', 'Dribbling Success %', 'Key Passes', 'Passes', 'Passing Accuracy %', 'Passes to Penalty Area', 'Smart Passes'],
+    Possession: ['Deep Completions', 'Dribbles', 'Dribbling Success %', 'Key Passes', 'Passes', 'Passing Accuracy %', 'Passes to Penalty Area', 'Passes to Penalty Area %', 'Smart Passes'],
   },
 };
 FEATURE_F.ST = FEATURE_F.CF;
 
+const POS_TO_KEY = {
+  GK: 'GK', CB: 'CB', LCB: 'CB', RCB: 'CB',
+  LB: 'FB', RB: 'FB', LWB: 'FB', RWB: 'FB',
+  DMF: 'CM', LDMF: 'CM', RDMF: 'CM', LCMF: 'CM', RCMF: 'CM',
+  AMF: 'ATT', LAMF: 'ATT', RAMF: 'ATT',
+  LW: 'ATT', RW: 'ATT', LWF: 'ATT', RWF: 'ATT',
+  CF: 'CF', ST: 'CF',
+};
+
+function pitchDiagramSvg() {
+  // Static pitch with markers — simplified version of the reference
+  return `<svg viewBox="0 0 330 220" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;">
+    <rect x="0" y="0" width="330" height="220" fill="#0d1117" rx="6"/>
+    <rect x="10" y="10" width="310" height="200" fill="none" stroke="#3a4156" stroke-width="1.5"/>
+    <line x1="165" y1="10" x2="165" y2="210" stroke="#3a4156" stroke-width="1.5"/>
+    <circle cx="165" cy="110" r="28" fill="none" stroke="#3a4156" stroke-width="1.5"/>
+    <rect x="10" y="65" width="35" height="90" fill="none" stroke="#3a4156" stroke-width="1.5"/>
+    <rect x="285" y="65" width="35" height="90" fill="none" stroke="#3a4156" stroke-width="1.5"/>
+    <circle cx="55" cy="110" r="5" fill="#9aa3b5"/>
+    <circle cx="95" cy="55" r="5" fill="#9aa3b5"/>
+    <circle cx="95" cy="165" r="5" fill="#9aa3b5"/>
+    <circle cx="135" cy="55" r="5" fill="#9aa3b5"/>
+    <circle cx="135" cy="165" r="5" fill="#9aa3b5"/>
+    <circle cx="170" cy="110" r="5" fill="#9aa3b5"/>
+    <circle cx="220" cy="40" r="6" fill="#3aa65c"/>
+    <circle cx="245" cy="90" r="6" fill="#e0c84a"/>
+    <circle cx="245" cy="135" r="6" fill="#3aa65c"/>
+    <circle cx="220" cy="180" r="6" fill="#e0c84a"/>
+  </svg>`;
+}
+
 /**
  * Build the offscreen DOM node for the card.
- * `player` = the existing player object from players.json (same shape as PlayerCard.js uses)
- * `manual` = { keyAttributes, devAreas, view, currentStars, currentLevel, potentialStars,
- *              potentialLevel, physical:{Pace,Power,Fitness}, form:['W','D','L',...],
- *              avgRating5, clubColor, positionImageDataUrl }
  */
 export function buildCardElement(player, manual = {}) {
   const sd = Object.values(player.seasonsDetail || {})[0] || {};
   const rcs = player.roleCareerScores || {};
-  const sortedRoles = Object.entries(rcs).sort((a, b) => b[1] - a[1]).slice(0, 3);
+  const sortedRoles = Object.entries(rcs).slice(0, 3);
   const groups = sd.g || {};
   const allSeasons = player.allSeasonsSummary || [];
   const latestSeason = allSeasons[0] || {};
   const photo = photoUrl(player.name, player.team);
   const crest = player.teamFotmobId ? `${CREST_BASE}${player.teamFotmobId}.png` : '';
-  const clubColor = manual.clubColor || '#1a3a6b';
 
   const trendData = (player.sh || []).slice(-3).map(h => ({ season: h.s, score: Math.round(h.sc) }));
 
-  const buildGroupBars = (grpKey) => (groups[grpKey] || []).map(([label, pct, val]) =>
-    barRow(label, pct, typeof val === 'number' ? val.toFixed(2) : val)
+  const buildGroupBars = (grpKey) => (groups[grpKey] || []).map(([label, pct, val], i) =>
+    barRow(label, pct, typeof val === 'number' ? val.toFixed(2) : val, null)
   ).join('');
 
   const rolesHtml = sortedRoles.map(([role, score]) => rolePill(role, score)).join('');
@@ -170,98 +201,111 @@ export function buildCardElement(player, manual = {}) {
     <div style="width:1920px;height:1080px;overflow:hidden;background:${BG};font-family:'Montserrat',sans-serif;color:#fff;position:relative;box-sizing:border-box;">
 
       <!-- HEADER -->
-      <div style="position:absolute;top:0;left:0;right:0;height:305px;background:linear-gradient(to right, ${clubColor} 0%, ${BG} 58%);display:flex;align-items:flex-start;padding:20px 16px 0;gap:18px;">
-        <img src="${photo}" crossorigin="anonymous" onerror="this.style.background='#111827'" style="width:258px;height:258px;object-fit:cover;border-radius:4px;flex-shrink:0;"/>
-        <div style="flex:1;padding-top:2px;">
-          <div style="font-size:42px;font-weight:900;line-height:1.1;letter-spacing:-0.5px;">${player.name}</div>
-          <div style="font-size:19px;font-weight:600;color:#d1d5db;margin-top:4px;">
-            ${player.position ? player.position.split(',')[0].trim() : (ROLE_KEY_LABELS[player.roleKey] || '')} &nbsp; ${player.foot && player.foot !== 'unknown' && player.foot !== 'nan' ? formatFoot(player.foot) : ''}
-          </div>
-          <div style="display:flex;align-items:center;gap:7px;margin-top:7px;font-size:14px;color:#d1d5db;">
-            <span>${player.age} years old</span>
-            ${player.dob ? `<span style="color:#374151;">·</span><span>${player.dob}</span>` : ''}
-          </div>
-          <div style="display:flex;align-items:flex-start;gap:12px;margin-top:16px;">
-            ${crest ? `<img src="${crest}" crossorigin="anonymous" onerror="this.style.display='none'" style="width:70px;height:70px;object-fit:contain;"/>` : ''}
-            <div style="display:flex;flex-direction:column;gap:2px;">
-              <div style="font-size:18px;font-weight:800;">${player.team}</div>
-              <div style="font-size:13px;color:#9ca3af;">${player.league}</div>
-              <div style="font-size:11px;color:#6b7280;">${player.onLoan ? 'On Loan' : ''}</div>
-            </div>
-          </div>
-        </div>
-        <div style="margin-left:auto;display:flex;flex-direction:column;gap:5px;padding-top:2px;">
-          <div style="display:flex;gap:6px;font-size:13px;"><span style="color:#9ca3af;width:70px;">Height:</span><span style="color:#fff;font-weight:700;">${manual.height || '—'}</span></div>
-          <div style="display:flex;gap:6px;font-size:13px;"><span style="color:#9ca3af;width:70px;">Value:</span><span style="color:#fff;font-weight:700;">${player.marketValue > 0 ? formatMV(player.marketValue) : '—'}</span></div>
-          <div style="display:flex;gap:6px;font-size:13px;"><span style="color:#9ca3af;width:70px;">Contract:</span><span style="color:#fff;font-weight:700;">${player.contract && player.contract !== 'nan' ? player.contract : '—'}</span></div>
-        </div>
-      </div>
+      <div style="position:absolute;top:0;left:0;right:0;height:210px;background:linear-gradient(to right, ${HEADER_L} 0%, ${HEADER_R} 100%);display:flex;align-items:flex-start;padding:14px 0 0 0;">
 
-      ${manual.positionImageDataUrl ? `<img src="${manual.positionImageDataUrl}" style="position:absolute;top:20px;right:18px;width:155px;height:155px;object-fit:contain;"/>` : ''}
+        <img src="${photo}" crossorigin="anonymous" onerror="this.style.background='#1c2236'" style="width:175px;height:175px;object-fit:cover;flex-shrink:0;margin-left:0;"/>
+
+        <div style="flex:1;padding-top:6px;padding-left:14px;">
+          <div style="font-size:34px;font-weight:800;line-height:1.1;letter-spacing:-0.3px;">${player.name}</div>
+          <div style="font-size:17px;font-weight:600;color:#d7dbe6;margin-top:5px;">
+            ${player.position ? player.position.split(',')[0].trim() : (ROLE_KEY_LABELS[player.roleKey] || '')} &nbsp; <span style="color:#b9bfcd;font-weight:500;">${player.foot && player.foot !== 'unknown' && player.foot !== 'nan' ? formatFoot(player.foot) : ''}</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:9px;font-size:14px;color:#d7dbe6;">
+            ${player.nationality ? `<img src="https://flagcdn.com/24x18/${(player.countryCode||'').toLowerCase()}.png" style="width:22px;height:16px;object-fit:cover;" onerror="this.style.display='none'"/>` : ''}
+            <span style="font-weight:700;">${player.age} years old</span>
+            <span style="color:#b9bfcd;margin-left:4px;">${player.dob || ''}</span>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:flex-start;gap:14px;padding-top:14px;width:300px;flex-shrink:0;">
+          ${crest ? `<img src="${crest}" crossorigin="anonymous" onerror="this.style.display='none'" style="width:56px;height:64px;object-fit:contain;"/>` : '<div style="width:56px;"></div>'}
+          <div style="display:flex;flex-direction:column;gap:3px;">
+            <div style="font-size:17px;font-weight:700;">${player.team}</div>
+            <div style="font-size:13px;color:#aab2c5;">${player.league}</div>
+            <div style="font-size:12px;color:#7d869b;margin-top:2px;">${player.onLoan ? 'On Loan' : 'Important Player'}</div>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:8px;padding-top:14px;width:170px;flex-shrink:0;">
+          <div style="display:flex;gap:8px;font-size:13px;"><span style="color:#aab2c5;width:60px;">Height:</span><span style="color:#fff;font-weight:700;">${manual.height || '—'}</span></div>
+          <div style="display:flex;gap:8px;font-size:13px;"><span style="color:#aab2c5;width:60px;">Value:</span><span style="color:#fff;font-weight:700;">${player.marketValue > 0 ? formatMV(player.marketValue) : '—'}</span></div>
+          <div style="display:flex;gap:8px;font-size:13px;"><span style="color:#aab2c5;width:60px;">Contract:</span><span style="color:#fff;font-weight:700;">${player.contract && player.contract !== 'nan' ? player.contract : '—'}</span></div>
+        </div>
+
+        <div style="width:280px;flex-shrink:0;"></div>
+
+      </div>
 
       <!-- NAV -->
-      <div style="position:absolute;top:195px;left:282px;display:flex;gap:28px;font-size:11px;color:#6b7280;">
-        <span>Profile ▸</span><span>Performance ▾</span><span>Similar Players ▾</span><span>Club Fit ▾</span><span>Video ▾</span><span>Compare ▾</span>
+      <div style="position:absolute;top:165px;left:200px;display:flex;align-items:center;gap:26px;font-size:15px;color:#c2c7d4;">
+        <span style="font-weight:700;color:#fff;">Profile ▸</span><span>Performance ▾</span><span>Similar Players ▾</span><span>Club Fit ▾</span><span>Video ▾</span><span>Compare ▾</span>
       </div>
 
+      <!-- POSITION DIAGRAM -->
+      <div style="position:absolute;top:14px;right:14px;width:255px;height:170px;">
+        ${pitchDiagramSvg()}
+      </div>
+
+      <!-- BEST ROLE header (top right, below pitch) -->
+      <div style="position:absolute;top:192px;right:30px;font-size:16px;font-weight:800;color:#fff;">BEST ROLE</div>
+
       <!-- SEASON STATS -->
-      <div style="position:absolute;top:305px;left:0;width:900px;height:30px;background:#0d1117;display:flex;align-items:center;padding:0 10px;">
-        <span style="font-size:12px;font-weight:800;color:${ACCENT_PINK};margin-right:10px;white-space:nowrap;">Season Stats</span>
+      <div style="position:absolute;top:210px;left:0;width:670px;display:flex;align-items:center;padding:10px 16px;">
+        <span style="font-size:15px;font-weight:800;color:${ACCENT_PINK};margin-right:18px;white-space:nowrap;">Season Stats</span>
         ${['Apps', 'Gls', 'Asts', 'xG', 'xA', 'Mins'].map((label, i) => {
           const vals = [latestSeason.m || '—', latestSeason.g || '0', latestSeason.a || '0', '—', '—', latestSeason.mins ? latestSeason.mins.toLocaleString() : '—'];
-          return `<div style="display:flex;flex-direction:column;align-items:center;min-width:75px;"><span style="font-size:8px;color:#6b7280;">${label}</span><span style="font-size:11px;font-weight:700;">${vals[i]}</span></div>`;
+          return `<div style="display:flex;flex-direction:column;align-items:center;min-width:60px;"><span style="font-size:11px;color:#8b93a7;">${label}</span><span style="font-size:14px;font-weight:700;">${vals[i]}</span></div>`;
         }).join('')}
-        <div style="display:flex;flex-direction:column;align-items:center;min-width:75px;">
-          <span style="font-size:8px;color:#6b7280;">Av.Rat</span>
-          <span style="background:#f59e0b;color:#fff;font-size:11px;font-weight:800;padding:1px 7px;border-radius:3px;">${sd.score ? ((sd.score - 40) / 54 * 7.5 + 1).toFixed(1) : '—'}</span>
+        <div style="display:flex;flex-direction:column;align-items:center;min-width:60px;">
+          <span style="font-size:11px;color:#8b93a7;">Av. Rat</span>
+          <span style="background:#f0b94a;color:#1a1300;font-size:13px;font-weight:800;padding:1px 9px;border-radius:4px;">${sd.score ? ((sd.score - 40) / 54 * 7.5 + 1).toFixed(1) : '—'}</span>
         </div>
       </div>
 
-      <div style="position:absolute;top:305px;bottom:0;width:1px;background:#1a2540;left:900px;"></div>
-      <div style="position:absolute;top:305px;bottom:0;width:1px;background:#1a2540;left:1162px;"></div>
-
-      <!-- BAR CHART -->
-      <div style="position:absolute;top:335px;left:0;width:895px;padding:4px 0;">
-        ${groups.A && groups.A.length ? `<div style="font-size:12px;font-weight:800;color:#fff;padding:4px 8px 2px;">Attacking</div>${buildGroupBars('A')}` : ''}
-        ${groups.D && groups.D.length ? `<div style="font-size:12px;font-weight:800;color:#fff;padding:4px 8px 2px;">Defensive</div>${buildGroupBars('D')}` : ''}
-        ${groups.P && groups.P.length ? `<div style="font-size:12px;font-weight:800;color:#fff;padding:4px 8px 2px;">Possession</div>${buildGroupBars('P')}` : ''}
-        <div style="text-align:center;font-size:8px;color:#4b5563;padding-top:6px;margin-left:157px;">Percentile Rank</div>
+      <!-- BAR CHART PANEL -->
+      <div style="position:absolute;top:255px;left:0;width:670px;padding:0 16px;">
+        ${groups.A && groups.A.length ? `<div style="font-size:17px;font-weight:800;color:#fff;margin:4px 0 6px;">Attacking</div>${buildGroupBars('A')}` : ''}
+        ${groups.D && groups.D.length ? `<div style="font-size:17px;font-weight:800;color:#fff;margin:10px 0 6px;">Defensive</div>${buildGroupBars('D')}` : ''}
+        ${groups.P && groups.P.length ? `<div style="font-size:17px;font-weight:800;color:#fff;margin:10px 0 6px;">Possession</div>${buildGroupBars('P')}` : ''}
+        <div style="display:flex;margin-top:6px;padding-left:164px;font-size:9px;color:#6b7280;justify-content:space-between;padding-right:4px;">
+          ${[0,10,20,30,40,50,60,70,80,90,100].map(p=>`<span>${p}%</span>`).join('')}
+        </div>
+        <div style="text-align:center;font-size:11px;color:#8b93a7;padding-top:4px;padding-left:164px;">Percentile Rank</div>
       </div>
 
       <!-- NOTES PANEL -->
-      <div style="position:absolute;top:335px;left:908px;width:248px;padding:7px 10px;">
-        <div style="display:flex;gap:5px;margin-bottom:12px;">
-          <span style="color:${ACCENT_PINK};font-size:12px;flex-shrink:0;line-height:1.5;">•</span>
-          <div style="font-size:10.5px;line-height:1.55;color:${LABEL_COL};"><span style="color:${ACCENT_PINK};font-weight:700;">Key Attributes: </span>${manual.keyAttributes || ''}</div>
+      <div style="position:absolute;top:255px;left:702px;width:460px;padding:0 10px;">
+        <div style="display:flex;gap:8px;margin-bottom:16px;">
+          <span style="color:${ACCENT_PINK};font-size:16px;flex-shrink:0;line-height:1.6;">•</span>
+          <div style="font-size:15px;line-height:1.6;color:${LABEL_COL};"><span style="color:${ACCENT_PINK};font-weight:700;">Key Attributes: </span>${manual.keyAttributes || ''}</div>
         </div>
-        <div style="display:flex;gap:5px;margin-bottom:12px;">
-          <span style="color:${ACCENT_PINK};font-size:12px;flex-shrink:0;line-height:1.5;">•</span>
-          <div style="font-size:10.5px;line-height:1.55;color:${LABEL_COL};"><span style="color:${ACCENT_PINK};font-weight:700;">Development Areas: </span>${manual.devAreas || ''}</div>
+        <div style="display:flex;gap:8px;margin-bottom:16px;">
+          <span style="color:${ACCENT_PINK};font-size:16px;flex-shrink:0;line-height:1.6;">•</span>
+          <div style="font-size:15px;line-height:1.6;color:${LABEL_COL};"><span style="color:${ACCENT_PINK};font-weight:700;">Development Areas: </span>${manual.devAreas || ''}</div>
         </div>
-        <div style="display:flex;gap:5px;margin-bottom:12px;">
-          <span style="color:${ACCENT_PINK};font-size:12px;flex-shrink:0;line-height:1.5;">•</span>
-          <div style="font-size:10.5px;line-height:1.55;color:${LABEL_COL};"><span style="color:${ACCENT_PINK};font-weight:700;">View: </span>${manual.view || ''}</div>
+        <div style="display:flex;gap:8px;margin-bottom:20px;">
+          <span style="color:${ACCENT_PINK};font-size:16px;flex-shrink:0;line-height:1.6;">•</span>
+          <div style="font-size:15px;line-height:1.6;color:${LABEL_COL};"><span style="color:${ACCENT_PINK};font-weight:700;">View: </span>${manual.view || ''}</div>
         </div>
-        <div style="margin-top:16px;">
-          <div style="font-size:11px;font-weight:800;color:#fff;margin-bottom:4px;">CURRENT LEVEL</div>
-          <div style="display:flex;align-items:center;gap:7px;"><span style="font-size:18px;">${starsHtml(manual.currentScore ?? player.careerScore)}</span><span style="font-size:9px;color:#9ca3af;">${manual.currentLevel || scoreLabel(player.careerScore)}</span></div>
+        <div style="margin-top:6px;">
+          <div style="font-size:17px;font-weight:800;color:#fff;margin-bottom:8px;">CURRENT LEVEL</div>
+          <div style="display:flex;align-items:center;gap:12px;"><span style="font-size:20px;">${starsHtml(manual.currentScore ?? player.careerScore)}</span><span style="font-size:14px;color:#aab2c5;">${manual.currentLevel || scoreLabel(player.careerScore)}</span></div>
         </div>
-        <div style="margin-top:10px;">
-          <div style="font-size:11px;font-weight:800;color:#fff;margin-bottom:4px;">POTENTIAL LEVEL</div>
-          <div style="display:flex;align-items:center;gap:7px;"><span style="font-size:18px;">${starsHtml(manual.potentialScore ?? player.potentialScore ?? player.careerScore)}</span><span style="font-size:9px;color:#9ca3af;">${manual.potentialLevel || scoreLabel(player.potentialScore || player.careerScore)}</span></div>
+        <div style="margin-top:18px;">
+          <div style="font-size:17px;font-weight:800;color:#fff;margin-bottom:8px;">POTENTIAL LEVEL</div>
+          <div style="display:flex;align-items:center;gap:12px;"><span style="font-size:20px;">${starsHtml(manual.potentialScore ?? player.potentialScore ?? player.careerScore)}</span><span style="font-size:14px;color:#aab2c5;">${manual.potentialLevel || scoreLabel(player.potentialScore || player.careerScore)}</span></div>
         </div>
       </div>
 
       <!-- FAR RIGHT PANEL -->
-      <div style="position:absolute;top:305px;left:1168px;right:0;padding:12px 14px;">
-        <div style="font-size:10px;font-weight:900;color:#fff;letter-spacing:.06em;margin-bottom:8px;">BEST ROLE</div>
+      <div style="position:absolute;top:218px;left:1188px;right:0;padding:0 30px;">
         ${rolesHtml}
-        ${trendData.length >= 2 ? `<div style="margin-top:12px;"><div style="font-size:10px;font-weight:900;color:#fff;letter-spacing:.06em;margin-bottom:8px;">PERFORMANCE TREND</div>${trendSvg(trendData)}</div>` : ''}
-        <div style="margin-top:12px;"><div style="font-size:10px;font-weight:900;color:#fff;letter-spacing:.06em;margin-bottom:8px;">PHYSICAL</div>${physicalDotsHtml(manual.physical || { Pace: 3, Power: 3, Fitness: 3 })}</div>
-        <div style="margin-top:12px;">
-          <div style="font-size:10px;font-weight:900;color:#fff;letter-spacing:.06em;margin-bottom:8px;">FORM</div>
-          <div style="display:flex;margin-top:4px;">${formBlocksHtml(manual.form || [])}</div>
-          ${manual.avgRating5 ? `<div style="font-size:9px;color:#9ca3af;margin-top:6px;">⭐ ${manual.avgRating5} &nbsp; Last 5 Avg Rating</div>` : ''}
+        ${trendData.length >= 2 ? `<div style="margin-top:18px;"><div style="font-size:17px;font-weight:800;color:#fff;margin-bottom:10px;">PERFORMANCE TREND</div>${trendSvg(trendData)}</div>` : ''}
+        <div style="margin-top:22px;"><div style="font-size:17px;font-weight:800;color:#fff;margin-bottom:14px;">PHYSICAL</div>${physicalDotsHtml(manual.physical || { Pace: 3, Power: 3, Fitness: 3 })}</div>
+        <div style="margin-top:18px;">
+          <div style="font-size:17px;font-weight:800;color:#fff;margin-bottom:10px;">FORM</div>
+          <div style="display:flex;margin-top:6px;">${formBlocksHtml(manual.form || [])}</div>
+          ${manual.avgRating5 ? `<div style="display:inline-flex;align-items:center;gap:6px;background:#d35a48;color:#fff;font-size:12px;font-weight:700;padding:4px 10px;border-radius:5px;margin-top:10px;">${manual.avgRating5} <span style="font-weight:500;">Last 5 Avg Rating</span></div>` : ''}
         </div>
       </div>
 
@@ -271,21 +315,16 @@ export function buildCardElement(player, manual = {}) {
   return container;
 }
 
-/**
- * Generates and downloads the PNG. Requires html2canvas to be loaded
- * (npm install html2canvas, then `import html2canvas from 'html2canvas'`).
- */
 export async function downloadScoutingCardPNG(player, manual = {}) {
   const html2canvas = (await import('html2canvas')).default;
 
-  // Ensure Montserrat is loaded before rendering
   if (!document.getElementById('montserrat-font-link')) {
     const link = document.createElement('link');
     link.id = 'montserrat-font-link';
     link.rel = 'stylesheet';
     link.href = 'https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&display=swap';
     document.head.appendChild(link);
-    await new Promise(r => setTimeout(r, 300)); // give font time to register
+    await new Promise(r => setTimeout(r, 300));
   }
 
   const el = buildCardElement(player, manual);
