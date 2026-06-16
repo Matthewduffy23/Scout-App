@@ -8,6 +8,35 @@ import { scoreBandColor, scoreLabel, scoreToStars, ROLE_KEY_LABELS, formatMV, fo
 const PHOTO_BASE = 'https://raw.githubusercontent.com/Matthewduffy23/scouting-photos/main/photos/';
 const CREST_BASE = 'https://images.fotmob.com/image_resources/logo/teamlogo/';
 
+// ── Country name (as found in birthCountry field) → ISO 3166-1 alpha-2 code, for flagcdn ──
+const COUNTRY_TO_ISO2 = {
+  'England': 'gb-eng', 'Scotland': 'gb-sct', 'Wales': 'gb-wls', 'Northern Ireland': 'gb-nir',
+  'Spain': 'es', 'Germany': 'de', 'Italy': 'it', 'France': 'fr', 'Belgium': 'be',
+  'Portugal': 'pt', 'Netherlands': 'nl', 'Croatia': 'hr', 'Switzerland': 'ch', 'Norway': 'no',
+  'Sweden': 'se', 'Cyprus': 'cy', 'Czech': 'cz', 'Czech Republic': 'cz', 'Greece': 'gr',
+  'Austria': 'at', 'Hungary': 'hu', 'Romania': 'ro', 'Slovenia': 'si', 'Slovakia': 'sk',
+  'Ukraine': 'ua', 'Bulgaria': 'bg', 'Serbia': 'rs', 'Albania': 'al', 'Bosnia': 'ba',
+  'Bosnia and Herzegovina': 'ba', 'Kosovo': 'xk', 'Ireland': 'ie', 'Republic of Ireland': 'ie',
+  'Finland': 'fi', 'Armenia': 'am', 'Georgia': 'ge', 'Poland': 'pl', 'Iceland': 'is',
+  'North Macedonia': 'mk', 'Latvia': 'lv', 'Montenegro': 'me', 'Denmark': 'dk', 'Estonia': 'ee',
+  'Russia': 'ru', 'Kazakhstan': 'kz', 'Lithuania': 'lt', 'Malta': 'mt', 'Moldova': 'md',
+  'Israel': 'il', 'Andorra': 'ad', 'Faroe Islands': 'fo',
+  'Brazil': 'br', 'Argentina': 'ar', 'Colombia': 'co', 'Ecuador': 'ec', 'Paraguay': 'py',
+  'Uruguay': 'uy', 'Chile': 'cl', 'Bolivia': 'bo', 'Peru': 'pe', 'Venezuela': 've', 'Panama': 'pa',
+  'USA': 'us', 'United States': 'us', 'Mexico': 'mx', 'Costa Rica': 'cr', 'Canada': 'ca',
+  'Morocco': 'ma', 'Algeria': 'dz', 'Egypt': 'eg', 'Nigeria': 'ng', 'Tunisia': 'tn',
+  'South Africa': 'za', 'Zambia': 'zm', 'Ghana': 'gh', 'Senegal': 'sn', 'Cameroon': 'cm',
+  'Ivory Coast': 'ci', "Côte d'Ivoire": 'ci', 'Mali': 'ml', 'DR Congo': 'cd', 'Guinea': 'gn',
+  'Japan': 'jp', 'Korea': 'kr', 'South Korea': 'kr', 'Saudi': 'sa', 'Saudi Arabia': 'sa',
+  'UAE': 'ae', 'Qatar': 'qa', 'Uzbekistan': 'uz', 'China': 'cn', 'Turkey': 'tr',
+  'Azerbaijan': 'az', 'Kyrgyzstan': 'kg', 'Australia': 'au', 'Iran': 'ir', 'Iraq': 'iq',
+  'Jordan': 'jo', 'Syria': 'sy', 'India': 'in',
+};
+function countryToIso2(name) {
+  if (!name) return '';
+  return COUNTRY_TO_ISO2[String(name).trim()] || '';
+}
+
 // ── Colours sampled directly from the real Canva export ──────────────────────
 const BG          = '#090f1b';          // body background (sampled 9,15,27)
 const HEADER_L     = 'rgb(23,26,77)';   // header gradient left
@@ -33,7 +62,7 @@ function photoUrl(name, team) {
   let ini, sur;
   if (parts.length >= 2) { ini = parts[0].trim(); sur = parts.slice(1).join('.').trim(); }
   else { const b = name.trim().split(' '); ini = b[0] || ''; sur = b.slice(1).join(' ') || b[0] || ''; }
-  const t = String(team || '').trim().split(/\s+/).map(w => slugN(w)).join('_').replace(/^_|_$/g, '');
+  const t = String(team || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
   return `${PHOTO_BASE}${slugN(ini)}_${slugN(sur)}__${t}.png`;
 }
 
@@ -211,9 +240,8 @@ export function buildCardElement(player, manual = {}) {
             ${player.position ? player.position.split(',')[0].trim() : (ROLE_KEY_LABELS[player.roleKey] || '')} &nbsp; <span style="color:#b9bfcd;font-weight:500;">${player.foot && player.foot !== 'unknown' && player.foot !== 'nan' ? formatFoot(player.foot) : ''}</span>
           </div>
           <div style="display:flex;align-items:center;gap:8px;margin-top:9px;font-size:14px;color:#d7dbe6;">
-            ${player.nationality ? `<img src="https://flagcdn.com/24x18/${(player.countryCode||'').toLowerCase()}.png" style="width:22px;height:16px;object-fit:cover;" onerror="this.style.display='none'"/>` : ''}
+            ${countryToIso2(player.birthCountry) ? `<img src="https://flagcdn.com/24x18/${countryToIso2(player.birthCountry)}.png" style="width:22px;height:16px;object-fit:cover;" onerror="this.style.display='none'"/>` : ''}
             <span style="font-weight:700;">${player.age} years old</span>
-            <span style="color:#b9bfcd;margin-left:4px;">${player.dob || ''}</span>
           </div>
         </div>
 
