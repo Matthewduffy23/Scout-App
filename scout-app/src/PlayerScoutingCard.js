@@ -255,7 +255,7 @@ export function buildCardElement(player, manual = {}) {
       <!-- HEADER -->
       <div style="position:absolute;top:0;left:0;width:1920px;height:288px;background:linear-gradient(to right, ${HEADER_L} 0%, ${HEADER_R} 100%);">
 
-        <img src="${photo}" crossorigin="anonymous" onerror="this.onerror=null;this.src='/fallback.png';this.style.background='#1c2236';" style="position:absolute;left:0;top:0;width:218px;height:265px;object-fit:cover;"/>
+        <div id="scc-photo" style="position:absolute;left:0;top:0;width:218px;height:265px;background-color:#1c2236;background-image:url('${photo}');background-size:cover;background-position:center top;"></div>
 
         <div style="position:absolute;left:235px;top:8px;width:470px;">
           <div style="font-size:48px;font-weight:800;line-height:1.05;letter-spacing:-0.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${player.name}</div>
@@ -263,7 +263,7 @@ export function buildCardElement(player, manual = {}) {
             ${player.position ? player.position.split(',')[0].trim() : (ROLE_KEY_LABELS[player.roleKey] || '')} &nbsp; <span style="color:#b9bfcd;font-weight:500;">${player.foot && player.foot !== 'unknown' && player.foot !== 'nan' ? formatFoot(player.foot) : ''}</span>
           </div>
           <div style="display:flex;align-items:center;gap:10px;margin-top:18px;font-size:22px;color:#d7dbe6;">
-            ${countryToIso2(player.birthCountry) ? `<img src="https://flagcdn.com/32x24/${countryToIso2(player.birthCountry)}.png" style="width:30px;height:22px;object-fit:cover;" onerror="this.style.display='none'"/>` : ''}
+            ${countryToIso2(player.birthCountry) ? `<div style="width:30px;height:22px;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/32x24/${countryToIso2(player.birthCountry)}.png');"></div>` : ''}
             <span style="font-weight:700;">${player.age} years old</span>
           </div>
         </div>
@@ -273,7 +273,7 @@ export function buildCardElement(player, manual = {}) {
           <span style="font-weight:700;color:#fff;">Profile ▸</span><span>Performance ▾</span><span>Similar Players ▾</span><span>Club Fit ▾</span><span>Video ▾</span><span>Compare ▾</span>
         </div>
 
-        ${crest ? `<img src="${crest}" onerror="this.style.display='none'" style="position:absolute;left:725px;top:55px;width:90px;height:85px;object-fit:contain;"/>` : ''}
+        ${crest ? `<div style="position:absolute;left:725px;top:55px;width:90px;height:85px;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${crest}');"></div>` : ''}
         <div style="position:absolute;left:835px;top:60px;">
           <div style="font-size:24px;font-weight:700;">${player.team}</div>
           <div style="font-size:18px;color:#aab2c5;margin-top:4px;">${player.league}</div>
@@ -388,6 +388,22 @@ export async function downloadScoutingCardPNG(player, manual = {}) {
   }
 
   const el = buildCardElement(player, manual);
+
+  // background-image has no onerror — preload the real photo URL manually and
+  // swap to the fallback image if it 404s, before html2canvas captures the card.
+  const photoDiv = el.querySelector('#scc-photo');
+  if (photoDiv) {
+    const bgUrl = photoUrl(player.name, player.team);
+    await new Promise((resolve) => {
+      const testImg = new Image();
+      testImg.onload = () => resolve();
+      testImg.onerror = () => {
+        photoDiv.style.backgroundImage = "url('/fallback.png')";
+        resolve();
+      };
+      testImg.src = bgUrl;
+    });
+  }
 
   try {
     const canvas = await html2canvas(el, {
