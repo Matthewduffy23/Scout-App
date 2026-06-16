@@ -90,16 +90,16 @@ function barRow(label, pct, rawVal, count) {
   const p = Math.max(0, Math.min(100, pct || 0));
   const bc = barColor(p);
   return `
-    <div style="display:flex;align-items:center;height:15px;margin-bottom:1px;">
-      <div style="font-size:8.5px;font-weight:600;color:${LABEL_COL};width:148px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${label}</div>
-      <div style="width:16px;flex-shrink:0;font-size:7.5px;color:#6b7280;text-align:right;padding-right:4px;">${count != null ? count : ''}</div>
-      <div style="flex:1;position:relative;height:11px;">
-        <div style="width:100%;height:11px;background:${BAR_TRACK};position:relative;overflow:hidden;">
+    <div style="display:flex;align-items:center;height:21px;margin-bottom:2px;">
+      <div style="font-size:13px;font-weight:600;color:${LABEL_COL};width:170px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${label}</div>
+      <div style="width:26px;flex-shrink:0;font-size:11px;color:#6b7280;text-align:right;padding-right:6px;">${count != null ? count : ''}</div>
+      <div style="flex:1;position:relative;height:16px;">
+        <div style="width:100%;height:16px;background:${BAR_TRACK};position:relative;overflow:hidden;">
           <div style="height:100%;width:${p}%;background:${bc};position:relative;">
-            ${rawVal ? `<span style="position:absolute;left:4px;top:50%;transform:translateY(-50%);font-size:7.5px;font-weight:700;color:#0a0a0a;white-space:nowrap;">${rawVal}</span>` : ''}
+            ${rawVal ? `<span style="position:absolute;left:6px;top:50%;transform:translateY(-50%);font-size:11px;font-weight:700;color:#0a0a0a;white-space:nowrap;">${rawVal}</span>` : ''}
           </div>
         </div>
-        <div style="position:absolute;left:50%;top:0;width:1px;height:11px;background:rgba(255,255,255,.55);"></div>
+        <div style="position:absolute;left:50%;top:0;width:1px;height:16px;background:rgba(255,255,255,.55);"></div>
       </div>
     </div>`;
 }
@@ -109,28 +109,28 @@ function rolePill(roleName, score) {
   const bc = barColor(sc);
   const fg = sc > 45 ? '#0a0a0a' : '#fff';
   return `
-    <div style="display:flex;align-items:center;justify-content:space-between;background:#1c2236;border-radius:8px;padding:9px 12px;margin-bottom:8px;width:228px;">
-      <span style="font-size:13px;color:#e2e6ee;font-weight:500;">${roleName}</span>
-      <span style="font-size:13px;font-weight:800;padding:3px 11px;border-radius:5px;min-width:34px;text-align:center;background:${bc};color:${fg};">${sc}</span>
+    <div style="display:flex;align-items:center;justify-content:space-between;background:#1c2236;border-radius:10px;padding:14px 18px;margin-bottom:12px;width:335px;box-sizing:border-box;">
+      <span style="font-size:19px;color:#e2e6ee;font-weight:500;">${roleName}</span>
+      <span style="font-size:19px;font-weight:800;padding:4px 16px;border-radius:6px;min-width:46px;text-align:center;background:${bc};color:${fg};">${sc}</span>
     </div>`;
 }
 
 function trendSvg(trendData) {
   if (!trendData || trendData.length < 2) return '';
-  const W = 270, H = 75;
+  const W = 335, H = 95;
   const scores = trendData.map(d => d.score);
   const mn = Math.min(...scores) - 8, mx = Math.max(...scores) + 8;
-  const tx = i => 14 + i * (W - 28) / (trendData.length - 1);
-  const ty = s => H - 16 - (s - mn) / (mx - mn || 1) * (H - 30);
+  const tx = i => 24 + i * (W - 48) / (trendData.length - 1);
+  const ty = s => H - 22 - (s - mn) / (mx - mn || 1) * (H - 40);
   const pts = trendData.map((d, i) => `${tx(i)},${ty(d.score)}`).join(' ');
   const dots = trendData.map((d, i) => {
     const x = tx(i), y = ty(d.score);
-    return `<rect x="${x-15}" y="${y-22}" width="30" height="17" rx="4" fill="${TREND_CYAN}"/>
-      <text x="${x}" y="${y-9.5}" text-anchor="middle" fill="#04222a" font-size="11.5" font-weight="800" font-family="Montserrat">${d.score}</text>
-      <text x="${x}" y="${H}" text-anchor="middle" fill="#8b93a7" font-size="10.5" font-family="Montserrat">${d.season}</text>`;
+    return `<rect x="${x-19}" y="${y-28}" width="38" height="22" rx="5" fill="${TREND_CYAN}"/>
+      <text x="${x}" y="${y-12}" text-anchor="middle" fill="#04222a" font-size="15" font-weight="800" font-family="Montserrat">${d.score}</text>
+      <text x="${x}" y="${H}" text-anchor="middle" fill="#8b93a7" font-size="14" font-family="Montserrat">${d.season}</text>`;
   }).join('');
-  return `<svg width="${W}" height="${H+8}" xmlns="http://www.w3.org/2000/svg">
-    <polyline points="${pts}" fill="none" stroke="${TREND_CYAN}" stroke-width="2.5"/>${dots}
+  return `<svg width="${W}" height="${H+10}" xmlns="http://www.w3.org/2000/svg">
+    <polyline points="${pts}" fill="none" stroke="${TREND_CYAN}" stroke-width="3"/>${dots}
   </svg>`;
 }
 
@@ -140,10 +140,10 @@ function physicalDotsHtml(physical) {
     const dotsHtml = [0, 1, 2, 3, 4].map(i => {
       const filled = i < dots;
       const col = filled ? (dotColors[dots] || '#22c55e') : '#3a4566';
-      return `<span style="width:15px;height:15px;border-radius:50%;display:inline-block;background:${col};margin-right:6px;"></span>`;
+      return `<span style="width:21px;height:21px;border-radius:50%;display:inline-block;background:${col};margin-right:9px;"></span>`;
     }).join('');
-    return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
-      <span style="font-size:14px;color:#aab2c5;width:66px;">${attr}</span>
+    return `<div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;">
+      <span style="font-size:19px;color:#aab2c5;width:90px;">${attr}</span>
       <span style="display:flex;">${dotsHtml}</span>
     </div>`;
   }).join('');
@@ -153,7 +153,7 @@ function formBlocksHtml(form) {
   const fm = { W: '#3aa65c', D: '#e0904a', L: '#d35a48' };
   return (form || []).slice(0, 5).map(r => {
     const col = fm[r.toUpperCase()] || '#4b5563';
-    return `<span style="width:38px;height:38px;border-radius:5px;display:inline-block;background:${col};margin-right:8px;"></span>`;
+    return `<span style="width:54px;height:54px;border-radius:7px;display:inline-block;background:${col};margin-right:11px;"></span>`;
   }).join('');
 }
 
@@ -230,110 +230,108 @@ export function buildCardElement(player, manual = {}) {
     <div style="width:1920px;height:1080px;overflow:hidden;background:${BG};font-family:'Montserrat',sans-serif;color:#fff;position:relative;box-sizing:border-box;">
 
       <!-- HEADER -->
-      <div style="position:absolute;top:0;left:0;right:0;height:210px;background:linear-gradient(to right, ${HEADER_L} 0%, ${HEADER_R} 100%);display:flex;align-items:flex-start;padding:14px 0 0 0;">
+      <div style="position:absolute;top:0;left:0;width:1920px;height:288px;background:linear-gradient(to right, ${HEADER_L} 0%, ${HEADER_R} 100%);">
 
-        <img src="${photo}" crossorigin="anonymous" onerror="this.style.background='#1c2236'" style="width:175px;height:175px;object-fit:cover;flex-shrink:0;margin-left:0;"/>
+        <img src="${photo}" crossorigin="anonymous" onerror="this.onerror=null;this.src='/fallback.png';this.style.background='#1c2236';" style="position:absolute;left:0;top:0;width:218px;height:265px;object-fit:cover;"/>
 
-        <div style="flex:1;padding-top:6px;padding-left:14px;">
-          <div style="font-size:34px;font-weight:800;line-height:1.1;letter-spacing:-0.3px;">${player.name}</div>
-          <div style="font-size:17px;font-weight:600;color:#d7dbe6;margin-top:5px;">
+        <div style="position:absolute;left:235px;top:8px;width:470px;">
+          <div style="font-size:48px;font-weight:800;line-height:1.05;letter-spacing:-0.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${player.name}</div>
+          <div style="font-size:24px;font-weight:600;color:#d7dbe6;margin-top:8px;">
             ${player.position ? player.position.split(',')[0].trim() : (ROLE_KEY_LABELS[player.roleKey] || '')} &nbsp; <span style="color:#b9bfcd;font-weight:500;">${player.foot && player.foot !== 'unknown' && player.foot !== 'nan' ? formatFoot(player.foot) : ''}</span>
           </div>
-          <div style="display:flex;align-items:center;gap:8px;margin-top:9px;font-size:14px;color:#d7dbe6;">
-            ${countryToIso2(player.birthCountry) ? `<img src="https://flagcdn.com/24x18/${countryToIso2(player.birthCountry)}.png" style="width:22px;height:16px;object-fit:cover;" onerror="this.style.display='none'"/>` : ''}
+          <div style="display:flex;align-items:center;gap:10px;margin-top:18px;font-size:22px;color:#d7dbe6;">
+            ${countryToIso2(player.birthCountry) ? `<img src="https://flagcdn.com/32x24/${countryToIso2(player.birthCountry)}.png" style="width:30px;height:22px;object-fit:cover;" onerror="this.style.display='none'"/>` : ''}
             <span style="font-weight:700;">${player.age} years old</span>
           </div>
         </div>
 
-        <div style="display:flex;align-items:flex-start;gap:14px;padding-top:14px;width:300px;flex-shrink:0;">
-          ${crest ? `<img src="${crest}" crossorigin="anonymous" onerror="this.style.display='none'" style="width:56px;height:64px;object-fit:contain;"/>` : '<div style="width:56px;"></div>'}
-          <div style="display:flex;flex-direction:column;gap:3px;">
-            <div style="font-size:17px;font-weight:700;">${player.team}</div>
-            <div style="font-size:13px;color:#aab2c5;">${player.league}</div>
-            <div style="font-size:12px;color:#7d869b;margin-top:2px;">${player.onLoan ? 'On Loan' : 'Important Player'}</div>
-          </div>
+        <!-- NAV -->
+        <div style="position:absolute;left:235px;top:175px;display:flex;align-items:center;gap:32px;font-size:20px;color:#c2c7d4;">
+          <span style="font-weight:700;color:#fff;">Profile ▸</span><span>Performance ▾</span><span>Similar Players ▾</span><span>Club Fit ▾</span><span>Video ▾</span><span>Compare ▾</span>
         </div>
 
-        <div style="display:flex;flex-direction:column;gap:8px;padding-top:14px;width:170px;flex-shrink:0;">
-          <div style="display:flex;gap:8px;font-size:13px;"><span style="color:#aab2c5;width:60px;">Height:</span><span style="color:#fff;font-weight:700;">${manual.height || '—'}</span></div>
-          <div style="display:flex;gap:8px;font-size:13px;"><span style="color:#aab2c5;width:60px;">Value:</span><span style="color:#fff;font-weight:700;">${player.marketValue > 0 ? formatMV(player.marketValue) : '—'}</span></div>
-          <div style="display:flex;gap:8px;font-size:13px;"><span style="color:#aab2c5;width:60px;">Contract:</span><span style="color:#fff;font-weight:700;">${player.contract && player.contract !== 'nan' ? player.contract : '—'}</span></div>
+        ${crest ? `<img src="${crest}" crossorigin="anonymous" onerror="this.style.display='none'" style="position:absolute;left:725px;top:55px;width:90px;height:85px;object-fit:contain;"/>` : ''}
+        <div style="position:absolute;left:835px;top:60px;">
+          <div style="font-size:24px;font-weight:700;">${player.team}</div>
+          <div style="font-size:18px;color:#aab2c5;margin-top:4px;">${player.league}</div>
+          <div style="font-size:16px;color:#7d869b;margin-top:8px;">${player.onLoan ? 'On Loan' : 'Important Player'}</div>
         </div>
 
-        <div style="width:280px;flex-shrink:0;"></div>
+        <div style="position:absolute;left:1180px;top:0;width:1px;height:288px;background:rgba(255,255,255,.12);"></div>
 
-      </div>
+        <div style="position:absolute;left:1210px;top:55px;">
+          <div style="display:flex;gap:14px;font-size:18px;margin-bottom:16px;"><span style="color:#aab2c5;width:90px;">Height:</span><span style="color:#fff;font-weight:700;">${manual.height || '—'}</span></div>
+          <div style="display:flex;gap:14px;font-size:18px;margin-bottom:16px;"><span style="color:#aab2c5;width:90px;">Value:</span><span style="color:#fff;font-weight:700;">${player.marketValue > 0 ? formatMV(player.marketValue) : '—'}</span></div>
+          <div style="display:flex;gap:14px;font-size:18px;"><span style="color:#aab2c5;width:90px;">Contract:</span><span style="color:#fff;font-weight:700;">${player.contract && player.contract !== 'nan' ? player.contract : '—'}</span></div>
+        </div>
 
-      <!-- NAV -->
-      <div style="position:absolute;top:165px;left:200px;display:flex;align-items:center;gap:26px;font-size:15px;color:#c2c7d4;">
-        <span style="font-weight:700;color:#fff;">Profile ▸</span><span>Performance ▾</span><span>Similar Players ▾</span><span>Club Fit ▾</span><span>Video ▾</span><span>Compare ▾</span>
       </div>
 
       <!-- POSITION DIAGRAM -->
-      <div style="position:absolute;top:14px;right:14px;width:255px;height:170px;">
+      <div style="position:absolute;top:15px;left:1565px;width:335px;height:220px;">
         ${pitchDiagramSvg()}
       </div>
 
       <!-- BEST ROLE header (top right, below pitch) -->
-      <div style="position:absolute;top:192px;right:30px;font-size:16px;font-weight:800;color:#fff;">BEST ROLE</div>
-
+      <div style="position:absolute;top:248px;left:1565px;font-size:22px;font-weight:800;color:#fff;">BEST ROLE <span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#4b5563;color:#cbd5e1;font-size:13px;font-weight:700;vertical-align:middle;">i</span></div>
       <!-- SEASON STATS -->
-      <div style="position:absolute;top:210px;left:0;width:670px;display:flex;align-items:center;padding:10px 16px;">
-        <span style="font-size:15px;font-weight:800;color:${ACCENT_PINK};margin-right:18px;white-space:nowrap;">Season Stats</span>
+      <div style="position:absolute;top:300px;left:0;width:670px;display:flex;align-items:center;padding:0 16px;">
+        <span style="font-size:20px;font-weight:800;color:${ACCENT_PINK};margin-right:24px;white-space:nowrap;">Season Stats</span>
         ${['Apps', 'Gls', 'Asts', 'xG', 'xA', 'Mins'].map((label, i) => {
           const vals = [latestSeason.m || '—', latestSeason.g || '0', latestSeason.a || '0', '—', '—', latestSeason.mins ? latestSeason.mins.toLocaleString() : '—'];
-          return `<div style="display:flex;flex-direction:column;align-items:center;min-width:60px;"><span style="font-size:11px;color:#8b93a7;">${label}</span><span style="font-size:14px;font-weight:700;">${vals[i]}</span></div>`;
+          return `<div style="display:flex;flex-direction:column;align-items:center;min-width:64px;"><span style="font-size:15px;color:#8b93a7;">${label}</span><span style="font-size:19px;font-weight:700;margin-top:2px;">${vals[i]}</span></div>`;
         }).join('')}
-        <div style="display:flex;flex-direction:column;align-items:center;min-width:60px;">
-          <span style="font-size:11px;color:#8b93a7;">Av. Rat</span>
-          <span style="background:#f0b94a;color:#1a1300;font-size:13px;font-weight:800;padding:1px 9px;border-radius:4px;">${sd.score ? ((sd.score - 40) / 54 * 7.5 + 1).toFixed(1) : '—'}</span>
+        <div style="display:flex;flex-direction:column;align-items:center;min-width:64px;">
+          <span style="font-size:15px;color:#8b93a7;">Av. Rat</span>
+          <span style="background:#f0b94a;color:#1a1300;font-size:17px;font-weight:800;padding:2px 12px;border-radius:4px;margin-top:2px;">${sd.score ? ((sd.score - 40) / 54 * 7.5 + 1).toFixed(1) : '—'}</span>
         </div>
       </div>
 
+
       <!-- BAR CHART PANEL -->
-      <div style="position:absolute;top:255px;left:0;width:670px;padding:0 16px;">
-        ${groups.A && groups.A.length ? `<div style="font-size:17px;font-weight:800;color:#fff;margin:4px 0 6px;">Attacking</div>${buildGroupBars('A')}` : ''}
-        ${groups.D && groups.D.length ? `<div style="font-size:17px;font-weight:800;color:#fff;margin:10px 0 6px;">Defensive</div>${buildGroupBars('D')}` : ''}
-        ${groups.P && groups.P.length ? `<div style="font-size:17px;font-weight:800;color:#fff;margin:10px 0 6px;">Possession</div>${buildGroupBars('P')}` : ''}
-        <div style="display:flex;margin-top:6px;padding-left:164px;font-size:9px;color:#6b7280;justify-content:space-between;padding-right:4px;">
+      <div style="position:absolute;top:345px;left:0;width:670px;padding:0 16px;">
+        ${groups.A && groups.A.length ? `<div style="font-size:24px;font-weight:800;color:#fff;margin:6px 0 8px;">Attacking</div>${buildGroupBars('A')}` : ''}
+        ${groups.D && groups.D.length ? `<div style="font-size:24px;font-weight:800;color:#fff;margin:14px 0 8px;">Defensive</div>${buildGroupBars('D')}` : ''}
+        ${groups.P && groups.P.length ? `<div style="font-size:24px;font-weight:800;color:#fff;margin:14px 0 8px;">Possession</div>${buildGroupBars('P')}` : ''}
+        <div style="display:flex;margin-top:8px;padding-left:170px;font-size:13px;color:#6b7280;justify-content:space-between;padding-right:4px;">
           ${[0,10,20,30,40,50,60,70,80,90,100].map(p=>`<span>${p}%</span>`).join('')}
         </div>
-        <div style="text-align:center;font-size:11px;color:#8b93a7;padding-top:4px;padding-left:164px;">Percentile Rank</div>
+        <div style="text-align:center;font-size:15px;color:#8b93a7;padding-top:6px;padding-left:170px;">Percentile Rank</div>
       </div>
 
       <!-- NOTES PANEL -->
-      <div style="position:absolute;top:255px;left:702px;width:460px;padding:0 10px;">
-        <div style="display:flex;gap:8px;margin-bottom:16px;">
-          <span style="color:${ACCENT_PINK};font-size:16px;flex-shrink:0;line-height:1.6;">•</span>
-          <div style="font-size:15px;line-height:1.6;color:${LABEL_COL};"><span style="color:${ACCENT_PINK};font-weight:700;">Key Attributes: </span>${manual.keyAttributes || ''}</div>
+      <div style="position:absolute;top:345px;left:702px;width:470px;padding:0 10px;">
+        <div style="display:flex;gap:10px;margin-bottom:22px;">
+          <span style="color:${ACCENT_PINK};font-size:22px;flex-shrink:0;line-height:1.5;">•</span>
+          <div style="font-size:21px;line-height:1.5;color:${LABEL_COL};"><span style="color:${ACCENT_PINK};font-weight:700;">Key Attributes: </span>${manual.keyAttributes || ''}</div>
         </div>
-        <div style="display:flex;gap:8px;margin-bottom:16px;">
-          <span style="color:${ACCENT_PINK};font-size:16px;flex-shrink:0;line-height:1.6;">•</span>
-          <div style="font-size:15px;line-height:1.6;color:${LABEL_COL};"><span style="color:${ACCENT_PINK};font-weight:700;">Development Areas: </span>${manual.devAreas || ''}</div>
+        <div style="display:flex;gap:10px;margin-bottom:22px;">
+          <span style="color:${ACCENT_PINK};font-size:22px;flex-shrink:0;line-height:1.5;">•</span>
+          <div style="font-size:21px;line-height:1.5;color:${LABEL_COL};"><span style="color:${ACCENT_PINK};font-weight:700;">Development Areas: </span>${manual.devAreas || ''}</div>
         </div>
-        <div style="display:flex;gap:8px;margin-bottom:20px;">
-          <span style="color:${ACCENT_PINK};font-size:16px;flex-shrink:0;line-height:1.6;">•</span>
-          <div style="font-size:15px;line-height:1.6;color:${LABEL_COL};"><span style="color:${ACCENT_PINK};font-weight:700;">View: </span>${manual.view || ''}</div>
+        <div style="display:flex;gap:10px;margin-bottom:26px;">
+          <span style="color:${ACCENT_PINK};font-size:22px;flex-shrink:0;line-height:1.5;">•</span>
+          <div style="font-size:21px;line-height:1.5;color:${LABEL_COL};"><span style="color:${ACCENT_PINK};font-weight:700;">View: </span>${manual.view || ''}</div>
         </div>
-        <div style="margin-top:6px;">
-          <div style="font-size:17px;font-weight:800;color:#fff;margin-bottom:8px;">CURRENT LEVEL</div>
-          <div style="display:flex;align-items:center;gap:12px;"><span style="font-size:20px;">${starsHtml(manual.currentScore ?? player.careerScore)}</span><span style="font-size:14px;color:#aab2c5;">${manual.currentLevel || scoreLabel(player.careerScore)}</span></div>
+        <div style="margin-top:8px;">
+          <div style="font-size:24px;font-weight:800;color:#fff;margin-bottom:10px;">CURRENT LEVEL</div>
+          <div style="display:flex;align-items:center;gap:14px;"><span style="font-size:28px;">${starsHtml(manual.currentScore ?? player.careerScore)}</span><span style="font-size:19px;color:#aab2c5;">${manual.currentLevel || scoreLabel(player.careerScore)}</span></div>
         </div>
-        <div style="margin-top:18px;">
-          <div style="font-size:17px;font-weight:800;color:#fff;margin-bottom:8px;">POTENTIAL LEVEL</div>
-          <div style="display:flex;align-items:center;gap:12px;"><span style="font-size:20px;">${starsHtml(manual.potentialScore ?? player.potentialScore ?? player.careerScore)}</span><span style="font-size:14px;color:#aab2c5;">${manual.potentialLevel || scoreLabel(player.potentialScore || player.careerScore)}</span></div>
+        <div style="margin-top:24px;">
+          <div style="font-size:24px;font-weight:800;color:#fff;margin-bottom:10px;">POTENTIAL LEVEL</div>
+          <div style="display:flex;align-items:center;gap:14px;"><span style="font-size:28px;">${starsHtml(manual.potentialScore ?? player.potentialScore ?? player.careerScore)}</span><span style="font-size:19px;color:#aab2c5;">${manual.potentialLevel || scoreLabel(player.potentialScore || player.careerScore)}</span></div>
         </div>
       </div>
 
       <!-- FAR RIGHT PANEL -->
-      <div style="position:absolute;top:218px;left:1188px;right:0;padding:0 30px;">
+      <div style="position:absolute;top:290px;left:1565px;width:335px;">
         ${rolesHtml}
-        ${trendData.length >= 2 ? `<div style="margin-top:18px;"><div style="font-size:17px;font-weight:800;color:#fff;margin-bottom:10px;">PERFORMANCE TREND</div>${trendSvg(trendData)}</div>` : ''}
-        <div style="margin-top:22px;"><div style="font-size:17px;font-weight:800;color:#fff;margin-bottom:14px;">PHYSICAL</div>${physicalDotsHtml(manual.physical || { Pace: 3, Power: 3, Fitness: 3 })}</div>
+        ${trendData.length >= 2 ? `<div style="margin-top:24px;"><div style="font-size:24px;font-weight:800;color:#fff;margin-bottom:14px;">PERFORMANCE TREND</div>${trendSvg(trendData)}</div>` : ''}
+        <div style="margin-top:28px;"><div style="font-size:24px;font-weight:800;color:#fff;margin-bottom:18px;">PHYSICAL</div>${physicalDotsHtml(manual.physical || { Pace: 3, Power: 3, Fitness: 3 })}</div>
         <div style="margin-top:18px;">
-          <div style="font-size:17px;font-weight:800;color:#fff;margin-bottom:10px;">FORM</div>
-          <div style="display:flex;margin-top:6px;">${formBlocksHtml(manual.form || [])}</div>
-          ${manual.avgRating5 ? `<div style="display:inline-flex;align-items:center;gap:6px;background:#d35a48;color:#fff;font-size:12px;font-weight:700;padding:4px 10px;border-radius:5px;margin-top:10px;">${manual.avgRating5} <span style="font-weight:500;">Last 5 Avg Rating</span></div>` : ''}
+          <div style="font-size:24px;font-weight:800;color:#fff;margin-bottom:14px;">FORM</div>
+          <div style="display:flex;margin-top:8px;">${formBlocksHtml(manual.form || [])}</div>
+          ${manual.avgRating5 ? `<div style="display:inline-flex;align-items:center;gap:8px;background:#d35a48;color:#fff;font-size:16px;font-weight:700;padding:6px 14px;border-radius:5px;margin-top:14px;">${manual.avgRating5} <span style="font-weight:500;">Last 5 Avg Rating</span></div>` : ''}
         </div>
       </div>
 
