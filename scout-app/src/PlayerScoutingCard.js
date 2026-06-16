@@ -236,9 +236,14 @@ export function buildCardElement(player, manual = {}) {
   rowH = Math.max(8, rowH); // never shrink below a legible minimum
   if (typeof window !== 'undefined' && window.__FORCE_ROW_H) rowH = window.__FORCE_ROW_H;
 
-  const buildGroupBars = (grpKey) => (groups[grpKey] || []).map(([label, pct, val], i) =>
-    barRow(label, pct, typeof val === 'number' ? val.toFixed(2) : val, null, rowH)
-  ).join('');
+  const buildGroupBars = (grpKey) => {
+    const rows = groups[grpKey] || [];
+    const startVal = Math.floor((rows.length) / 2) * 2; // largest even number <= rowCount, decorative ruler
+    return rows.map(([label, pct, val], i) => {
+      const decorNum = (i % 2 === 0 && (startVal - i) >= 0) ? (startVal - i) : null;
+      return barRow(label, pct, typeof val === 'number' ? val.toFixed(2) : val, decorNum, rowH);
+    }).join('');
+  };
 
   const rolesHtml = sortedRoles.map(([role, score]) => rolePill(role, score)).join('');
 
@@ -255,7 +260,7 @@ export function buildCardElement(player, manual = {}) {
       <!-- HEADER -->
       <div style="position:absolute;top:0;left:0;width:1920px;height:288px;background:linear-gradient(to right, ${HEADER_L} 0%, ${HEADER_R} 100%);">
 
-        <div id="scc-photo" style="position:absolute;left:0;top:0;width:218px;height:265px;background-color:#1c2236;background-image:url('${photo}');background-size:cover;background-position:center top;"></div>
+        <div id="scc-photo" style="position:absolute;left:0;top:0;width:218px;height:265px;background-color:#1c2236;background-image:url('${photo}');background-size:cover;background-position:center center;"></div>
 
         <div style="position:absolute;left:235px;top:8px;width:470px;">
           <div style="font-size:48px;font-weight:800;line-height:1.05;letter-spacing:-0.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${player.name}</div>
