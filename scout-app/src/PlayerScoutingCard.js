@@ -204,7 +204,16 @@ function pitchDiagramSvg() {
  * Build the offscreen DOM node for the card.
  */
 export function buildCardElement(player, manual = {}) {
-  const sd = Object.values(player.seasonsDetail || {})[0] || {};
+  // seasonsDetail is a dict keyed by season string (e.g. "2023-24") with no guaranteed
+  // insertion order matching recency — Object.values()[0] previously grabbed whichever
+  // key happened to be first, which could be the OLDEST season (confirmed bug: showed
+  // Marmoush's 2023-24 Frankfurt bar-chart stats while the header correctly showed
+  // Man City). Pick explicitly using the most recent season key from allSeasonsSummary,
+  // falling back to sorting seasonsDetail's own keys descending if that's unavailable.
+  const seasonsDetailObj = player.seasonsDetail || {};
+  const mostRecentSeasonKey = (player.allSeasonsSummary && player.allSeasonsSummary[0] && player.allSeasonsSummary[0].s)
+    || Object.keys(seasonsDetailObj).sort().reverse()[0];
+  const sd = seasonsDetailObj[mostRecentSeasonKey] || Object.values(seasonsDetailObj)[0] || {};
   const rcs = player.roleCareerScores || {};
   const sortedRoles = Object.entries(rcs).slice(0, 3);
   const groups = sd.g || {};
@@ -321,10 +330,17 @@ export function buildCardElement(player, manual = {}) {
         ${groups.A && groups.A.length ? `<div style="font-size:23px;font-weight:800;color:#fff;margin:4px 0 6px;">Attacking</div>${buildGroupBars('A')}` : ''}
         ${groups.D && groups.D.length ? `<div style="font-size:23px;font-weight:800;color:#fff;margin:10px 0 6px;">Defensive</div>${buildGroupBars('D')}` : ''}
         ${groups.P && groups.P.length ? `<div style="font-size:23px;font-weight:800;color:#fff;margin:10px 0 6px;">Possession</div>${buildGroupBars('P')}` : ''}
-        <div style="display:flex;margin-top:6px;padding-left:170px;font-size:13px;color:#6b7280;justify-content:space-between;padding-right:4px;">
-          ${[0,10,20,30,40,50,60,70,80,90,100].map(p=>`<span>${p}%</span>`).join('')}
+        <div style="display:flex;align-items:center;margin-top:6px;">
+          <div style="width:170px;flex-shrink:0;"></div>
+          <div style="width:26px;flex-shrink:0;"></div>
+          <div style="flex:1;display:flex;justify-content:space-between;font-size:13px;color:#6b7280;padding:0 0 0 0;">
+            ${[0,10,20,30,40,50,60,70,80,90,100].map(p=>`<span>${p}%</span>`).join('')}
+          </div>
         </div>
-        <div style="text-align:center;font-size:15px;color:#8b93a7;padding-top:5px;padding-left:170px;">Percentile Rank</div>
+        <div style="display:flex;">
+          <div style="width:196px;flex-shrink:0;"></div>
+          <div style="flex:1;text-align:center;font-size:15px;color:#8b93a7;padding-top:5px;">Percentile Rank</div>
+        </div>
       </div>
 
       <!-- NOTES PANEL -->
