@@ -119,13 +119,14 @@ function trendSvg(trendData) {
   const scores = trendData.map(d => d.score);
   const mn = Math.min(...scores) - 8, mx = Math.max(...scores) + 8;
   const tx = i => 30 + i * (W - 60) / (trendData.length - 1);
-  const ty = s => H - 30 - (s - mn) / (mx - mn || 1) * (H - 58);
+  const ty = s => 22 + (mx - s) / (mx - mn || 1) * (H - 56);
   const pts = trendData.map((d, i) => `${tx(i)},${ty(d.score)}`).join(' ');
   const dots = trendData.map((d, i) => {
     const x = tx(i), y = ty(d.score);
-    return `<rect x="${x-19}" y="${y-26}" width="38" height="22" rx="5" fill="${barColor(d.score)}"/>
-      <text x="${x}" y="${y-10}" text-anchor="middle" fill="#000000" font-size="13" font-weight="700" font-family="Montserrat">${d.score}</text>
-      <text x="${x}" y="${H-4}" text-anchor="middle" fill="#c0c0c0" font-size="13" font-family="Montserrat">${d.season}</text>`;
+    // pill centred ON the line point
+    return `<rect x="${x-20}" y="${y-12}" width="40" height="24" rx="6" fill="${barColor(d.score)}"/>
+      <text x="${x}" y="${y+5}" text-anchor="middle" fill="#000000" font-size="13" font-weight="700" font-family="Montserrat, sans-serif">${d.score}</text>
+      <text x="${x}" y="${H-2}" text-anchor="middle" fill="#c0c0c0" font-size="13" font-weight="600" font-family="Montserrat, sans-serif">${d.season}</text>`;
   }).join('');
   return `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
     <polyline points="${pts}" fill="none" stroke="${TREND_CYAN}" stroke-width="3"/>${dots}
@@ -343,11 +344,10 @@ export function buildCardElement(player, manual = {}) {
       <div style="position:absolute;top:950px;left:1520px;width:400px;display:flex;justify-content:center;gap:11px;">
         ${(manual.form || []).slice(0,5).map(r => { const fm={W:'#3aa65c',D:'#e0904a',L:'#d35a48'}; const c=fm[String(r).toUpperCase()]||'#4b5563'; return `<span style="width:25px;height:73px;border-radius:6px;background:${c};"></span>`; }).join('')}
       </div>
-      ${manual.avgRating5 ? `
       <div style="position:absolute;top:1038px;left:1520px;width:400px;display:flex;align-items:center;justify-content:center;gap:10px;">
-        <span style="font-size:12px;font-weight:700;color:#000;background:${ratingColor(manual.avgRating5)};border-radius:6px;padding:3px 9px;">${manual.avgRating5}</span>
+        <span style="font-size:12px;font-weight:700;color:#000;background:${ratingColor(manual.avgRating5 || 6.5)};border-radius:6px;padding:3px 9px;">${manual.avgRating5 || '—'}</span>
         <span style="font-size:13px;font-weight:600;color:#c0c0c0;">Last 5 Avg Rating</span>
-      </div>` : ''}
+      </div>
 
       <!-- SEASON STATS -->
       <div style="position:absolute;top:300px;left:17px;font-size:20px;font-weight:700;color:${ACCENT_PINK};">Season Stats</div>
@@ -416,28 +416,57 @@ export function buildCardElement(player, manual = {}) {
   return container;
 }
 
+// html2canvas renders the card in a cloned context that does NOT inherit fonts
+// loaded via a stylesheet <link> (the woff2 files load async and lose the race),
+// which is why captures fall back to Arial. Fix: fetch the Google Fonts CSS, inline
+// every woff2 as a base64 data URI inside a <style>, so the font is embedded in the
+// DOM synchronously and present in the clone. Then force-load each weight.
+let _montserratEmbedPromise = null;
+function ensureMontserratEmbedded() {
+  if (_montserratEmbedPromise) return _montserratEmbedPromise;
+  _montserratEmbedPromise = (async () => {
+    try {
+      if (!document.getElementById('scc-montserrat-embed')) {
+        const cssUrl = 'https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&display=swap';
+        let cssText = await fetch(cssUrl).then(r => r.text());
+        const urls = [...new Set([...cssText.matchAll(/url\((https:\/\/[^)]+\.woff2)\)/g)].map(m => m[1]))];
+        const toDataUri = async (u) => {
+          const buf = await fetch(u).then(r => r.arrayBuffer());
+          const bytes = new Uint8Array(buf);
+          let bin = '';
+          for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+          return 'data:font/woff2;base64,' + btoa(bin);
+        };
+        const dataUris = await Promise.all(urls.map(toDataUri));
+        urls.forEach((u, i) => { cssText = cssText.split(u).join(dataUris[i]); });
+        const style = document.createElement('style');
+        style.id = 'scc-montserrat-embed';
+        style.textContent = cssText;
+        document.head.appendChild(style);
+      }
+      // Now the @font-face rules are registered; actually load every weight used.
+      await Promise.all([400, 500, 600, 700, 800, 900].map(w => document.fonts.load(`${w} 16px Montserrat`)));
+      await document.fonts.ready;
+    } catch (e) {
+      // Network/CORS/API failure — fall back to a plain <link> + best-effort wait so we never hang.
+      if (!document.getElementById('montserrat-font-link')) {
+        const link = document.createElement('link');
+        link.id = 'montserrat-font-link';
+        link.rel = 'stylesheet';
+        link.href = 'https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&display=swap';
+        document.head.appendChild(link);
+      }
+      try { await Promise.all([400,500,600,700,800,900].map(w => document.fonts.load(`${w} 16px Montserrat`))); await document.fonts.ready; }
+      catch (_) { await new Promise(r => setTimeout(r, 600)); }
+    }
+  })();
+  return _montserratEmbedPromise;
+}
+
 export async function downloadScoutingCardPNG(player, manual = {}) {
   const html2canvas = (await import('html2canvas')).default;
 
-  if (!document.getElementById('montserrat-font-link')) {
-    const link = document.createElement('link');
-    link.id = 'montserrat-font-link';
-    link.rel = 'stylesheet';
-    link.href = 'https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&display=swap';
-    document.head.appendChild(link);
-  }
-
-  // Force-load the specific weights the card actually uses (400/500/600/700/800)
-  // and wait for the browser's real font-ready signal — a flat setTimeout is not
-  // reliable enough to guarantee bold text has applied before html2canvas captures.
-  try {
-    const weights = [400, 500, 600, 700, 800];
-    await Promise.all(weights.map(w => document.fonts.load(`${w} 16px Montserrat`)));
-    await document.fonts.ready;
-  } catch (e) {
-    // Font Loading API unsupported or failed — fall back to a short wait so we don't hang forever
-    await new Promise(r => setTimeout(r, 500));
-  }
+  await ensureMontserratEmbedded();
 
   const el = buildCardElement(player, manual);
 
