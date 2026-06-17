@@ -411,6 +411,9 @@ export function buildCardElement(player, manual = {}) {
       <div style="position:absolute;top:1033px;left:937px;">${starsHtml(manual.potentialScore ?? player.potentialScore ?? player.careerScore, 28)}</div>
       <div style="position:absolute;top:1039px;left:1111px;font-size:15px;font-weight:500;color:#c0c0c0;">${manual.potentialLevel || scoreLabel(player.potentialScore || player.careerScore)}</div>
 
+      <!-- TEMP build marker (remove once font is confirmed) -->
+      <div style="position:absolute;bottom:6px;left:10px;font-size:11px;color:rgba(255,255,255,0.30);">build v4 · font test</div>
+
     </div>
   `;
 
