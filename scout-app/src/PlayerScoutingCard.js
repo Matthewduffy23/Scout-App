@@ -475,13 +475,19 @@ export async function downloadScoutingCardPNG(player, manual = {}) {
       backgroundColor: BG,
       useCORS: true,
       logging: false,
-      onclone: (doc) => {
+      onclone: async (doc) => {
         if (!doc.getElementById('scc-montserrat-embed')) {
           const s = doc.createElement('style');
           s.id = 'scc-montserrat-embed';
           s.textContent = MONTSERRAT_EMBED_CSS;
           doc.head.appendChild(s);
         }
+        try {
+          if (doc.fonts) {
+            await Promise.all([400, 500, 600, 700, 900].map(w => doc.fonts.load(w + ' 16px Montserrat')));
+            await doc.fonts.ready;
+          }
+        } catch (e) {}
       },
     });
 
