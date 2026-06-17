@@ -92,11 +92,11 @@ function barRow(label, pct, rawVal, rowH = 18) {
   const barH = Math.max(10, rowH - 4);
   return `
     <div style="display:flex;align-items:center;height:${rowH}px;margin-bottom:1px;">
-      <div style="font-size:13px;font-weight:600;color:${LABEL_COL};width:180px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${label}</div>
+      <div style="font-size:12px;font-weight:700;color:${LABEL_COL};width:180px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${label}</div>
       <div style="flex:1;position:relative;height:${barH}px;">
         <div style="position:absolute;inset:0;background:repeating-linear-gradient(to right, rgba(255,255,255,.10) 0 1px, transparent 1px 10%), ${BAR_TRACK};"></div>
         <div style="position:relative;height:100%;width:${p}%;background:${bc};">
-          ${rawVal ? `<span style="position:absolute;left:6px;top:50%;transform:translateY(-50%);font-size:11px;font-weight:500;color:#0b0b0b;white-space:nowrap;">${rawVal}</span>` : ''}
+          ${rawVal ? `<span style="position:absolute;left:6px;top:50%;transform:translateY(-50%);font-size:10px;font-weight:400;color:#0b0b0b;white-space:nowrap;">${rawVal}</span>` : ''}
         </div>
         <div style="position:absolute;left:50%;top:0;width:1px;height:100%;background:repeating-linear-gradient(to bottom, rgba(255,255,255,.85) 0 3px, transparent 3px 6px);"></div>
       </div>
@@ -106,11 +106,10 @@ function barRow(label, pct, rawVal, rowH = 18) {
 function rolePill(roleName, score, width = 320) {
   const sc = Math.round(score);
   const bc = barColor(sc);
-  const fg = sc > 45 ? '#0a0a0a' : '#fff';
   return `
-    <div style="position:relative;display:flex;align-items:center;background:#737373;border-radius:10px;height:46px;width:${width}px;box-sizing:border-box;padding:0 16px;margin-bottom:14px;">
-      <span style="font-size:20px;color:#fff;font-weight:600;">${roleName}</span>
-      <span style="position:absolute;right:7px;top:50%;transform:translateY(-50%);font-size:19px;font-weight:800;padding:3px 14px;border-radius:8px;min-width:42px;text-align:center;background:${bc};color:${fg};">${sc}</span>
+    <div style="display:flex;align-items:center;justify-content:space-between;width:${width}px;height:46px;margin:0 auto 14px;">
+      <span style="background:#737373;border-radius:10px;padding:8px 16px;font-size:20px;color:#fff;font-weight:600;white-space:nowrap;">${roleName}</span>
+      <span style="font-size:19px;font-weight:800;padding:6px 15px;border-radius:8px;min-width:42px;text-align:center;background:${bc};color:#000000;">${sc}</span>
     </div>`;
 }
 
@@ -124,9 +123,9 @@ function trendSvg(trendData) {
   const pts = trendData.map((d, i) => `${tx(i)},${ty(d.score)}`).join(' ');
   const dots = trendData.map((d, i) => {
     const x = tx(i), y = ty(d.score);
-    return `<rect x="${x-19}" y="${y-26}" width="38" height="22" rx="5" fill="${TREND_CYAN}"/>
-      <text x="${x}" y="${y-10}" text-anchor="middle" fill="#04222a" font-size="15" font-weight="800" font-family="Montserrat">${d.score}</text>
-      <text x="${x}" y="${H-4}" text-anchor="middle" fill="#c0c0c0" font-size="14" font-family="Montserrat">${d.season}</text>`;
+    return `<rect x="${x-19}" y="${y-26}" width="38" height="22" rx="5" fill="${barColor(d.score)}"/>
+      <text x="${x}" y="${y-10}" text-anchor="middle" fill="#000000" font-size="13" font-weight="700" font-family="Montserrat">${d.score}</text>
+      <text x="${x}" y="${H-4}" text-anchor="middle" fill="#c0c0c0" font-size="13" font-family="Montserrat">${d.season}</text>`;
   }).join('');
   return `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
     <polyline points="${pts}" fill="none" stroke="${TREND_CYAN}" stroke-width="3"/>${dots}
@@ -265,7 +264,7 @@ export function buildCardElement(player, manual = {}) {
       <div style="position:absolute;top:0;left:0;width:1520px;height:270px;background:linear-gradient(to right, ${HEADER_L} 0%, ${HEADER_R} 100%);"></div>
 
       <!-- PHOTO -->
-      <div id="scc-photo" style="position:absolute;left:-12px;top:16px;width:261px;height:261px;background-color:#1c2236;background-image:url('${photo}');background-size:cover;background-position:center top;"></div>
+      <div id="scc-photo" style="position:absolute;left:-12px;top:16px;width:261px;height:261px;background-color:transparent;background-image:url('${photo}');background-size:cover;background-position:center top;"></div>
 
       <!-- NAME / POSITION / FOOT / FLAG / AGE -->
       <div style="position:absolute;left:248px;top:24px;width:880px;font-size:40px;font-weight:700;line-height:1.05;letter-spacing:-0.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${player.name}</div>
@@ -294,55 +293,61 @@ export function buildCardElement(player, manual = {}) {
       <!-- FULL-HEIGHT SEPARATOR -->
       <div style="position:absolute;left:1520px;top:0;width:3px;height:1080px;background:#737373;"></div>
 
-      <!-- POSITION DIAGRAM -->
-      <div style="position:absolute;top:16px;left:1557px;width:329px;height:218px;">${pitchDiagramSvg()}</div>
+      <!-- CHART / TEXTBOX SEPARATOR -->
+      <div style="position:absolute;left:890px;top:291px;width:2px;height:789px;background:#737373;"></div>
+
+      <!-- RIGHT PANEL (centred in the right block x1520–1920; exact spec Y) -->
+      <div style="position:absolute;top:16px;left:1520px;width:400px;display:flex;justify-content:center;"><div style="width:329px;height:218px;">${pitchDiagramSvg()}</div></div>
 
       <!-- BEST ROLE -->
-      <div style="position:absolute;top:245px;left:1625px;font-size:21px;font-weight:700;color:#d9d9d9;">BEST ROLE <span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#4b5563;color:#cbd5e1;font-size:12px;font-weight:700;vertical-align:middle;">i</span></div>
+      <div style="position:absolute;top:245px;left:1520px;width:400px;text-align:center;font-size:21px;font-weight:700;color:#d9d9d9;">BEST ROLE <span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#4b5563;color:#cbd5e1;font-size:12px;font-weight:700;vertical-align:middle;">i</span></div>
 
       <!-- ROLE PILLS -->
-      <div style="position:absolute;top:291px;left:1566px;">${rolesHtml}</div>
+      <div style="position:absolute;top:291px;left:1520px;width:400px;">${rolesHtml}</div>
 
       <!-- DIVIDER 1 -->
-      <div style="position:absolute;top:468px;left:1551px;width:349px;height:2px;background:rgba(192,192,192,.35);"></div>
+      <div style="position:absolute;top:468px;left:1546px;width:349px;height:2px;background:rgba(192,192,192,.35);"></div>
 
-      <!-- PERFORMANCE TREND -->
       ${trendData.length >= 2 ? `
-        <div style="position:absolute;top:482px;left:1548px;font-size:21px;font-weight:700;color:#d9d9d9;">PERFORMANCE TREND</div>
-        <div style="position:absolute;top:512px;left:1556px;">${trendSvg(trendData)}</div>` : ''}
+      <!-- PERFORMANCE TREND -->
+      <div style="position:absolute;top:482px;left:1520px;width:400px;text-align:center;font-size:21px;font-weight:700;color:#d9d9d9;">PERFORMANCE TREND</div>
+      <div style="position:absolute;top:512px;left:1520px;width:400px;display:flex;justify-content:center;">${trendSvg(trendData)}</div>` : ''}
 
       <!-- DIVIDER 2 -->
-      <div style="position:absolute;top:680px;left:1551px;width:349px;height:2px;background:rgba(192,192,192,.35);"></div>
+      <div style="position:absolute;top:680px;left:1546px;width:349px;height:2px;background:rgba(192,192,192,.35);"></div>
 
       <!-- PHYSICAL -->
-      <div style="position:absolute;top:686px;left:1650px;font-size:21px;font-weight:700;color:#d9d9d9;">PHYSICAL</div>
+      <div style="position:absolute;top:686px;left:1520px;width:400px;text-align:center;font-size:21px;font-weight:700;color:#d9d9d9;">PHYSICAL</div>
       ${(() => {
         const phys = manual.physical || { Pace: 3, Power: 3, Fitness: 3 };
-        const rowY = { Pace: 727, Power: 791, Fitness: 858 };
+        const rowY = { Pace: 728, Power: 792, Fitness: 859 };
         const dotCol = { 5:'#22c55e', 4:'#65d17e', 3:'#9ad15a', 2:'#e0c84a', 1:'#e0c84a' };
         return Object.entries(rowY).map(([attr, y]) => {
           const n = phys[attr] || 0;
-          const label = `<div style="position:absolute;left:1566px;top:${y+4}px;font-size:17px;font-weight:700;color:#d9d9d9;">${attr}</div>`;
           const dots = [0,1,2,3,4].map(i => {
-            const filled = i < n;
-            const col = filled ? (dotCol[n] || '#22c55e') : '#3a4566';
-            return `<span style="position:absolute;left:${Math.round(1687.5 + i*39.6)}px;top:${y}px;width:25px;height:25px;border-radius:50%;background:${col};"></span>`;
+            const col = i < n ? (dotCol[n] || '#22c55e') : '#3a4566';
+            return `<span style="width:25px;height:25px;border-radius:50%;background:${col};"></span>`;
           }).join('');
-          return label + dots;
+          return `<div style="position:absolute;top:${y}px;left:1560px;width:320px;display:flex;align-items:center;justify-content:space-between;">
+            <span style="font-size:17px;font-weight:700;color:#d9d9d9;">${attr}</span>
+            <span style="display:flex;gap:15px;">${dots}</span>
+          </div>`;
         }).join('');
       })()}
 
       <!-- DIVIDER 3 -->
-      <div style="position:absolute;top:906px;left:1551px;width:349px;height:2px;background:rgba(192,192,192,.35);"></div>
+      <div style="position:absolute;top:906px;left:1546px;width:349px;height:2px;background:rgba(192,192,192,.35);"></div>
 
       <!-- FORM -->
-      <div style="position:absolute;top:916px;left:1546px;font-size:21px;font-weight:600;color:#c0c0c0;">FORM</div>
-      <div style="position:absolute;top:950px;left:1637px;display:flex;gap:11px;">
+      <div style="position:absolute;top:916px;left:1520px;width:400px;text-align:center;font-size:21px;font-weight:600;color:#c0c0c0;">FORM</div>
+      <div style="position:absolute;top:950px;left:1520px;width:400px;display:flex;justify-content:center;gap:11px;">
         ${(manual.form || []).slice(0,5).map(r => { const fm={W:'#3aa65c',D:'#e0904a',L:'#d35a48'}; const c=fm[String(r).toUpperCase()]||'#4b5563'; return `<span style="width:25px;height:73px;border-radius:6px;background:${c};"></span>`; }).join('')}
       </div>
       ${manual.avgRating5 ? `
-        <span style="position:absolute;top:1041px;left:1644px;font-size:12px;font-weight:700;color:#000;background:${ratingColor(manual.avgRating5)};border-radius:6px;padding:2px 8px;">${manual.avgRating5}</span>
-        <div style="position:absolute;top:1041px;left:1690px;font-size:13px;font-weight:600;color:#c0c0c0;">Last 5 Avg Rating</div>` : ''}
+      <div style="position:absolute;top:1038px;left:1520px;width:400px;display:flex;align-items:center;justify-content:center;gap:10px;">
+        <span style="font-size:12px;font-weight:700;color:#000;background:${ratingColor(manual.avgRating5)};border-radius:6px;padding:3px 9px;">${manual.avgRating5}</span>
+        <span style="font-size:13px;font-weight:600;color:#c0c0c0;">Last 5 Avg Rating</span>
+      </div>` : ''}
 
       <!-- SEASON STATS -->
       <div style="position:absolute;top:300px;left:17px;font-size:20px;font-weight:700;color:${ACCENT_PINK};">Season Stats</div>
@@ -359,15 +364,15 @@ export function buildCardElement(player, manual = {}) {
         const heads = cols.map(([lab,x]) => `<div style="position:absolute;top:319px;left:${x}px;font-size:15px;color:#d9d9d9;">${lab}</div>`).join('');
         const vals = cols.map(([,x,v]) => `<div style="position:absolute;top:357px;left:${x}px;font-size:15px;color:#fff;">${v}</div>`).join('');
         const avHead = `<div style="position:absolute;top:319px;left:782px;font-size:15px;color:#d9d9d9;">Av Rat</div>`;
-        const avVal = seasonRating ? `<span style="position:absolute;top:354px;left:782px;font-size:15px;font-weight:700;color:#000;background:${ratingColor(seasonRating)};border-radius:6px;padding:2px 10px;">${seasonRating}</span>` : '';
+        const avVal = seasonRating ? `<span style="position:absolute;top:354px;left:782px;font-size:15px;font-weight:400;color:#000;background:${ratingColor(seasonRating)};border-radius:6px;padding:2px 10px;">${seasonRating}</span>` : '';
         return heads + vals + avHead + avVal;
       })()}
 
       <!-- PERCENTILE CHART (Feature F) -->
       <div style="position:absolute;top:409px;left:6px;width:876px;">
-        ${groups.A && groups.A.length ? `<div style="font-size:22px;font-weight:800;color:#f3f5f7;margin:0 0 6px;">Attacking</div>${buildGroupBars('A')}` : ''}
-        ${groups.D && groups.D.length ? `<div style="font-size:22px;font-weight:800;color:#f3f5f7;margin:10px 0 6px;">Defensive</div>${buildGroupBars('D')}` : ''}
-        ${groups.P && groups.P.length ? `<div style="font-size:22px;font-weight:800;color:#f3f5f7;margin:10px 0 6px;">Possession</div>${buildGroupBars('P')}` : ''}
+        ${groups.A && groups.A.length ? `<div style="font-size:24px;font-weight:900;color:#f3f5f7;margin:0 0 6px;">Attacking</div>${buildGroupBars('A')}` : ''}
+        ${groups.D && groups.D.length ? `<div style="font-size:24px;font-weight:900;color:#f3f5f7;margin:10px 0 6px;">Defensive</div>${buildGroupBars('D')}` : ''}
+        ${groups.P && groups.P.length ? `<div style="font-size:24px;font-weight:900;color:#f3f5f7;margin:10px 0 6px;">Possession</div>${buildGroupBars('P')}` : ''}
         <div style="display:flex;align-items:center;margin-top:6px;">
           <div style="width:180px;flex-shrink:0;"></div>
           <div style="flex:1;display:flex;justify-content:space-between;font-size:13px;font-weight:700;color:#ffffff;">
@@ -376,23 +381,23 @@ export function buildCardElement(player, manual = {}) {
         </div>
         <div style="display:flex;">
           <div style="width:180px;flex-shrink:0;"></div>
-          <div style="flex:1;text-align:center;font-size:13px;font-weight:600;color:${LABEL_COL};padding-top:6px;">Percentile Rank</div>
+          <div style="flex:1;text-align:center;font-size:13px;font-weight:700;color:${LABEL_COL};padding-top:6px;">Percentile Rank</div>
         </div>
       </div>
 
-      <!-- NOTES (Key Attributes / Dev / View) -->
-      <div style="position:absolute;top:280px;left:898px;width:616px;">
-        <div style="display:flex;gap:10px;margin-bottom:20px;">
-          <span style="color:${ACCENT_PINK};font-size:21px;flex-shrink:0;line-height:1.45;">•</span>
-          <div style="font-size:21px;line-height:1.45;color:#fff;"><span style="color:${ACCENT_PINK};font-weight:700;">Key Attributes: </span><span style="font-weight:600;">${manual.keyAttributes || ''}</span></div>
-        </div>
-        <div style="display:flex;gap:10px;margin-bottom:20px;">
-          <span style="color:${ACCENT_PINK};font-size:21px;flex-shrink:0;line-height:1.45;">•</span>
-          <div style="font-size:21px;line-height:1.45;color:#fff;"><span style="color:${ACCENT_PINK};font-weight:700;">Development Areas: </span><span style="font-weight:600;">${manual.devAreas || ''}</span></div>
+      <!-- NOTES (Key Attributes / Dev / View) — spread across the text box -->
+      <div style="position:absolute;top:291px;left:898px;width:616px;height:570px;display:flex;flex-direction:column;justify-content:space-between;">
+        <div style="display:flex;gap:10px;">
+          <span style="color:${ACCENT_PINK};font-size:21px;flex-shrink:0;line-height:1.5;">•</span>
+          <div style="font-size:21px;line-height:1.5;color:#fff;"><span style="color:${ACCENT_PINK};font-weight:700;">Key Attributes: </span><span style="font-weight:600;">${manual.keyAttributes || ''}</span></div>
         </div>
         <div style="display:flex;gap:10px;">
-          <span style="color:${ACCENT_PINK};font-size:21px;flex-shrink:0;line-height:1.45;">•</span>
-          <div style="font-size:21px;line-height:1.45;color:#fff;"><span style="color:${ACCENT_PINK};font-weight:700;">View: </span><span style="font-weight:600;">${manual.view || ''}</span></div>
+          <span style="color:${ACCENT_PINK};font-size:21px;flex-shrink:0;line-height:1.5;">•</span>
+          <div style="font-size:21px;line-height:1.5;color:#fff;"><span style="color:${ACCENT_PINK};font-weight:700;">Development Areas: </span><span style="font-weight:600;">${manual.devAreas || ''}</span></div>
+        </div>
+        <div style="display:flex;gap:10px;">
+          <span style="color:${ACCENT_PINK};font-size:21px;flex-shrink:0;line-height:1.5;">•</span>
+          <div style="font-size:21px;line-height:1.5;color:#fff;"><span style="color:${ACCENT_PINK};font-weight:700;">View: </span><span style="font-weight:600;">${manual.view || ''}</span></div>
         </div>
       </div>
 
