@@ -261,7 +261,7 @@ export function buildCardElement(player, manual = {}) {
 
   container.innerHTML = `
 
-    <div style="width:1920px;height:1080px;overflow:hidden;background:${BG};font-family:'Montserrat',sans-serif;color:#fff;position:relative;box-sizing:border-box;">
+    <div id="scc-card-root" style="width:1920px;height:1080px;overflow:hidden;background:${BG};font-family:'Montserrat',sans-serif;color:#fff;position:relative;box-sizing:border-box;">
 
       <!-- HEADER GRADIENT BAND (left region) -->
       <div style="position:absolute;top:0;left:0;width:1520px;height:270px;background:linear-gradient(to right, ${HEADER_L} 0%, ${HEADER_R} 100%);"></div>
@@ -412,7 +412,7 @@ export function buildCardElement(player, manual = {}) {
       <div style="position:absolute;top:1039px;left:1111px;font-size:15px;font-weight:500;color:#c0c0c0;">${manual.potentialLevel || scoreLabel(player.potentialScore || player.careerScore)}</div>
 
       <!-- TEMP build marker (remove once font is confirmed) -->
-      <div style="position:absolute;bottom:6px;left:10px;font-size:11px;color:rgba(255,255,255,0.30);">build v5 · h2i</div>
+      <div style="position:absolute;bottom:6px;left:10px;font-size:11px;color:rgba(255,255,255,0.30);">build v6 · h2i</div>
 
     </div>
   `;
@@ -471,12 +471,16 @@ export async function downloadScoutingCardPNG(player, manual = {}) {
   }
 
   try {
+    // Capture the actual 1920x1080 card, NOT the offscreen wrapper (which sits
+    // at left:-9999px and would render the content out of frame -> blank).
+    const cardNode = el.querySelector('#scc-card-root') || el;
+
     // html-to-image renders via SVG <foreignObject> using the browser's own
     // text engine, so the embedded Montserrat is applied natively (html2canvas
     // could not). fontEmbedCSS injects the font straight into the SVG; the
     // transparent imagePlaceholder stops the CORS-blocked fotmob crest from
     // failing the whole export.
-    const dataUrl = await toPng(el, {
+    const opts = {
       width: 1920,
       height: 1080,
       pixelRatio: 1,
@@ -485,7 +489,12 @@ export async function downloadScoutingCardPNG(player, manual = {}) {
       fontEmbedCSS: MONTSERRAT_EMBED_CSS,
       imagePlaceholder:
         'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
-    });
+    };
+
+    // First pass can come back blank before fonts/images are inlined into the
+    // clone, so render once to warm up, then capture for real.
+    await toPng(cardNode, opts);
+    const dataUrl = await toPng(cardNode, opts);
 
     const link = document.createElement('a');
     link.download = `${player.name.replace(/\s+/g, '_')}_scouting_card.png`;
