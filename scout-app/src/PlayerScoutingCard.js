@@ -110,7 +110,7 @@ function rolePill(roleName, score) {
   const bc = barColor(sc);
   const fg = sc > 45 ? '#0a0a0a' : '#fff';
   return `
-    <div style="display:flex;align-items:center;justify-content:space-between;background:#1c2236;border-radius:10px;padding:14px 18px;margin-bottom:12px;width:335px;box-sizing:border-box;">
+    <div style="display:flex;align-items:center;justify-content:space-between;background:#1c2236;border-radius:10px;padding:14px 18px;margin-bottom:12px;width:370px;box-sizing:border-box;">
       <span style="font-size:19px;color:#e2e6ee;font-weight:500;">${roleName}</span>
       <span style="font-size:19px;font-weight:800;padding:4px 16px;border-radius:6px;min-width:46px;text-align:center;background:${bc};color:${fg};">${sc}</span>
     </div>`;
@@ -118,7 +118,7 @@ function rolePill(roleName, score) {
 
 function trendSvg(trendData) {
   if (!trendData || trendData.length < 2) return '';
-  const W = 335, H = 95;
+  const W = 370, H = 95;
   const scores = trendData.map(d => d.score);
   const mn = Math.min(...scores) - 8, mx = Math.max(...scores) + 8;
   const tx = i => 24 + i * (W - 48) / (trendData.length - 1);
@@ -305,12 +305,12 @@ export function buildCardElement(player, manual = {}) {
       </div>
 
       <!-- POSITION DIAGRAM -->
-      <div style="position:absolute;top:15px;left:1565px;width:335px;height:220px;">
+      <div style="position:absolute;top:15px;left:1518px;width:370px;height:220px;">
         ${pitchDiagramSvg()}
       </div>
 
       <!-- BEST ROLE header (top right, below pitch) -->
-      <div style="position:absolute;top:248px;left:1565px;font-size:22px;font-weight:800;color:#fff;">BEST ROLE <span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#4b5563;color:#cbd5e1;font-size:13px;font-weight:700;vertical-align:middle;">i</span></div>
+      <div style="position:absolute;top:248px;left:1518px;font-size:22px;font-weight:800;color:#fff;">BEST ROLE <span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#4b5563;color:#cbd5e1;font-size:13px;font-weight:700;vertical-align:middle;">i</span></div>
       <!-- SEASON STATS -->
       <div style="position:absolute;top:300px;left:0;width:670px;display:flex;align-items:center;padding:0 16px;">
         <span style="font-size:20px;font-weight:800;color:${ACCENT_PINK};margin-right:24px;white-space:nowrap;">Season Stats</span>
@@ -344,7 +344,7 @@ export function buildCardElement(player, manual = {}) {
       </div>
 
       <!-- NOTES PANEL -->
-      <div style="position:absolute;top:345px;left:702px;width:470px;padding:0 10px;">
+      <div style="position:absolute;top:345px;left:702px;width:786px;padding:0 30px 0 30px;">
         <div style="display:flex;gap:10px;margin-bottom:22px;">
           <span style="color:${ACCENT_PINK};font-size:22px;flex-shrink:0;line-height:1.5;">•</span>
           <div style="font-size:21px;line-height:1.5;color:${LABEL_COL};"><span style="color:${ACCENT_PINK};font-weight:700;">Key Attributes: </span>${manual.keyAttributes || ''}</div>
@@ -368,7 +368,7 @@ export function buildCardElement(player, manual = {}) {
       </div>
 
       <!-- FAR RIGHT PANEL -->
-      <div style="position:absolute;top:290px;left:1565px;width:335px;">
+      <div style="position:absolute;top:290px;left:1518px;width:370px;">
         ${rolesHtml}
         ${trendData.length >= 2 ? `<div style="margin-top:24px;"><div style="font-size:24px;font-weight:800;color:#fff;margin-bottom:14px;">PERFORMANCE TREND</div>${trendSvg(trendData)}</div>` : ''}
         <div style="margin-top:28px;"><div style="font-size:24px;font-weight:800;color:#fff;margin-bottom:18px;">PHYSICAL</div>${physicalDotsHtml(manual.physical || { Pace: 3, Power: 3, Fitness: 3 })}</div>
