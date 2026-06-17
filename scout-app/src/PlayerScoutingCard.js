@@ -412,7 +412,7 @@ export function buildCardElement(player, manual = {}) {
       <div style="position:absolute;top:1039px;left:1111px;font-size:15px;font-weight:500;color:#c0c0c0;">${manual.potentialLevel || scoreLabel(player.potentialScore || player.careerScore)}</div>
 
       <!-- TEMP build marker (remove once font is confirmed) -->
-      <div style="position:absolute;bottom:6px;left:10px;font-size:11px;color:rgba(255,255,255,0.30);">build v4 · font test</div>
+      <div style="position:absolute;bottom:6px;left:10px;font-size:11px;color:rgba(255,255,255,0.30);">build v5 · h2i</div>
 
     </div>
   `;
@@ -448,7 +448,7 @@ function ensureMontserratEmbedded() {
 }
 
 export async function downloadScoutingCardPNG(player, manual = {}) {
-  const html2canvas = (await import('html2canvas')).default;
+  const { toPng } = await import('html-to-image');
 
   await ensureMontserratEmbedded();
 
@@ -471,32 +471,25 @@ export async function downloadScoutingCardPNG(player, manual = {}) {
   }
 
   try {
-    const canvas = await html2canvas(el, {
+    // html-to-image renders via SVG <foreignObject> using the browser's own
+    // text engine, so the embedded Montserrat is applied natively (html2canvas
+    // could not). fontEmbedCSS injects the font straight into the SVG; the
+    // transparent imagePlaceholder stops the CORS-blocked fotmob crest from
+    // failing the whole export.
+    const dataUrl = await toPng(el, {
       width: 1920,
       height: 1080,
-      scale: 1,
+      pixelRatio: 1,
       backgroundColor: BG,
-      useCORS: true,
-      logging: false,
-      onclone: async (doc) => {
-        if (!doc.getElementById('scc-montserrat-embed')) {
-          const s = doc.createElement('style');
-          s.id = 'scc-montserrat-embed';
-          s.textContent = MONTSERRAT_EMBED_CSS;
-          doc.head.appendChild(s);
-        }
-        try {
-          if (doc.fonts) {
-            await Promise.all([400, 500, 600, 700, 900].map(w => doc.fonts.load(w + ' 16px Montserrat')));
-            await doc.fonts.ready;
-          }
-        } catch (e) {}
-      },
+      cacheBust: true,
+      fontEmbedCSS: MONTSERRAT_EMBED_CSS,
+      imagePlaceholder:
+        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
     });
 
     const link = document.createElement('a');
     link.download = `${player.name.replace(/\s+/g, '_')}_scouting_card.png`;
-    link.href = canvas.toDataURL('image/png');
+    link.href = dataUrl;
     link.click();
   } finally {
     document.body.removeChild(el);
