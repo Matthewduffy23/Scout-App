@@ -94,11 +94,11 @@ function barRow(label, pct, rawVal, rowH = 18) {
   const barH = Math.max(10, rowH - 4);
   return `
     <div style="display:flex;align-items:center;height:${rowH}px;margin-bottom:1px;">
-      <div style="font-size:16px;font-weight:700;color:${LABEL_COL};width:180px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${label}</div>
+      <div style="font-size:16.2px;font-weight:700;color:${LABEL_COL};width:180px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${label}</div>
       <div style="flex:1;position:relative;height:${barH}px;">
         <div style="position:absolute;inset:0;background:repeating-linear-gradient(to right, rgba(255,255,255,.10) 0 1px, transparent 1px 10%), ${BAR_TRACK};"></div>
         <div style="position:relative;height:100%;width:${p}%;background:${bc};">
-          ${rawVal ? `<span style="position:absolute;left:6px;top:50%;transform:translateY(-50%);font-size:13.3px;font-weight:400;color:#0b0b0b;white-space:nowrap;">${rawVal}</span>` : ''}
+          ${rawVal ? `<span style="position:absolute;left:6px;top:50%;transform:translateY(-50%);font-size:13.5px;font-weight:400;color:#0b0b0b;white-space:nowrap;">${rawVal}</span>` : ''}
         </div>
         <div style="position:absolute;left:50%;top:0;width:1px;height:100%;background:repeating-linear-gradient(to bottom, rgba(255,255,255,.85) 0 3px, transparent 3px 6px);"></div>
       </div>
@@ -110,8 +110,8 @@ function rolePill(roleName, score, width = 320) {
   const bc = barColor(sc);
   return `
     <div style="display:flex;align-items:center;justify-content:space-between;width:${width}px;height:46px;margin:0 auto 14px;">
-      <span style="background:#737373;border-radius:10px;padding:5px 12px;font-size:26.6px;color:#fff;font-weight:600;white-space:nowrap;">${roleName}</span>
-      <span style="font-size:25.3px;font-weight:700;padding:3px 11px;border-radius:8px;min-width:42px;text-align:center;background:${bc};color:#000000;">${sc}</span>
+      <span style="background:#737373;border-radius:10px;padding:3px 9px;font-size:27px;color:#fff;font-weight:600;white-space:nowrap;">${roleName}</span>
+      <span style="font-size:25.7px;font-weight:700;padding:1px 8px;border-radius:8px;min-width:42px;text-align:center;background:${bc};color:#000000;">${sc}</span>
     </div>`;
 }
 
@@ -270,28 +270,28 @@ export function buildCardElement(player, manual = {}) {
       <div id="scc-photo" style="position:absolute;left:-12px;top:16px;width:261px;height:261px;background-color:transparent;background-image:url('${photo}');background-size:cover;background-position:center top;"></div>
 
       <!-- NAME / POSITION / FOOT / FLAG / AGE -->
-      <div style="position:absolute;left:248px;top:24px;width:880px;font-size:53.2px;font-weight:700;line-height:1.05;letter-spacing:-0.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${player.name}</div>
-      <div style="position:absolute;left:248px;top:87px;font-size:26.6px;font-weight:600;color:#fff;">${player.position ? player.position.split(',')[0].trim() : (ROLE_KEY_LABELS[player.roleKey] || '')}</div>
-      ${player.foot && player.foot !== 'unknown' && player.foot !== 'nan' ? `<div style="position:absolute;left:536px;top:90px;font-size:21.3px;color:#c0c0c0;">${formatFoot(player.foot)}</div>` : ''}
+      <div style="position:absolute;left:248px;top:24px;width:880px;font-size:54px;font-weight:700;line-height:1.05;letter-spacing:-0.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${player.name}</div>
+      <div style="position:absolute;left:248px;top:87px;font-size:27px;font-weight:600;color:#fff;">${player.position ? player.position.split(',')[0].trim() : (ROLE_KEY_LABELS[player.roleKey] || '')}</div>
+      ${player.foot && player.foot !== 'unknown' && player.foot !== 'nan' ? `<div style="position:absolute;left:536px;top:90px;font-size:21.6px;color:#c0c0c0;">${formatFoot(player.foot)}</div>` : ''}
       ${countryToIso2(player.birthCountry) ? `<div style="position:absolute;left:248px;top:155px;width:47px;height:28px;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/48x36/${countryToIso2(player.birthCountry)}.png');"></div>` : ''}
-      <div style="position:absolute;left:310px;top:153px;font-size:26.6px;font-weight:600;color:#fff;">${player.age} years old</div>
+      <div style="position:absolute;left:310px;top:153px;font-size:27px;font-weight:600;color:#fff;">${player.age} years old</div>
 
       <!-- NAV -->
-      ${[['Profile ▸',267,true],['Performance ▾',442,false],['Similar Players ▾',697,false],['Club Fit ▾',977,false],['Video ▾',1174,false],['Compare ▾',1318,false]].map(([t,x,act]) => `<div style="position:absolute;left:${x}px;top:227px;font-size:27.9px;font-weight:700;color:${act ? '#fff' : '#b4b4b4'};">${t}</div>`).join('')}
+      ${[['Profile ▸',267,true],['Performance ▾',442,false],['Similar Players ▾',697,false],['Club Fit ▾',977,false],['Video ▾',1174,false],['Compare ▾',1318,false]].map(([t,x,act]) => `<div style="position:absolute;left:${x}px;top:227px;font-size:28.4px;font-weight:700;color:${act ? '#fff' : '#b4b4b4'};">${t}</div>`).join('')}
 
       <!-- CLUB CREST / NAME / LEAGUE -->
       ${crest ? `<div style="position:absolute;left:764px;top:56px;width:89px;height:124px;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${crest}');"></div>` : ''}
-      <div style="position:absolute;left:884px;top:57px;font-size:26.6px;font-weight:700;color:#fff;">${player.team}</div>
-      <div style="position:absolute;left:884px;top:97px;font-size:21.3px;font-weight:500;color:#fff;">${player.league}</div>
-      <div style="position:absolute;left:884px;top:147px;font-size:21.3px;color:#d9d9d9;">${player.onLoan ? 'On Loan' : 'Important Player'}</div>
+      <div style="position:absolute;left:884px;top:57px;font-size:27px;font-weight:700;color:#fff;">${player.team}</div>
+      <div style="position:absolute;left:884px;top:97px;font-size:21.6px;font-weight:500;color:#fff;">${player.league}</div>
+      <div style="position:absolute;left:884px;top:147px;font-size:21.6px;color:#d9d9d9;">${player.onLoan ? 'On Loan' : 'Important Player'}</div>
 
       <!-- HEADER VERTICAL SEPARATOR -->
       <div style="position:absolute;left:1164px;top:45px;width:3px;height:155px;background:#737373;"></div>
 
       <!-- INFO BOX -->
       ${[['Height:', manual.height || '—'], ['Value:', player.marketValue > 0 ? formatMV(player.marketValue) : '—'], ['Contract:', (player.contract && player.contract !== 'nan') ? player.contract : '—']].map(([k,v],i) => `
-        <div style="position:absolute;left:1196px;top:${56 + i*45}px;font-size:20px;font-weight:600;color:#d9d9d9;">${k}</div>
-        <div style="position:absolute;left:1311px;top:${56 + i*45}px;font-size:20px;font-weight:600;color:#fff;">${v}</div>`).join('')}
+        <div style="position:absolute;left:1196px;top:${56 + i*50}px;font-size:20.2px;font-weight:600;color:#d9d9d9;">${k}</div>
+        <div style="position:absolute;left:1311px;top:${56 + i*50}px;font-size:20.2px;font-weight:600;color:#fff;">${v}</div>`).join('')}
 
       <!-- FULL-HEIGHT SEPARATOR -->
       <div style="position:absolute;left:1520px;top:0;width:3px;height:1080px;background:#737373;"></div>
@@ -303,7 +303,7 @@ export function buildCardElement(player, manual = {}) {
       <div style="position:absolute;top:16px;left:1520px;width:400px;display:flex;justify-content:center;"><div style="width:329px;height:218px;">${pitchDiagramSvg()}</div></div>
 
       <!-- BEST ROLE -->
-      <div style="position:absolute;top:245px;left:1520px;width:400px;text-align:center;font-size:27.9px;font-weight:700;color:#d9d9d9;">BEST ROLE <span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#4b5563;color:#cbd5e1;font-size:16px;font-weight:700;vertical-align:middle;">i</span></div>
+      <div style="position:absolute;top:245px;left:1520px;width:400px;text-align:center;font-size:28.4px;font-weight:700;color:#d9d9d9;">BEST ROLE <span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#4b5563;color:#cbd5e1;font-size:16.2px;font-weight:700;vertical-align:middle;">i</span></div>
 
       <!-- ROLE PILLS -->
       <div style="position:absolute;top:291px;left:1520px;width:400px;">${rolesHtml}</div>
@@ -313,14 +313,14 @@ export function buildCardElement(player, manual = {}) {
 
       ${trendData.length >= 2 ? `
       <!-- PERFORMANCE TREND -->
-      <div style="position:absolute;top:482px;left:1520px;width:400px;text-align:center;font-size:27.9px;font-weight:700;color:#d9d9d9;">PERFORMANCE TREND</div>
+      <div style="position:absolute;top:482px;left:1520px;width:400px;text-align:center;font-size:28.4px;font-weight:700;color:#d9d9d9;">PERFORMANCE TREND</div>
       <div style="position:absolute;top:512px;left:1520px;width:400px;display:flex;justify-content:center;">${trendSvg(trendData)}</div>` : ''}
 
       <!-- DIVIDER 2 -->
       <div style="position:absolute;top:680px;left:1546px;width:349px;height:2px;background:rgba(192,192,192,.35);"></div>
 
       <!-- PHYSICAL -->
-      <div style="position:absolute;top:686px;left:1520px;width:400px;text-align:center;font-size:27.9px;font-weight:700;color:#d9d9d9;">PHYSICAL</div>
+      <div style="position:absolute;top:686px;left:1520px;width:400px;text-align:center;font-size:28.4px;font-weight:700;color:#d9d9d9;">PHYSICAL</div>
       ${(() => {
         const phys = manual.physical || { Pace: 3, Power: 3, Fitness: 3 };
         const rowY = { Pace: 728, Power: 792, Fitness: 859 };
@@ -332,7 +332,7 @@ export function buildCardElement(player, manual = {}) {
             return `<span style="width:25px;height:25px;border-radius:50%;background:${col};"></span>`;
           }).join('');
           return `<div style="position:absolute;top:${y}px;left:1560px;width:320px;display:flex;align-items:center;justify-content:space-between;">
-            <span style="font-size:22.6px;font-weight:700;color:#d9d9d9;">${attr}</span>
+            <span style="font-size:23px;font-weight:700;color:#d9d9d9;">${attr}</span>
             <span style="display:flex;gap:15px;">${dots}</span>
           </div>`;
         }).join('');
@@ -342,18 +342,18 @@ export function buildCardElement(player, manual = {}) {
       <div style="position:absolute;top:906px;left:1546px;width:349px;height:2px;background:rgba(192,192,192,.35);"></div>
 
       <!-- FORM -->
-      <div style="position:absolute;top:916px;left:1520px;width:400px;text-align:center;font-size:27.9px;font-weight:600;color:#c0c0c0;">FORM</div>
+      <div style="position:absolute;top:901px;left:1520px;width:400px;text-align:center;font-size:28.4px;font-weight:600;color:#c0c0c0;">FORM</div>
       <div style="position:absolute;top:950px;left:1520px;width:400px;display:flex;justify-content:center;gap:11px;">
         ${(manual.form || []).slice(0,5).map(r => { const fm={W:'#3aa65c',D:'#e0904a',L:'#d35a48'}; const c=fm[String(r).toUpperCase()]||'#4b5563'; return `<span style="width:25px;height:73px;border-radius:6px;background:${c};"></span>`; }).join('')}
       </div>
       <div style="position:absolute;top:1038px;left:1520px;width:400px;display:flex;align-items:center;justify-content:center;gap:10px;">
-        <span style="font-size:16px;font-weight:700;color:#000;background:${ratingColor(manual.avgRating5 || 6.5)};border-radius:6px;padding:3px 9px;">${manual.avgRating5 || '—'}</span>
-        <span style="font-size:17.3px;font-weight:600;color:#c0c0c0;">Last 5 Avg Rating</span>
+        <span style="font-size:16.2px;font-weight:700;color:#000;background:${ratingColor(manual.avgRating5 || 6.5)};border-radius:6px;padding:3px 9px;">${manual.avgRating5 || '—'}</span>
+        <span style="font-size:17.6px;font-weight:600;color:#c0c0c0;">Last 5 Avg Rating</span>
       </div>
 
       <!-- SEASON STATS -->
-      <div style="position:absolute;top:300px;left:17px;font-size:26.6px;font-weight:700;color:${ACCENT_PINK};">Season Stats</div>
-      <div style="position:absolute;top:357px;left:24px;font-size:21.3px;color:#fff;max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${leagueName}</div>
+      <div style="position:absolute;top:300px;left:17px;font-size:27px;font-weight:700;color:${ACCENT_PINK};">Season Stats</div>
+      <div style="position:absolute;top:357px;left:24px;font-size:21.6px;font-weight:500;color:#fff;max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${leagueName}</div>
       ${(() => {
         const cols = [
           ['Apps', 235, latestSeason.m != null ? String(latestSeason.m) : '—'],
@@ -363,56 +363,56 @@ export function buildCardElement(player, manual = {}) {
           ['xA',   595, fmt1(xaSeason)],
           ['Mins', 678, latestSeason.mins ? latestSeason.mins.toLocaleString() : '—'],
         ];
-        const heads = cols.map(([lab,x]) => `<div style="position:absolute;top:319px;left:${x}px;font-size:20px;color:#d9d9d9;">${lab}</div>`).join('');
-        const vals = cols.map(([,x,v]) => `<div style="position:absolute;top:357px;left:${x}px;font-size:20px;color:#fff;">${v}</div>`).join('');
-        const avHead = `<div style="position:absolute;top:319px;left:782px;font-size:20px;color:#d9d9d9;">Av Rat</div>`;
-        const avVal = seasonRating ? `<span style="position:absolute;top:354px;left:782px;font-size:20px;font-weight:400;color:#000;background:${ratingColor(seasonRating)};border-radius:6px;padding:2px 10px;">${seasonRating}</span>` : '';
+        const heads = cols.map(([lab,x]) => `<div style="position:absolute;top:319px;left:${x}px;font-size:20.2px;font-weight:500;color:#d9d9d9;">${lab}</div>`).join('');
+        const vals = cols.map(([,x,v]) => `<div style="position:absolute;top:357px;left:${x}px;font-size:20.2px;font-weight:500;color:#fff;">${v}</div>`).join('');
+        const avHead = `<div style="position:absolute;top:319px;left:782px;font-size:20.2px;font-weight:500;color:#d9d9d9;">Av Rat</div>`;
+        const avVal = seasonRating ? `<span style="position:absolute;top:354px;left:782px;font-size:20.2px;font-weight:500;color:#000;background:${ratingColor(seasonRating)};border-radius:6px;padding:2px 10px;">${seasonRating}</span>` : '';
         return heads + vals + avHead + avVal;
       })()}
 
       <!-- PERCENTILE CHART (Feature F) -->
       <div style="position:absolute;top:409px;left:6px;width:876px;">
-        ${groups.A && groups.A.length ? `<div style="font-size:31.9px;font-weight:900;color:#f3f5f7;margin:0 0 6px;">Attacking</div>${buildGroupBars('A')}` : ''}
-        ${groups.D && groups.D.length ? `<div style="font-size:31.9px;font-weight:900;color:#f3f5f7;margin:10px 0 6px;">Defensive</div>${buildGroupBars('D')}` : ''}
-        ${groups.P && groups.P.length ? `<div style="font-size:31.9px;font-weight:900;color:#f3f5f7;margin:10px 0 6px;">Possession</div>${buildGroupBars('P')}` : ''}
+        ${groups.A && groups.A.length ? `<div style="font-size:32.4px;font-weight:900;color:#f3f5f7;margin:0 0 6px;">Attacking</div>${buildGroupBars('A')}` : ''}
+        ${groups.D && groups.D.length ? `<div style="font-size:32.4px;font-weight:900;color:#f3f5f7;margin:10px 0 6px;">Defensive</div>${buildGroupBars('D')}` : ''}
+        ${groups.P && groups.P.length ? `<div style="font-size:32.4px;font-weight:900;color:#f3f5f7;margin:10px 0 6px;">Possession</div>${buildGroupBars('P')}` : ''}
         <div style="display:flex;align-items:center;margin-top:6px;">
           <div style="width:180px;flex-shrink:0;"></div>
-          <div style="flex:1;display:flex;justify-content:space-between;font-size:17.3px;font-weight:700;color:#ffffff;">
+          <div style="flex:1;display:flex;justify-content:space-between;font-size:17.6px;font-weight:700;color:#ffffff;">
             ${[0,10,20,30,40,50,60,70,80,90,100].map(p=>`<span>${p}%</span>`).join('')}
           </div>
         </div>
         <div style="display:flex;">
           <div style="width:180px;flex-shrink:0;"></div>
-          <div style="flex:1;text-align:center;font-size:17.3px;font-weight:700;color:${LABEL_COL};padding-top:6px;">Percentile Rank</div>
+          <div style="flex:1;text-align:center;font-size:17.6px;font-weight:700;color:${LABEL_COL};padding-top:6px;">Percentile Rank</div>
         </div>
       </div>
 
       <!-- NOTES (Key Attributes / Dev / View) — spread across the text box -->
       <div style="position:absolute;top:291px;left:898px;width:616px;height:570px;padding:0 22px;box-sizing:border-box;display:flex;flex-direction:column;justify-content:space-between;">
         <div style="display:flex;gap:10px;">
-          <span style="color:${ACCENT_PINK};font-size:27.9px;flex-shrink:0;line-height:1.5;">•</span>
-          <div style="font-size:27.9px;line-height:1.5;color:#fff;"><span style="color:${ACCENT_PINK};font-weight:700;">Key Attributes: </span><span style="font-weight:600;">${manual.keyAttributes || ''}</span></div>
+          <span style="color:#fff;font-size:28.4px;flex-shrink:0;line-height:1.5;">•</span>
+          <div style="font-size:28.4px;line-height:1.5;color:#fff;"><span style="color:${ACCENT_PINK};font-weight:800;">Key Attributes: </span><span style="font-weight:700;">${manual.keyAttributes || ''}</span></div>
         </div>
         <div style="display:flex;gap:10px;">
-          <span style="color:${ACCENT_PINK};font-size:27.9px;flex-shrink:0;line-height:1.5;">•</span>
-          <div style="font-size:27.9px;line-height:1.5;color:#fff;"><span style="color:${ACCENT_PINK};font-weight:700;">Development Areas: </span><span style="font-weight:600;">${manual.devAreas || ''}</span></div>
+          <span style="color:#fff;font-size:28.4px;flex-shrink:0;line-height:1.5;">•</span>
+          <div style="font-size:28.4px;line-height:1.5;color:#fff;"><span style="color:${ACCENT_PINK};font-weight:800;">Development Areas: </span><span style="font-weight:700;">${manual.devAreas || ''}</span></div>
         </div>
         <div style="display:flex;gap:10px;">
-          <span style="color:${ACCENT_PINK};font-size:27.9px;flex-shrink:0;line-height:1.5;">•</span>
-          <div style="font-size:27.9px;line-height:1.5;color:#fff;"><span style="color:${ACCENT_PINK};font-weight:700;">View: </span><span style="font-weight:600;">${manual.view || ''}</span></div>
+          <span style="color:#fff;font-size:28.4px;flex-shrink:0;line-height:1.5;">•</span>
+          <div style="font-size:28.4px;line-height:1.5;color:#fff;"><span style="color:${ACCENT_PINK};font-weight:800;">View: </span><span style="font-weight:700;">${manual.view || ''}</span></div>
         </div>
       </div>
 
       <!-- CURRENT / POTENTIAL LEVEL -->
-      <div style="position:absolute;top:894px;left:938px;font-size:26.6px;font-weight:600;color:#fff;">CURRENT LEVEL</div>
-      <div style="position:absolute;top:940px;left:941px;">${starsHtml(manual.currentScore ?? player.careerScore, 28)}</div>
-      <div style="position:absolute;top:948px;left:1111px;font-size:20px;font-weight:500;color:#c0c0c0;">${manual.currentLevel || scoreLabel(player.careerScore)}</div>
-      <div style="position:absolute;top:995px;left:938px;font-size:26.6px;font-weight:600;color:#fff;">POTENTIAL LEVEL</div>
-      <div style="position:absolute;top:1033px;left:937px;">${starsHtml(manual.potentialScore ?? player.potentialScore ?? player.careerScore, 28)}</div>
-      <div style="position:absolute;top:1039px;left:1111px;font-size:20px;font-weight:500;color:#c0c0c0;">${manual.potentialLevel || scoreLabel(player.potentialScore || player.careerScore)}</div>
+      <div style="position:absolute;top:894px;left:938px;font-size:27px;font-weight:700;color:#fff;">CURRENT LEVEL</div>
+      <div style="position:absolute;top:940px;left:941px;">${starsHtml(manual.currentScore ?? player.careerScore, 40)}</div>
+      <div style="position:absolute;top:948px;left:1111px;font-size:20.2px;font-weight:500;color:#c0c0c0;">${manual.currentLevel || scoreLabel(player.careerScore)}</div>
+      <div style="position:absolute;top:995px;left:938px;font-size:27px;font-weight:700;color:#fff;">POTENTIAL LEVEL</div>
+      <div style="position:absolute;top:1033px;left:937px;">${starsHtml(manual.potentialScore ?? player.potentialScore ?? player.careerScore, 40)}</div>
+      <div style="position:absolute;top:1039px;left:1111px;font-size:20.2px;font-weight:500;color:#c0c0c0;">${manual.potentialLevel || scoreLabel(player.potentialScore || player.careerScore)}</div>
 
       <!-- TEMP build marker (remove once font is confirmed) -->
-      <div style="position:absolute;bottom:6px;left:10px;font-size:14.6px;color:rgba(255,255,255,0.30);">build v6 · h2i</div>
+      <div style="position:absolute;bottom:6px;left:10px;font-size:14.9px;color:rgba(255,255,255,0.30);">build v6 · h2i</div>
 
     </div>
   `;
