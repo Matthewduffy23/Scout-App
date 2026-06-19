@@ -510,7 +510,7 @@ export function buildCardElement(player, manual = {}) {
   const groups = sd.g || {};
   const allSeasons = player.allSeasonsSummary || [];
   const latestSeason = allSeasons[0] || {};
-  const photo = photoUrl(player.name, player.team);
+  const photo = manual.playerPhotoUrl || photoUrl(player.name, player.team);
   const crest = player.teamFotmobId ? `${CREST_BASE}${player.teamFotmobId}.png` : '';
 
   const trendData = (player.sh || []).slice(-3).map(h => ({ season: h.s, score: Math.round(h.sc) }));
@@ -587,12 +587,17 @@ export function buildCardElement(player, manual = {}) {
 
       <!-- NAME / POSITION / FOOT / FLAG / AGE -->
       <div style="position:absolute;left:248px;top:24px;width:880px;font-size:53.2px;font-weight:700;line-height:1.05;letter-spacing:-0.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${manual.nameOverride || player.name}</div>
-      <div style="position:absolute;left:248px;top:87px;font-size:26.6px;font-weight:600;color:#fff;">${(() => {
-        if (manual.positionOverride) return manual.positionOverride;
-        const rawPos = player.position ? player.position.split(',')[0].trim() : (ROLE_KEY_LABELS[player.roleKey] || '');
-        return POSITION_LABELS[rawPos] || rawPos;
-      })()}</div>
-      ${player.foot && player.foot !== 'unknown' && player.foot !== 'nan' ? `<div style="position:absolute;left:536px;top:90px;font-size:21.3px;color:#c0c0c0;">${formatFoot(player.foot)}</div>` : ''}
+      <div style="position:absolute;left:248px;top:87px;display:flex;align-items:baseline;gap:18px;">
+        <span style="font-size:26.6px;font-weight:600;color:#fff;white-space:nowrap;">${(() => {
+          if (manual.positionOverride) return manual.positionOverride;
+          const rawPos = player.position ? player.position.split(',')[0].trim() : (ROLE_KEY_LABELS[player.roleKey] || '');
+          return POSITION_LABELS[rawPos] || rawPos;
+        })()}</span>
+        ${(() => {
+          const footVal = manual.footOverride || player.foot;
+          return (footVal && footVal !== 'unknown' && footVal !== 'nan') ? `<span style="font-size:21.3px;color:#c0c0c0;white-space:nowrap;">${formatFoot(footVal)}</span>` : '';
+        })()}
+      </div>
       ${countryToIso2(player.birthCountry) ? `<div style="position:absolute;left:248px;top:155px;width:47px;height:28px;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(player.birthCountry)}.png');"></div>` : ''}
       <div style="position:absolute;left:310px;top:153px;font-size:26.6px;font-weight:600;color:#fff;">${player.age} years old</div>
 
@@ -785,9 +790,12 @@ export async function downloadScoutingCardPNG(player, manual = {}) {
   const photoDiv = el.querySelector('#scc-photo');
   if (photoDiv) {
     if (manual.playerPhotoDataUrl) {
+      // uploaded file -> already a local data URL, no load-test needed
       photoDiv.style.backgroundImage = `url('${manual.playerPhotoDataUrl}')`;
     } else {
-      const bgUrl = photoUrl(player.name, player.team);
+      // pasted URL override falls through the same load-test as the default
+      // photo lookup, since an external URL can still 404 or be broken
+      const bgUrl = manual.playerPhotoUrl || photoUrl(player.name, player.team);
       await new Promise((resolve) => {
         const testImg = new Image();
         testImg.onload = () => resolve();

@@ -30,10 +30,12 @@ export default function ScoutingCardModal({ player, onClose }) {
   const [posImageFile, setPosImageFile] = useState(null);
   const [posImageDataUrl, setPosImageDataUrl] = useState('');
   const [playerPhotoDataUrl, setPlayerPhotoDataUrl] = useState('');
+  const [playerPhotoUrl, setPlayerPhotoUrl] = useState('');
   const [hideTeamBadge, setHideTeamBadge] = useState(false);
   const [nameOverride, setNameOverride] = useState('');
   const [valueOverride, setValueOverride] = useState('');
   const [positionOverride, setPositionOverride] = useState('');
+  const [footOverride, setFootOverride] = useState('');
   const [busy, setBusy] = useState(false);
 
   const handlePosImage = (e) => {
@@ -65,10 +67,12 @@ export default function ScoutingCardModal({ player, onClose }) {
         avgRating5,
         positionImageDataUrl: posImageDataUrl,
         playerPhotoDataUrl,
+        playerPhotoUrl,
         hideTeamBadge,
         nameOverride,
         valueOverride,
         positionOverride,
+        footOverride,
       });
     } catch (err) {
       alert('Failed to generate card: ' + err.message);
@@ -108,6 +112,15 @@ export default function ScoutingCardModal({ player, onClose }) {
             <label style={labelStyle}>Value Override</label>
             <input style={inputStyle} value={valueOverride} onChange={e => setValueOverride(e.target.value)} placeholder="e.g. €35m" />
           </div>
+          <div style={{ width: 110 }}>
+            <label style={labelStyle}>Foot</label>
+            <select style={inputStyle} value={footOverride} onChange={e => setFootOverride(e.target.value)}>
+              <option value="">Auto</option>
+              <option value="right">Right</option>
+              <option value="left">Left</option>
+              <option value="both">Both</option>
+            </select>
+          </div>
         </div>
 
         <div style={sectionStyle}>
@@ -125,6 +138,12 @@ export default function ScoutingCardModal({ player, onClose }) {
           <textarea style={{ ...inputStyle, minHeight: 70, resize: 'vertical' }} value={view} onChange={e => setView(e.target.value)} placeholder="Fitness / injuries have stalled..." />
         </div>
 
+        <div style={{ marginTop: -8, marginBottom: 14, fontSize: 11, textAlign: 'right' }}>
+          <span style={{ color: (keyAttributes.length + devAreas.length + view.length) > 373 ? '#ef4444' : '#6b7a99' }}>
+            {keyAttributes.length + devAreas.length + view.length} / 373 characters
+          </span>
+        </div>
+
         <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
           <div style={{ flex: 1 }}>
             <label style={labelStyle}>Height</label>
@@ -132,6 +151,31 @@ export default function ScoutingCardModal({ player, onClose }) {
           </div>
           <div style={{ flex: 1 }}>
             <label style={labelStyle}>Club Colour (hex)</label>
+            <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 6, marginBottom: 6 }}>
+              {[
+                ['Red Dark', '#7f1d1d'], ['Red Light', '#ef4444'],
+                ['Blue Dark', '#1e3a5f'], ['Blue Light', '#3b82f6'],
+                ['Green Dark', '#14532d'], ['Green Light', '#22c55e'],
+                ['Yellow Dark', '#78350f'], ['Yellow Light', '#f59e0b'],
+                ['Purple Dark', '#4c1d95'], ['Purple Light', '#a855f7'],
+                ['Black Dark', '#0a0a0a'], ['Black Light', '#27272a'],
+                ['White Dark', '#9ca3af'], ['White Light', '#e5e7eb'],
+                ['Orange Dark', '#7c2d12'], ['Orange Light', '#f97316'],
+                ['Maroon Dark', '#450a0a'], ['Maroon Light', '#991b1b'],
+                ['Navy Dark', '#0c1844'], ['Navy Light', '#1a3a6b'],
+              ].map(([label, hex]) => (
+                <button
+                  key={label}
+                  type="button"
+                  title={label}
+                  onClick={() => setClubColor(hex)}
+                  style={{
+                    width: 22, height: 22, borderRadius: 4, background: hex, flexShrink: 0, cursor: 'pointer',
+                    border: clubColor === hex ? '2px solid #fff' : '1px solid #1e2d4a',
+                  }}
+                />
+              ))}
+            </div>
             <input style={inputStyle} value={clubColor} onChange={e => setClubColor(e.target.value)} placeholder="#1a3a6b" />
           </div>
         </div>
@@ -191,6 +235,8 @@ export default function ScoutingCardModal({ player, onClose }) {
               <button onClick={() => setPlayerPhotoDataUrl('')} style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: 11, cursor: 'pointer', textDecoration: 'underline' }}>Remove</button>
             </div>
           )}
+          <div style={{ fontSize: 10, color: '#6b7a99', margin: '6px 0 4px' }}>or paste an image URL</div>
+          <input style={inputStyle} value={playerPhotoUrl} onChange={e => setPlayerPhotoUrl(e.target.value)} placeholder="https://images.fotmob.com/image_resources/playerimages/209405.png" />
         </div>
 
         <div style={{ ...sectionStyle, display: 'flex', alignItems: 'center', gap: 8 }}>
