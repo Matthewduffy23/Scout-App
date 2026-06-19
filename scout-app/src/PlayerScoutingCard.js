@@ -446,12 +446,12 @@ function starsHtml(score, size = 20) {
 function barRow(label, pct, rawVal, rowH = 18) {
   const p = Math.max(0, Math.min(100, pct || 0));
   const bc = barColor(p);
-  const barH = Math.max(10, rowH - 4);
+  const barH = Math.max(10, Math.round(rowH * 0.85));
   return `
     <div style="display:flex;align-items:center;height:${rowH}px;margin-bottom:1px;">
-      <div style="font-size:16px;font-weight:700;color:${LABEL_COL};width:180px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${label}</div>
+      <div style="font-size:16px;font-weight:700;color:${LABEL_COL};width:188px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${label}</div>
       <div style="flex:1;position:relative;height:${barH}px;">
-        <div style="position:absolute;inset:0;background:repeating-linear-gradient(to right, rgba(255,255,255,.10) 0 1px, transparent 1px 10%), ${BAR_TRACK};"></div>
+        <div style="position:absolute;inset:0;background:repeating-linear-gradient(to right, rgba(255,255,255,.16) 0 1px, transparent 1px 10%), ${BAR_TRACK};"></div>
         <div style="position:relative;height:100%;width:${p}%;background:${bc};">
           ${rawVal ? `<span style="position:absolute;left:6px;top:50%;transform:translateY(-50%);font-size:13.3px;font-weight:400;color:#0b0b0b;white-space:nowrap;">${rawVal}</span>` : ''}
         </div>
@@ -795,13 +795,13 @@ export function buildCardElement(player, manual = {}) {
         ${groups.D && groups.D.length ? `<div style="font-size:31.9px;font-weight:900;color:#f3f5f7;margin:10px 0 6px;">Defensive</div>${buildGroupBars('D')}` : ''}
         ${groups.P && groups.P.length ? `<div style="font-size:31.9px;font-weight:900;color:#f3f5f7;margin:10px 0 6px;">Possession</div>${buildGroupBars('P')}` : ''}
         <div style="display:flex;align-items:center;margin-top:6px;">
-          <div style="width:180px;flex-shrink:0;"></div>
-          <div style="flex:1;display:flex;justify-content:space-between;font-size:17.3px;font-weight:700;color:#ffffff;">
-            ${[0,10,20,30,40,50,60,70,80,90,100].map(p=>`<span>${p}%</span>`).join('')}
+          <div style="width:188px;flex-shrink:0;"></div>
+          <div style="flex:1;position:relative;height:22px;">
+            ${[0,10,20,30,40,50,60,70,80,90,100].map(p=>`<span style="position:absolute;left:${p}%;top:0;transform:translateX(${p===0?'0':p===100?'-100%':'-50%'});font-size:17.3px;font-weight:700;color:#ffffff;">${p}%</span>`).join('')}
           </div>
         </div>
         <div style="display:flex;">
-          <div style="width:180px;flex-shrink:0;"></div>
+          <div style="width:188px;flex-shrink:0;"></div>
           <div style="flex:1;text-align:center;font-size:17.3px;font-weight:700;color:${LABEL_COL};padding-top:6px;">Percentile Rank</div>
         </div>
       </div>
