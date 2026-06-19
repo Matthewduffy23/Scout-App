@@ -371,6 +371,24 @@ function darkenHex(hex, amount = 0.35) {
   return `rgb(${r},${g},${b})`;
 }
 
+// Fades a hex color toward the page's near-black background (BG), matching
+// the original navy header's subtle dark-to-darker sweep, rather than just
+// producing a moderately-darker version of a bright color (which reads as
+// a flat "brick" instead of a smooth fade for vivid club colours).
+function fadeHexToBG(hex, amount = 0.82) {
+  if (!hex || typeof hex !== 'string') return hex;
+  const m = hex.trim().match(/^#?([0-9a-f]{6})$/i);
+  if (!m) return hex;
+  const num = parseInt(m[1], 16);
+  const r = (num >> 16) & 255, g = (num >> 8) & 255, b = num & 255;
+  // BG = #0a0f1c
+  const bgR = 10, bgG = 15, bgB = 28;
+  const r2 = Math.round(r + (bgR - r) * amount);
+  const g2 = Math.round(g + (bgG - g) * amount);
+  const b2 = Math.round(b + (bgB - b) * amount);
+  return `rgb(${r2},${g2},${b2})`;
+}
+
 function playerImportanceLabel(player) {
   if (player.onLoan) return 'On Loan';
   const pct = player.gbeMinsPct;
@@ -602,7 +620,7 @@ export function buildCardElement(player, manual = {}) {
     <div id="scc-card-root" style="width:1920px;height:1080px;overflow:hidden;background:${BG};font-family:'Montserrat',sans-serif;color:#fff;position:relative;box-sizing:border-box;">
 
       <!-- HEADER GRADIENT BAND (left region) -->
-      <div style="position:absolute;top:0;left:0;width:1520px;height:292px;background:linear-gradient(to right, ${manual.clubColor || HEADER_L} 0%, ${manual.clubColor ? darkenHex(manual.clubColor) : HEADER_R} 100%);"></div>
+      <div style="position:absolute;top:0;left:0;width:1520px;height:292px;background:linear-gradient(to right, ${manual.clubColor || HEADER_L} 0%, ${manual.clubColor ? fadeHexToBG(manual.clubColor) : HEADER_R} 100%);"></div>
 
       <!-- PHOTO -->
       <div id="scc-photo" style="position:absolute;left:-12px;top:16px;width:261px;height:261px;background-color:transparent;background-image:url('${photo}');background-size:cover;background-position:center top;"></div>
