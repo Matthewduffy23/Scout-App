@@ -509,25 +509,68 @@ const POS_TO_KEY = {
   CF: 'CF', ST: 'CF',
 };
 
-function pitchDiagramSvg() {
-  // Static pitch with markers — simplified version of the reference
+// ── Position pitch diagram: 13 fixed slots, default grey, optional 7-tier colours ──
+const PITCH_SLOTS = {
+  LB:  [98.6, 27.9],  LWB: [172.8, 27.9], LW:  [260.7, 27.9],
+  LCB: [83.6, 76.4],  GK:  [41.9, 109.8], DM:  [113.5, 110.4],
+  CM:  [172.8, 110.0], AM: [230.3, 110.0], ST: [287.9, 110.6],
+  RCB: [83.4, 138.5], RB:  [98.6, 193.7], RWB: [172.8, 193.7], RW: [260.7, 193.5],
+};
+// Raw position tokens (from player.position / POSITION_LABELS) -> pitch slot key
+const TOKEN_TO_SLOT = {
+  GK:'GK', RB:'RB', RWB:'RWB', LCB:'LCB', CB:'LCB', RCB:'RCB', LB:'LB', LWB:'LWB',
+  DMF:'DM', LDMF:'DM', RDMF:'DM', LCMF:'CM', RCMF:'CM', AMF:'AM',
+  RAMF:'RW', RWF:'RW', RW:'RW', LAMF:'LW', LWF:'LW', LW:'LW', CF:'ST',
+};
+const POSITION_COLOR_TIERS = {
+  Primary:   '#00bf63',
+  Secondary: '#7ed957',
+  Third:     '#c1ff72',
+  Fourth:    '#ffde59',
+  Fifth:     '#ffbd59',
+  Sixth:     '#ff914d',
+  Seventh:   '#ff3131',
+};
+const PITCH_DOT_DEFAULT = '#a3a3a3';
+
+function pitchDiagramSvg(player, manual) {
+  // manual.positionColors: optional { SLOT_KEY: 'Primary'|'Secondary'|...|hex } map
+  // from the modal's manual colour-tier picker. If absent, fall back to auto:
+  // the player's own primary position slot gets Primary (Dark Green), all
+  // other 12 dots stay default grey.
+  const manualColors = manual && manual.positionColors;
+  let dotColors = {};
+  if (manualColors && Object.keys(manualColors).length) {
+    for (const slot of Object.keys(PITCH_SLOTS)) {
+      const tier = manualColors[slot];
+      dotColors[slot] = tier ? (POSITION_COLOR_TIERS[tier] || tier) : PITCH_DOT_DEFAULT;
+    }
+  } else {
+    const rawPos = player.position ? player.position.split(',')[0].trim() : (player.roleKey || '');
+    const primarySlot = TOKEN_TO_SLOT[rawPos];
+    for (const slot of Object.keys(PITCH_SLOTS)) {
+      dotColors[slot] = (slot === primarySlot) ? POSITION_COLOR_TIERS.Primary : PITCH_DOT_DEFAULT;
+    }
+  }
+
+  const dots = Object.entries(PITCH_SLOTS).map(([slot, [x, y]]) =>
+    `<circle cx="${x}" cy="${y}" r="14" fill="${dotColors[slot]}"/>`
+  ).join('');
+
   return `<svg viewBox="0 0 330 220" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;">
     <rect x="0" y="0" width="330" height="220" fill="#0d1117" rx="6"/>
-    <rect x="10" y="10" width="310" height="200" fill="none" stroke="#3a4156" stroke-width="1.5"/>
+    <rect x="10" y="10" width="310" height="200" fill="none" stroke="#3a4156" stroke-width="1.5" rx="3"/>
     <line x1="165" y1="10" x2="165" y2="210" stroke="#3a4156" stroke-width="1.5"/>
     <circle cx="165" cy="110" r="28" fill="none" stroke="#3a4156" stroke-width="1.5"/>
+    <circle cx="165" cy="110" r="1.5" fill="#3a4156"/>
     <rect x="10" y="65" width="35" height="90" fill="none" stroke="#3a4156" stroke-width="1.5"/>
+    <rect x="10" y="85" width="14" height="50" fill="none" stroke="#3a4156" stroke-width="1.5"/>
+    <path d="M 45 92 A 18 18 0 0 1 45 128" fill="none" stroke="#3a4156" stroke-width="1.5"/>
     <rect x="285" y="65" width="35" height="90" fill="none" stroke="#3a4156" stroke-width="1.5"/>
-    <circle cx="55" cy="110" r="5" fill="#9aa3b5"/>
-    <circle cx="95" cy="55" r="5" fill="#9aa3b5"/>
-    <circle cx="95" cy="165" r="5" fill="#9aa3b5"/>
-    <circle cx="135" cy="55" r="5" fill="#9aa3b5"/>
-    <circle cx="135" cy="165" r="5" fill="#9aa3b5"/>
-    <circle cx="170" cy="110" r="5" fill="#9aa3b5"/>
-    <circle cx="220" cy="40" r="6" fill="#3aa65c"/>
-    <circle cx="245" cy="90" r="6" fill="#e0c84a"/>
-    <circle cx="245" cy="135" r="6" fill="#3aa65c"/>
-    <circle cx="220" cy="180" r="6" fill="#e0c84a"/>
+    <rect x="306" y="85" width="14" height="50" fill="none" stroke="#3a4156" stroke-width="1.5"/>
+    <path d="M 285 92 A 18 18 0 0 0 285 128" fill="none" stroke="#3a4156" stroke-width="1.5"/>
+    <circle cx="320" cy="110" r="1.5" fill="#3a4156"/>
+    ${dots}
   </svg>`;
 }
 
@@ -620,7 +663,7 @@ export function buildCardElement(player, manual = {}) {
     <div id="scc-card-root" style="width:1920px;height:1080px;overflow:hidden;background:${BG};font-family:'Montserrat',sans-serif;color:#fff;position:relative;box-sizing:border-box;">
 
       <!-- HEADER GRADIENT BAND (left region) -->
-      <div style="position:absolute;top:0;left:0;width:1520px;height:292px;background:linear-gradient(to right, ${manual.clubColor ? fadeHexToBG(manual.clubColor, 0.55) : HEADER_L} 0%, ${manual.clubColor ? fadeHexToBG(manual.clubColor, 0.9) : HEADER_R} 100%);"></div>
+      <div style="position:absolute;top:0;left:0;width:1520px;height:292px;background:linear-gradient(to right, ${manual.clubColor ? fadeHexToBG(manual.clubColor, 0.62) : HEADER_L} 0%, ${manual.clubColor ? fadeHexToBG(manual.clubColor, 0.93) : HEADER_R} 100%);"></div>
 
       <!-- PHOTO -->
       <div id="scc-photo" style="position:absolute;left:-12px;top:16px;width:261px;height:261px;background-color:transparent;background-image:url('${photo}');background-size:cover;background-position:center top;"></div>
@@ -668,7 +711,7 @@ export function buildCardElement(player, manual = {}) {
       <div style="position:absolute;left:890px;top:291px;width:2px;height:789px;background:#737373;"></div>
 
       <!-- RIGHT PANEL (centred in the right block x1520–1920; exact spec Y) -->
-      <div style="position:absolute;top:16px;left:1520px;width:400px;display:flex;justify-content:center;"><div style="width:329px;height:218px;">${pitchDiagramSvg()}</div></div>
+      <div style="position:absolute;top:16px;left:1520px;width:400px;display:flex;justify-content:center;"><div style="width:329px;height:218px;">${pitchDiagramSvg(player, manual)}</div></div>
 
       <!-- BEST ROLE -->
       <div style="position:absolute;top:245px;left:1520px;width:400px;text-align:center;font-size:27.9px;font-weight:700;color:#d9d9d9;">BEST ROLE <span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#4b5563;color:#cbd5e1;font-size:16px;font-weight:700;vertical-align:middle;">i</span></div>

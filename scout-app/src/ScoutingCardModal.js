@@ -37,6 +37,7 @@ export default function ScoutingCardModal({ player, onClose }) {
   const [positionOverride, setPositionOverride] = useState('');
   const [footOverride, setFootOverride] = useState('');
   const [importanceOverride, setImportanceOverride] = useState('');
+  const [positionColors, setPositionColors] = useState({});
   const [busy, setBusy] = useState(false);
 
   const handlePosImage = (e) => {
@@ -75,6 +76,7 @@ export default function ScoutingCardModal({ player, onClose }) {
         positionOverride,
         footOverride,
         importanceOverride,
+        positionColors,
       });
     } catch (err) {
       alert('Failed to generate card: ' + err.message);
@@ -258,6 +260,39 @@ export default function ScoutingCardModal({ player, onClose }) {
         <div style={{ ...sectionStyle, display: 'flex', alignItems: 'center', gap: 8 }}>
           <input type="checkbox" id="hideTeamBadge" checked={hideTeamBadge} onChange={e => setHideTeamBadge(e.target.checked)} />
           <label htmlFor="hideTeamBadge" style={{ fontSize: 12, color: '#cbd5e1', cursor: 'pointer' }}>Hide team badge</label>
+        </div>
+
+        <div style={sectionStyle}>
+          <label style={labelStyle}>Position Map Colours</label>
+          <div style={{ fontSize: 10, color: '#6b7a99', marginBottom: 8 }}>
+            Leave all on Auto to default to grey dots with the player's primary position highlighted Primary (Dark Green).
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            {[
+              ['LW', 'Left Winger'], ['LWB', 'Left Wingback'], ['LB', 'Left Back'],
+              ['LCB', 'Left Centre Back'], ['DM', 'Defensive Midfielder'], ['CM', 'Central Midfielder'],
+              ['AM', 'Attacking Midfielder'], ['ST', 'Striker'], ['RCB', 'Right Centre Back'],
+              ['RB', 'Right Back'], ['RWB', 'Right Wingback'], ['RW', 'Right Winger'], ['GK', 'Goalkeeper'],
+            ].map(([slot, label]) => (
+              <div key={slot}>
+                <div style={{ fontSize: 9.5, color: '#9ca3af', marginBottom: 2 }}>{label}</div>
+                <select
+                  style={{ ...inputStyle, fontSize: 10.5, padding: '5px 7px' }}
+                  value={positionColors[slot] || ''}
+                  onChange={e => setPositionColors({ ...positionColors, [slot]: e.target.value })}
+                >
+                  <option value="">Auto / Default (Grey)</option>
+                  <option value="Primary">Primary (Dark Green) #00bf63</option>
+                  <option value="Secondary">Secondary (Green) #7ed957</option>
+                  <option value="Third">Third (Light Green) #c1ff72</option>
+                  <option value="Fourth">Fourth (Yellow) #ffde59</option>
+                  <option value="Fifth">Fifth (Peach) #ffbd59</option>
+                  <option value="Sixth">Sixth (Orange) #ff914d</option>
+                  <option value="Seventh">Seventh (Red) #ff3131</option>
+                </select>
+              </div>
+            ))}
+          </div>
         </div>
 
         <div style={sectionStyle}>
