@@ -36,6 +36,7 @@ export default function ScoutingCardModal({ player, onClose }) {
   const [valueOverride, setValueOverride] = useState('');
   const [positionOverride, setPositionOverride] = useState('');
   const [footOverride, setFootOverride] = useState('');
+  const [importanceOverride, setImportanceOverride] = useState('');
   const [busy, setBusy] = useState(false);
 
   const handlePosImage = (e) => {
@@ -73,6 +74,7 @@ export default function ScoutingCardModal({ player, onClose }) {
         valueOverride,
         positionOverride,
         footOverride,
+        importanceOverride,
       });
     } catch (err) {
       alert('Failed to generate card: ' + err.message);
@@ -119,6 +121,20 @@ export default function ScoutingCardModal({ player, onClose }) {
               <option value="right">Right</option>
               <option value="left">Left</option>
               <option value="both">Both</option>
+            </select>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
+          <div style={{ flex: 1 }}>
+            <label style={labelStyle}>Importance (under team name)</label>
+            <select style={inputStyle} value={importanceOverride} onChange={e => setImportanceOverride(e.target.value)}>
+              <option value="">Auto (by minutes %)</option>
+              <option value="Crucial Player">Crucial Player</option>
+              <option value="Important Player">Important Player</option>
+              <option value="Rotation Player">Rotation Player</option>
+              <option value="Fringe Player">Fringe Player</option>
+              <option value="On Loan">On Loan</option>
             </select>
           </div>
         </div>

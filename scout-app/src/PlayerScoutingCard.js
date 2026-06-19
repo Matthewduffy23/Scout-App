@@ -354,10 +354,32 @@ function leagueToCountry(leagueName) {
 
 // ── Colours sampled directly from the real Canva export ──────────────────────
 const BG          = '#0a0f1c';          // Feature F PAGE_BG
-const HEADER_L     = 'rgb(23,26,77)';   // header gradient left
-const HEADER_R     = 'rgb(17,22,42)';   // header gradient right
+const HEADER_L     = 'rgb(23,26,77)';   // header gradient left (default, no clubColor override)
+const HEADER_R     = 'rgb(17,22,42)';   // header gradient right (default, no clubColor override)
 const ACCENT_PINK  = '#ff66c4';         // spec
 const TREND_CYAN   = '#00cadc';         // spec trend line
+
+function darkenHex(hex, amount = 0.35) {
+  if (!hex || typeof hex !== 'string') return hex;
+  const m = hex.trim().match(/^#?([0-9a-f]{6})$/i);
+  if (!m) return hex;
+  const num = parseInt(m[1], 16);
+  let r = (num >> 16) & 255, g = (num >> 8) & 255, b = num & 255;
+  r = Math.round(r * (1 - amount));
+  g = Math.round(g * (1 - amount));
+  b = Math.round(b * (1 - amount));
+  return `rgb(${r},${g},${b})`;
+}
+
+function playerImportanceLabel(player) {
+  if (player.onLoan) return 'On Loan';
+  const pct = player.gbeMinsPct;
+  if (pct == null || isNaN(pct)) return 'Important Player'; // fallback if no data
+  if (pct >= 70) return 'Crucial Player';
+  if (pct >= 50) return 'Important Player';
+  if (pct >= 29) return 'Rotation Player';
+  return 'Fringe Player';
+}
 const LABEL_COL    = '#e8eef8';
 const BAR_TRACK    = '#1b2636';         // Feature F TRACK
 const BAR_RED      = 'rgb(199,54,60)';  // Feature F #C7363C
@@ -580,7 +602,7 @@ export function buildCardElement(player, manual = {}) {
     <div id="scc-card-root" style="width:1920px;height:1080px;overflow:hidden;background:${BG};font-family:'Montserrat',sans-serif;color:#fff;position:relative;box-sizing:border-box;">
 
       <!-- HEADER GRADIENT BAND (left region) -->
-      <div style="position:absolute;top:0;left:0;width:1520px;height:292px;background:linear-gradient(to right, ${HEADER_L} 0%, ${HEADER_R} 100%);"></div>
+      <div style="position:absolute;top:0;left:0;width:1520px;height:292px;background:linear-gradient(to right, ${manual.clubColor || HEADER_L} 0%, ${manual.clubColor ? darkenHex(manual.clubColor) : HEADER_R} 100%);"></div>
 
       <!-- PHOTO -->
       <div id="scc-photo" style="position:absolute;left:-12px;top:16px;width:261px;height:261px;background-color:transparent;background-image:url('${photo}');background-size:cover;background-position:center top;"></div>
@@ -611,7 +633,7 @@ export function buildCardElement(player, manual = {}) {
         <span style="font-size:21.3px;font-weight:500;color:#fff;white-space:nowrap;">${LEAGUE_DISPLAY_NAMES[player.league] || player.league}</span>
         ${countryToIso2(leagueToCountry(player.league)) ? `<div style="width:31px;height:19px;flex-shrink:0;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(leagueToCountry(player.league))}.png');"></div>` : ''}
       </div>
-      <div style="position:absolute;left:884px;top:147px;font-size:21.3px;color:#d9d9d9;">${player.onLoan ? 'On Loan' : 'Important Player'}</div>
+      <div style="position:absolute;left:884px;top:147px;font-size:21.3px;color:#d9d9d9;">${manual.importanceOverride || playerImportanceLabel(player)}</div>
 
       <!-- HEADER VERTICAL SEPARATOR -->
       <div style="position:absolute;left:1164px;top:45px;width:3px;height:155px;background:#737373;"></div>
@@ -787,15 +809,33 @@ export async function downloadScoutingCardPNG(player, manual = {}) {
 
   // background-image has no onerror — preload the real photo URL manually and
   // swap to the fallback image if it 404s, before html2canvas captures the card.
+  // A pasted external URL (manual.playerPhotoUrl) is fetched and converted to a
+  // data URL here, since cross-origin images without CORS headers (like fotmob's
+  // player photo CDN) will silently blank out during toPng() capture otherwise -
+  // same root cause that required mirroring crests/league logos to GitHub.
   const photoDiv = el.querySelector('#scc-photo');
   if (photoDiv) {
     if (manual.playerPhotoDataUrl) {
-      // uploaded file -> already a local data URL, no load-test needed
+      // uploaded file -> already a local data URL, no fetch needed
       photoDiv.style.backgroundImage = `url('${manual.playerPhotoDataUrl}')`;
+    } else if (manual.playerPhotoUrl) {
+      try {
+        const resp = await fetch(manual.playerPhotoUrl);
+        if (!resp.ok) throw new Error('fetch failed');
+        const blob = await resp.blob();
+        const dataUrl = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+        photoDiv.style.backgroundImage = `url('${dataUrl}')`;
+      } catch (err) {
+        // pasted URL is broken, blocked, or CORS-restricted even for fetch -> fallback
+        photoDiv.style.backgroundImage = "url('/fallback.png')";
+      }
     } else {
-      // pasted URL override falls through the same load-test as the default
-      // photo lookup, since an external URL can still 404 or be broken
-      const bgUrl = manual.playerPhotoUrl || photoUrl(player.name, player.team);
+      const bgUrl = photoUrl(player.name, player.team);
       await new Promise((resolve) => {
         const testImg = new Image();
         testImg.onload = () => resolve();
