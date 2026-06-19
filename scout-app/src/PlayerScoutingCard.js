@@ -620,7 +620,7 @@ export function buildCardElement(player, manual = {}) {
     <div id="scc-card-root" style="width:1920px;height:1080px;overflow:hidden;background:${BG};font-family:'Montserrat',sans-serif;color:#fff;position:relative;box-sizing:border-box;">
 
       <!-- HEADER GRADIENT BAND (left region) -->
-      <div style="position:absolute;top:0;left:0;width:1520px;height:292px;background:linear-gradient(to right, ${manual.clubColor || HEADER_L} 0%, ${manual.clubColor ? fadeHexToBG(manual.clubColor) : HEADER_R} 100%);"></div>
+      <div style="position:absolute;top:0;left:0;width:1520px;height:292px;background:linear-gradient(to right, ${manual.clubColor ? fadeHexToBG(manual.clubColor, 0.55) : HEADER_L} 0%, ${manual.clubColor ? fadeHexToBG(manual.clubColor, 0.9) : HEADER_R} 100%);"></div>
 
       <!-- PHOTO -->
       <div id="scc-photo" style="position:absolute;left:-12px;top:16px;width:261px;height:261px;background-color:transparent;background-image:url('${photo}');background-size:cover;background-position:center top;"></div>
