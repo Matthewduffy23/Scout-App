@@ -296,6 +296,29 @@ const LEAGUE_DISPLAY_NAMES = {
 };
 
 // ── Country name (as found in birthCountry field) → ISO 3166-1 alpha-2 code, for flagcdn ──
+const POSITION_LABELS = {
+  'GK':'Goalkeeper (GK)',
+  'RB':'Right Back (RB)',
+  'RWB':'Right Wingback (RWB)',
+  'LCB':'Centre Back (CB)',
+  'CB':'Centre Back (CB)',
+  'RCB':'Centre Back (CB)',
+  'LB':'Left Back (LB)',
+  'LWB':'Left Wingback (LWB)',
+  'DMF':'Defensive Midfielder (DM)',
+  'LDMF':'Defensive Midfielder (DM)',
+  'RDMF':'Defensive Midfielder (DM)',
+  'LCMF':'Central Midfielder (CM)',
+  'RCMF':'Central Midfielder (CM)',
+  'AMF':'Attacking Midfielder (AM)',
+  'RAMF':'Right Winger (RW)',
+  'RWF':'Right Winger (RW)',
+  'RW':'Right Winger (RW)',
+  'LAMF':'Left Winger (LW)',
+  'LWF':'Left Winger (LW)',
+  'LW':'Left Winger (LW)',
+  'CF':'Striker (CF)',
+};
 const COUNTRY_TO_ISO2 = {
   'England': 'gb-eng', 'Scotland': 'gb-sct', 'Wales': 'gb-wls', 'Northern Ireland': 'gb-nir',
   'Spain': 'es', 'Germany': 'de', 'Italy': 'it', 'France': 'fr', 'Belgium': 'be',
@@ -563,8 +586,12 @@ export function buildCardElement(player, manual = {}) {
       <div id="scc-photo" style="position:absolute;left:-12px;top:16px;width:261px;height:261px;background-color:transparent;background-image:url('${photo}');background-size:cover;background-position:center top;"></div>
 
       <!-- NAME / POSITION / FOOT / FLAG / AGE -->
-      <div style="position:absolute;left:248px;top:24px;width:880px;font-size:53.2px;font-weight:700;line-height:1.05;letter-spacing:-0.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${player.name}</div>
-      <div style="position:absolute;left:248px;top:87px;font-size:26.6px;font-weight:600;color:#fff;">${player.position ? player.position.split(',')[0].trim() : (ROLE_KEY_LABELS[player.roleKey] || '')}</div>
+      <div style="position:absolute;left:248px;top:24px;width:880px;font-size:53.2px;font-weight:700;line-height:1.05;letter-spacing:-0.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${manual.nameOverride || player.name}</div>
+      <div style="position:absolute;left:248px;top:87px;font-size:26.6px;font-weight:600;color:#fff;">${(() => {
+        if (manual.positionOverride) return manual.positionOverride;
+        const rawPos = player.position ? player.position.split(',')[0].trim() : (ROLE_KEY_LABELS[player.roleKey] || '');
+        return POSITION_LABELS[rawPos] || rawPos;
+      })()}</div>
       ${player.foot && player.foot !== 'unknown' && player.foot !== 'nan' ? `<div style="position:absolute;left:536px;top:90px;font-size:21.3px;color:#c0c0c0;">${formatFoot(player.foot)}</div>` : ''}
       ${countryToIso2(player.birthCountry) ? `<div style="position:absolute;left:248px;top:155px;width:47px;height:28px;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(player.birthCountry)}.png');"></div>` : ''}
       <div style="position:absolute;left:310px;top:153px;font-size:26.6px;font-weight:600;color:#fff;">${player.age} years old</div>
@@ -573,7 +600,7 @@ export function buildCardElement(player, manual = {}) {
       ${[['Profile ▸',267,true],['Performance ▾',442,false],['Similar Players ▾',697,false],['Club Fit ▾',977,false],['Video ▾',1174,false],['Compare ▾',1318,false]].map(([t,x,act]) => `<div style="position:absolute;left:${x}px;top:227px;font-size:27.9px;font-weight:700;color:${act ? '#fff' : '#b4b4b4'};">${t}</div>`).join('')}
 
       <!-- CLUB CREST / NAME / LEAGUE -->
-      ${crest ? `<div style="position:absolute;left:764px;top:40px;width:107px;height:149px;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${crest}');"></div>` : ''}
+      ${(crest && !manual.hideTeamBadge) ? `<div style="position:absolute;left:764px;top:40px;width:107px;height:149px;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${crest}');"></div>` : ''}
       <div style="position:absolute;left:884px;top:57px;font-size:26.6px;font-weight:700;color:#fff;">${player.team}</div>
       <div style="position:absolute;left:884px;top:97px;display:flex;align-items:center;gap:10px;">
         <span style="font-size:21.3px;font-weight:500;color:#fff;white-space:nowrap;">${LEAGUE_DISPLAY_NAMES[player.league] || player.league}</span>
@@ -585,7 +612,7 @@ export function buildCardElement(player, manual = {}) {
       <div style="position:absolute;left:1164px;top:45px;width:3px;height:155px;background:#737373;"></div>
 
       <!-- INFO BOX -->
-      ${[['Height:', manual.height || '—'], ['Value:', player.xValue > 0 ? formatMV(player.xValue) : '—'], ['Contract:', (player.contractYear && player.contractYear !== 'nan') ? String(player.contractYear) : '—']].map(([k,v],i) => `
+      ${[['Height:', manual.height || '—'], ['Value:', manual.valueOverride || (player.xValue > 0 ? formatMV(player.xValue) : '—')], ['Contract:', (player.contractYear && player.contractYear !== 'nan') ? String(player.contractYear) : '—']].map(([k,v],i) => `
         <div style="position:absolute;left:1196px;top:${56 + i*50}px;font-size:20px;font-weight:600;color:#d9d9d9;">${k}</div>
         <div style="position:absolute;left:1311px;top:${56 + i*50}px;font-size:20px;font-weight:600;color:#fff;">${v}</div>`).join('')}
 
@@ -757,16 +784,20 @@ export async function downloadScoutingCardPNG(player, manual = {}) {
   // swap to the fallback image if it 404s, before html2canvas captures the card.
   const photoDiv = el.querySelector('#scc-photo');
   if (photoDiv) {
-    const bgUrl = photoUrl(player.name, player.team);
-    await new Promise((resolve) => {
-      const testImg = new Image();
-      testImg.onload = () => resolve();
-      testImg.onerror = () => {
-        photoDiv.style.backgroundImage = "url('/fallback.png')";
-        resolve();
-      };
-      testImg.src = bgUrl;
-    });
+    if (manual.playerPhotoDataUrl) {
+      photoDiv.style.backgroundImage = `url('${manual.playerPhotoDataUrl}')`;
+    } else {
+      const bgUrl = photoUrl(player.name, player.team);
+      await new Promise((resolve) => {
+        const testImg = new Image();
+        testImg.onload = () => resolve();
+        testImg.onerror = () => {
+          photoDiv.style.backgroundImage = "url('/fallback.png')";
+          resolve();
+        };
+        testImg.src = bgUrl;
+      });
+    }
   }
 
   try {

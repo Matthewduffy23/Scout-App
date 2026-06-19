@@ -29,6 +29,11 @@ export default function ScoutingCardModal({ player, onClose }) {
   const [avgRating5, setAvgRating5] = useState('');
   const [posImageFile, setPosImageFile] = useState(null);
   const [posImageDataUrl, setPosImageDataUrl] = useState('');
+  const [playerPhotoDataUrl, setPlayerPhotoDataUrl] = useState('');
+  const [hideTeamBadge, setHideTeamBadge] = useState(false);
+  const [nameOverride, setNameOverride] = useState('');
+  const [valueOverride, setValueOverride] = useState('');
+  const [positionOverride, setPositionOverride] = useState('');
   const [busy, setBusy] = useState(false);
 
   const handlePosImage = (e) => {
@@ -37,6 +42,14 @@ export default function ScoutingCardModal({ player, onClose }) {
     setPosImageFile(file);
     const reader = new FileReader();
     reader.onload = () => setPosImageDataUrl(reader.result);
+    reader.readAsDataURL(file);
+  };
+
+  const handlePlayerPhoto = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setPlayerPhotoDataUrl(reader.result);
     reader.readAsDataURL(file);
   };
 
@@ -51,6 +64,11 @@ export default function ScoutingCardModal({ player, onClose }) {
         form: form.toUpperCase().split('').filter(c => 'WDL'.includes(c)).slice(0, 5),
         avgRating5,
         positionImageDataUrl: posImageDataUrl,
+        playerPhotoDataUrl,
+        hideTeamBadge,
+        nameOverride,
+        valueOverride,
+        positionOverride,
       });
     } catch (err) {
       alert('Failed to generate card: ' + err.message);
@@ -72,6 +90,24 @@ export default function ScoutingCardModal({ player, onClose }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <div style={{ fontSize: 16, fontWeight: 800, color: '#fff' }}>Scouting Card — {player.name}</div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: 18, cursor: 'pointer' }}>×</button>
+        </div>
+
+        <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
+          <div style={{ flex: 1 }}>
+            <label style={labelStyle}>Name Override</label>
+            <input style={inputStyle} value={nameOverride} onChange={e => setNameOverride(e.target.value)} placeholder={player.name} />
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
+          <div style={{ flex: 1 }}>
+            <label style={labelStyle}>Position Override (under name)</label>
+            <input style={inputStyle} value={positionOverride} onChange={e => setPositionOverride(e.target.value)} placeholder="e.g. Striker (CF)" />
+          </div>
+          <div style={{ flex: 1 }}>
+            <label style={labelStyle}>Value Override</label>
+            <input style={inputStyle} value={valueOverride} onChange={e => setValueOverride(e.target.value)} placeholder="e.g. €35m" />
+          </div>
         </div>
 
         <div style={sectionStyle}>
@@ -144,6 +180,22 @@ export default function ScoutingCardModal({ player, onClose }) {
             <label style={labelStyle}>Last 5 Avg</label>
             <input style={inputStyle} value={avgRating5} onChange={e => setAvgRating5(e.target.value)} placeholder="6.3" />
           </div>
+        </div>
+
+        <div style={sectionStyle}>
+          <label style={labelStyle}>Player Photo Override</label>
+          <input type="file" accept="image/*" onChange={handlePlayerPhoto} style={{ fontSize: 11, color: '#94a3b8' }} />
+          {playerPhotoDataUrl && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
+              <img src={playerPhotoDataUrl} alt="" style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }} />
+              <button onClick={() => setPlayerPhotoDataUrl('')} style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: 11, cursor: 'pointer', textDecoration: 'underline' }}>Remove</button>
+            </div>
+          )}
+        </div>
+
+        <div style={{ ...sectionStyle, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <input type="checkbox" id="hideTeamBadge" checked={hideTeamBadge} onChange={e => setHideTeamBadge(e.target.checked)} />
+          <label htmlFor="hideTeamBadge" style={{ fontSize: 12, color: '#cbd5e1', cursor: 'pointer' }}>Hide team badge</label>
         </div>
 
         <div style={sectionStyle}>
