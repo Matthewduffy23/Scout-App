@@ -511,10 +511,10 @@ const POS_TO_KEY = {
 
 // ── Position pitch diagram: 13 fixed slots, default grey, optional 7-tier colours ──
 const PITCH_SLOTS = {
-  LB:  [98.6, 27.9],  LWB: [172.8, 27.9], LW:  [260.7, 27.9],
+  LB:  [98.6, 31.5],  LWB: [172.8, 31.5], LW:  [260.7, 31.5],
   LCB: [83.6, 76.4],  GK:  [41.9, 109.8], DM:  [113.5, 110.4],
   CM:  [172.8, 110.0], AM: [230.3, 110.0], ST: [287.9, 110.6],
-  RCB: [83.4, 138.5], RB:  [98.6, 193.7], RWB: [172.8, 193.7], RW: [260.7, 193.5],
+  RCB: [83.4, 138.5], RB:  [98.6, 190.1], RWB: [172.8, 190.1], RW: [260.7, 189.9],
 };
 // Raw position tokens (from player.position / POSITION_LABELS) -> pitch slot key
 const TOKEN_TO_SLOT = {
@@ -554,10 +554,15 @@ function pitchDiagramSvg(player, manual) {
   }
 
   const dots = Object.entries(PITCH_SLOTS).map(([slot, [x, y]]) =>
-    `<circle cx="${x}" cy="${y}" r="14" fill="${dotColors[slot]}"/>`
+    `<circle cx="${x}" cy="${y}" r="14" fill="${dotColors[slot]}" filter="url(#dotShadow)"/>`
   ).join('');
 
   return `<svg viewBox="0 0 330 220" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;">
+    <defs>
+      <filter id="dotShadow" x="-50%" y="-50%" width="200%" height="200%">
+        <feDropShadow dx="0" dy="1" stdDeviation="1" flood-color="#000000" flood-opacity="0.4"/>
+      </filter>
+    </defs>
     <rect x="0" y="0" width="330" height="220" fill="#0d1117" rx="6"/>
     <rect x="10" y="10" width="310" height="200" fill="none" stroke="#5a6478" stroke-width="2" rx="3"/>
     <line x1="165" y1="10" x2="165" y2="210" stroke="#5a6478" stroke-width="2"/>
@@ -711,7 +716,7 @@ export function buildCardElement(player, manual = {}) {
       <div style="position:absolute;left:890px;top:291px;width:2px;height:789px;background:#737373;"></div>
 
       <!-- RIGHT PANEL (centred in the right block x1520–1920; exact spec Y) -->
-      <div style="position:absolute;top:14px;left:1520px;width:400px;display:flex;justify-content:center;"><div style="width:355px;height:235px;">${pitchDiagramSvg(player, manual)}</div></div>
+      <div style="position:absolute;top:15px;left:1520px;width:400px;display:flex;justify-content:center;"><div style="width:345px;height:229px;">${pitchDiagramSvg(player, manual)}</div></div>
 
       <!-- BEST ROLE -->
       <div style="position:absolute;top:245px;left:1520px;width:400px;text-align:center;font-size:27.9px;font-weight:700;color:#d9d9d9;">BEST ROLE <span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#4b5563;color:#cbd5e1;font-size:16px;font-weight:700;vertical-align:middle;">i</span></div>
