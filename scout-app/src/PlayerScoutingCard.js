@@ -557,7 +557,7 @@ export function buildCardElement(player, manual = {}) {
     <div id="scc-card-root" style="width:1920px;height:1080px;overflow:hidden;background:${BG};font-family:'Montserrat',sans-serif;color:#fff;position:relative;box-sizing:border-box;">
 
       <!-- HEADER GRADIENT BAND (left region) -->
-      <div style="position:absolute;top:0;left:0;width:1520px;height:270px;background:linear-gradient(to right, ${HEADER_L} 0%, ${HEADER_R} 100%);"></div>
+      <div style="position:absolute;top:20px;left:0;width:1520px;height:250px;background:linear-gradient(to right, ${HEADER_L} 0%, ${HEADER_R} 100%);"></div>
 
       <!-- PHOTO -->
       <div id="scc-photo" style="position:absolute;left:-12px;top:16px;width:261px;height:261px;background-color:transparent;background-image:url('${photo}');background-size:cover;background-position:center top;"></div>
@@ -575,8 +575,10 @@ export function buildCardElement(player, manual = {}) {
       <!-- CLUB CREST / NAME / LEAGUE -->
       ${crest ? `<div style="position:absolute;left:764px;top:40px;width:107px;height:149px;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${crest}');"></div>` : ''}
       <div style="position:absolute;left:884px;top:57px;font-size:26.6px;font-weight:700;color:#fff;">${player.team}</div>
-      <div style="position:absolute;left:884px;top:97px;font-size:21.3px;font-weight:500;color:#fff;">${LEAGUE_DISPLAY_NAMES[player.league] || player.league}</div>
-      ${countryToIso2(leagueToCountry(player.league)) ? `<div style="position:absolute;left:1121px;top:99px;width:31px;height:19px;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(leagueToCountry(player.league))}.png');"></div>` : ''}
+      <div style="position:absolute;left:884px;top:97px;display:flex;align-items:center;gap:10px;">
+        <span style="font-size:21.3px;font-weight:500;color:#fff;white-space:nowrap;">${LEAGUE_DISPLAY_NAMES[player.league] || player.league}</span>
+        ${countryToIso2(leagueToCountry(player.league)) ? `<div style="width:31px;height:19px;flex-shrink:0;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(leagueToCountry(player.league))}.png');"></div>` : ''}
+      </div>
       <div style="position:absolute;left:884px;top:147px;font-size:21.3px;color:#d9d9d9;">${player.onLoan ? 'On Loan' : 'Important Player'}</div>
 
       <!-- HEADER VERTICAL SEPARATOR -->
@@ -647,8 +649,10 @@ export function buildCardElement(player, manual = {}) {
 
       <!-- SEASON STATS -->
       <div style="position:absolute;top:300px;left:17px;font-size:26.6px;font-weight:700;color:${ACCENT_PINK};">Season Stats</div>
-      ${LEAGUE_LOGOS[leagueName] ? `<div style="position:absolute;left:17px;top:328px;width:33px;height:42px;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${LEAGUE_LOGOS[leagueName]}');"></div>` : ''}
-      <div style="position:absolute;top:341px;left:${LEAGUE_LOGOS[leagueName] ? 58 : 17}px;font-size:20px;font-weight:500;color:#fff;max-width:170px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${leagueDisplayName}</div>
+      <div style="position:absolute;top:330px;left:17px;display:flex;align-items:center;gap:8px;">
+        ${LEAGUE_LOGOS[leagueName] ? `<div style="width:30px;height:30px;flex-shrink:0;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${LEAGUE_LOGOS[leagueName]}');"></div>` : ''}
+        <span style="font-size:20px;font-weight:500;color:#fff;max-width:170px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${leagueDisplayName}</span>
+      </div>
       ${(() => {
         const cols = [
           ['Apps', 235, latestSeason.m != null ? String(latestSeason.m) : '—', 250],
