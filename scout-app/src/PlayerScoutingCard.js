@@ -573,10 +573,10 @@ export function buildCardElement(player, manual = {}) {
       ${[['Profile ▸',267,true],['Performance ▾',442,false],['Similar Players ▾',697,false],['Club Fit ▾',977,false],['Video ▾',1174,false],['Compare ▾',1318,false]].map(([t,x,act]) => `<div style="position:absolute;left:${x}px;top:227px;font-size:27.9px;font-weight:700;color:${act ? '#fff' : '#b4b4b4'};">${t}</div>`).join('')}
 
       <!-- CLUB CREST / NAME / LEAGUE -->
-      ${crest ? `<div style="position:absolute;left:764px;top:56px;width:107px;height:149px;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${crest}');"></div>` : ''}
+      ${crest ? `<div style="position:absolute;left:764px;top:40px;width:107px;height:149px;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${crest}');"></div>` : ''}
       <div style="position:absolute;left:884px;top:57px;font-size:26.6px;font-weight:700;color:#fff;">${player.team}</div>
       <div style="position:absolute;left:884px;top:97px;font-size:21.3px;font-weight:500;color:#fff;">${LEAGUE_DISPLAY_NAMES[player.league] || player.league}</div>
-      ${countryToIso2(leagueToCountry(player.league)) ? `<div style="position:absolute;left:${1015 + ((LEAGUE_DISPLAY_NAMES[player.league] || player.league || '').length * 11)}px;top:99px;width:31px;height:19px;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(leagueToCountry(player.league))}.png');"></div>` : ''}
+      ${countryToIso2(leagueToCountry(player.league)) ? `<div style="position:absolute;left:1121px;top:99px;width:31px;height:19px;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(leagueToCountry(player.league))}.png');"></div>` : ''}
       <div style="position:absolute;left:884px;top:147px;font-size:21.3px;color:#d9d9d9;">${player.onLoan ? 'On Loan' : 'Important Player'}</div>
 
       <!-- HEADER VERTICAL SEPARATOR -->
@@ -647,11 +647,11 @@ export function buildCardElement(player, manual = {}) {
 
       <!-- SEASON STATS -->
       <div style="position:absolute;top:300px;left:17px;font-size:26.6px;font-weight:700;color:${ACCENT_PINK};">Season Stats</div>
-      ${LEAGUE_LOGOS[leagueName] ? `<div style="position:absolute;left:17px;top:325px;width:33px;height:42px;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${LEAGUE_LOGOS[leagueName]}');"></div>` : ''}
-      <div style="position:absolute;top:339px;left:${LEAGUE_LOGOS[leagueName] ? 58 : 17}px;font-size:21.3px;font-weight:500;color:#fff;max-width:170px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${leagueDisplayName}</div>
+      ${LEAGUE_LOGOS[leagueName] ? `<div style="position:absolute;left:17px;top:328px;width:33px;height:42px;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${LEAGUE_LOGOS[leagueName]}');"></div>` : ''}
+      <div style="position:absolute;top:341px;left:${LEAGUE_LOGOS[leagueName] ? 58 : 17}px;font-size:20px;font-weight:500;color:#fff;max-width:170px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${leagueDisplayName}</div>
       ${(() => {
         const cols = [
-          ['Apps', 235, latestSeason.m != null ? String(latestSeason.m) : '—'],
+          ['Apps', 235, latestSeason.m != null ? String(latestSeason.m) : '—', 250],
           ['Gls',  332, latestSeason.g != null ? String(latestSeason.g) : '0'],
           ['Asts', 408, latestSeason.a != null ? String(latestSeason.a) : '0'],
           ['xG',   500, fmt1(xgSeason)],
@@ -659,7 +659,7 @@ export function buildCardElement(player, manual = {}) {
           ['Mins', 678, latestSeason.mins ? latestSeason.mins.toLocaleString() : '—'],
         ];
         const heads = cols.map(([lab,x]) => `<div style="position:absolute;top:319px;left:${x}px;font-size:20px;font-weight:500;color:#d9d9d9;">${lab}</div>`).join('');
-        const vals = cols.map(([,x,v]) => `<div style="position:absolute;top:357px;left:${x}px;font-size:20px;font-weight:500;color:#fff;">${v}</div>`).join('');
+        const vals = cols.map(([,x,v,vx]) => `<div style="position:absolute;top:357px;left:${vx || x}px;font-size:20px;font-weight:500;color:#fff;">${v}</div>`).join('');
         const avHead = `<div style="position:absolute;top:319px;left:782px;font-size:20px;font-weight:500;color:#d9d9d9;">Av Rat</div>`;
         const avVal = seasonRating ? `<span style="position:absolute;top:354px;left:782px;font-size:20px;font-weight:500;color:#000;background:${ratingColor(seasonRating)};border-radius:6px;padding:2px 10px;">${seasonRating}</span>` : '';
         return heads + vals + avHead + avVal;
