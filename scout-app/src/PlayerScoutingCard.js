@@ -557,7 +557,7 @@ export function buildCardElement(player, manual = {}) {
     <div id="scc-card-root" style="width:1920px;height:1080px;overflow:hidden;background:${BG};font-family:'Montserrat',sans-serif;color:#fff;position:relative;box-sizing:border-box;">
 
       <!-- HEADER GRADIENT BAND (left region) -->
-      <div style="position:absolute;top:20px;left:0;width:1520px;height:250px;background:linear-gradient(to right, ${HEADER_L} 0%, ${HEADER_R} 100%);"></div>
+      <div style="position:absolute;top:0;left:0;width:1520px;height:292px;background:linear-gradient(to right, ${HEADER_L} 0%, ${HEADER_R} 100%);"></div>
 
       <!-- PHOTO -->
       <div id="scc-photo" style="position:absolute;left:-12px;top:16px;width:261px;height:261px;background-color:transparent;background-image:url('${photo}');background-size:cover;background-position:center top;"></div>
@@ -649,7 +649,7 @@ export function buildCardElement(player, manual = {}) {
 
       <!-- SEASON STATS -->
       <div style="position:absolute;top:300px;left:17px;font-size:26.6px;font-weight:700;color:${ACCENT_PINK};">Season Stats</div>
-      <div style="position:absolute;top:330px;left:17px;display:flex;align-items:center;gap:8px;">
+      <div style="position:absolute;top:338px;left:17px;display:flex;align-items:center;gap:8px;">
         ${LEAGUE_LOGOS[leagueName] ? `<div style="width:30px;height:30px;flex-shrink:0;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${LEAGUE_LOGOS[leagueName]}');"></div>` : ''}
         <span style="font-size:20px;font-weight:500;color:#fff;max-width:170px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${leagueDisplayName}</span>
       </div>
