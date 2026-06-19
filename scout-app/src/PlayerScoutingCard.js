@@ -6,7 +6,7 @@
 import { scoreBandColor, scoreLabel, scoreToStars, ROLE_KEY_LABELS, formatMV, formatFoot, LEAGUE_STRENGTHS } from './constants';
 
 const PHOTO_BASE = 'https://raw.githubusercontent.com/Matthewduffy23/scouting-photos/main/photos/';
-const CREST_BASE = 'https://images.fotmob.com/image_resources/logo/teamlogo/';
+const CREST_BASE = 'https://raw.githubusercontent.com/Matthewduffy23/scouting-photos/main/crests/';
 
 // ── Country name (as found in birthCountry field) → ISO 3166-1 alpha-2 code, for flagcdn ──
 const COUNTRY_TO_ISO2 = {
