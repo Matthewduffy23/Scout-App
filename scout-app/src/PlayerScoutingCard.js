@@ -585,7 +585,7 @@ export function buildCardElement(player, manual = {}) {
       <div style="position:absolute;left:1164px;top:45px;width:3px;height:155px;background:#737373;"></div>
 
       <!-- INFO BOX -->
-      ${[['Height:', manual.height || '—'], ['Value:', player.marketValue > 0 ? formatMV(player.marketValue) : '—'], ['Contract:', (player.contract && player.contract !== 'nan') ? player.contract : '—']].map(([k,v],i) => `
+      ${[['Height:', manual.height || '—'], ['Value:', player.xValue > 0 ? formatMV(player.xValue) : '—'], ['Contract:', (player.contractYear && player.contractYear !== 'nan') ? String(player.contractYear) : '—']].map(([k,v],i) => `
         <div style="position:absolute;left:1196px;top:${56 + i*50}px;font-size:20px;font-weight:600;color:#d9d9d9;">${k}</div>
         <div style="position:absolute;left:1311px;top:${56 + i*50}px;font-size:20px;font-weight:600;color:#fff;">${v}</div>`).join('')}
 
@@ -649,7 +649,7 @@ export function buildCardElement(player, manual = {}) {
 
       <!-- SEASON STATS -->
       <div style="position:absolute;top:300px;left:17px;font-size:26.6px;font-weight:700;color:${ACCENT_PINK};">Season Stats</div>
-      <div style="position:absolute;top:338px;left:17px;display:flex;align-items:center;gap:8px;">
+      <div style="position:absolute;top:356px;left:17px;display:flex;align-items:center;gap:8px;">
         ${LEAGUE_LOGOS[leagueName] ? `<div style="width:30px;height:30px;flex-shrink:0;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${LEAGUE_LOGOS[leagueName]}');"></div>` : ''}
         <span style="font-size:20px;font-weight:500;color:#fff;max-width:170px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${leagueDisplayName}</span>
       </div>
