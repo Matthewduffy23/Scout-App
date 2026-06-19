@@ -559,17 +559,17 @@ function pitchDiagramSvg(player, manual) {
 
   return `<svg viewBox="0 0 330 220" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;">
     <rect x="0" y="0" width="330" height="220" fill="#0d1117" rx="6"/>
-    <rect x="10" y="10" width="310" height="200" fill="none" stroke="#3a4156" stroke-width="1.5" rx="3"/>
-    <line x1="165" y1="10" x2="165" y2="210" stroke="#3a4156" stroke-width="1.5"/>
-    <circle cx="165" cy="110" r="28" fill="none" stroke="#3a4156" stroke-width="1.5"/>
-    <circle cx="165" cy="110" r="1.5" fill="#3a4156"/>
-    <rect x="10" y="65" width="35" height="90" fill="none" stroke="#3a4156" stroke-width="1.5"/>
-    <rect x="10" y="85" width="14" height="50" fill="none" stroke="#3a4156" stroke-width="1.5"/>
-    <path d="M 45 92 A 18 18 0 0 1 45 128" fill="none" stroke="#3a4156" stroke-width="1.5"/>
-    <rect x="285" y="65" width="35" height="90" fill="none" stroke="#3a4156" stroke-width="1.5"/>
-    <rect x="306" y="85" width="14" height="50" fill="none" stroke="#3a4156" stroke-width="1.5"/>
-    <path d="M 285 92 A 18 18 0 0 0 285 128" fill="none" stroke="#3a4156" stroke-width="1.5"/>
-    <circle cx="320" cy="110" r="1.5" fill="#3a4156"/>
+    <rect x="10" y="10" width="310" height="200" fill="none" stroke="#5a6478" stroke-width="2" rx="3"/>
+    <line x1="165" y1="10" x2="165" y2="210" stroke="#5a6478" stroke-width="2"/>
+    <circle cx="165" cy="110" r="28" fill="none" stroke="#5a6478" stroke-width="2"/>
+    <circle cx="165" cy="110" r="1.5" fill="#5a6478"/>
+    <rect x="10" y="65" width="35" height="90" fill="none" stroke="#5a6478" stroke-width="2"/>
+    <rect x="10" y="85" width="14" height="50" fill="none" stroke="#5a6478" stroke-width="2"/>
+    <path d="M 45 92 A 18 18 0 0 1 45 128" fill="none" stroke="#5a6478" stroke-width="2"/>
+    <rect x="285" y="65" width="35" height="90" fill="none" stroke="#5a6478" stroke-width="2"/>
+    <rect x="306" y="85" width="14" height="50" fill="none" stroke="#5a6478" stroke-width="2"/>
+    <path d="M 285 92 A 18 18 0 0 0 285 128" fill="none" stroke="#5a6478" stroke-width="2"/>
+    <circle cx="320" cy="110" r="1.5" fill="#5a6478"/>
     ${dots}
   </svg>`;
 }
@@ -711,7 +711,7 @@ export function buildCardElement(player, manual = {}) {
       <div style="position:absolute;left:890px;top:291px;width:2px;height:789px;background:#737373;"></div>
 
       <!-- RIGHT PANEL (centred in the right block x1520–1920; exact spec Y) -->
-      <div style="position:absolute;top:16px;left:1520px;width:400px;display:flex;justify-content:center;"><div style="width:329px;height:218px;">${pitchDiagramSvg(player, manual)}</div></div>
+      <div style="position:absolute;top:14px;left:1520px;width:400px;display:flex;justify-content:center;"><div style="width:355px;height:235px;">${pitchDiagramSvg(player, manual)}</div></div>
 
       <!-- BEST ROLE -->
       <div style="position:absolute;top:245px;left:1520px;width:400px;text-align:center;font-size:27.9px;font-weight:700;color:#d9d9d9;">BEST ROLE <span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#4b5563;color:#cbd5e1;font-size:16px;font-weight:700;vertical-align:middle;">i</span></div>

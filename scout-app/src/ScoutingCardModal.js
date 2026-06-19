@@ -269,10 +269,12 @@ export default function ScoutingCardModal({ player, onClose }) {
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             {[
-              ['LW', 'Left Winger'], ['LWB', 'Left Wingback'], ['LB', 'Left Back'],
-              ['LCB', 'Left Centre Back'], ['DM', 'Defensive Midfielder'], ['CM', 'Central Midfielder'],
-              ['AM', 'Attacking Midfielder'], ['ST', 'Striker'], ['RCB', 'Right Centre Back'],
-              ['RB', 'Right Back'], ['RWB', 'Right Wingback'], ['RW', 'Right Winger'], ['GK', 'Goalkeeper'],
+              ['GK', 'Goalkeeper'],
+              ['LB', 'Left Back'], ['LCB', 'Left Centre Back'], ['RCB', 'Right Centre Back'], ['RB', 'Right Back'],
+              ['LWB', 'Left Wingback'], ['RWB', 'Right Wingback'],
+              ['DM', 'Defensive Midfielder'], ['CM', 'Central Midfielder'], ['AM', 'Attacking Midfielder'],
+              ['LW', 'Left Winger'], ['RW', 'Right Winger'],
+              ['ST', 'Striker'],
             ].map(([slot, label]) => (
               <div key={slot}>
                 <div style={{ fontSize: 9.5, color: '#9ca3af', marginBottom: 2 }}>{label}</div>
