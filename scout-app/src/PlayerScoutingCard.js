@@ -449,13 +449,13 @@ function barRow(label, pct, rawVal, rowH = 18) {
   const barH = Math.max(10, Math.round(rowH * 0.85));
   return `
     <div style="display:flex;align-items:center;height:${rowH}px;margin-bottom:1px;">
-      <div style="font-size:13px;font-weight:700;color:${LABEL_COL};width:188px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-left:4px;">${label}</div>
+      <div style="font-size:13px;font-weight:700;color:${LABEL_COL};width:188px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${label}</div>
       <div style="flex:1;position:relative;height:${barH}px;">
         <div style="position:absolute;inset:0;background:repeating-linear-gradient(to right, rgba(255,255,255,.16) 0 1px, transparent 1px 10%), ${BAR_TRACK};"></div>
         <div style="position:relative;height:100%;width:${p}%;background:${bc};">
           ${rawVal ? `<span style="position:absolute;left:6px;top:50%;transform:translateY(-50%);font-size:13.3px;font-weight:400;color:#0b0b0b;white-space:nowrap;">${rawVal}</span>` : ''}
         </div>
-        <div style="position:absolute;left:50%;top:0;width:1px;height:100%;background:repeating-linear-gradient(to bottom, rgba(255,255,255,.85) 0 3px, transparent 3px 6px);"></div>
+        <div style="position:absolute;left:50%;top:0;width:2px;height:100%;background:repeating-linear-gradient(to bottom, rgba(255,255,255,.95) 0 4px, transparent 4px 7px);"></div>
       </div>
     </div>`;
 }
@@ -631,16 +631,14 @@ export function buildCardElement(player, manual = {}) {
   // Row height must be computed so 3 section headers + axis row + footer row +
   // N metric rows always fit inside that 671px budget, regardless of how many
   // bar-chart metrics the upstream data pipeline includes for a given position.
-  // FIXED_OVERHEAD recalculated directly from the actual rendered font-size/margin
-  // values below (titles reduced to 24px / footer to 14px after the Jun 2026 pass):
-  //   3x section title (24px @ ~1.15 line-height) + their margins  ≈ 109px
-  //   axis tick row (22px + 6px margin)                            ≈  28px
-  //   footer "Percentile Rank" row (14px @ ~1.3 line-height + 6px) ≈  24px
-  //   total                                                        ≈ 161px (round up for safety: 170)
+  // FIXED_OVERHEAD derived from a real measured export (Marmoush, 25 rows): last
+  // metric row ended at 633px from container top, of which row content itself
+  // (rowH=19 * 25 + 25px margins = 500px) left ~133px for 3 section titles alone -
+  // axis row + footer row add ~60px more on top of that = ~193px total overhead.
   const groupKeys = ['A', 'D', 'P'];
   const totalRows = groupKeys.reduce((s, k) => s + (groups[k] ? groups[k].length : 0), 0);
   const CHART_HEIGHT = 671;
-  const FIXED_OVERHEAD = 170;
+  const FIXED_OVERHEAD = 193;
   const REFERENCE_ROW_H = 20;
   let rowH = totalRows > 0
     ? Math.min(REFERENCE_ROW_H, Math.floor((CHART_HEIGHT - FIXED_OVERHEAD) / totalRows) - 1)
@@ -796,14 +794,14 @@ export function buildCardElement(player, manual = {}) {
       })()}
 
       <!-- PERCENTILE CHART (Feature F) -->
-      <div style="position:absolute;top:409px;left:6px;width:876px;height:671px;overflow:hidden;">
-        ${groups.A && groups.A.length ? `<div style="font-size:24px;font-weight:900;color:#f3f5f7;margin:0 0 6px;">Attacking</div>${buildGroupBars('A')}` : ''}
-        ${groups.D && groups.D.length ? `<div style="font-size:24px;font-weight:900;color:#f3f5f7;margin:8px 0 6px;">Defensive</div>${buildGroupBars('D')}` : ''}
-        ${groups.P && groups.P.length ? `<div style="font-size:24px;font-weight:900;color:#f3f5f7;margin:8px 0 6px;">Possession</div>${buildGroupBars('P')}` : ''}
+      <div style="position:absolute;top:409px;left:6px;width:876px;height:671px;overflow:hidden;box-sizing:border-box;padding-left:31px;">
+        ${groups.A && groups.A.length ? `<div style="font-size:24px;font-weight:800;color:#f3f5f7;margin:0 0 6px;">Attacking</div>${buildGroupBars('A')}` : ''}
+        ${groups.D && groups.D.length ? `<div style="font-size:24px;font-weight:800;color:#f3f5f7;margin:8px 0 6px;">Defensive</div>${buildGroupBars('D')}` : ''}
+        ${groups.P && groups.P.length ? `<div style="font-size:24px;font-weight:800;color:#f3f5f7;margin:8px 0 6px;">Possession</div>${buildGroupBars('P')}` : ''}
         <div style="display:flex;align-items:center;margin-top:6px;">
           <div style="width:188px;flex-shrink:0;"></div>
           <div style="flex:1;position:relative;height:22px;">
-            ${[0,10,20,30,40,50,60,70,80,90,100].map(p=>`<span style="position:absolute;left:${p}%;top:0;transform:translateX(${p===0?'0':p===100?'-100%':'-50%'});font-size:17.3px;font-weight:700;color:#ffffff;">${p}%</span>`).join('')}
+            ${[0,10,20,30,40,50,60,70,80,90,100].map(p=>`<span style="position:absolute;left:${p}%;top:0;transform:translateX(${p===0?'0':p===100?'-100%':'-50%'});font-size:12px;font-weight:600;color:#c4cbd9;">${p}%</span>`).join('')}
           </div>
         </div>
         <div style="display:flex;">
