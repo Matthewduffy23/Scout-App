@@ -449,7 +449,7 @@ function barRow(label, pct, rawVal, rowH = 18) {
   const barH = Math.max(10, Math.round(rowH * 0.85));
   return `
     <div style="display:flex;align-items:center;height:${rowH}px;margin-bottom:1px;">
-      <div style="font-size:16px;font-weight:700;color:${LABEL_COL};width:188px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${label}</div>
+      <div style="font-size:13px;font-weight:700;color:${LABEL_COL};width:188px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-left:4px;">${label}</div>
       <div style="flex:1;position:relative;height:${barH}px;">
         <div style="position:absolute;inset:0;background:repeating-linear-gradient(to right, rgba(255,255,255,.16) 0 1px, transparent 1px 10%), ${BAR_TRACK};"></div>
         <div style="position:relative;height:100%;width:${p}%;background:${bc};">
@@ -627,17 +627,23 @@ export function buildCardElement(player, manual = {}) {
   // never overflows past the bottom of the 1920x1080 canvas, regardless of how many rows the
   // upstream data pipeline includes for that position.
   // ── Dynamic row sizing: bar chart panel has a fixed vertical budget (1080 - panelTop - margin).
-  // Fixed overhead (3 section headers + axis/footer, independent of row count) was measured
-  // empirically via a real-DOM sweep at 163px; per-row footprint is (rowH + 1px row margin).
-  // This guarantees the percentile axis never gets clipped regardless of how many bar-chart
-  // metrics the upstream data pipeline includes for a given position.
+  // Chart container is fixed at 875.8x671.1px per the Canva spec (X:6.2,Y:408.9).
+  // Row height must be computed so 3 section headers + axis row + footer row +
+  // N metric rows always fit inside that 671px budget, regardless of how many
+  // bar-chart metrics the upstream data pipeline includes for a given position.
+  // FIXED_OVERHEAD recalculated directly from the actual rendered font-size/margin
+  // values below (titles reduced to 24px / footer to 14px after the Jun 2026 pass):
+  //   3x section title (24px @ ~1.15 line-height) + their margins  ≈ 109px
+  //   axis tick row (22px + 6px margin)                            ≈  28px
+  //   footer "Percentile Rank" row (14px @ ~1.3 line-height + 6px) ≈  24px
+  //   total                                                        ≈ 161px (round up for safety: 170)
   const groupKeys = ['A', 'D', 'P'];
   const totalRows = groupKeys.reduce((s, k) => s + (groups[k] ? groups[k].length : 0), 0);
-  const PANEL_TOP = 409, SAFETY_MARGIN = 8, FIXED_OVERHEAD = 150;
-  const maxPanelHeight = 1080 - PANEL_TOP - SAFETY_MARGIN;
+  const CHART_HEIGHT = 671;
+  const FIXED_OVERHEAD = 170;
   const REFERENCE_ROW_H = 20;
   let rowH = totalRows > 0
-    ? Math.min(REFERENCE_ROW_H, Math.floor((maxPanelHeight - FIXED_OVERHEAD) / totalRows) - 1)
+    ? Math.min(REFERENCE_ROW_H, Math.floor((CHART_HEIGHT - FIXED_OVERHEAD) / totalRows) - 1)
     : REFERENCE_ROW_H;
   rowH = Math.max(8, rowH); // never shrink below a legible minimum
   if (typeof window !== 'undefined' && window.__FORCE_ROW_H) rowH = window.__FORCE_ROW_H;
@@ -790,10 +796,10 @@ export function buildCardElement(player, manual = {}) {
       })()}
 
       <!-- PERCENTILE CHART (Feature F) -->
-      <div style="position:absolute;top:409px;left:6px;width:876px;">
-        ${groups.A && groups.A.length ? `<div style="font-size:31.9px;font-weight:900;color:#f3f5f7;margin:0 0 6px;">Attacking</div>${buildGroupBars('A')}` : ''}
-        ${groups.D && groups.D.length ? `<div style="font-size:31.9px;font-weight:900;color:#f3f5f7;margin:10px 0 6px;">Defensive</div>${buildGroupBars('D')}` : ''}
-        ${groups.P && groups.P.length ? `<div style="font-size:31.9px;font-weight:900;color:#f3f5f7;margin:10px 0 6px;">Possession</div>${buildGroupBars('P')}` : ''}
+      <div style="position:absolute;top:409px;left:6px;width:876px;height:671px;overflow:hidden;">
+        ${groups.A && groups.A.length ? `<div style="font-size:24px;font-weight:900;color:#f3f5f7;margin:0 0 6px;">Attacking</div>${buildGroupBars('A')}` : ''}
+        ${groups.D && groups.D.length ? `<div style="font-size:24px;font-weight:900;color:#f3f5f7;margin:8px 0 6px;">Defensive</div>${buildGroupBars('D')}` : ''}
+        ${groups.P && groups.P.length ? `<div style="font-size:24px;font-weight:900;color:#f3f5f7;margin:8px 0 6px;">Possession</div>${buildGroupBars('P')}` : ''}
         <div style="display:flex;align-items:center;margin-top:6px;">
           <div style="width:188px;flex-shrink:0;"></div>
           <div style="flex:1;position:relative;height:22px;">
@@ -802,7 +808,7 @@ export function buildCardElement(player, manual = {}) {
         </div>
         <div style="display:flex;">
           <div style="width:188px;flex-shrink:0;"></div>
-          <div style="flex:1;text-align:center;font-size:17.3px;font-weight:700;color:${LABEL_COL};padding-top:6px;">Percentile Rank</div>
+          <div style="flex:1;text-align:center;font-size:14px;font-weight:700;color:${LABEL_COL};padding-top:6px;">Percentile Rank</div>
         </div>
       </div>
 
