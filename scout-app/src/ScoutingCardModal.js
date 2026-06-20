@@ -25,8 +25,12 @@ export default function ScoutingCardModal({ player, onClose }) {
   const [pace, setPace] = useState(3);
   const [power, setPower] = useState(3);
   const [fitness, setFitness] = useState(3);
-  const [form, setForm] = useState('WWDLW');
-  const [avgRating5, setAvgRating5] = useState('');
+  const [formRatings, setFormRatings] = useState(['', '', '', '', '']);
+  const formAvg = (() => {
+    const nums = formRatings.map(r => parseFloat(r)).filter(n => !isNaN(n));
+    if (!nums.length) return null;
+    return nums.reduce((a, b) => a + b, 0) / nums.length;
+  })();
   const [posImageFile, setPosImageFile] = useState(null);
   const [posImageDataUrl, setPosImageDataUrl] = useState('');
   const [playerPhotoDataUrl, setPlayerPhotoDataUrl] = useState('');
@@ -65,8 +69,8 @@ export default function ScoutingCardModal({ player, onClose }) {
         currentLevel, currentScore: Number(currentScore),
         potentialLevel, potentialScore: Number(potentialScore),
         physical: { Pace: pace, Power: power, Fitness: fitness },
-        form: form.toUpperCase().split('').filter(c => 'WDL'.includes(c)).slice(0, 5),
-        avgRating5,
+        formRatings,
+        avgRating5: formAvg !== null ? formAvg.toFixed(1) : '',
         positionImageDataUrl: posImageDataUrl,
         playerPhotoDataUrl,
         playerPhotoUrl,
@@ -226,21 +230,32 @@ export default function ScoutingCardModal({ player, onClose }) {
             {[['Pace', pace, setPace], ['Power', power, setPower], ['Fitness', fitness, setFitness]].map(([lbl, val, setter]) => (
               <div key={lbl} style={{ flex: 1 }}>
                 <div style={{ fontSize: 9.5, color: '#9ca3af', marginBottom: 3 }}>{lbl}</div>
-                <input type="range" min={1} max={5} value={val} onChange={e => setter(Number(e.target.value))} style={{ width: '100%' }} />
+                <input type="range" min={1} max={5} step={0.5} value={val} onChange={e => setter(Number(e.target.value))} style={{ width: '100%' }} />
                 <div style={{ textAlign: 'center', fontSize: 10, color: '#fff' }}>{val}</div>
               </div>
             ))}
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
-          <div style={{ flex: 1 }}>
-            <label style={labelStyle}>Form (e.g. WDLWW)</label>
-            <input style={inputStyle} value={form} onChange={e => setForm(e.target.value)} maxLength={5} />
+        <div style={sectionStyle}>
+          <label style={labelStyle}>Last 5 Match Ratings</label>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {formRatings.map((r, i) => (
+              <input
+                key={i}
+                style={{ ...inputStyle, textAlign: 'center', padding: '7px 4px' }}
+                value={r}
+                onChange={e => {
+                  const next = [...formRatings];
+                  next[i] = e.target.value;
+                  setFormRatings(next);
+                }}
+                placeholder="6.9"
+              />
+            ))}
           </div>
-          <div style={{ width: 110 }}>
-            <label style={labelStyle}>Last 5 Avg</label>
-            <input style={inputStyle} value={avgRating5} onChange={e => setAvgRating5(e.target.value)} placeholder="6.3" />
+          <div style={{ fontSize: 10, color: '#6b7a99', marginTop: 6 }}>
+            Average: {formAvg !== null ? formAvg.toFixed(1) : '—'} (colour and average calculated automatically)
           </div>
         </div>
 

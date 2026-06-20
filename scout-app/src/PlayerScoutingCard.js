@@ -521,11 +521,11 @@ function trendSvg(trendData) {
     const x = tx(i), y = ty(d.score);
     // pill centred ON the line point
     return `<rect x="${x-20}" y="${y-12}" width="40" height="24" rx="6" fill="${scoreTierColor(d.score)}"/>
-      <text x="${x}" y="${y+5}" text-anchor="middle" fill="#000000" font-size="13" font-weight="900" font-family="Montserrat, sans-serif">${d.score}</text>
+      <text x="${x}" y="${y+5}" text-anchor="middle" fill="#000000" font-size="13" font-weight="700" font-family="Montserrat, sans-serif">${d.score}</text>
       <text x="${x}" y="${H-2}" text-anchor="middle" fill="#c0c0c0" font-size="13" font-weight="700" font-family="Montserrat, sans-serif">${d.season.replace(/^20/, '')}</text>`;
   }).join('');
   return `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
-    <polyline points="${pts}" fill="none" stroke="${TREND_CYAN}" stroke-width="4"/>${dots}
+    <polyline points="${pts}" fill="none" stroke="${TREND_CYAN}" stroke-width="2"/>${dots}
   </svg>`;
 }
 
@@ -787,8 +787,17 @@ export function buildCardElement(player, manual = {}) {
           const n = phys[attr] || 0;
           const filledColor = physicalTierColor(n);
           const dots = [0,1,2,3,4].map(i => {
-            const col = i < n ? filledColor : '#3a4566';
-            return `<span style="width:25px;height:25px;border-radius:50%;background:${col};"></span>`;
+            const dotValue = i + 1; // this dot represents level 1,2,3,4,5
+            let opacity = 0;
+            if (n >= dotValue) opacity = 1;
+            else if (n >= dotValue - 0.5) opacity = 0.7; // half-filled = faded
+            const bg = opacity > 0 ? filledColor : '#3a4566';
+            const style = opacity === 1
+              ? `background:${bg};`
+              : opacity === 0.7
+                ? `background:${bg};opacity:0.7;`
+                : `background:${bg};`;
+            return `<span style="width:25px;height:25px;border-radius:50%;${style}"></span>`;
           }).join('');
           return `<div style="position:absolute;top:${y}px;left:1560px;width:320px;display:flex;align-items:center;justify-content:space-between;">
             <span style="font-size:22.6px;font-weight:700;color:#d9d9d9;">${attr}</span>
@@ -803,7 +812,11 @@ export function buildCardElement(player, manual = {}) {
       <!-- FORM -->
       <div style="position:absolute;top:909px;left:1520px;width:400px;text-align:center;font-size:27.9px;font-weight:600;color:#c0c0c0;">FORM</div>
       <div style="position:absolute;top:950px;left:1520px;width:400px;display:flex;justify-content:center;gap:11px;">
-        ${(manual.form || []).slice(0,5).map(r => { const fm={W:'#3aa65c',D:'#e0904a',L:'#d35a48'}; const c=fm[String(r).toUpperCase()]||'#4b5563'; return `<span style="width:25px;height:73px;border-radius:6px;background:${c};"></span>`; }).join('')}
+        ${(manual.formRatings || []).slice(0,5).map(r => {
+          const v = parseFloat(r);
+          const c = isNaN(v) ? '#4b5563' : formTierColor(v);
+          return `<span style="width:25px;height:73px;border-radius:6px;background:${c};"></span>`;
+        }).join('')}
       </div>
       <div style="position:absolute;top:1038px;left:1520px;width:400px;display:flex;align-items:center;justify-content:center;gap:10px;">
         <span style="font-size:16px;font-weight:700;color:#000;background:${formTierColor(manual.avgRating5 || 6.5)};border-radius:6px;padding:3px 9px;">${manual.avgRating5 || '—'}</span>
