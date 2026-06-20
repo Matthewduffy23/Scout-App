@@ -434,6 +434,45 @@ function barColor(pct) {
   return `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
 }
 
+// Discrete 7-tier colour for 0-100 rating scores (Av Rating, role scores, Form numeric value)
+function scoreTierColor(score) {
+  const v = Number(score);
+  if (isNaN(v)) return '#a3a3a3';
+  if (v >= 79) return '#00bf63';
+  if (v >= 67) return '#7ed957';
+  if (v >= 55) return '#c1ff72';
+  if (v >= 43) return '#ffde59';
+  if (v >= 34) return '#ffbd59';
+  if (v >= 25) return '#ff914d';
+  return '#ff3131';
+}
+
+// Discrete 7-tier colour for Pace / Power / Fitness (1-5 scale)
+function physicalTierColor(val) {
+  const v = Number(val);
+  if (isNaN(v)) return '#a3a3a3';
+  if (v >= 4.5) return '#00bf63';
+  if (v >= 4)   return '#7ed957';
+  if (v >= 3)   return '#c1ff72';
+  if (v >= 2.5) return '#ffde59';
+  if (v >= 2)   return '#ffbd59';
+  if (v >= 1.5) return '#ff914d';
+  return '#ff3131';
+}
+
+// Discrete tier colour for Form (match-rating scale, e.g. Av Rat / Last 5 Avg)
+function formTierColor(val) {
+  const v = Number(val);
+  if (isNaN(v)) return '#a3a3a3';
+  if (v >= 9.0) return '#5170ff';
+  if (v >= 8.0) return '#0cc0df';
+  if (v >= 7.5) return '#00bf63';
+  if (v >= 7.0) return '#7ed957';
+  if (v >= 6.5) return '#ffde59';
+  if (v >= 5.9) return '#ff914d';
+  return '#ff3131';
+}
+
 function starsHtml(score, size = 20) {
   const stars = scoreToStars(score);
   const full = Math.floor(stars);
@@ -462,7 +501,7 @@ function barRow(label, pct, rawVal, rowH = 18) {
 
 function rolePill(roleName, score, width = 320) {
   const sc = Math.round(score);
-  const bc = barColor(sc);
+  const bc = scoreTierColor(sc);
   return `
     <div style="display:flex;align-items:center;justify-content:space-between;width:${width}px;height:46px;margin:0 auto 14px;">
       <span style="background:#737373;border-radius:10px;padding:3px 9px;font-size:26.6px;color:#fff;font-weight:600;white-space:nowrap;">${roleName}</span>
@@ -481,12 +520,12 @@ function trendSvg(trendData) {
   const dots = trendData.map((d, i) => {
     const x = tx(i), y = ty(d.score);
     // pill centred ON the line point
-    return `<rect x="${x-20}" y="${y-12}" width="40" height="24" rx="6" fill="${barColor(d.score)}"/>
-      <text x="${x}" y="${y+5}" text-anchor="middle" fill="#000000" font-size="13" font-weight="700" font-family="Montserrat, sans-serif">${d.score}</text>
-      <text x="${x}" y="${H-2}" text-anchor="middle" fill="#c0c0c0" font-size="13" font-weight="600" font-family="Montserrat, sans-serif">${d.season}</text>`;
+    return `<rect x="${x-20}" y="${y-12}" width="40" height="24" rx="6" fill="${scoreTierColor(d.score)}"/>
+      <text x="${x}" y="${y+5}" text-anchor="middle" fill="#000000" font-size="13" font-weight="900" font-family="Montserrat, sans-serif">${d.score}</text>
+      <text x="${x}" y="${H-2}" text-anchor="middle" fill="#c0c0c0" font-size="13" font-weight="700" font-family="Montserrat, sans-serif">${d.season.replace(/^20/, '')}</text>`;
   }).join('');
   return `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
-    <polyline points="${pts}" fill="none" stroke="${TREND_CYAN}" stroke-width="3"/>${dots}
+    <polyline points="${pts}" fill="none" stroke="${TREND_CYAN}" stroke-width="4"/>${dots}
   </svg>`;
 }
 
@@ -744,11 +783,11 @@ export function buildCardElement(player, manual = {}) {
       ${(() => {
         const phys = manual.physical || { Pace: 3, Power: 3, Fitness: 3 };
         const rowY = { Pace: 728, Power: 792, Fitness: 859 };
-        const dotCol = { 5:'#22c55e', 4:'#65d17e', 3:'#9ad15a', 2:'#e0c84a', 1:'#e0c84a' };
         return Object.entries(rowY).map(([attr, y]) => {
           const n = phys[attr] || 0;
+          const filledColor = physicalTierColor(n);
           const dots = [0,1,2,3,4].map(i => {
-            const col = i < n ? (dotCol[n] || '#22c55e') : '#3a4566';
+            const col = i < n ? filledColor : '#3a4566';
             return `<span style="width:25px;height:25px;border-radius:50%;background:${col};"></span>`;
           }).join('');
           return `<div style="position:absolute;top:${y}px;left:1560px;width:320px;display:flex;align-items:center;justify-content:space-between;">
@@ -767,7 +806,7 @@ export function buildCardElement(player, manual = {}) {
         ${(manual.form || []).slice(0,5).map(r => { const fm={W:'#3aa65c',D:'#e0904a',L:'#d35a48'}; const c=fm[String(r).toUpperCase()]||'#4b5563'; return `<span style="width:25px;height:73px;border-radius:6px;background:${c};"></span>`; }).join('')}
       </div>
       <div style="position:absolute;top:1038px;left:1520px;width:400px;display:flex;align-items:center;justify-content:center;gap:10px;">
-        <span style="font-size:16px;font-weight:700;color:#000;background:${ratingColor(manual.avgRating5 || 6.5)};border-radius:6px;padding:3px 9px;">${manual.avgRating5 || '—'}</span>
+        <span style="font-size:16px;font-weight:700;color:#000;background:${formTierColor(manual.avgRating5 || 6.5)};border-radius:6px;padding:3px 9px;">${manual.avgRating5 || '—'}</span>
         <span style="font-size:17.3px;font-weight:600;color:#c0c0c0;">Last 5 Avg Rating</span>
       </div>
 
@@ -789,12 +828,12 @@ export function buildCardElement(player, manual = {}) {
         const heads = cols.map(([lab,x]) => `<div style="position:absolute;top:319px;left:${x}px;font-size:20px;font-weight:500;color:#d9d9d9;">${lab}</div>`).join('');
         const vals = cols.map(([,x,v,vx]) => `<div style="position:absolute;top:357px;left:${vx || x}px;font-size:20px;font-weight:500;color:#fff;">${v}</div>`).join('');
         const avHead = `<div style="position:absolute;top:319px;left:782px;font-size:20px;font-weight:500;color:#d9d9d9;">Av Rat</div>`;
-        const avVal = seasonRating ? `<span style="position:absolute;top:354px;left:782px;font-size:20px;font-weight:500;color:#000;background:${ratingColor(seasonRating)};border-radius:6px;padding:2px 10px;">${seasonRating}</span>` : '';
+        const avVal = seasonRating ? `<span style="position:absolute;top:354px;left:782px;font-size:20px;font-weight:500;color:#000;background:${formTierColor(seasonRating)};border-radius:6px;padding:2px 10px;">${seasonRating}</span>` : '';
         return heads + vals + avHead + avVal;
       })()}
 
       <!-- PERCENTILE CHART (Feature F) -->
-      <div style="position:absolute;top:409px;left:6px;width:876px;height:671px;overflow:hidden;box-sizing:border-box;padding-left:31px;">
+      <div style="position:absolute;top:409px;left:0px;width:876px;height:671px;overflow:hidden;box-sizing:border-box;padding-left:31px;">
         ${groups.A && groups.A.length ? `<div style="font-size:24px;font-weight:800;color:#f3f5f7;margin:0 0 6px;">Attacking</div>${buildGroupBars('A')}` : ''}
         ${groups.D && groups.D.length ? `<div style="font-size:24px;font-weight:800;color:#f3f5f7;margin:8px 0 6px;">Defensive</div>${buildGroupBars('D')}` : ''}
         ${groups.P && groups.P.length ? `<div style="font-size:24px;font-weight:800;color:#f3f5f7;margin:8px 0 6px;">Possession</div>${buildGroupBars('P')}` : ''}
@@ -835,7 +874,6 @@ export function buildCardElement(player, manual = {}) {
       <div style="position:absolute;top:1039px;left:1133px;font-size:20px;font-weight:500;color:#c0c0c0;">${manual.potentialLevel || scoreLabel(player.potentialScore || player.careerScore)}</div>
 
       <!-- TEMP build marker (remove once font is confirmed) -->
-      <div style="position:absolute;bottom:6px;left:10px;font-size:14.6px;color:rgba(255,255,255,0.30);">build v6 · h2i</div>
 
     </div>
   `;
