@@ -40,6 +40,7 @@ export default function ScoutingCardModal({ player, onClose }) {
   const [valueOverride, setValueOverride] = useState('');
   const [positionOverride, setPositionOverride] = useState('');
   const [footOverride, setFootOverride] = useState('');
+  const [birthDate, setBirthDate] = useState('');
   const [importanceOverride, setImportanceOverride] = useState('');
   const [positionColors, setPositionColors] = useState({});
   const [busy, setBusy] = useState(false);
@@ -79,6 +80,7 @@ export default function ScoutingCardModal({ player, onClose }) {
         valueOverride,
         positionOverride,
         footOverride,
+        birthDate,
         importanceOverride,
         positionColors,
       });
@@ -128,6 +130,10 @@ export default function ScoutingCardModal({ player, onClose }) {
               <option value="left">Left</option>
               <option value="both">Both</option>
             </select>
+          </div>
+          <div style={{ width: 130 }}>
+            <label style={labelStyle}>Birth Date (optional)</label>
+            <input style={inputStyle} value={birthDate} onChange={e => setBirthDate(e.target.value)} placeholder="23/9/2003" />
           </div>
         </div>
 

@@ -718,7 +718,7 @@ export function buildCardElement(player, manual = {}) {
 
       <!-- NAME / POSITION / FOOT / FLAG / AGE -->
       <div style="position:absolute;left:248px;top:24px;width:880px;font-size:53.2px;font-weight:700;line-height:1.05;letter-spacing:-0.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${manual.nameOverride || player.name}</div>
-      <div style="position:absolute;left:248px;top:87px;display:flex;align-items:baseline;gap:18px;">
+      <div style="position:absolute;left:248px;top:87px;display:flex;align-items:baseline;gap:15px;">
         <span style="font-size:26.6px;font-weight:600;color:#fff;white-space:nowrap;">${(() => {
           if (manual.positionOverride) return manual.positionOverride;
           const rawPos = player.position ? player.position.split(',')[0].trim() : (ROLE_KEY_LABELS[player.roleKey] || '');
@@ -730,13 +730,16 @@ export function buildCardElement(player, manual = {}) {
         })()}
       </div>
       ${countryToIso2(player.birthCountry) ? `<div style="position:absolute;left:248px;top:155px;width:47px;height:28px;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(player.birthCountry)}.png');"></div>` : ''}
-      <div style="position:absolute;left:310px;top:153px;font-size:26.6px;font-weight:600;color:#fff;">${player.age} years old</div>
+      <div style="position:absolute;left:310px;top:153px;display:flex;align-items:baseline;gap:18px;">
+        <span style="font-size:26.6px;font-weight:600;color:#fff;white-space:nowrap;">${player.age} years old</span>
+        ${manual.birthDate ? `<span style="font-size:21.3px;color:#c0c0c0;white-space:nowrap;">${manual.birthDate}</span>` : ''}
+      </div>
 
       <!-- NAV -->
       ${[['Profile ▸',267,true],['Performance ▾',442,false],['Similar Players ▾',697,false],['Club Fit ▾',977,false],['Video ▾',1174,false],['Compare ▾',1318,false]].map(([t,x,act]) => `<div style="position:absolute;left:${x}px;top:227px;font-size:27.9px;font-weight:700;color:${act ? '#fff' : '#b4b4b4'};">${t}</div>`).join('')}
 
       <!-- CLUB CREST / NAME / LEAGUE -->
-      ${(crest && !manual.hideTeamBadge) ? `<div style="position:absolute;left:764px;top:40px;width:107px;height:149px;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${crest}');"></div>` : ''}
+      ${(crest && !manual.hideTeamBadge) ? `<div style="position:absolute;left:756px;top:36px;width:112px;height:156px;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${crest}');"></div>` : ''}
       <div style="position:absolute;left:884px;top:57px;font-size:26.6px;font-weight:700;color:#fff;">${player.team}</div>
       <div style="position:absolute;left:884px;top:97px;display:flex;align-items:center;gap:10px;">
         <span style="font-size:21.3px;font-weight:500;color:#fff;white-space:nowrap;">${LEAGUE_DISPLAY_NAMES[player.league] || player.league}</span>
@@ -773,7 +776,7 @@ export function buildCardElement(player, manual = {}) {
       ${trendData.length >= 2 ? `
       <!-- PERFORMANCE TREND -->
       <div style="position:absolute;top:482px;left:1520px;width:400px;text-align:center;font-size:27.9px;font-weight:700;color:#d9d9d9;">PERFORMANCE TREND</div>
-      <div style="position:absolute;top:512px;left:1520px;width:400px;display:flex;justify-content:center;">${trendSvg(trendData)}</div>` : ''}
+      <div style="position:absolute;top:524px;left:1520px;width:400px;display:flex;justify-content:center;">${trendSvg(trendData)}</div>` : ''}
 
       <!-- DIVIDER 2 -->
       <div style="position:absolute;top:680px;left:1546px;width:349px;height:2px;background:rgba(192,192,192,.35);"></div>
@@ -811,11 +814,11 @@ export function buildCardElement(player, manual = {}) {
 
       <!-- FORM -->
       <div style="position:absolute;top:909px;left:1520px;width:400px;text-align:center;font-size:27.9px;font-weight:600;color:#c0c0c0;">FORM</div>
-      <div style="position:absolute;top:950px;left:1520px;width:400px;display:flex;justify-content:center;gap:11px;">
+      <div style="position:absolute;top:950px;left:1520px;width:400px;display:flex;justify-content:center;gap:7px;">
         ${(manual.formRatings || []).slice(0,5).map(r => {
           const v = parseFloat(r);
           const c = isNaN(v) ? '#4b5563' : formTierColor(v);
-          return `<span style="width:25px;height:73px;border-radius:6px;background:${c};"></span>`;
+          return `<span style="width:25px;height:62px;border-radius:6px;background:${c};"></span>`;
         }).join('')}
       </div>
       <div style="position:absolute;top:1038px;left:1520px;width:400px;display:flex;align-items:center;justify-content:center;gap:10px;">
@@ -846,7 +849,7 @@ export function buildCardElement(player, manual = {}) {
       })()}
 
       <!-- PERCENTILE CHART (Feature F) -->
-      <div style="position:absolute;top:409px;left:0px;width:876px;height:671px;overflow:hidden;box-sizing:border-box;padding-left:31px;">
+      <div style="position:absolute;top:409px;left:0px;width:876px;height:671px;overflow:hidden;box-sizing:border-box;padding-left:24px;">
         ${groups.A && groups.A.length ? `<div style="font-size:24px;font-weight:800;color:#f3f5f7;margin:0 0 6px;">Attacking</div>${buildGroupBars('A')}` : ''}
         ${groups.D && groups.D.length ? `<div style="font-size:24px;font-weight:800;color:#f3f5f7;margin:8px 0 6px;">Defensive</div>${buildGroupBars('D')}` : ''}
         ${groups.P && groups.P.length ? `<div style="font-size:24px;font-weight:800;color:#f3f5f7;margin:8px 0 6px;">Possession</div>${buildGroupBars('P')}` : ''}
