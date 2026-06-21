@@ -26,6 +26,9 @@ export default function ScoutingCardModal({ player, onClose }) {
   const [power, setPower] = useState(3);
   const [fitness, setFitness] = useState(3);
   const [formRatings, setFormRatings] = useState(['', '', '', '', '']);
+  const [currentStarsOverride, setCurrentStarsOverride] = useState('');
+  const [potentialStarsOverride, setPotentialStarsOverride] = useState('');
+  const [seasonAvgRatingOverride, setSeasonAvgRatingOverride] = useState('');
   const formAvg = (() => {
     const nums = formRatings.map(r => parseFloat(r)).filter(n => !isNaN(n));
     if (!nums.length) return null;
@@ -71,6 +74,9 @@ export default function ScoutingCardModal({ player, onClose }) {
         potentialLevel, potentialScore: Number(potentialScore),
         physical: { Pace: pace, Power: power, Fitness: fitness },
         formRatings,
+        currentStarsOverride,
+        potentialStarsOverride,
+        seasonAvgRatingOverride,
         avgRating5: formAvg !== null ? formAvg.toFixed(1) : '',
         positionImageDataUrl: posImageDataUrl,
         playerPhotoDataUrl,
@@ -217,6 +223,10 @@ export default function ScoutingCardModal({ player, onClose }) {
             <label style={labelStyle}>Score</label>
             <input style={inputStyle} type="number" value={currentScore} onChange={e => setCurrentScore(e.target.value)} />
           </div>
+          <div style={{ width: 80 }}>
+            <label style={labelStyle}>Stars</label>
+            <input style={inputStyle} type="number" step="0.1" value={currentStarsOverride} onChange={e => setCurrentStarsOverride(e.target.value)} placeholder="auto" />
+          </div>
         </div>
 
         <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
@@ -227,6 +237,10 @@ export default function ScoutingCardModal({ player, onClose }) {
           <div style={{ width: 80 }}>
             <label style={labelStyle}>Score</label>
             <input style={inputStyle} type="number" value={potentialScore} onChange={e => setPotentialScore(e.target.value)} />
+          </div>
+          <div style={{ width: 80 }}>
+            <label style={labelStyle}>Stars</label>
+            <input style={inputStyle} type="number" step="0.1" value={potentialStarsOverride} onChange={e => setPotentialStarsOverride(e.target.value)} placeholder="auto" />
           </div>
         </div>
 
@@ -262,6 +276,14 @@ export default function ScoutingCardModal({ player, onClose }) {
           </div>
           <div style={{ fontSize: 10, color: '#6b7a99', marginTop: 6 }}>
             Average: {formAvg !== null ? formAvg.toFixed(1) : '—'} (colour and average calculated automatically)
+          </div>
+        </div>
+
+        <div style={sectionStyle}>
+          <label style={labelStyle}>Season Stats Avg Rating Override</label>
+          <input style={inputStyle} value={seasonAvgRatingOverride} onChange={e => setSeasonAvgRatingOverride(e.target.value)} placeholder="auto from data" />
+          <div style={{ fontSize: 10, color: '#6b7a99', marginTop: 4 }}>
+            This is the "Av Rat" pill in the Season Stats row (left panel) — separate from the Last 5 Match Ratings above.
           </div>
         </div>
 

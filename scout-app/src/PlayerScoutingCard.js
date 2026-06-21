@@ -473,8 +473,8 @@ function formTierColor(val) {
   return '#ff3131';
 }
 
-function starsHtml(score, size = 20) {
-  const stars = scoreToStars(score);
+function starsHtml(score, size = 20, directStars = null) {
+  const stars = directStars != null ? Math.round(directStars * 2) / 2 : scoreToStars(score);
   const full = Math.floor(stars);
   const half = (stars - full) >= 0.5 ? 1 : 0;
   const empty = 5 - full - half;
@@ -739,7 +739,7 @@ export function buildCardElement(player, manual = {}) {
       ${[['Profile ▸',267,true],['Performance ▾',442,false],['Similar Players ▾',697,false],['Club Fit ▾',977,false],['Video ▾',1174,false],['Compare ▾',1318,false]].map(([t,x,act]) => `<div style="position:absolute;left:${x}px;top:227px;font-size:27.9px;font-weight:700;color:${act ? '#fff' : '#b4b4b4'};">${t}</div>`).join('')}
 
       <!-- CLUB CREST / NAME / LEAGUE -->
-      ${(crest && !manual.hideTeamBadge) ? `<div style="position:absolute;left:756px;top:36px;width:112px;height:156px;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${crest}');"></div>` : ''}
+      ${(crest && !manual.hideTeamBadge) ? `<div style="position:absolute;left:756px;top:39px;width:118px;height:164px;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${crest}');"></div>` : ''}
       <div style="position:absolute;left:884px;top:57px;font-size:26.6px;font-weight:700;color:#fff;">${player.team}</div>
       <div style="position:absolute;left:884px;top:97px;display:flex;align-items:center;gap:10px;">
         <span style="font-size:21.3px;font-weight:500;color:#fff;white-space:nowrap;">${LEAGUE_DISPLAY_NAMES[player.league] || player.league}</span>
@@ -814,7 +814,7 @@ export function buildCardElement(player, manual = {}) {
 
       <!-- FORM -->
       <div style="position:absolute;top:909px;left:1520px;width:400px;text-align:center;font-size:27.9px;font-weight:600;color:#c0c0c0;">FORM</div>
-      <div style="position:absolute;top:950px;left:1520px;width:400px;display:flex;justify-content:center;gap:7px;">
+      <div style="position:absolute;top:958px;left:1520px;width:400px;display:flex;justify-content:center;gap:7px;">
         ${(manual.formRatings || []).slice(0,5).map(r => {
           const v = parseFloat(r);
           const c = isNaN(v) ? '#4b5563' : formTierColor(v);
@@ -822,7 +822,7 @@ export function buildCardElement(player, manual = {}) {
         }).join('')}
       </div>
       <div style="position:absolute;top:1038px;left:1520px;width:400px;display:flex;align-items:center;justify-content:center;gap:10px;">
-        <span style="font-size:16px;font-weight:700;color:#000;background:${formTierColor(manual.avgRating5 || 6.5)};border-radius:6px;padding:3px 9px;">${manual.avgRating5 || '—'}</span>
+        <span style="font-size:16px;font-weight:700;color:#000;background:${formTierColor(manual.avgRating5 || 6.5)};border-radius:6px;padding:1px 6px;">${manual.avgRating5 || '—'}</span>
         <span style="font-size:17.3px;font-weight:600;color:#c0c0c0;">Last 5 Avg Rating</span>
       </div>
 
@@ -844,7 +844,7 @@ export function buildCardElement(player, manual = {}) {
         const heads = cols.map(([lab,x]) => `<div style="position:absolute;top:319px;left:${x}px;font-size:20px;font-weight:500;color:#d9d9d9;">${lab}</div>`).join('');
         const vals = cols.map(([,x,v,vx]) => `<div style="position:absolute;top:357px;left:${vx || x}px;font-size:20px;font-weight:500;color:#fff;">${v}</div>`).join('');
         const avHead = `<div style="position:absolute;top:319px;left:782px;font-size:20px;font-weight:500;color:#d9d9d9;">Av Rat</div>`;
-        const avVal = seasonRating ? `<span style="position:absolute;top:354px;left:782px;font-size:20px;font-weight:500;color:#000;background:${formTierColor(seasonRating)};border-radius:6px;padding:2px 10px;">${seasonRating}</span>` : '';
+        const avVal = (manual.seasonAvgRatingOverride || seasonRating) ? `<span style="position:absolute;top:354px;left:782px;font-size:20px;font-weight:500;color:#000;background:${formTierColor(manual.seasonAvgRatingOverride || seasonRating)};border-radius:6px;padding:2px 10px;">${manual.seasonAvgRatingOverride || seasonRating}</span>` : '';
         return heads + vals + avHead + avVal;
       })()}
 
@@ -883,10 +883,10 @@ export function buildCardElement(player, manual = {}) {
 
       <!-- CURRENT / POTENTIAL LEVEL -->
       <div style="position:absolute;top:894px;left:938px;font-size:26.6px;font-weight:700;color:#fff;">CURRENT LEVEL</div>
-      <div style="position:absolute;top:940px;left:941px;">${starsHtml(manual.currentScore ?? player.careerScore, 40)}</div>
+      <div style="position:absolute;top:940px;left:941px;">${starsHtml(manual.currentScore ?? player.careerScore, 40, manual.currentStarsOverride != null && manual.currentStarsOverride !== '' ? Number(manual.currentStarsOverride) : null)}</div>
       <div style="position:absolute;top:948px;left:1133px;font-size:20px;font-weight:500;color:#c0c0c0;">${manual.currentLevel || scoreLabel(player.careerScore)}</div>
       <div style="position:absolute;top:995px;left:938px;font-size:26.6px;font-weight:700;color:#fff;">POTENTIAL LEVEL</div>
-      <div style="position:absolute;top:1033px;left:937px;">${starsHtml(manual.potentialScore ?? player.potentialScore ?? player.careerScore, 40)}</div>
+      <div style="position:absolute;top:1033px;left:937px;">${starsHtml(manual.potentialScore ?? player.potentialScore ?? player.careerScore, 40, manual.potentialStarsOverride != null && manual.potentialStarsOverride !== '' ? Number(manual.potentialStarsOverride) : null)}</div>
       <div style="position:absolute;top:1039px;left:1133px;font-size:20px;font-weight:500;color:#c0c0c0;">${manual.potentialLevel || scoreLabel(player.potentialScore || player.careerScore)}</div>
 
       <!-- TEMP build marker (remove once font is confirmed) -->
