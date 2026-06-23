@@ -637,6 +637,7 @@ export function buildCardElement(player, manual = {}) {
   const groups = sd.g || {};
   const allSeasons = player.allSeasonsSummary || [];
   const latestSeason = allSeasons[0] || {};
+  const isGK = (player.position || '').split(',')[0].trim() === 'GK' || (player.roleKey || '').startsWith('GK');
   const photo = manual.playerPhotoUrl || photoUrl(player.name, player.team);
   const crest = player.teamFotmobId ? `${CREST_BASE}${player.teamFotmobId}.png` : '';
 
@@ -678,11 +679,11 @@ export function buildCardElement(player, manual = {}) {
   const totalRows = groupKeys.reduce((s, k) => s + (groups[k] ? groups[k].length : 0), 0);
   const CHART_HEIGHT = 671;
   const FIXED_OVERHEAD = 193;
-  const REFERENCE_ROW_H = 20;
+  const MIN_ROW_H = 8;
+  const MAX_ROW_H = 32; // cap so bars don't become absurdly tall on very sparse sets
   let rowH = totalRows > 0
-    ? Math.min(REFERENCE_ROW_H, Math.floor((CHART_HEIGHT - FIXED_OVERHEAD) / totalRows) - 1)
-    : REFERENCE_ROW_H;
-  rowH = Math.max(8, rowH); // never shrink below a legible minimum
+    ? Math.max(MIN_ROW_H, Math.min(MAX_ROW_H, Math.floor((CHART_HEIGHT - FIXED_OVERHEAD) / totalRows) - 1))
+    : MAX_ROW_H;
   if (typeof window !== 'undefined' && window.__FORCE_ROW_H) rowH = window.__FORCE_ROW_H;
 
   const buildGroupBars = (grpKey) => {
@@ -814,11 +815,12 @@ export function buildCardElement(player, manual = {}) {
 
       <!-- FORM -->
       <div style="position:absolute;top:909px;left:1520px;width:400px;text-align:center;font-size:27.9px;font-weight:600;color:#c0c0c0;">FORM</div>
-      <div style="position:absolute;top:958px;left:1520px;width:400px;display:flex;justify-content:center;gap:7px;">
+      <div style="position:absolute;top:958px;left:1520px;width:400px;display:flex;justify-content:center;align-items:flex-end;gap:6px;height:62px;">
         ${(manual.formRatings || []).slice(0,5).map(r => {
           const v = parseFloat(r);
           const c = isNaN(v) ? '#4b5563' : formTierColor(v);
-          return `<span style="width:25px;height:62px;border-radius:6px;background:${c};"></span>`;
+          const h = isNaN(v) ? 62 : Math.max(8, Math.round((v / 10) * 62));
+          return `<span style="width:25px;height:${h}px;border-radius:6px;background:${c};display:inline-block;"></span>`;
         }).join('')}
       </div>
       <div style="position:absolute;top:1038px;left:1520px;width:400px;display:flex;align-items:center;justify-content:center;gap:10px;">
@@ -833,7 +835,14 @@ export function buildCardElement(player, manual = {}) {
         <span style="font-size:20px;font-weight:500;color:#fff;max-width:170px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${leagueDisplayName}</span>
       </div>
       ${(() => {
-        const cols = [
+        const cols = isGK ? [
+          ['Apps', 235, latestSeason.m != null ? String(latestSeason.m) : '—', 250],
+          ['GA',   332, latestSeason.g != null ? String(latestSeason.g) : '—'],
+          ['xGA',  408, latestSeason.a != null ? String(latestSeason.a) : '—'],
+          ['CS',   500, fmt1(xgSeason)],
+          ['Save%',595, fmt1(xaSeason)],
+          ['Mins', 678, latestSeason.mins ? latestSeason.mins.toLocaleString() : '—'],
+        ] : [
           ['Apps', 235, latestSeason.m != null ? String(latestSeason.m) : '—', 250],
           ['Gls',  332, latestSeason.g != null ? String(latestSeason.g) : '0'],
           ['Asts', 408, latestSeason.a != null ? String(latestSeason.a) : '0'],
@@ -850,7 +859,7 @@ export function buildCardElement(player, manual = {}) {
 
       <!-- PERCENTILE CHART (Feature F) -->
       <div style="position:absolute;top:409px;left:0px;width:876px;height:671px;overflow:hidden;box-sizing:border-box;padding-left:24px;">
-        ${groups.A && groups.A.length ? `<div style="font-size:24px;font-weight:800;color:#f3f5f7;margin:0 0 6px;">Attacking</div>${buildGroupBars('A')}` : ''}
+        ${groups.A && groups.A.length ? `<div style="font-size:24px;font-weight:800;color:#f3f5f7;margin:0 0 6px;">${isGK ? 'Goalkeeping' : 'Attacking'}</div>${buildGroupBars('A')}` : ''}
         ${groups.D && groups.D.length ? `<div style="font-size:24px;font-weight:800;color:#f3f5f7;margin:8px 0 6px;">Defensive</div>${buildGroupBars('D')}` : ''}
         ${groups.P && groups.P.length ? `<div style="font-size:24px;font-weight:800;color:#f3f5f7;margin:8px 0 6px;">Possession</div>${buildGroupBars('P')}` : ''}
         <div style="display:flex;align-items:center;margin-top:6px;">
