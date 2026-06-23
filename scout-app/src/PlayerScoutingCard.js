@@ -680,10 +680,17 @@ export function buildCardElement(player, manual = {}) {
   // axis row + footer row add ~60px more on top of that = ~193px total overhead.
   const groupKeys = ['A', 'D', 'P'];
   const totalRows = groupKeys.reduce((s, k) => s + (groups[k] ? groups[k].length : 0), 0);
+  const activeSections = groupKeys.filter(k => groups[k] && groups[k].length > 0).length;
   const CHART_HEIGHT = 671;
-  const FIXED_OVERHEAD = 193;
+  // Overhead computed dynamically from actual sections present:
+  //   first section title: 24px*1.15 line-height + 6px bottom margin ≈ 34px
+  //   each additional section title: 34px + 8px top margin = 42px
+  //   axis tick row: 28px, footer Percentile Rank: 24px
+  const OVERHEAD_PER_SECTION = 34 + (activeSections - 1) * 42;
+  const OVERHEAD_AXIS_FOOTER = 52;
+  const FIXED_OVERHEAD = OVERHEAD_PER_SECTION + OVERHEAD_AXIS_FOOTER;
   const MIN_ROW_H = 8;
-  const MAX_ROW_H = 45; // cap so bars don't become absurdly tall on very sparse sets
+  const MAX_ROW_H = 55;
   let rowH = totalRows > 0
     ? Math.max(MIN_ROW_H, Math.min(MAX_ROW_H, Math.floor((CHART_HEIGHT - FIXED_OVERHEAD) / totalRows) - 1))
     : MAX_ROW_H;
