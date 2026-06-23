@@ -682,13 +682,11 @@ export function buildCardElement(player, manual = {}) {
   const totalRows = groupKeys.reduce((s, k) => s + (groups[k] ? groups[k].length : 0), 0);
   const activeSections = groupKeys.filter(k => groups[k] && groups[k].length > 0).length;
   const CHART_HEIGHT = 671;
-  // Overhead computed dynamically from actual sections present:
-  //   first section title: 24px*1.15 line-height + 6px bottom margin ≈ 34px
-  //   each additional section title: 34px + 8px top margin = 42px
-  //   axis tick row: 28px, footer Percentile Rank: 24px
-  const OVERHEAD_PER_SECTION = 34 + (activeSections - 1) * 42;
-  const OVERHEAD_AXIS_FOOTER = 52;
-  const FIXED_OVERHEAD = OVERHEAD_PER_SECTION + OVERHEAD_AXIS_FOOTER;
+  // FIXED_OVERHEAD empirically verified: 193px for 3-section outfield card (Marmoush, 25 rows -> 3px gap).
+  // For fewer sections, subtract ~48px per missing section (each section title block ≈ 48px incl margins).
+  const FULL_OVERHEAD = 193;
+  const SECTION_TITLE_H = 48;
+  const FIXED_OVERHEAD = FULL_OVERHEAD - (3 - activeSections) * SECTION_TITLE_H;
   const MIN_ROW_H = 8;
   const MAX_ROW_H = 55;
   let rowH = totalRows > 0
