@@ -657,6 +657,9 @@ export function buildCardElement(player, manual = {}) {
   const per90ToSeason = (v) => (v != null && minsNum) ? (v * minsNum / 90) : null;
   const xgSeason = per90ToSeason(findRawA('xg'));
   const xaSeason = per90ToSeason(findRawA('xa', 'expected assists'));
+  // GK-specific: Save Rate is a % value stored directly (not per-90), Goals Conceded is per-90
+  const gkSaveRate = findRawA('save rate');
+  const gkGoalsConceded = per90ToSeason(findRawA('goals conceded'));
   const fmt1 = (v) => (v == null ? '—' : v.toFixed(1));
   const leagueName = latestSeason.l || player.league || '';
   const leagueDisplayName = (LEAGUE_DISPLAY_NAMES[leagueName] && LEAGUE_DISPLAY_NAMES[leagueName].length <= 14) ? LEAGUE_DISPLAY_NAMES[leagueName] : leagueName;
@@ -680,7 +683,7 @@ export function buildCardElement(player, manual = {}) {
   const CHART_HEIGHT = 671;
   const FIXED_OVERHEAD = 193;
   const MIN_ROW_H = 8;
-  const MAX_ROW_H = 32; // cap so bars don't become absurdly tall on very sparse sets
+  const MAX_ROW_H = 45; // cap so bars don't become absurdly tall on very sparse sets
   let rowH = totalRows > 0
     ? Math.max(MIN_ROW_H, Math.min(MAX_ROW_H, Math.floor((CHART_HEIGHT - FIXED_OVERHEAD) / totalRows) - 1))
     : MAX_ROW_H;
@@ -837,10 +840,10 @@ export function buildCardElement(player, manual = {}) {
       ${(() => {
         const cols = isGK ? [
           ['Apps', 235, latestSeason.m != null ? String(latestSeason.m) : '—', 250],
-          ['GA',   332, latestSeason.g != null ? String(latestSeason.g) : '—'],
+          ['GA',   332, fmt1(gkGoalsConceded)],
           ['xGA',  408, latestSeason.a != null ? String(latestSeason.a) : '—'],
-          ['CS',   500, fmt1(xgSeason)],
-          ['Save%',595, fmt1(xaSeason)],
+          ['CS',   500, '—'],
+          ['Save%',595, gkSaveRate != null ? gkSaveRate.toFixed(1)+'%' : '—'],
           ['Mins', 678, latestSeason.mins ? latestSeason.mins.toLocaleString() : '—'],
         ] : [
           ['Apps', 235, latestSeason.m != null ? String(latestSeason.m) : '—', 250],
@@ -853,7 +856,7 @@ export function buildCardElement(player, manual = {}) {
         const heads = cols.map(([lab,x]) => `<div style="position:absolute;top:319px;left:${x}px;font-size:20px;font-weight:500;color:#d9d9d9;">${lab}</div>`).join('');
         const vals = cols.map(([,x,v,vx]) => `<div style="position:absolute;top:357px;left:${vx || x}px;font-size:20px;font-weight:500;color:#fff;">${v}</div>`).join('');
         const avHead = `<div style="position:absolute;top:319px;left:782px;font-size:20px;font-weight:500;color:#d9d9d9;">Av Rat</div>`;
-        const avVal = (manual.seasonAvgRatingOverride || seasonRating) ? `<span style="position:absolute;top:354px;left:782px;font-size:20px;font-weight:500;color:#000;background:${formTierColor(manual.seasonAvgRatingOverride || seasonRating)};border-radius:6px;padding:2px 10px;">${manual.seasonAvgRatingOverride || seasonRating}</span>` : '';
+        const avVal = (manual.seasonAvgRatingOverride || seasonRating) ? `<span style="position:absolute;top:354px;left:782px;font-size:20px;font-weight:700;color:#000;background:${formTierColor(manual.seasonAvgRatingOverride || seasonRating)};border-radius:6px;padding:2px 10px;">${manual.seasonAvgRatingOverride || seasonRating}</span>` : '';
         return heads + vals + avHead + avVal;
       })()}
 
