@@ -535,7 +535,7 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
             {Object.keys(groups).length>0&&(
               <div>
                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
-                  <div style={SEC}>Metric Percentiles — {selS} · vs same league & position</div>
+                  <div style={SEC}>Metric Percentiles — {selS} · vs <span style={{color:'#60a5fa'}}>{sd.position?.split(',')[0]||player.position?.split(',')[0]||ROLE_KEY_LABELS[player.roleKey]||'same position'}</span> in {sd.league||player.league}</div>
                   <div style={{display:'flex',gap:4}}>
                     {Object.keys(GRP_LABELS).filter(k=>groups[k]?.length>0).map(k=>(
                       <button key={k} onClick={()=>setGrpTab(k)} style={{padding:'3px 9px',borderRadius:5,border:`1px solid ${grpTab===k?'#3b7de8':'#1e2d45'}`,background:grpTab===k?'#0e2040':'transparent',color:grpTab===k?'#60a5fa':'#64748b',fontSize:10,fontWeight:700,cursor:'pointer'}}>

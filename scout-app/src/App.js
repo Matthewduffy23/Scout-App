@@ -53,9 +53,13 @@ const METRIC_OPTIONS=[
 ];
 
 function getMetricPct(player,metricKey){
-  const seasons=Object.values(player.seasonsDetail||{});
-  if(!seasons.length) return null;
-  const sd=seasons[0];
+  // Use allSeasonsSummary[0].s to get the correct latest season key,
+  // since Object.values ordering is not guaranteed and breaks for mid-season transfer players
+  const sdMap=player.seasonsDetail||{};
+  const latestKey=(player.allSeasonsSummary&&player.allSeasonsSummary[0])
+    ? player.allSeasonsSummary[0].s
+    : Object.keys(sdMap)[0];
+  const sd=sdMap[latestKey]||{};
   for(const grp of ['A','D','P']){
     const found=(sd.g?.[grp]||[]).find(x=>x[0]===metricKey);
     if(found) return {pct:found[1],val:found[2]};
@@ -342,7 +346,7 @@ export default function App(){
       for(const mf of metricFilters){
         if(!mf.key) continue;
         const m=getMetricPct(p,mf.key);
-        if(!m) continue;
+        if(!m) return false; // player doesn't have this metric — exclude
         if(m.pct<mf.min||m.pct>mf.max) return false;
       }
       return true;
@@ -403,6 +407,10 @@ export default function App(){
         <aside style={T.sb}>
           <div style={T.fg}>
             <div style={T.sw}><span style={T.si3}>⌕</span><input style={T.si2} placeholder="Player or team…" value={search} onChange={e=>{setSearch(e.target.value);setPage(0);}}/></div>
+          </div>
+          <div style={T.fg}>
+            <span style={T.fl}>Nationality</span>
+            <div style={T.sw}><span style={T.si3}>🏳</span><input style={T.si2} placeholder="e.g. France, Brazil…" value={natFilter} onChange={e=>{setNatFilter(e.target.value);setPage(0);}}/></div>
           </div>
           <div style={T.dv}/>
 
@@ -561,6 +569,22 @@ export default function App(){
                 <span style={{fontSize:9.5,color:showYouth?'#e2e8f4':'#94a3b8'}}>Show Youth</span>
               </label>
             </div>
+            {showYouth&&(
+              <div style={{marginBottom:8}}>
+                <span style={{fontSize:9,color:'#94a3b8',display:'block',marginBottom:4}}>Specific Youth League</span>
+                <select style={T.sel} onChange={e=>{
+                  const v=e.target.value;
+                  if(!v){setActivePresetLeagues([...YOUTH_LEAGUES]);}
+                  else{setActivePresetLeagues([v]);}
+                  setPage(0);
+                }}>
+                  <option value="">All Youth Leagues</option>
+                  {[...YOUTH_LEAGUES].sort((a,b)=>a.localeCompare(b)).map(lg=>(
+                    <option key={lg} value={lg}>{lg}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             {/* League Strength Range */}
             <div style={{marginBottom:8}}>
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
@@ -643,10 +667,6 @@ export default function App(){
                   <span key={v} onClick={()=>{setGbeMin(v);setPage(0);}} style={{padding:'2px 7px',borderRadius:4,fontSize:10,cursor:'pointer',background:gbeMin===v?'#3b82f6':'#1e293b',color:gbeMin===v?'#fff':'#94a3b8',border:`1px solid ${gbeMin===v?'#3b82f6':'#334155'}`}}>{v===0?'Any':v+'+'}</span>
                 ))}
               </div>
-            </div>
-            <div style={{marginTop:6}}>
-              <div style={{fontSize:10,color:'#94a3b8',marginBottom:3}}>NATIONALITY</div>
-              <input value={natFilter} onChange={e=>{setNatFilter(e.target.value);setPage(0);}} placeholder="e.g. France, Brazil" style={{width:'100%',background:'#1e293b',border:'1px solid #334155',borderRadius:4,padding:'4px 7px',fontSize:10,color:'#e2e8f4',outline:'none'}}/>
             </div>
             <label style={T.cr} onClick={()=>{setNotPlayingOnly(p=>!p);setPage(0);}}>
               <div style={T.cb(notPlayingOnly)}>{notPlayingOnly&&<span style={{color:'#fff',fontSize:8,lineHeight:1}}>✓</span>}</div>

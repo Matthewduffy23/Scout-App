@@ -351,6 +351,13 @@ function leagueToCountry(leagueName) {
   // strip trailing " N." or " N" pattern, e.g. "England 1." -> "England"
   return String(leagueName).replace(/\s+\d+\.?\s*$/, '').trim();
 }
+function cmToFeet(cm) {
+  if (!cm || isNaN(cm)) return null;
+  const totalInches = Math.round(Number(cm) / 2.54);
+  const feet = Math.floor(totalInches / 12);
+  const inches = totalInches % 12;
+  return `${feet}'${inches}"`;
+}
 
 // ── Colours sampled directly from the real Canva export ──────────────────────
 const BG          = '#0a0f1c';          // Feature F PAGE_BG
@@ -655,8 +662,9 @@ export function buildCardElement(player, manual = {}) {
     return hit && typeof hit[2] === 'number' ? hit[2] : null;
   };
   const per90ToSeason = (v) => (v != null && minsNum) ? (v * minsNum / 90) : null;
-  const xgSeason = per90ToSeason(findRawA('xg'));
-  const xaSeason = per90ToSeason(findRawA('xa', 'expected assists'));
+  // Use direct season totals from CSV if available, fall back to per-90 derivation
+  const xgSeason = player.xgSeason != null ? player.xgSeason : per90ToSeason(findRawA('xg'));
+  const xaSeason = player.xaSeason != null ? player.xaSeason : per90ToSeason(findRawA('xa', 'expected assists'));
   // GK-specific: Save Rate is a % value stored directly (not per-90), Goals Conceded is per-90
   const gkSaveRate = findRawA('save rate');
   const gkGoalsConceded = per90ToSeason(findRawA('goals conceded'));
@@ -760,7 +768,7 @@ export function buildCardElement(player, manual = {}) {
       <div style="position:absolute;left:1164px;top:45px;width:3px;height:155px;background:#737373;"></div>
 
       <!-- INFO BOX -->
-      ${[['Height:', manual.height || '—'], ['Value:', manual.valueOverride || (player.xValue > 0 ? formatMV(player.xValue) : '—')], ['Contract:', (player.contractYear && player.contractYear !== 'nan') ? String(player.contractYear) : '—']].map(([k,v],i) => `
+      ${[['Height:', manual.height || cmToFeet(player.height) || '—'], ['Value:', manual.valueOverride || (player.xValue > 0 ? formatMV(player.xValue) : '—')], ['Contract:', (player.contractYear && player.contractYear !== 'nan') ? String(player.contractYear) : '—']].map(([k,v],i) => `
         <div style="position:absolute;left:1196px;top:${56 + i*50}px;font-size:20px;font-weight:600;color:#d9d9d9;">${k}</div>
         <div style="position:absolute;left:1311px;top:${56 + i*50}px;font-size:20px;font-weight:600;color:#fff;">${v}</div>`).join('')}
 
