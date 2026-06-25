@@ -361,17 +361,28 @@ function getSimilar(player, allPlayers){
 
 export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=false}) {
   const SEASON_ORDER_ARR=['2025-26','2026','2025','2024-25','2024','2023-24','2023','2022-23','2022','2021-22','2021','2020-21','2020','2019-20','2018-19'];
-  const seasons=Object.keys(player.seasonsDetail||{}).sort((a,b)=>{
-    const ai=SEASON_ORDER_ARR.indexOf(a); const bi=SEASON_ORDER_ARR.indexOf(b);
-    return (ai===-1?99:ai)-(bi===-1?99:bi);
-  });
-  const [selS,setSelS]=useState(seasons[0]||player.season);
+  // Build selectable options from allSeasonsSummary standard rows, deduped by season+league
+  const allStdRows=(()=>{
+    const seen=new Set();
+    return (player.allSeasonsSummary||[])
+      .filter(s=>(s.type==='standard'||!s.type)&&SEASON_ORDER_ARR.includes(s.s))
+      .filter(s=>{const k=`${s.s}||${s.l}`;if(seen.has(k))return false;seen.add(k);return true;})
+      .sort((a,b)=>{const ai=SEASON_ORDER_ARR.indexOf(a.s),bi=SEASON_ORDER_ARR.indexOf(b.s);return (ai===-1?99:ai)-(bi===-1?99:bi);});
+  })();
+  // selS = "season||league" e.g. "2025-26||Czech1."
+  const defaultSelS=allStdRows.length>0?`${allStdRows[0].s}||${allStdRows[0].l}`:'';
+  const [selS,setSelS]=useState(defaultSelS);
+  const selSParts=selS.split('||');
+  const selSKey=selSParts[0]||'';
+  const selSLeague=selSParts[1]||'';
   const [tab,setTab]=useState('profile');
   const [grpTab,setGrpTab]=useState('A');
   const [rawModeLocal,setRawModeLocal]=useState(false);
   const [showScoutingCard,setShowScoutingCard]=useState(false);
   const rawMode = rawModeProp || rawModeLocal; // external prop takes precedence
-  const sd=(player.seasonsDetail||{})[selS]||{};
+  const sd=(player.seasonsDetail||{})[selSKey]||{};
+  // Find the matching allSeasonsSummary row for accurate team/league/score display
+  const selectedRow=allStdRows.find(r=>r.s===selSKey&&r.l===selSLeague)||allStdRows.find(r=>r.s===selSKey)||{};
   // Raw scores: simple average of sh season scores (no ls weighting)
   // Raw scores: stored during data build as true league-relative (no ls weighting)
   const rawCareer = rawMode ? (player.careerRaw??player.careerScore) : player.careerScore;
@@ -413,7 +424,7 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
               <div style={{padding:'3px 10px',borderRadius:6,background:scoreBandColor(player.careerScore),color:'#fff',fontSize:14,fontWeight:900}}>{player.careerScore.toFixed(1)}</div>
               {hasUpside&&<div style={{padding:'3px 10px',borderRadius:6,background:'#14532d',color:'#22c55e',fontSize:12,fontWeight:700}}>↑ {player.potentialScore?.toFixed(1)} pot</div>}
             </div>
-            <div style={{fontSize:11,color:'#64748b',marginBottom:8}}>{sd.team||player.team} · {sd.league||player.league}</div>
+            <div style={{fontSize:11,color:'#64748b',marginBottom:8}}>{selectedRow.team||sd.team||player.team} · {selectedRow.l||sd.league||player.league}</div>
             <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
               <Tag label={ROLE_KEY_LABELS[player.roleKey]} bg='#0e1e38' color='#93c5fd'/>
               {(()=>{
@@ -505,18 +516,18 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
             )}
 
             {/* Season selector */}
-            {seasons.length>0&&(
+            {allStdRows.length>0&&(
               <div>
                 <div style={SEC}>Season</div>
                 <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
-                  {seasons.map(s=>{
-                    const sd2=(player.seasonsDetail||{})[s]||{};
-                    return <button key={s} onClick={()=>setSelS(s)} style={{padding:'4px 10px',borderRadius:6,border:`1px solid ${selS===s?'#3b7de8':'#1e2d45'}`,background:selS===s?'#0e2040':'transparent',color:selS===s?'#60a5fa':'#64748b',fontSize:11,fontWeight:600,cursor:'pointer'}}>
-                      {s} <span style={{opacity:.5,fontSize:9}}>{(sd2.league||'').replace('England','Eng').replace('Scotland','Sco').replace(' ','')}</span>
+                  {allStdRows.map(r=>{
+                    const key=`${r.s}||${r.l}`;
+                    return <button key={key} onClick={()=>setSelS(key)} style={{padding:'4px 10px',borderRadius:6,border:`1px solid ${selS===key?'#3b7de8':'#1e2d45'}`,background:selS===key?'#0e2040':'transparent',color:selS===key?'#60a5fa':'#64748b',fontSize:11,fontWeight:600,cursor:'pointer'}}>
+                      {r.s} <span style={{opacity:.5,fontSize:9}}>{(r.l||'').replace('England','Eng').replace('Scotland','Sco').replace(' ','')}</span>
                     </button>;
                   })}
                 </div>
-                {sd.team&&<div style={{marginTop:6,fontSize:10.5,color:'#64748b'}}><strong style={{color:'#94a3b8'}}>{sd.team}</strong> · {sd.league} · Score: <strong style={{color:scoreBandColor(sd.score||0)}}>{(sd.score||0).toFixed(1)}</strong> · {scoreLabel(sd.score||0)}</div>}
+                {selectedRow.team&&<div style={{marginTop:6,fontSize:10.5,color:'#64748b'}}><strong style={{color:'#94a3b8'}}>{selectedRow.team}</strong> · {selectedRow.l} · Score: <strong style={{color:scoreBandColor(sd.score||0)}}>{sd.score?(sd.score).toFixed(1):'—'}</strong> · {sd.score?scoreLabel(sd.score):'—'}</div>}
               {/* Season stats */}
               {(player.allSeasonsSummary||[]).length>0&&(
               <div style={{marginTop:10,background:'#07090f',border:'1px solid #131c2e',borderRadius:7,overflow:'hidden'}}>
@@ -529,7 +540,7 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
                   <tbody>
                     {(()=>{const seen=new Set();return (player.allSeasonsSummary||[]).filter(s=>{const k=`${s.s}-${s.l}-${s.team}-${s.mins}`;if(seen.has(k))return false;seen.add(k);return true;}).sort((a,b)=>{const ai=SEASON_ORDER_ARR.indexOf(a.s);const bi=SEASON_ORDER_ARR.indexOf(b.s);return (ai===-1?99:ai)-(bi===-1?99:bi);}).map((s,i)=>(
                       <tr key={`${s.s}-${s.l}-${s.team}`} style={{background:i%2===0?'transparent':'#07090f'}}>
-                        <td style={{padding:'5px 8px',fontSize:11,color:'#e2e8f4',fontWeight:selS===s.s?700:400,borderBottom:'1px solid #0d1525'}}>{s.s}</td>
+                        <td style={{padding:'5px 8px',fontSize:11,color:'#e2e8f4',fontWeight:selSKey===s.s?700:400,borderBottom:'1px solid #0d1525'}}>{s.s}</td>
                         <td style={{padding:'5px 8px',fontSize:11,color:'#94a3b8',borderBottom:'1px solid #0d1525'}}>{s.team}</td>
                         <td style={{padding:'5px 8px',fontSize:10,color:'#64748b',borderBottom:'1px solid #0d1525'}}>{(s.l||'').replace('England','Eng').replace('Scotland','Sco').replace(' ','')}</td>
                         <td style={{padding:'5px 8px',fontSize:11,color:'#e2e8f4',borderBottom:'1px solid #0d1525'}}>{s.m}</td>
@@ -565,7 +576,7 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
             {Object.keys(groups).length>0&&(
               <div>
                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
-                  <div style={SEC}>Metric Percentiles — {selS} · vs <span style={{color:'#60a5fa'}}>{sd.position?.split(',')[0]||player.position?.split(',')[0]||ROLE_KEY_LABELS[player.roleKey]||'same position'}</span> in {sd.league||player.league}</div>
+                  <div style={SEC}>Metric Percentiles — {selSKey} · vs <span style={{color:'#60a5fa'}}>{sd.position?.split(',')[0]||player.position?.split(',')[0]||ROLE_KEY_LABELS[player.roleKey]||'same position'}</span> in {selectedRow.l||sd.league||player.league}</div>
                   <div style={{display:'flex',gap:4}}>
                     {Object.keys(GRP_LABELS).filter(k=>groups[k]?.length>0).map(k=>(
                       <button key={k} onClick={()=>setGrpTab(k)} style={{padding:'3px 9px',borderRadius:5,border:`1px solid ${grpTab===k?'#3b7de8':'#1e2d45'}`,background:grpTab===k?'#0e2040':'transparent',color:grpTab===k?'#60a5fa':'#64748b',fontSize:10,fontWeight:700,cursor:'pointer'}}>
@@ -584,7 +595,7 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
             {/* Role scores */}
             {sortedRoles.length>0&&(
               <div>
-                <div style={SEC}>Role Scores — {selS} (unweighted vs league peers)</div>
+                <div style={SEC}>Role Scores — {selSKey} · {selectedRow.l||sd.league||''} (unweighted vs league peers)</div>
                 <div style={{display:'flex',flexDirection:'column',gap:5}}>
                   {sortedRoles.map(([role,score])=>(
                     <div key={role} style={{display:'flex',alignItems:'center',gap:8}}>
@@ -635,8 +646,21 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
             {player.sh&&player.sh.length>=2&&(
               <div>
                 <div style={SEC}>Career Trajectory</div>
-                <div style={{background:'#07090f',borderRadius:7,padding:'8px 4px 2px',border:'1px solid #0d1220'}}>
-                  <Trajectory history={player.sh} rawMode={rawMode}/>
+                <div style={{background:'#07090f',borderRadius:7,padding:'8px 4px 2px',border:'1px solid #0d1220'}}>\
+                  {(()=>{
+                    // Deduplicate sh: one point per season, standard leagues only (type from allSeasonsSummary), highest sc
+                    const standardLeagues=new Set((player.allSeasonsSummary||[]).filter(s=>s.type==='standard'||!s.type).map(s=>s.s));
+                    const byS={};
+                    (player.sh||[]).forEach(h=>{
+                      if(h.sc==null) return;
+                      if(!byS[h.s]||h.sc>byS[h.s].sc) byS[h.s]=h;
+                    });
+                    const dedupSh=Object.values(byS).sort((a,b)=>{
+                      const ai=SEASON_ORDER_ARR.indexOf(a.s),bi=SEASON_ORDER_ARR.indexOf(b.s);
+                      return (bi===-1?-99:bi)-(ai===-1?-99:ai);
+                    }).reverse();
+                    return <Trajectory history={dedupSh} rawMode={rawMode}/>;
+                  })()}
                 </div>
               </div>
             )}

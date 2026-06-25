@@ -125,13 +125,16 @@ export default function ScoutingCardModal({ player, onClose }) {
               setSelectedLeague(sl === 'auto' ? '' : sl);
             }}>
               <option value="auto||auto">Auto (most recent)</option>
-              {(player.allSeasonsSummary || [])
-                .filter(s => s.type === 'standard' || !s.type)
+              {(()=>{
+                const seen=new Set();
+                return (player.allSeasonsSummary || [])
+                  .filter(s => s.type === 'standard' || !s.type)
+                  .filter(s => { const k=`${s.s}||${s.l}`; if(seen.has(k)) return false; seen.add(k); return true; })
                 .map((s, i) => (
                   <option key={`${s.s}-${s.l}-${i}`} value={`${s.s}||${s.l}`}>
                     {s.s} — {s.team} ({(s.l||'').replace('England ','Eng ').replace('Scotland ','Sco ')})
                   </option>
-                ))}
+                ))})()}
             </select>
           </div>
         </div>

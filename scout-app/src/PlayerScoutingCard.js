@@ -688,10 +688,11 @@ export function buildCardElement(player, manual = {}) {
   const crest = player.teamFotmobId ? `${CREST_BASE}${player.teamFotmobId}.png` : '';
 
   // Performance trend: standard league seasons only, 400+ mins, deduplicated per season
-  // (take highest-mins entry per season), sorted oldest→newest, last 3
+  // Uses best valid role score from seasonsDetail[s].roles for that season (unweighted)
+  // Falls back to h.sc if no role scores exist for that season
+  const trendValidRoles = (posKey && TREND_ROLES[posKey]) || [];
   const standardSeasons = (player.allSeasonsSummary || [])
     .filter(s => s.type === 'standard' && (s.mins || 0) >= 400);
-  // Deduplicate: per season string, keep the one with most minutes
   const bestStandardBySeason = {};
   standardSeasons.forEach(s => {
     if (!bestStandardBySeason[s.s] || s.mins > bestStandardBySeason[s.s].mins) {
@@ -701,13 +702,19 @@ export function buildCardElement(player, manual = {}) {
   const trendSeasonKeys = Object.keys(bestStandardBySeason)
     .sort((a, b) => TREND_SEASON_ORDER.indexOf(a) - TREND_SEASON_ORDER.indexOf(b))
     .slice(-3);
-  // Match sh entries to the chosen season keys (take the sh entry for each season)
   const shBySeason = {};
   (player.sh || []).forEach(h => { if (h.sc != null) shBySeason[h.s] = h; });
-  const trendData = trendSeasonKeys
-    .map(sk => shBySeason[sk] ? { season: sk, score: Math.round(shBySeason[sk].sc) } : null)
-    .filter(Boolean);
-  const trendValidRoles = (posKey && TREND_ROLES[posKey]) || [];
+  const trendData = trendSeasonKeys.map(sk => {
+    // Get per-season role scores from seasonsDetail
+    const sdEntry = (player.seasonsDetail || {})[sk] || {};
+    const seasonRoles = sdEntry.roles || {};
+    const bestRoleScore = Object.entries(seasonRoles)
+      .filter(([role]) => trendValidRoles.length === 0 || trendValidRoles.includes(role))
+      .sort((a, b) => b[1] - a[1])[0]?.[1] || null;
+    // Fall back to h.sc if no role scores
+    const score = bestRoleScore != null ? Math.round(bestRoleScore) : (shBySeason[sk] ? Math.round(shBySeason[sk].sc) : null);
+    return score != null ? { season: sk, score } : null;
+  }).filter(Boolean);
   const trendTopRole = Object.entries(rcs)
     .filter(([role]) => trendValidRoles.length === 0 || trendValidRoles.includes(role))
     .sort((a, b) => b[1] - a[1])[0]?.[0] || null;
