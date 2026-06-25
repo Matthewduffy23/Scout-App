@@ -1,6 +1,22 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { scoreBandColor, formatMV, formatFoot, ROLE_KEY_LABELS, divColor, LEAGUE_STRENGTHS, scoreLabel, scoreToStars, starLabel, POSITION_ATTRIBUTES, playerHasAttribute, GBE_LEAGUE_BANDS } from './constants';
 
+const APP_ROLES = {
+  GK:  ['Shot Stopper GK','Ball Playing GK','Sweeper GK'],
+  CB:  ['Ball Playing CB','Wide CB','Box Defender'],
+  FB:  ['Build Up FB','Attacking FB','Defensive FB'],
+  CM:  ['Deep Playmaker CM','Advanced Playmaker CM','Defensive CM','Ball Carrying CM','Goal Threat CM'],
+  ATT: ['Playmaker ATT','Goal Threat ATT','Ball Carrier ATT'],
+  CF:  ['Target Man CF','Goal Threat CF','Link Up CF'],
+};
+const TOKEN_TO_POS_KEY = {
+  GK:'GK', CB:'CB', LCB:'CB', RCB:'CB',
+  LB:'FB', RB:'FB', LWB:'FB', RWB:'FB',
+  DMF:'CM', LDMF:'CM', RDMF:'CM', LCMF:'CM', RCMF:'CM',
+  AMF:'ATT', LAMF:'ATT', LW:'ATT', LWF:'ATT', RAMF:'ATT', RW:'ATT', RWF:'ATT',
+  CF:'CF',
+};
+
 const COUNTRY_CODES = {'England':'gb-eng','Scotland':'gb-sct','Wales':'gb-wls','Northern Ireland':'gb-nir','Ireland':'ie','Republic of Ireland':'ie','France':'fr','Germany':'de','Spain':'es','Italy':'it','Portugal':'pt','Netherlands':'nl','Belgium':'be','Brazil':'br','Argentina':'ar','USA':'us','Mexico':'mx','Colombia':'co','Uruguay':'uy','Chile':'cl','Paraguay':'py','Ecuador':'ec','Peru':'pe','Venezuela':'ve','Morocco':'ma','Algeria':'dz','Egypt':'eg','Nigeria':'ng','Tunisia':'tn','South Africa':'za','Senegal':'sn','Ghana':'gh','Ivory Coast':'ci','Cameroon':'cm','Mali':'ml','Guinea':'gn','Japan':'jp','Korea':'kr','Saudi Arabia':'sa','Australia':'au','China':'cn','Turkey':'tr','Ukraine':'ua','Russia':'ru','Poland':'pl','Czech Republic':'cz','Hungary':'hu','Romania':'ro','Serbia':'rs','Croatia':'hr','Slovakia':'sk','Slovenia':'si','Bulgaria':'bg','Greece':'gr','Austria':'at','Switzerland':'ch','Denmark':'dk','Sweden':'se','Norway':'no','Finland':'fi','Iceland':'is','Albania':'al','Bosnia':'ba','Kosovo':'xk','North Macedonia':'mk','Montenegro':'me','Armenia':'am','Georgia':'ge','Azerbaijan':'az','Kazakhstan':'kz','Latvia':'lv','Lithuania':'lt','Estonia':'ee','Moldova':'md','Belarus':'by','Iceland':'is','Canada':'ca','Panama':'pa','Costa Rica':'cr','Jamaica':'jm','Trinidad and Tobago':'tt','Martinique':'mq','Guadeloupe':'gp','Curacao':'cw','Honduras':'hn','Guatemala':'gt','El Salvador':'sv','Nicaragua':'ni','Haiti':'ht','Dominican Republic':'do','Cuba':'cu','Angola':'ao','Zambia':'zm','Zimbabwe':'zw','Mozambique':'mz','Tanzania':'tz','Kenya':'ke','Uganda':'ug','Ethiopia':'et','Sudan':'sd','Libya':'ly','Mauritania':'mr','Sierra Leone':'sl','Liberia':'lr','Guinea-Bissau':'gw','Gambia':'gm','Burkina Faso':'bf','Niger':'ne','Chad':'td','Benin':'bj','Togo':'tg','Rwanda':'rw','Burundi':'bi','DR Congo':'cd','Congo':'cg','Gabon':'ga','Equatorial Guinea':'gq','Comoros':'km','Cape Verde':'cv','Sao Tome':'st','Israel':'il','Lebanon':'lb','Jordan':'jo','Syria':'sy','Iraq':'iq','Iran':'ir','Kuwait':'kw','Qatar':'qa','UAE':'ae','Bahrain':'bh','Oman':'om','Yemen':'ye','Afghanistan':'af','Pakistan':'pk','India':'in','Sri Lanka':'lk','Bangladesh':'bd','Nepal':'np','Thailand':'th','Vietnam':'vn','Indonesia':'id','Malaysia':'my','Philippines':'ph','Myanmar':'mm','Cambodia':'kh','Laos':'la','Mongolia':'mn','New Zealand':'nz','Papua New Guinea':'pg','Fiji':'fj','Palestine':'ps','Kosovo':'xk','Taiwan':'tw','Hong Kong':'hk','Bolivia':'bo'};
 function flagUrl(country) {
   if(!country) return '';
@@ -370,7 +386,13 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
   const groups=sd.g||{};
   const gap=player.peakScore-player.careerScore;
   const ls=LEAGUE_STRENGTHS[player.league]||40;
-  const sortedRoles=Object.entries(roles).sort((a,b)=>b[1]-a[1]);
+  const rawPosToken=(player.position||'').split(',')[0].trim();
+  const posKey=TOKEN_TO_POS_KEY[rawPosToken]||player.roleKey;
+  const validRoles=(posKey&&APP_ROLES[posKey])||[];
+  const sortedRoles=Object.entries(roles)
+    .filter(([role])=>validRoles.length===0||validRoles.includes(role))
+    .sort((a,b)=>b[1]-a[1])
+    .slice(0,3);
   const topRole=sortedRoles[0]?.[0];
   const hasUpside=player.potentialScore>player.careerScore+3;
 

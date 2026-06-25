@@ -295,6 +295,28 @@ const LEAGUE_DISPLAY_NAMES = {
   'Wales 1.':'Cymru Premier',
 };
 
+// ── Role constants — must match Streamlit ROLE_BUCKETS exactly ──────────────
+const APP_ROLES = {
+  GK:  ['Shot Stopper GK','Ball Playing GK','Sweeper GK'],
+  CB:  ['Ball Playing CB','Wide CB','Box Defender'],
+  FB:  ['Build Up FB','Attacking FB','Defensive FB'],
+  CM:  ['Deep Playmaker CM','Advanced Playmaker CM','Defensive CM','Ball Carrying CM','Goal Threat CM'],
+  ATT: ['Playmaker ATT','Goal Threat ATT','Ball Carrier ATT'],
+  CF:  ['Target Man CF','Goal Threat CF','Link Up CF'],
+};
+// Roles used for the performance trend label — excludes certain roles per position
+const TREND_ROLES = {
+  ...APP_ROLES,
+  CF: ['Goal Threat CF','Link Up CF'],
+};
+const TOKEN_TO_POS_KEY = {
+  GK:'GK', CB:'CB', LCB:'CB', RCB:'CB',
+  LB:'FB', RB:'FB', LWB:'FB', RWB:'FB',
+  DMF:'CM', LDMF:'CM', RDMF:'CM', LCMF:'CM', RCMF:'CM',
+  AMF:'ATT', LAMF:'ATT', LW:'ATT', LWF:'ATT', RAMF:'ATT', RW:'ATT', RWF:'ATT',
+  CF:'CF',
+};
+
 // ── Country name (as found in birthCountry field) → ISO 3166-1 alpha-2 code, for flagcdn ──
 const POSITION_LABELS = {
   'GK':'Goalkeeper (GK)',
@@ -640,7 +662,13 @@ export function buildCardElement(player, manual = {}) {
     || Object.keys(seasonsDetailObj).sort().reverse()[0];
   const sd = seasonsDetailObj[mostRecentSeasonKey] || Object.values(seasonsDetailObj)[0] || {};
   const rcs = player.roleCareerScores || {};
-  const sortedRoles = Object.entries(rcs).slice(0, 3);
+  const rawPosToken = (player.position || '').split(',')[0].trim();
+  const posKey = TOKEN_TO_POS_KEY[rawPosToken] || player.roleKey;
+  const validRoles = (posKey && APP_ROLES[posKey]) || [];
+  const sortedRoles = Object.entries(rcs)
+    .filter(([role]) => validRoles.length === 0 || validRoles.includes(role))
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3);
   const groups = sd.g || {};
   const allSeasons = player.allSeasonsSummary || [];
   const latestSeason = allSeasons[0] || {};
@@ -649,6 +677,10 @@ export function buildCardElement(player, manual = {}) {
   const crest = player.teamFotmobId ? `${CREST_BASE}${player.teamFotmobId}.png` : '';
 
   const trendData = (player.sh || []).slice(-3).map(h => ({ season: h.s, score: Math.round(h.sc) }));
+  const trendValidRoles = (posKey && TREND_ROLES[posKey]) || [];
+  const trendTopRole = Object.entries(rcs)
+    .filter(([role]) => trendValidRoles.length === 0 || trendValidRoles.includes(role))
+    .sort((a, b) => b[1] - a[1])[0]?.[0] || null;
 
   // ── Season-stats values ──────────────────────────────────────────────────
   // xG / xA are not stored as season totals in players.json, but the bar-chart
@@ -782,7 +814,7 @@ export function buildCardElement(player, manual = {}) {
       <div style="position:absolute;top:15px;left:1520px;width:400px;display:flex;justify-content:center;"><div style="width:345px;height:229px;">${pitchDiagramSvg(player, manual)}</div></div>
 
       <!-- BEST ROLE -->
-      <div style="position:absolute;top:245px;left:1520px;width:400px;text-align:center;font-size:27.9px;font-weight:700;color:#d9d9d9;">BEST ROLE <span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#4b5563;color:#cbd5e1;font-size:16px;font-weight:700;vertical-align:middle;">i</span></div>
+      <div style="position:absolute;top:245px;left:1520px;width:400px;text-align:center;font-size:27.9px;font-weight:700;color:#d9d9d9;">BEST ROLE${sortedRoles[0] ? ` — ${sortedRoles[0][0]}` : ''} <span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#4b5563;color:#cbd5e1;font-size:16px;font-weight:700;vertical-align:middle;">i</span></div>
 
       <!-- ROLE PILLS -->
       <div style="position:absolute;top:291px;left:1520px;width:400px;">${rolesHtml}</div>
@@ -792,7 +824,7 @@ export function buildCardElement(player, manual = {}) {
 
       ${trendData.length >= 2 ? `
       <!-- PERFORMANCE TREND -->
-      <div style="position:absolute;top:482px;left:1520px;width:400px;text-align:center;font-size:27.9px;font-weight:700;color:#d9d9d9;">PERFORMANCE TREND</div>
+      <div style="position:absolute;top:482px;left:1520px;width:400px;text-align:center;font-size:27.9px;font-weight:700;color:#d9d9d9;">PERFORMANCE TREND${trendTopRole ? ` — ${trendTopRole}` : ''}</div>
       <div style="position:absolute;top:524px;left:1520px;width:400px;display:flex;justify-content:center;">${trendSvg(trendData)}</div>` : ''}
 
       <!-- DIVIDER 2 -->
