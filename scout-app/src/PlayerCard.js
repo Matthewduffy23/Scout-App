@@ -82,7 +82,7 @@ function Bar({ label, pct, val }) {
         <div style={{position:'absolute',left:'50%',top:-1,width:1,height:9,background:'#1e2d45'}}/>
       </div>
       <div style={{width:26,fontSize:11,fontWeight:800,color:divColor(v),textAlign:'right',flexShrink:0}}>{v}</div>
-      {val!=null&&<div style={{width:42,fontSize:10,color:'#475569',textAlign:'right',flexShrink:0}}>{typeof val==='number'?val.toFixed(2):val}</div>}
+      {val!=null&&<div style={{width:42,fontSize:8,color:'#475569',textAlign:'right',flexShrink:0}}>{typeof val==='number'?val.toFixed(2):val}</div>}
     </div>
   );
 }
