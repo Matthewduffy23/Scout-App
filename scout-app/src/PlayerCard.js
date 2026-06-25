@@ -527,7 +527,7 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
                     ))}
                   </tr></thead>
                   <tbody>
-                    {(player.allSeasonsSummary||[]).sort((a,b)=>{const ai=SEASON_ORDER_ARR.indexOf(a.s);const bi=SEASON_ORDER_ARR.indexOf(b.s);return (ai===-1?99:ai)-(bi===-1?99:bi);}).map((s,i)=>(
+                    {(()=>{const seen=new Set();return (player.allSeasonsSummary||[]).filter(s=>{const k=`${s.s}-${s.l}-${s.team}-${s.mins}`;if(seen.has(k))return false;seen.add(k);return true;}).sort((a,b)=>{const ai=SEASON_ORDER_ARR.indexOf(a.s);const bi=SEASON_ORDER_ARR.indexOf(b.s);return (ai===-1?99:ai)-(bi===-1?99:bi);}).map((s,i)=>(
                       <tr key={`${s.s}-${s.l}-${s.team}`} style={{background:i%2===0?'transparent':'#07090f'}}>
                         <td style={{padding:'5px 8px',fontSize:11,color:'#e2e8f4',fontWeight:selS===s.s?700:400,borderBottom:'1px solid #0d1525'}}>{s.s}</td>
                         <td style={{padding:'5px 8px',fontSize:11,color:'#94a3b8',borderBottom:'1px solid #0d1525'}}>{s.team}</td>
@@ -537,7 +537,7 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
                         <td style={{padding:'5px 8px',fontSize:11,fontWeight:s.g>0?700:400,color:s.g>0?'#4ade80':'#94a3b8',borderBottom:'1px solid #0d1525'}}>{s.g}</td>
                         <td style={{padding:'5px 8px',fontSize:11,fontWeight:s.a>0?700:400,color:s.a>0?'#60a5fa':'#94a3b8',borderBottom:'1px solid #0d1525'}}>{s.a}</td>
                       </tr>
-                    ))}
+                    ))})()}
                   </tbody>
                 </table>
               </div>
