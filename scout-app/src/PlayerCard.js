@@ -402,8 +402,7 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
   const validRoles=(posKey&&APP_ROLES[posKey])||[];
   const sortedRoles=Object.entries(roles)
     .filter(([role])=>validRoles.length===0||validRoles.includes(role))
-    .sort((a,b)=>b[1]-a[1])
-    .slice(0,3);
+    .sort((a,b)=>b[1]-a[1]);
   const topRole=sortedRoles[0]?.[0];
   const hasUpside=player.potentialScore>player.careerScore+3;
 

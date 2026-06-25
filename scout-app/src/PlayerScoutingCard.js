@@ -522,7 +522,7 @@ function barRow(label, pct, rawVal, rowH = 18) {
       <div style="flex:1;position:relative;height:${barH}px;">
         <div style="position:absolute;inset:0;background:repeating-linear-gradient(to right, rgba(255,255,255,.16) 0 1px, transparent 1px 10%), ${BAR_TRACK};"></div>
         <div style="position:relative;height:100%;width:${p}%;background:${bc};">
-          ${rawVal ? `<span style="position:absolute;left:6px;top:50%;transform:translateY(-50%);font-size:13.3px;font-weight:400;color:#0b0b0b;white-space:nowrap;">${rawVal}</span>` : ''}
+          ${rawVal ? `<span style="position:absolute;left:6px;top:50%;transform:translateY(-50%);font-size:12.3px;font-weight:400;color:#0b0b0b;white-space:nowrap;">${rawVal}</span>` : ''}
         </div>
         <div style="position:absolute;left:50%;top:0;width:2px;height:100%;background:repeating-linear-gradient(to bottom, rgba(255,255,255,.95) 0 4px, transparent 4px 7px);"></div>
       </div>
@@ -532,9 +532,12 @@ function barRow(label, pct, rawVal, rowH = 18) {
 function rolePill(roleName, score, width = 320) {
   const sc = Math.round(score);
   const bc = scoreTierColor(sc);
+  const displayName = ROLE_DISPLAY_NAMES[roleName] || roleName;
+  const tightSpacing = (roleName === 'Deep Playmaker CM' || roleName === 'Advanced Playmaker CM');
+  const letterSpacingStyle = tightSpacing ? 'letter-spacing:-0.5px;' : '';
   return `
     <div style="display:flex;align-items:center;justify-content:space-between;width:${width}px;height:46px;margin:0 auto 14px;">
-      <span style="background:#737373;border-radius:10px;padding:3px 9px;font-size:26.6px;color:#fff;font-weight:600;white-space:nowrap;">${roleName}</span>
+      <span style="background:#737373;border-radius:10px;padding:3px 9px;font-size:26.6px;color:#fff;font-weight:600;white-space:nowrap;${letterSpacingStyle}">${displayName}</span>
       <span style="font-size:25.3px;font-weight:700;padding:1px 8px;border-radius:8px;min-width:42px;text-align:center;background:${bc};color:#000000;">${sc}</span>
     </div>`;
 }
@@ -580,10 +583,10 @@ const POS_TO_KEY = {
 
 // ── Position pitch diagram: 13 fixed slots, default grey, optional 7-tier colours ──
 const PITCH_SLOTS = {
-  LB:  [98.6, 31.5],  LWB: [172.8, 110],  LW:  [260.7, 31.5],
+  LB:  [98.6, 31.5],  LWB: [165, 46],     LW:  [260.7, 31.5],
   LCB: [83.6, 76.4],  GK:  [33, 110],     DM:  [113.5, 110],
-  CM:  [172.8, 110.0], AM: [230.3, 110.0], ST: [287.9, 110.6],
-  RCB: [83.4, 138.5], RB:  [98.6, 190.1], RWB: [172.8, 110],  RW: [260.7, 189.9],
+  CM:  [165, 110.0],  AM:  [230.3, 110.0], ST: [287.9, 110.6],
+  RCB: [83.4, 138.5], RB:  [98.6, 190.1], RWB: [165, 174],   RW: [260.7, 189.9],
 };
 // Raw position tokens (from player.position / POSITION_LABELS) -> pitch slot key
 const TOKEN_TO_SLOT = {
@@ -601,6 +604,65 @@ const POSITION_COLOR_TIERS = {
   Seventh:   '#ff3131',
 };
 const PITCH_DOT_DEFAULT = '#a3a3a3';
+
+// ── Metric label display map: pipeline label → display label ──────────────
+const METRIC_LABEL_MAP = {
+  // Attacking
+  'Crosses': 'Crosses',
+  'Accurate crosses, %': 'Crossing Accuracy %',
+  'Crossing accuracy': 'Crossing Accuracy %',
+  'Non-penalty goals': 'Goals: Non-Penalty',
+  'Non-penalty goals per 90': 'Goals: Non-Penalty',
+  'xG': 'xG',
+  'xA': 'Expected Assists',
+  'Offensive duels': 'Offensive Duels',
+  'Offensive duels won, %': 'Offensive Duel Success %',
+  'Progressive runs': 'Progressive Runs',
+  'Shots': 'Shots',
+  'Shots on target, %': 'Shooting Accuracy %',
+  'Touches in box': 'Touches in Opposition Box',
+  'Touches in box per 90': 'Touches in Opposition Box',
+  // Defensive
+  'Aerial duels': 'Aerial Duels',
+  'Aerial duels won, %': 'Aerial Duel Success %',
+  'Defensive duels': 'Defensive Duels',
+  'Defensive duels won, %': 'Defensive Duel Success %',
+  'PAdj Interceptions': 'PAdj. Interceptions',
+  'PAdj. Interceptions': 'PAdj. Interceptions',
+  // Possession
+  'Deep completions': 'Deep Completions',
+  'Deep completions per 90': 'Deep Completions',
+  'Dribbles': 'Dribbles',
+  'Successful dribbles, %': 'Dribbling Success %',
+  'Key passes': 'Key Passes',
+  'Key passes per 90': 'Key Passes',
+  'Forward passes': 'Forward Passes',
+  'Forward passes per 90': 'Forward Passes',
+  'Accurate forward passes, %': 'Forward Passing %',
+  'Long passes': 'Long Passes',
+  'Long passes per 90': 'Long Passes',
+  'Accurate long passes, %': 'Long Passing %',
+  'Passes': 'Passes',
+  'Passes per 90': 'Passes',
+  'Accurate passes, %': 'Passing %',
+  'Passes to final third': 'Passes to Final 3rd',
+  'Passes to final third per 90': 'Passes to Final 3rd',
+  'Accurate passes to final third, %': 'Passes to Final 3rd %',
+  'Passes to penalty area': 'Passes to Penalty Area',
+  'Passes to penalty area per 90': 'Passes to Penalty Area',
+  'Accurate passes to penalty area, %': 'Pass to Penalty Area %',
+  'Progressive passes': 'Progressive Passes',
+  'Progressive passes per 90': 'Progressive Passes',
+  'Accurate progressive passes, %': 'Progressive Passing %',
+  'Smart passes': 'Smart Passes',
+  'Smart passes per 90': 'Smart Passes',
+};
+
+// ── Role display name overrides for scouting card ───────────────────────
+const ROLE_DISPLAY_NAMES = {
+  'Deep Playmaker CM': 'Deep Playmaker',
+  'Advanced Playmaker CM': 'Adv. Playmaker CM',
+};
 
 function pitchDiagramSvg(player, manual) {
   // manual.positionColors: optional { SLOT_KEY: 'Primary'|'Secondary'|...|hex } map
@@ -784,9 +846,10 @@ export function buildCardElement(player, manual = {}) {
 
   const buildGroupBars = (grpKey) => {
     const rows = groups[grpKey] || [];
-    return rows.map(([label, pct, val]) =>
-      barRow(label, pct, typeof val === 'number' ? val.toFixed(2) : val, rowH)
-    ).join('');
+    return rows.map(([label, pct, val]) => {
+      const displayLabel = METRIC_LABEL_MAP[label] || label;
+      return barRow(displayLabel, pct, typeof val === 'number' ? val.toFixed(2) : val, rowH);
+    }).join('');
   };
 
   const rolesHtml = sortedRoles.map(([role, score]) => rolePill(role, score)).join('');
