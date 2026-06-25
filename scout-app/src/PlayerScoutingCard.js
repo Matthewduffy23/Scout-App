@@ -672,11 +672,16 @@ export function buildCardElement(player, manual = {}) {
     : null;
   const sdTeam = selectedSummaryRow ? selectedSummaryRow.team : (sd.team || player.team);
   const sdLeague = selectedSummaryRow ? selectedSummaryRow.l : (sd.league || player.league);
+  // Only show crest if selected team matches current team (fotmobId is only stored for current team)
+  const crestId = sdTeam === player.team ? player.teamFotmobId : '';
   const rcs = player.roleCareerScores || {};
   const rawPosToken = (player.position || '').split(',')[0].trim();
   const posKey = TOKEN_TO_POS_KEY[rawPosToken] || player.roleKey;
   const validRoles = (posKey && APP_ROLES[posKey]) || [];
-  const sortedRoles = Object.entries(rcs)
+  // Use per-season role scores from seasonsDetail if available, fall back to career scores
+  const seasonRoles = sd.roles || {};
+  const roleSource = Object.keys(seasonRoles).length > 0 ? seasonRoles : rcs;
+  const sortedRoles = Object.entries(roleSource)
     .filter(([role]) => validRoles.length === 0 || validRoles.includes(role))
     .sort((a, b) => b[1] - a[1])
     .slice(0, 3);
@@ -685,7 +690,7 @@ export function buildCardElement(player, manual = {}) {
   const latestSeason = allSeasons[0] || {};
   const isGK = (player.position || '').split(',')[0].trim() === 'GK' || (player.roleKey || '').startsWith('GK');
   const photo = manual.playerPhotoUrl || photoUrl(player.name, player.team);
-  const crest = player.teamFotmobId ? `${CREST_BASE}${player.teamFotmobId}.png` : '';
+  const crest = crestId ? `${CREST_BASE}${crestId}.png` : '';
 
   // Performance trend: standard league seasons only, 400+ mins, deduplicated per season
   // Uses best valid role score from seasonsDetail[s].roles for that season (unweighted)

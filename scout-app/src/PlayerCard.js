@@ -657,8 +657,9 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
                     });
                     const dedupSh=Object.values(byS).sort((a,b)=>{
                       const ai=SEASON_ORDER_ARR.indexOf(a.s),bi=SEASON_ORDER_ARR.indexOf(b.s);
-                      return (bi===-1?-99:bi)-(ai===-1?-99:ai);
-                    }).reverse();
+                      const an=ai===-1?999:ai, bn=bi===-1?999:bi;
+                      return bn-an; // higher index = older season = drawn left
+                    });
                     return <Trajectory history={dedupSh} rawMode={rawMode}/>;
                   })()}
                 </div>
