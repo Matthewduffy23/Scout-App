@@ -46,6 +46,8 @@ export default function ScoutingCardModal({ player, onClose }) {
   const [birthDate, setBirthDate] = useState('');
   const [importanceOverride, setImportanceOverride] = useState('');
   const [positionColors, setPositionColors] = useState({});
+  const [selectedSeasonKey, setSelectedSeasonKey] = useState('');
+  const [selectedLeague, setSelectedLeague] = useState('');
   const [busy, setBusy] = useState(false);
 
   const handlePosImage = (e) => {
@@ -89,6 +91,8 @@ export default function ScoutingCardModal({ player, onClose }) {
         birthDate,
         importanceOverride,
         positionColors,
+        selectedSeasonKey: selectedSeasonKey || undefined,
+        selectedLeague: selectedLeague || undefined,
       });
     } catch (err) {
       alert('Failed to generate card: ' + err.message);
@@ -110,6 +114,26 @@ export default function ScoutingCardModal({ player, onClose }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <div style={{ fontSize: 16, fontWeight: 800, color: '#fff' }}>Scouting Card — {player.name}</div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: 18, cursor: 'pointer' }}>×</button>
+        </div>
+
+        <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
+          <div style={{ flex: 1 }}>
+            <label style={labelStyle}>Season / Team for Card</label>
+            <select style={inputStyle} value={selectedSeasonKey + '||' + selectedLeague} onChange={e => {
+              const [sk, sl] = e.target.value.split('||');
+              setSelectedSeasonKey(sk === 'auto' ? '' : sk);
+              setSelectedLeague(sl === 'auto' ? '' : sl);
+            }}>
+              <option value="auto||auto">Auto (most recent)</option>
+              {(player.allSeasonsSummary || [])
+                .filter(s => s.type === 'standard' || !s.type)
+                .map((s, i) => (
+                  <option key={`${s.s}-${s.l}-${i}`} value={`${s.s}||${s.l}`}>
+                    {s.s} — {s.team} ({(s.l||'').replace('England ','Eng ').replace('Scotland ','Sco ')})
+                  </option>
+                ))}
+            </select>
+          </div>
         </div>
 
         <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>

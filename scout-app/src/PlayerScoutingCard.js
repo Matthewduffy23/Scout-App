@@ -658,9 +658,18 @@ export function buildCardElement(player, manual = {}) {
   // Man City). Pick explicitly using the most recent season key from allSeasonsSummary,
   // falling back to sorting seasonsDetail's own keys descending if that's unavailable.
   const seasonsDetailObj = player.seasonsDetail || {};
-  const mostRecentSeasonKey = (player.allSeasonsSummary && player.allSeasonsSummary[0] && player.allSeasonsSummary[0].s)
+  // manual.selectedSeasonKey: season string (e.g. "2025-26") chosen by user in modal
+  // manual.selectedLeague: league string to pair with it (for mid-season transfers)
+  const chosenSeasonKey = manual.selectedSeasonKey
+    || (player.allSeasonsSummary && player.allSeasonsSummary[0] && player.allSeasonsSummary[0].s)
     || Object.keys(seasonsDetailObj).sort().reverse()[0];
-  const sd = seasonsDetailObj[mostRecentSeasonKey] || Object.values(seasonsDetailObj)[0] || {};
+  const sd = seasonsDetailObj[chosenSeasonKey] || Object.values(seasonsDetailObj)[0] || {};
+  // If user selected a specific team/league row from allSeasonsSummary, override sd fields
+  const selectedSummaryRow = manual.selectedLeague
+    ? (player.allSeasonsSummary || []).find(s => s.s === chosenSeasonKey && s.l === manual.selectedLeague)
+    : null;
+  const sdTeam = selectedSummaryRow ? selectedSummaryRow.team : (sd.team || player.team);
+  const sdLeague = selectedSummaryRow ? selectedSummaryRow.l : (sd.league || player.league);
   const rcs = player.roleCareerScores || {};
   const rawPosToken = (player.position || '').split(',')[0].trim();
   const posKey = TOKEN_TO_POS_KEY[rawPosToken] || player.roleKey;
@@ -676,11 +685,27 @@ export function buildCardElement(player, manual = {}) {
   const photo = manual.playerPhotoUrl || photoUrl(player.name, player.team);
   const crest = player.teamFotmobId ? `${CREST_BASE}${player.teamFotmobId}.png` : '';
 
-  const minsLookup = Object.fromEntries((player.allSeasonsSummary || []).map(s => [s.s, s.mins || 0]));
-  const trendData = (player.sh || [])
-    .filter(h => h.sc != null && (minsLookup[h.s] || 0) >= 400)
-    .slice(-3)
-    .map(h => ({ season: h.s, score: Math.round(h.sc) }));
+  // Performance trend: standard league seasons only, 400+ mins, deduplicated per season
+  // (take highest-mins entry per season), sorted oldest→newest, last 3
+  const standardSeasons = (player.allSeasonsSummary || [])
+    .filter(s => s.type === 'standard' && (s.mins || 0) >= 400);
+  // Deduplicate: per season string, keep the one with most minutes
+  const bestStandardBySeason = {};
+  standardSeasons.forEach(s => {
+    if (!bestStandardBySeason[s.s] || s.mins > bestStandardBySeason[s.s].mins) {
+      bestStandardBySeason[s.s] = s;
+    }
+  });
+  const TREND_SEASON_ORDER = ['2018-19','2019-20','2020-21','2021','2021-22','2022','2022-23','2023','2023-24','2024','2024-25','2025','2025-26','2026'];
+  const trendSeasonKeys = Object.keys(bestStandardBySeason)
+    .sort((a, b) => TREND_SEASON_ORDER.indexOf(a) - TREND_SEASON_ORDER.indexOf(b))
+    .slice(-3);
+  // Match sh entries to the chosen season keys (take the sh entry for each season)
+  const shBySeason = {};
+  (player.sh || []).forEach(h => { if (h.sc != null) shBySeason[h.s] = h; });
+  const trendData = trendSeasonKeys
+    .map(sk => shBySeason[sk] ? { season: sk, score: Math.round(shBySeason[sk].sc) } : null)
+    .filter(Boolean);
   const trendValidRoles = (posKey && TREND_ROLES[posKey]) || [];
   const trendTopRole = Object.entries(rcs)
     .filter(([role]) => trendValidRoles.length === 0 || trendValidRoles.includes(role))
@@ -691,7 +716,7 @@ export function buildCardElement(player, manual = {}) {
   // group A carries the per-90 raw values (e.g. ['xG', pct, 0.42]). Wyscout-style
   // season totals are per90 × (mins / 90) — this reproduces the Canva numbers
   // (Adu: 0.38/90 × 1320min ≈ 5.6 → 5.8 shown). Falls back to '—' if unavailable.
-  const minsNum = latestSeason.mins || sd.mins || 0;
+  const minsNum = statsRow.mins || sd.mins || 0;
   const findRawA = (...labels) => {
     const arr = groups.A || [];
     const hit = arr.find(r => labels.includes(String(r[0]).toLowerCase().trim()));
@@ -705,7 +730,9 @@ export function buildCardElement(player, manual = {}) {
   const gkSaveRate = findRawA('save rate');
   const gkGoalsConceded = per90ToSeason(findRawA('goals conceded'));
   const fmt1 = (v) => (v == null ? '—' : v.toFixed(1));
-  const leagueName = latestSeason.l || player.league || '';
+  const leagueName = sdLeague || player.league || '';
+  // For stats row, use the selected summary row if available, otherwise fall back to latestSeason
+  const statsRow = selectedSummaryRow || latestSeason;
   const leagueDisplayName = (LEAGUE_DISPLAY_NAMES[leagueName] && LEAGUE_DISPLAY_NAMES[leagueName].length <= 14) ? LEAGUE_DISPLAY_NAMES[leagueName] : leagueName;
 
   // ── Dynamic row sizing: bar chart panel has a fixed vertical budget (1080 - panelTop - footerH).
@@ -793,10 +820,10 @@ export function buildCardElement(player, manual = {}) {
 
       <!-- CLUB CREST / NAME / LEAGUE -->
       ${(crest && !manual.hideTeamBadge) ? `<div style="position:absolute;left:756px;top:39px;width:118px;height:164px;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${crest}');"></div>` : ''}
-      <div style="position:absolute;left:884px;top:57px;font-size:26.6px;font-weight:700;color:#fff;">${player.team}</div>
+      <div style="position:absolute;left:884px;top:57px;font-size:26.6px;font-weight:700;color:#fff;">${sdTeam}</div>
       <div style="position:absolute;left:884px;top:97px;display:flex;align-items:center;gap:10px;">
-        <span style="font-size:21.3px;font-weight:500;color:#fff;white-space:nowrap;">${LEAGUE_DISPLAY_NAMES[player.league] || player.league}</span>
-        ${countryToIso2(leagueToCountry(player.league)) ? `<div style="width:31px;height:19px;flex-shrink:0;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(leagueToCountry(player.league))}.png');"></div>` : ''}
+        <span style="font-size:21.3px;font-weight:500;color:#fff;white-space:nowrap;">${LEAGUE_DISPLAY_NAMES[sdLeague] || sdLeague}</span>
+        ${countryToIso2(leagueToCountry(sdLeague)) ? `<div style="width:31px;height:19px;flex-shrink:0;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(leagueToCountry(sdLeague))}.png');"></div>` : ''}
       </div>
       <div style="position:absolute;left:884px;top:147px;font-size:21.3px;color:#d9d9d9;">${manual.importanceOverride || playerImportanceLabel(player)}</div>
 
@@ -818,7 +845,7 @@ export function buildCardElement(player, manual = {}) {
       <div style="position:absolute;top:15px;left:1520px;width:400px;display:flex;justify-content:center;"><div style="width:345px;height:229px;">${pitchDiagramSvg(player, manual)}</div></div>
 
       <!-- BEST ROLE -->
-      <div style="position:absolute;top:245px;left:1520px;width:400px;text-align:center;font-size:27.9px;font-weight:700;color:#d9d9d9;">BEST ROLE${sortedRoles[0] ? ` — ${sortedRoles[0][0]}` : ''} <span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#4b5563;color:#cbd5e1;font-size:16px;font-weight:700;vertical-align:middle;">i</span></div>
+      <div style="position:absolute;top:245px;left:1520px;width:400px;text-align:center;font-size:27.9px;font-weight:700;color:#d9d9d9;">BEST ROLE <span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#4b5563;color:#cbd5e1;font-size:16px;font-weight:700;vertical-align:middle;">i</span></div>
 
       <!-- ROLE PILLS -->
       <div style="position:absolute;top:291px;left:1520px;width:400px;">${rolesHtml}</div>
@@ -828,7 +855,7 @@ export function buildCardElement(player, manual = {}) {
 
       ${trendData.length >= 2 ? `
       <!-- PERFORMANCE TREND -->
-      <div style="position:absolute;top:482px;left:1520px;width:400px;text-align:center;font-size:27.9px;font-weight:700;color:#d9d9d9;">PERFORMANCE TREND${trendTopRole ? ` — ${trendTopRole}` : ''}</div>
+      <div style="position:absolute;top:482px;left:1520px;width:400px;text-align:center;font-size:27.9px;font-weight:700;color:#d9d9d9;">PERFORMANCE TREND</div>
       <div style="position:absolute;top:524px;left:1520px;width:400px;display:flex;justify-content:center;">${trendSvg(trendData)}</div>` : ''}
 
       <!-- DIVIDER 2 -->
@@ -888,19 +915,19 @@ export function buildCardElement(player, manual = {}) {
       </div>
       ${(() => {
         const cols = isGK ? [
-          ['Apps', 235, latestSeason.m != null ? String(latestSeason.m) : '—', 250],
+          ['Apps', 235, statsRow.m != null ? String(statsRow.m) : '—', 250],
           ['GA',   332, fmt1(gkGoalsConceded)],
-          ['xGA',  408, latestSeason.a != null ? String(latestSeason.a) : '—'],
+          ['xGA',  408, statsRow.a != null ? String(statsRow.a) : '—'],
           ['CS',   500, '—'],
           ['Save%',595, gkSaveRate != null ? gkSaveRate.toFixed(1)+'%' : '—'],
-          ['Mins', 678, latestSeason.mins ? latestSeason.mins.toLocaleString() : '—'],
+          ['Mins', 678, statsRow.mins ? statsRow.mins.toLocaleString() : '—'],
         ] : [
-          ['Apps', 235, latestSeason.m != null ? String(latestSeason.m) : '—', 250],
-          ['Gls',  332, latestSeason.g != null ? String(latestSeason.g) : '0'],
-          ['Asts', 408, latestSeason.a != null ? String(latestSeason.a) : '0'],
+          ['Apps', 235, statsRow.m != null ? String(statsRow.m) : '—', 250],
+          ['Gls',  332, statsRow.g != null ? String(statsRow.g) : '0'],
+          ['Asts', 408, statsRow.a != null ? String(statsRow.a) : '0'],
           ['xG',   500, fmt1(xgSeason)],
           ['xA',   595, fmt1(xaSeason)],
-          ['Mins', 678, latestSeason.mins ? latestSeason.mins.toLocaleString() : '—'],
+          ['Mins', 678, statsRow.mins ? statsRow.mins.toLocaleString() : '—'],
         ];
         const heads = cols.map(([lab,x]) => `<div style="position:absolute;top:319px;left:${x}px;font-size:20px;font-weight:500;color:#d9d9d9;">${lab}</div>`).join('');
         const vals = cols.map(([,x,v,vx]) => `<div style="position:absolute;top:357px;left:${vx || x}px;font-size:20px;font-weight:500;color:#fff;">${v}</div>`).join('');
