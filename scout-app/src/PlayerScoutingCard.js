@@ -650,6 +650,8 @@ function pitchDiagramSvg(player, manual) {
 /**
  * Build the offscreen DOM node for the card.
  */
+const TREND_SEASON_ORDER = ['2018-19','2019-20','2020-21','2021','2021-22','2022','2022-23','2023','2023-24','2024','2024-25','2025','2025-26','2026'];
+
 export function buildCardElement(player, manual = {}) {
   // seasonsDetail is a dict keyed by season string (e.g. "2023-24") with no guaranteed
   // insertion order matching recency — Object.values()[0] previously grabbed whichever
@@ -696,7 +698,6 @@ export function buildCardElement(player, manual = {}) {
       bestStandardBySeason[s.s] = s;
     }
   });
-  const TREND_SEASON_ORDER = ['2018-19','2019-20','2020-21','2021','2021-22','2022','2022-23','2023','2023-24','2024','2024-25','2025','2025-26','2026'];
   const trendSeasonKeys = Object.keys(bestStandardBySeason)
     .sort((a, b) => TREND_SEASON_ORDER.indexOf(a) - TREND_SEASON_ORDER.indexOf(b))
     .slice(-3);
@@ -716,6 +717,8 @@ export function buildCardElement(player, manual = {}) {
   // group A carries the per-90 raw values (e.g. ['xG', pct, 0.42]). Wyscout-style
   // season totals are per90 × (mins / 90) — this reproduces the Canva numbers
   // (Adu: 0.38/90 × 1320min ≈ 5.6 → 5.8 shown). Falls back to '—' if unavailable.
+  // For stats row, use the selected summary row if available, otherwise fall back to latestSeason
+  const statsRow = selectedSummaryRow || latestSeason;
   const minsNum = statsRow.mins || sd.mins || 0;
   const findRawA = (...labels) => {
     const arr = groups.A || [];
@@ -731,8 +734,6 @@ export function buildCardElement(player, manual = {}) {
   const gkGoalsConceded = per90ToSeason(findRawA('goals conceded'));
   const fmt1 = (v) => (v == null ? '—' : v.toFixed(1));
   const leagueName = sdLeague || player.league || '';
-  // For stats row, use the selected summary row if available, otherwise fall back to latestSeason
-  const statsRow = selectedSummaryRow || latestSeason;
   const leagueDisplayName = (LEAGUE_DISPLAY_NAMES[leagueName] && LEAGUE_DISPLAY_NAMES[leagueName].length <= 14) ? LEAGUE_DISPLAY_NAMES[leagueName] : leagueName;
 
   // ── Dynamic row sizing: bar chart panel has a fixed vertical budget (1080 - panelTop - footerH).
