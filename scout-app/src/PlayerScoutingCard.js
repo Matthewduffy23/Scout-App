@@ -676,7 +676,11 @@ export function buildCardElement(player, manual = {}) {
   const photo = manual.playerPhotoUrl || photoUrl(player.name, player.team);
   const crest = player.teamFotmobId ? `${CREST_BASE}${player.teamFotmobId}.png` : '';
 
-  const trendData = (player.sh || []).slice(-3).map(h => ({ season: h.s, score: Math.round(h.sc) }));
+  const minsLookup = Object.fromEntries((player.allSeasonsSummary || []).map(s => [s.s, s.mins || 0]));
+  const trendData = (player.sh || [])
+    .filter(h => h.sc != null && (minsLookup[h.s] || 0) >= 400)
+    .slice(-3)
+    .map(h => ({ season: h.s, score: Math.round(h.sc) }));
   const trendValidRoles = (posKey && TREND_ROLES[posKey]) || [];
   const trendTopRole = Object.entries(rcs)
     .filter(([role]) => trendValidRoles.length === 0 || trendValidRoles.includes(role))

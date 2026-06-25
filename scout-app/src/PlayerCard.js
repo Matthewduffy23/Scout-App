@@ -413,10 +413,18 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
               <div style={{padding:'3px 10px',borderRadius:6,background:scoreBandColor(player.careerScore),color:'#fff',fontSize:14,fontWeight:900}}>{player.careerScore.toFixed(1)}</div>
               {hasUpside&&<div style={{padding:'3px 10px',borderRadius:6,background:'#14532d',color:'#22c55e',fontSize:12,fontWeight:700}}>↑ {player.potentialScore?.toFixed(1)} pot</div>}
             </div>
-            <div style={{fontSize:11,color:'#64748b',marginBottom:8}}>{player.team} · {player.league}</div>
+            <div style={{fontSize:11,color:'#64748b',marginBottom:8}}>{sd.team||player.team} · {sd.league||player.league}</div>
             <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
               <Tag label={ROLE_KEY_LABELS[player.roleKey]} bg='#0e1e38' color='#93c5fd'/>
-              {player.seasonsDetail&&Object.values(player.seasonsDetail)[0]?.position&&<Tag label={Object.values(player.seasonsDetail)[0].position.split(',')[0]} bg='#0e1e38' color='#64748b'/>}
+              {(()=>{
+                const allS=player.allSeasonsSummary||[];
+                const freq={};
+                allS.forEach(s=>{const tok=(s.pos||s.position||'').split(',')[0].trim();if(tok)freq[tok]=(freq[tok]||0)+1;});
+                const sorted=Object.entries(freq).sort((a,b)=>b[1]-a[1]).slice(0,3);
+                const colors=['#4ade80','#fbbf24','#fb923c'];
+                const bgs=['#0a1e14','#1c1200','#1c0800'];
+                return sorted.map(([pos],i)=><Tag key={pos} label={pos} bg={bgs[i]||'#0e1e38'} color={colors[i]||'#94a3b8'}/>);
+              })()}
               {topRole&&<Tag label={topRole} bg='#0a1a30' color='#7eb3f8'/>}
               {player.foot&&player.foot!=='unknown'&&player.foot!=='nan'&&<Tag label={formatFoot(player.foot)+' foot'} bg={player.foot==='left'?'#0a1e14':'#0d1624'} color={player.foot==='left'?'#4ade80':'#60a5fa'}/>}
               <Tag label={`Age ${player.age}`} bg='#0d1220' color='#94a3b8'/>
