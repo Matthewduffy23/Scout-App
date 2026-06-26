@@ -169,7 +169,7 @@ export default function App(){
   const [page,setPage]=useState(0);
 
   const [search,setSearch]=useState('');
-  const isMobile=typeof window!=='undefined'&&window.innerWidth<768;
+  const isMobile=typeof navigator!=='undefined'&&/iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
   const [pos,setPos]=useState(isMobile?'Striker':'All');
   const [roleFilters,setRoleFilters]=useState(new Set());
   const [roleFilter,setRoleFilter]=useState('');
@@ -244,12 +244,25 @@ export default function App(){
   const [attrFilters,setAttrFilters]=useState(new Set()); // active attribute keys // hide MV by default, show xValue
   const [showColPicker,setShowColPicker]=useState(false); // default: only show players active 2022-23+
 
+  const posCache=React.useRef({});
+  const rkToFile={'GK':'gk','CB':'cb','FB':'fb','CM':'cm','ATT':'att','CF':'cf'};
+
   useEffect(()=>{
-    const files=['gk','cb','fb','cm','att','cf'];
-    Promise.all(files.map(f=>fetch(`/players_${f}.json`).then(r=>r.json()).catch(()=>[])))
-      .then(results=>{setAll(results.flat());setLoading(false);})
+    setLoading(true);
+    const rkNow=Object.entries(ROLE_KEY_LABELS).find(([,v])=>v===pos)?.[0]||'';
+    const fileKeys=pos==='All'?['gk','cb','fb','cm','att','cf']:[rkToFile[rkNow]].filter(Boolean);
+    if(!fileKeys.length){setLoading(false);return;}
+    const toFetch=fileKeys.filter(f=>!posCache.current[f]);
+    const cached=fileKeys.filter(f=>posCache.current[f]).flatMap(f=>posCache.current[f]);
+    if(toFetch.length===0){setAll(cached);setLoading(false);return;}
+    Promise.all(toFetch.map(f=>fetch(`/players_${f}.json`).then(r=>r.json()).catch(()=>[])))
+      .then(results=>{
+        toFetch.forEach((f,i)=>{posCache.current[f]=results[i];});
+        setAll([...cached,...results.flat()]);
+        setLoading(false);
+      })
       .catch(()=>setLoading(false));
-  },[]);
+  },[pos]);
   useEffect(()=>{setRoleFilter('');setRoleScoreMin(50);setScoreMode('complete');},[pos]);
   useEffect(()=>{if(activePreset&&PRESET_LEAGUES[activePreset]){setActivePresetLeagues([...PRESET_LEAGUES[activePreset]]);}  },[activePreset]);
 
@@ -421,7 +434,7 @@ export default function App(){
           <div style={T.fg}>
             <span style={T.fl}>Position Group</span>
             <select style={T.sel} value={pos} onChange={e=>{setPos(e.target.value);setAttrFilters(new Set());setMinMins(0);setCurrentLeagueOnly(false);setPage(0);}}>
-              <option>All</option>
+              {!isMobile&&<option>All</option>}
               {Object.values(ROLE_KEY_LABELS).map(v=><option key={v}>{v}</option>)}
             </select>
           </div>
