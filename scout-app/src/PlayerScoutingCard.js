@@ -599,10 +599,10 @@ const POS_TO_KEY = {
 
 // ── Position pitch diagram: 13 fixed slots, default grey, optional 7-tier colours ──
 const PITCH_SLOTS = {
-  LB:  [98.6, 31.5],  LWB: [165, 46],     LW:  [260.7, 31.5],
+  LB:  [98.6, 31.5],  LWB: [165, 31.5],   LW:  [260.7, 31.5],
   LCB: [83.6, 76.4],  GK:  [33, 110],     DM:  [113.5, 110],
   CM:  [165, 110.0],  AM:  [230.3, 110.0], ST: [287.9, 110.6],
-  RCB: [83.4, 138.5], RB:  [98.6, 190.1], RWB: [165, 174],   RW: [260.7, 189.9],
+  RCB: [83.4, 138.5], RB:  [98.6, 190.1], RWB: [165, 190.1], RW: [260.7, 189.9],
 };
 // Raw position tokens (from player.position / POSITION_LABELS) -> pitch slot key
 const TOKEN_TO_SLOT = {
@@ -916,7 +916,7 @@ export function buildCardElement(player, manual = {}) {
 
       <!-- CLUB CREST / NAME / LEAGUE -->
       ${(crest && !manual.hideTeamBadge) ? `<div style="position:absolute;left:756px;top:39px;width:118px;height:164px;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${crest}');"></div>` : ''}
-      <div style="position:absolute;left:884px;top:57px;font-size:26.6px;font-weight:700;color:#fff;">${sdTeam}</div>
+      <div style="position:absolute;left:884px;top:57px;font-size:26.6px;font-weight:700;color:#fff;${sdTeam.length > 18 ? 'letter-spacing:-0.8px;' : ''}">${sdTeam}</div>
       <div style="position:absolute;left:884px;top:97px;display:flex;align-items:center;gap:10px;">
         <span style="font-size:21.3px;font-weight:500;color:#fff;white-space:nowrap;">${LEAGUE_DISPLAY_NAMES[sdLeague] || sdLeague}</span>
         ${countryToIso2(leagueToCountry(sdLeague)) ? `<div style="width:31px;height:19px;flex-shrink:0;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(leagueToCountry(sdLeague))}.png');"></div>` : ''}
