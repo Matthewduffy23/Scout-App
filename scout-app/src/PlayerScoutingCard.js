@@ -477,14 +477,16 @@ function scoreTierColor(score) {
   return '#ff3131';
 }
 
-// Per-dot colour for Pace / Power / Fitness (dot represents level 1-5)
-function physicalDotColor(dotLevel) {
-  if (dotLevel >= 5) return '#00bf63';
-  if (dotLevel >= 4) return '#00bf63';
-  if (dotLevel >= 3.5) return '#7ed957';
-  if (dotLevel >= 3) return '#c1ff72';
-  if (dotLevel >= 2.5) return '#ffde59';
-  if (dotLevel >= 2) return '#ff914d';
+// Colour for Pace / Power / Fitness based on overall rating value
+function physicalTierColor(val) {
+  const v = Number(val);
+  if (isNaN(v)) return '#a3a3a3';
+  if (v >= 4.5) return '#00bf63';
+  if (v >= 4)   return '#00bf63';
+  if (v >= 3.5) return '#7ed957';
+  if (v >= 3)   return '#c1ff72';
+  if (v >= 2.5) return '#ffde59';
+  if (v >= 2)   return '#ff914d';
   return '#ff3131';
 }
 
@@ -946,13 +948,13 @@ export function buildCardElement(player, manual = {}) {
         const rowY = { Pace: 728, Power: 792, Fitness: 859 };
         return Object.entries(rowY).map(([attr, y]) => {
           const n = phys[attr] || 0;
+          const filledColor = physicalTierColor(n);
           const dots = [0,1,2,3,4].map(i => {
-            const dotValue = i + 1; // this dot represents level 1,2,3,4,5
+            const dotValue = i + 1;
             let opacity = 0;
             if (n >= dotValue) opacity = 1;
-            else if (n >= dotValue - 0.5) opacity = 0.7; // half-filled = faded
-            const dotColor = physicalDotColor(dotValue);
-            const bg = opacity > 0 ? dotColor : '#3a4566';
+            else if (n >= dotValue - 0.5) opacity = 0.7;
+            const bg = opacity > 0 ? filledColor : '#3a4566';
             const style = opacity === 1
               ? `background:${bg};`
               : opacity === 0.7
