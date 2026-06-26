@@ -36,6 +36,8 @@ const INTERNATIONAL_LEAGUES = new Set(['UEFA WC Qualifiers.','UEFA U21 Euros.','
 const CONTINENTAL_LEAGUES = new Set(['Conference League.','Conference League Qualifiers.','Europa League.','Europa League Qualifiers.','Champions League.','Champions League Qualifiers.','Asia Champions League.','Africa Champions League.','Copa Libertadores.','U20 Copa.','Club World Cup.','UEFA Youth League.']);
 
 const CREST_BASE = 'https://images.fotmob.com/image_resources/logo/teamlogo/';
+function cmToFeet(cm){const t=Math.round(Number(cm)/2.54);const f=Math.floor(t/12);const i=t%12;return`${f}'${i}"`}
+
 const SEC = { fontSize:9, fontWeight:700, color:'#c8d4e8', letterSpacing:'0.12em', textTransform:'uppercase', marginBottom:10 };
 const GRP_LABELS = { D:'Defensive', P:'Possession', A:'Attacking' };
 
@@ -438,6 +440,7 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
               })()}
               {topRole&&<Tag label={topRole} bg='#0a1a30' color='#7eb3f8'/>}
               {player.foot&&player.foot!=='unknown'&&player.foot!=='nan'&&<Tag label={formatFoot(player.foot)+' foot'} bg={player.foot==='left'?'#0a1e14':'#0d1624'} color={player.foot==='left'?'#4ade80':'#60a5fa'}/>}
+              {player.height&&player.height!=='nan'&&<Tag label={cmToFeet(player.height)} bg='#0d1220' color='#94a3b8'/>}
               <Tag label={`Age ${player.age}`} bg='#0d1220' color='#94a3b8'/>
               <Tag label={`${player.seasons} seasons`} bg='#0d1220' color='#94a3b8'/>
               {player.contract&&player.contract!=='nan'&&<Tag label={`📋 ${player.contract}`} bg='#0d1220' color={player.contractYear<=2026?'#fbbf24':'#94a3b8'}/>}
