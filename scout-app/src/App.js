@@ -244,25 +244,12 @@ export default function App(){
   const [attrFilters,setAttrFilters]=useState(new Set()); // active attribute keys // hide MV by default, show xValue
   const [showColPicker,setShowColPicker]=useState(false); // default: only show players active 2022-23+
 
-  const posCache=React.useRef({});
-  const rkToFile={'GK':'gk','CB':'cb','FB':'fb','CM':'cm','ATT':'att','CF':'cf'};
-
   useEffect(()=>{
-    setLoading(true);
-    const rkNow=Object.entries(ROLE_KEY_LABELS).find(([,v])=>v===pos)?.[0]||'';
-    const fileKeys=pos==='All'?['gk','cb','fb','cm','att','cf']:[rkToFile[rkNow]].filter(Boolean);
-    if(!fileKeys.length){setLoading(false);return;}
-    const toFetch=fileKeys.filter(f=>!posCache.current[f]);
-    const cached=fileKeys.filter(f=>posCache.current[f]).flatMap(f=>posCache.current[f]);
-    if(toFetch.length===0){setAll(cached);setLoading(false);return;}
-    Promise.all(toFetch.map(f=>fetch(`/players_${f}.json`).then(r=>r.json()).catch(()=>[])))
-      .then(results=>{
-        toFetch.forEach((f,i)=>{posCache.current[f]=results[i];});
-        setAll([...cached,...results.flat()]);
-        setLoading(false);
-      })
+    const files=['gk','cb','fb','cm','att','cf'];
+    Promise.all(files.map(f=>fetch(`/players_${f}.json`).then(r=>r.json()).catch(()=>[])))
+      .then(results=>{setAll(results.flat());setLoading(false);})
       .catch(()=>setLoading(false));
-  },[pos]);
+  },[]);
   useEffect(()=>{setRoleFilter('');setRoleScoreMin(50);setScoreMode('complete');},[pos]);
   useEffect(()=>{if(activePreset&&PRESET_LEAGUES[activePreset]){setActivePresetLeagues([...PRESET_LEAGUES[activePreset]]);}  },[activePreset]);
 
