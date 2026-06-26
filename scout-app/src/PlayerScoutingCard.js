@@ -522,7 +522,7 @@ function barRow(label, pct, rawVal, rowH = 18) {
       <div style="flex:1;position:relative;height:${barH}px;">
         <div style="position:absolute;inset:0;background:repeating-linear-gradient(to right, rgba(255,255,255,.16) 0 1px, transparent 1px 10%), ${BAR_TRACK};"></div>
         <div style="position:relative;height:100%;width:${p}%;background:${bc};">
-          ${rawVal ? `<span style="position:absolute;left:6px;top:50%;transform:translateY(-50%);font-size:12.3px;font-weight:400;color:#0b0b0b;white-space:nowrap;">${rawVal}</span>` : ''}
+          ${rawVal ? `<span style="position:absolute;left:6px;top:50%;transform:translateY(-50%);font-size:10.3px;font-weight:400;color:#0b0b0b;white-space:nowrap;">${rawVal}</span>` : ''}
         </div>
         <div style="position:absolute;left:50%;top:0;width:2px;height:100%;background:repeating-linear-gradient(to bottom, rgba(255,255,255,.95) 0 4px, transparent 4px 7px);"></div>
       </div>
@@ -534,7 +534,7 @@ function rolePill(roleName, score, width = 320) {
   const bc = scoreTierColor(sc);
   const displayName = ROLE_DISPLAY_NAMES[roleName] || roleName;
   const tightSpacing = (roleName === 'Deep Playmaker CM' || roleName === 'Advanced Playmaker CM');
-  const letterSpacingStyle = tightSpacing ? 'letter-spacing:-0.5px;' : '';
+  const letterSpacingStyle = (roleName === 'Advanced Playmaker CM') ? 'letter-spacing:-1.2px;' : (tightSpacing ? 'letter-spacing:-0.5px;' : '');
   return `
     <div style="display:flex;align-items:center;justify-content:space-between;width:${width}px;height:46px;margin:0 auto 14px;">
       <span style="background:#737373;border-radius:10px;padding:3px 9px;font-size:26.6px;color:#fff;font-weight:600;white-space:nowrap;${letterSpacingStyle}">${displayName}</span>
@@ -974,12 +974,12 @@ export function buildCardElement(player, manual = {}) {
 
       <!-- FORM -->
       <div style="position:absolute;top:909px;left:1520px;width:400px;text-align:center;font-size:27.9px;font-weight:600;color:#c0c0c0;">FORM</div>
-      <div style="position:absolute;top:948px;left:1520px;width:400px;display:flex;justify-content:center;align-items:flex-end;gap:8px;height:78px;">
+      <div style="position:absolute;top:948px;left:1520px;width:400px;display:flex;justify-content:center;align-items:flex-end;gap:5px;height:78px;">
         ${(manual.formRatings || []).slice(0,5).map(r => {
           const v = parseFloat(r);
           const c = isNaN(v) ? '#4b5563' : formTierColor(v);
           const h = isNaN(v) ? 78 : Math.max(10, Math.round((v / 10) * 78));
-          return `<span style="width:32px;height:${h}px;border-radius:6px;background:${c};display:inline-block;"></span>`;
+          return `<span style="width:26px;height:${h}px;border-radius:6px;background:${c};display:inline-block;"></span>`;
         }).join('')}
       </div>
       <div style="position:absolute;top:1038px;left:1520px;width:400px;display:flex;align-items:center;justify-content:center;gap:10px;">

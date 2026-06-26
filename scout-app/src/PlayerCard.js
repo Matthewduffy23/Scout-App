@@ -390,7 +390,8 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
   const rawPot    = rawMode ? Math.min((player.careerRaw??player.careerScore)*1.05+2,94) : (player.potentialScore||player.careerScore);
   // In raw mode, league strength for star calculation = 100 (don't apply league context to stars)
   // In normal mode, stars use absolute scale as always
-  const roles=sd.roles||player.latestRoles||player.roleCareerScores||{};
+  const seasonRoles=sd.roles||{};
+  const roles=Object.keys(seasonRoles).length>0 ? seasonRoles : (player.latestRoles||player.roleCareerScores||{});
   const strengths=sd.strengths||player.latestStrengths||[];
   const weaknesses=sd.weaknesses||player.latestWeaknesses||[];
   const styles=sd.styles||player.latestStyles||[];
