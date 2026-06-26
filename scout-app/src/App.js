@@ -169,7 +169,8 @@ export default function App(){
   const [page,setPage]=useState(0);
 
   const [search,setSearch]=useState('');
-  const [pos,setPos]=useState('All');
+  const isMobile=typeof window!=='undefined'&&window.innerWidth<768;
+  const [pos,setPos]=useState(isMobile?'Striker':'All');
   const [roleFilters,setRoleFilters]=useState(new Set());
   const [roleFilter,setRoleFilter]=useState('');
   const [roleScoreMin,setRoleScoreMin]=useState(50);
@@ -243,31 +244,12 @@ export default function App(){
   const [attrFilters,setAttrFilters]=useState(new Set()); // active attribute keys // hide MV by default, show xValue
   const [showColPicker,setShowColPicker]=useState(false); // default: only show players active 2022-23+
 
-  const posCache=React.useRef({});
-
-  // Map roleKey -> file key
-  const rkToFile={'GK':'gk','CB':'cb','FB':'fb','CM':'cm','ATT':'att','CF':'cf'};
-
   useEffect(()=>{
-    setLoading(true);
-    const rkNow=Object.entries(ROLE_KEY_LABELS).find(([,v])=>v===pos)?.[0]||'';
-    const files=rkNow&&rkToFile[rkNow]?[rkToFile[rkNow]]:['gk','cb','fb','cm','att','cf'];
-    const toFetch=files.filter(f=>!posCache.current[f]);
-    const cached=files.filter(f=>posCache.current[f]).flatMap(f=>posCache.current[f]);
-    if(toFetch.length===0){
-      setAll(cached);
-      setLoading(false);
-      return;
-    }
-    Promise.all(toFetch.map(f=>fetch(`/players_${f}.json`).then(r=>r.json()).catch(()=>[])))
-      .then(results=>{
-        toFetch.forEach((f,i)=>{posCache.current[f]=results[i];});
-        const allData=[...cached,...results.flat()];
-        setAll(allData);
-        setLoading(false);
-      })
+    const files=['gk','cb','fb','cm','att','cf'];
+    Promise.all(files.map(f=>fetch(`/players_${f}.json`).then(r=>r.json()).catch(()=>[])))
+      .then(results=>{setAll(results.flat());setLoading(false);})
       .catch(()=>setLoading(false));
-  },[pos]);
+  },[]);
   useEffect(()=>{setRoleFilter('');setRoleScoreMin(50);setScoreMode('complete');},[pos]);
   useEffect(()=>{if(activePreset&&PRESET_LEAGUES[activePreset]){setActivePresetLeagues([...PRESET_LEAGUES[activePreset]]);}  },[activePreset]);
 
@@ -404,7 +386,7 @@ export default function App(){
     avgAge:filtered.length?filtered.reduce((s,p)=>s+p.age,0)/filtered.length:0,
   }),[filtered,getDisplayScore]);
 
-  const reset=()=>{setSearch('');setPos('All');setRoleFilter('');setRoleFilters(new Set());setSoftMode(false);setRoleFilters(new Set());setSoftMode(false);setRoleScoreMin(50);setActivePreset('');setActivePresetLeagues(null);setShowHidden(false);setShowYouth(false);setActiveBands(new Set());setActiveRegions(new Set());setLsMin(0);setLsMax(101);setAgeMin(16);setAgeMax(38);setFoot('Any');setMinHeight(0);setMinScore(40);setMinSeas(1);setShowMvFilter(false);setMvMax(50);setShowContractFilter(false);setContractBefore(2028);setSeasonFilter('all');setScoreMode('complete');setMetricFilters([]);setXValueFilter('');setRawMode(false);setOnlyElite(false);setRecentOnly(true);setShowXValueFilter(false);setXValueMin(0);setXValueMax(50);setAttrFilters(new Set());setMinMins(500);setCurrentLeagueOnly(false);setPotentialMin(40);setPlayed2526(false);setEscOnly(false);setGbeMin(0);setNatFilter('');setNotPlayingOnly(false);setShowShortlist(false);setSoftMode(false);setRoleFilters(new Set());setPage(0);};
+  const reset=()=>{setSearch('');setPos(isMobile?'Striker':'All');setRoleFilter('');setRoleFilters(new Set());setSoftMode(false);setRoleFilters(new Set());setSoftMode(false);setRoleScoreMin(50);setActivePreset('');setActivePresetLeagues(null);setShowHidden(false);setShowYouth(false);setActiveBands(new Set());setActiveRegions(new Set());setLsMin(0);setLsMax(101);setAgeMin(16);setAgeMax(38);setFoot('Any');setMinHeight(0);setMinScore(40);setMinSeas(1);setShowMvFilter(false);setMvMax(50);setShowContractFilter(false);setContractBefore(2028);setSeasonFilter('all');setScoreMode('complete');setMetricFilters([]);setXValueFilter('');setRawMode(false);setOnlyElite(false);setRecentOnly(true);setShowXValueFilter(false);setXValueMin(0);setXValueMax(50);setAttrFilters(new Set());setMinMins(500);setCurrentLeagueOnly(false);setPotentialMin(40);setPlayed2526(false);setEscOnly(false);setGbeMin(0);setNatFilter('');setNotPlayingOnly(false);setShowShortlist(false);setSoftMode(false);setRoleFilters(new Set());setPage(0);};
 
   if(loading) return <div style={{...T.app,alignItems:'center',justifyContent:'center'}}><style>{'@keyframes spin{to{transform:rotate(360deg)}}'}</style><div style={{width:24,height:24,border:'2px solid #1e2d45',borderTop:'2px solid #3b7de8',borderRadius:'50%',animation:'spin 0.8s linear infinite'}}/><div style={{color:'#94a3b8',fontSize:11,marginTop:8}}>Loading…</div></div>;
 
