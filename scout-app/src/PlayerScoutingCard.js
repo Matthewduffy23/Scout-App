@@ -508,8 +508,20 @@ function starsHtml(score, size = 20, directStars = null) {
   const full = Math.floor(stars);
   const half = (stars - full) >= 0.5 ? 1 : 0;
   const empty = 5 - full - half;
-  const s = (state) => `<span style="color:${state === 'empty' ? '#3a4566' : '#f6c244'};font-size:${size}px;line-height:1">${state === 'half' ? '⯨' : '★'}</span>`;
-  return Array(full).fill(s('full')).join('') + (half ? s('half') : '') + Array(empty).fill(s('empty')).join('');
+  const GOLD = '#f6c244';
+  const EMPTY = '#3a4566';
+  const pts = '12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26';
+  const svgStar = (fillColor, gradId) => {
+    if (gradId) {
+      return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" style="display:inline-block;vertical-align:middle;"><defs><linearGradient id="${gradId}"><stop offset="50%" stop-color="${GOLD}"/><stop offset="50%" stop-color="${EMPTY}"/></linearGradient></defs><polygon points="${pts}" fill="url(#${gradId})"/></svg>`;
+    }
+    return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" style="display:inline-block;vertical-align:middle;"><polygon points="${pts}" fill="${fillColor}"/></svg>`;
+  };
+  let html = '';
+  for (let i = 0; i < full; i++) html += svgStar(GOLD, null);
+  if (half) { const id = 'hg' + Math.random().toString(36).slice(2,7); html += svgStar(null, id); }
+  for (let i = 0; i < empty; i++) html += svgStar(EMPTY, null);
+  return html;
 }
 
 function barRow(label, pct, rawVal, rowH = 18) {
