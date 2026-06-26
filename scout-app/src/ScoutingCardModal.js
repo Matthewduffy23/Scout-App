@@ -39,6 +39,7 @@ export default function ScoutingCardModal({ player, onClose }) {
   const [playerPhotoDataUrl, setPlayerPhotoDataUrl] = useState('');
   const [playerPhotoUrl, setPlayerPhotoUrl] = useState('');
   const [hideTeamBadge, setHideTeamBadge] = useState(false);
+  const [iphoneExport, setIphoneExport] = useState(false);
   const [nameOverride, setNameOverride] = useState('');
   const [valueOverride, setValueOverride] = useState('');
   const [positionOverride, setPositionOverride] = useState('');
@@ -84,6 +85,7 @@ export default function ScoutingCardModal({ player, onClose }) {
         playerPhotoDataUrl,
         playerPhotoUrl,
         hideTeamBadge,
+        iphoneExport,
         nameOverride,
         valueOverride,
         positionOverride,
@@ -327,9 +329,15 @@ export default function ScoutingCardModal({ player, onClose }) {
           <input style={inputStyle} value={playerPhotoUrl} onChange={e => setPlayerPhotoUrl(e.target.value)} placeholder="https://images.fotmob.com/image_resources/playerimages/209405.png" />
         </div>
 
-        <div style={{ ...sectionStyle, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <input type="checkbox" id="hideTeamBadge" checked={hideTeamBadge} onChange={e => setHideTeamBadge(e.target.checked)} />
-          <label htmlFor="hideTeamBadge" style={{ fontSize: 12, color: '#cbd5e1', cursor: 'pointer' }}>Hide team badge</label>
+        <div style={{ ...sectionStyle, display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input type="checkbox" id="hideTeamBadge" checked={hideTeamBadge} onChange={e => setHideTeamBadge(e.target.checked)} />
+            <label htmlFor="hideTeamBadge" style={{ fontSize: 12, color: '#cbd5e1', cursor: 'pointer' }}>Hide team badge</label>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input type="checkbox" id="iphoneExport" checked={iphoneExport} onChange={e => setIphoneExport(e.target.checked)} />
+            <label htmlFor="iphoneExport" style={{ fontSize: 12, color: '#cbd5e1', cursor: 'pointer' }}>iPhone Export</label>
+          </div>
         </div>
 
         <div style={sectionStyle}>
