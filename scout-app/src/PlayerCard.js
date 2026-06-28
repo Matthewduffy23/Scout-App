@@ -374,6 +374,7 @@ const POS_COLORS = { GK:'#f59e0b', CB:'#3b7de8', FB:'#22c55e', CM:'#a78bfa', ATT
 function CareerTab({ player, players }) {
   const [view, setView] = React.useState('player');
   const [showForecast, setShowForecast] = React.useState(false);
+  const [showScores, setShowScores] = React.useState(true);
   const [squadSection, setSquadSection] = React.useState('current');
   const canvasRef = useRef(null);
   const squadRef = useRef(null);
@@ -406,7 +407,8 @@ function CareerTab({ player, players }) {
   leagueList.forEach((l, i) => { leagueColorMap[l] = LEAGUE_COLORS[i % LEAGUE_COLORS.length]; });
 
   // ── Draw career chart ──────────────────────────────────────────────────────
-  function drawCareer(canvas, W, H, dpr=1, forExport=false) {
+  // ── Draw career chart ──────────────────────────────────────────────────────
+  function drawCareer(canvas, W, H, dpr=1, forExport=false, showScores=true) {
     if (!canvas || history.length < 1) return;
     canvas.width = W * dpr; canvas.height = H * dpr;
     if (!forExport) { canvas.style.width = W + 'px'; canvas.style.height = H + 'px'; }
@@ -414,7 +416,7 @@ function CareerTab({ player, players }) {
     ctx.clearRect(0, 0, W, H);
 
     const fs = forExport ? 2.4 : 1;
-    const pad = { t: forExport?100:28, r: forExport?200:120, b: forExport?90:48, l: forExport?90:52 };
+    const pad = { t: forExport?100:28, r: forExport?200:130, b: forExport?90:48, l: forExport?90:52 };
     const pw = W - pad.l - pad.r, ph = H - pad.t - pad.b;
     const pts = historyWithAge;
     const allScores = showForecast && player.potentialScore ? [...pts.map(p=>p.sc), player.potentialScore] : pts.map(p=>p.sc);
@@ -429,9 +431,8 @@ function CareerTab({ player, players }) {
     const yS = v => pad.t + ph - ((v - minS) / (maxS - minS || 1)) * ph;
     const baseline = pad.t + ph;
 
-    // Dark background
+    // Background
     ctx.fillStyle = '#060b14'; ctx.fillRect(0, 0, W, H);
-    // Subtle inner plot bg
     ctx.fillStyle = '#080d18'; ctx.fillRect(pad.l, pad.t, pw, ph);
 
     // Title
@@ -442,7 +443,7 @@ function CareerTab({ player, players }) {
       ctx.fillText('Career Trajectory  ·  Score by Age', pad.l, pad.t - 18);
     }
 
-    // Tier reference lines — on RIGHT side, vertically centred on line
+    // Tier reference lines — prominent, clipped to plot, labels right
     const TIER_LINES = [
       {score:82,label:'Elite PL',color:'#3b7de8'},
       {score:78,label:'Excellent PL',color:'#60a5fa'},
@@ -456,20 +457,21 @@ function CareerTab({ player, players }) {
     TIER_LINES.forEach(t => {
       if (t.score <= minS || t.score >= maxS) return;
       const y = yS(t.score);
-      ctx.setLineDash([6, 6]); ctx.strokeStyle = t.color + '28'; ctx.lineWidth = forExport ? 2 : 1;
+      ctx.setLineDash([8, 6]);
+      ctx.strokeStyle = t.color + '55';
+      ctx.lineWidth = forExport ? 3 : 1.5;
       ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l + pw, y); ctx.stroke();
       ctx.setLineDash([]);
     });
     ctx.restore();
-    // Tier labels outside right edge, vertically centred on line
     TIER_LINES.forEach(t => {
       if (t.score <= minS || t.score >= maxS) return;
       const y = yS(t.score);
-      ctx.fillStyle = t.color + 'cc'; ctx.font = `bold ${9*fs}px Inter,sans-serif`; ctx.textAlign = 'left';
+      ctx.fillStyle = t.color; ctx.font = `bold ${9*fs}px Inter,sans-serif`; ctx.textAlign = 'left';
       ctx.fillText(t.label, pad.l + pw + 10, y + 4);
     });
 
-    // Y axis grid + labels (every scoreStep)
+    // Y grid + labels every scoreStep
     for (let v = minS; v <= maxS; v += scoreStep) {
       const y = yS(v);
       if (y < pad.t - 1 || y > pad.t + ph + 1) continue;
@@ -479,7 +481,7 @@ function CareerTab({ player, players }) {
       ctx.fillText(v, pad.l - 8, y + 3.5);
     }
 
-    // X axis — vertical lines + age labels at integer ages
+    // X grid + age labels
     const ageInts = [];
     for (let a = Math.ceil(minA); a <= Math.floor(maxA); a++) ageInts.push(a);
     ageInts.forEach(a => {
@@ -487,7 +489,6 @@ function CareerTab({ player, players }) {
       if (x < pad.l || x > pad.l + pw) return;
       ctx.strokeStyle = '#111827'; ctx.lineWidth = forExport ? 1 : 0.5; ctx.setLineDash([]);
       ctx.beginPath(); ctx.moveTo(x, pad.t); ctx.lineTo(x, pad.t + ph); ctx.stroke();
-      // Tick mark
       ctx.strokeStyle = '#374151'; ctx.lineWidth = forExport ? 1.5 : 0.8;
       ctx.beginPath(); ctx.moveTo(x, pad.t + ph); ctx.lineTo(x, pad.t + ph + 5*fs); ctx.stroke();
       ctx.fillStyle = '#475569'; ctx.font = `${10*fs}px Inter,sans-serif`; ctx.textAlign = 'center';
@@ -498,122 +499,103 @@ function CareerTab({ player, players }) {
     ctx.strokeStyle = '#1e293b'; ctx.lineWidth = forExport ? 2 : 1; ctx.setLineDash([]);
     ctx.beginPath(); ctx.moveTo(pad.l, pad.t); ctx.lineTo(pad.l, pad.t + ph + 1); ctx.stroke();
 
-    // Filled area — gradient from line colour to transparent, clipped to plot
+    // Filled area under line — gradient
     if (pts.length >= 1) {
       ctx.save(); ctx.beginPath(); ctx.rect(pad.l, pad.t, pw, ph); ctx.clip();
-
-      // Build bezier path
-      const buildPath = () => {
-        ctx.beginPath();
-        pts.forEach((p, i) => {
-          const x = xS(p.age), y = yS(p.sc);
-          if (i === 0) { ctx.moveTo(x, y); return; }
-          const prev = pts[i-1], px2 = xS(prev.age), py2 = yS(prev.sc);
-          ctx.bezierCurveTo(px2+(x-px2)*0.45, py2, x-(x-px2)*0.45, y, x, y);
-        });
-      };
-
-      // Fill area
-      buildPath();
+      ctx.beginPath();
+      ctx.moveTo(xS(pts[0].age), baseline);
+      pts.forEach(p => ctx.lineTo(xS(p.age), yS(p.sc)));
       ctx.lineTo(xS(pts[pts.length-1].age), baseline);
-      ctx.lineTo(xS(pts[0].age), baseline);
       ctx.closePath();
       const grad = ctx.createLinearGradient(0, pad.t, 0, baseline);
       grad.addColorStop(0, 'rgba(59,125,232,0.18)');
       grad.addColorStop(1, 'rgba(59,125,232,0.01)');
       ctx.fillStyle = grad; ctx.fill();
-
-      // Draw line segments coloured by league of the destination point
-      if (pts.length >= 2) {
-        pts.forEach((p, i) => {
-          if (i === 0) return;
-          const prev = pts[i-1];
-          const col = leagueColorMap[p.l] || '#3b7de8';
-          const x1 = xS(prev.age), y1 = yS(prev.sc), x2 = xS(p.age), y2 = yS(p.sc);
-          ctx.beginPath();
-          ctx.moveTo(x1, y1);
-          ctx.bezierCurveTo(x1+(x2-x1)*0.45, y1, x2-(x2-x1)*0.45, y2, x2, y2);
-          ctx.strokeStyle = col; ctx.lineWidth = (forExport?3:2.5); ctx.lineJoin = 'round'; ctx.stroke();
-        });
-      } else if (pts.length === 1) {
-        // single point — just draw dot
-      }
       ctx.restore();
+    }
+
+    // STRAIGHT lines between dots, coloured by destination league
+    if (pts.length >= 2) {
+      pts.forEach((p, i) => {
+        if (i === 0) return;
+        const prev = pts[i-1];
+        const col = leagueColorMap[p.l] || '#3b7de8';
+        ctx.beginPath();
+        ctx.moveTo(xS(prev.age), yS(prev.sc));
+        ctx.lineTo(xS(p.age), yS(p.sc));
+        ctx.strokeStyle = col; ctx.lineWidth = forExport ? 3.5 : 2.5; ctx.lineJoin = 'round'; ctx.stroke();
+      });
     }
 
     // Forecast dashed line + dot
     if (showForecast && player.potentialScore && pts.length >= 1) {
       const last = pts[pts.length - 1];
-      const lx = xS(last.age), ly = yS(last.sc);
       const fAge = last.age + 2;
       const fScore = Math.min(player.potentialScore, maxS - 1);
+      const lx = xS(last.age), ly = yS(last.sc);
       const fx = xS(fAge), fy = yS(fScore);
       ctx.beginPath(); ctx.setLineDash([8, 6]);
       ctx.moveTo(lx, ly); ctx.lineTo(fx, fy);
-      ctx.strokeStyle = '#22c55e'; ctx.lineWidth = forExport?3:2; ctx.stroke(); ctx.setLineDash([]);
+      ctx.strokeStyle = '#22c55e'; ctx.lineWidth = forExport ? 3 : 2; ctx.stroke(); ctx.setLineDash([]);
       ctx.beginPath(); ctx.arc(fx, fy, (forExport?10:7), 0, Math.PI*2);
       ctx.fillStyle = '#22c55e'; ctx.fill();
       ctx.strokeStyle = '#060b14'; ctx.lineWidth = forExport?3:2; ctx.stroke();
-      // Label
       ctx.fillStyle = '#22c55e'; ctx.font = `bold ${10*fs}px Inter,sans-serif`; ctx.textAlign = 'center';
       ctx.strokeStyle = '#060b14'; ctx.lineWidth = 3*fs; ctx.lineJoin = 'round';
-      ctx.strokeText('Pot ' + fScore.toFixed(0), fx, fy - (14*fs));
-      ctx.fillText('Pot ' + fScore.toFixed(0), fx, fy - (14*fs));
-      // Age label
+      ctx.strokeText('Pot ' + fScore.toFixed(0), fx, fy - 14*fs);
+      ctx.fillText('Pot ' + fScore.toFixed(0), fx, fy - 14*fs);
       ctx.fillStyle = '#475569'; ctx.font = `${10*fs}px Inter,sans-serif`;
       ctx.fillText(String(fAge), fx, pad.t + ph + 18*fs);
     }
 
-    // Dots — draw all first
+    // Dots
     pts.forEach(p => {
       const x = xS(p.age), y = yS(p.sc);
       const col = leagueColorMap[p.l] || '#3b7de8';
-      ctx.beginPath(); ctx.arc(x, y, (forExport?10:7), 0, Math.PI*2);
+      ctx.beginPath(); ctx.arc(x, y, forExport?10:7, 0, Math.PI*2);
       ctx.fillStyle = col; ctx.fill();
       ctx.strokeStyle = '#060b14'; ctx.lineWidth = forExport?3:2; ctx.stroke();
     });
 
-    // Score labels above dots
-    pts.forEach(p => {
-      const x = xS(p.age), y = yS(p.sc);
-      const lbl = p.sc.toFixed(0);
-      ctx.font = `bold ${11*fs}px Inter,sans-serif`; ctx.textAlign = 'center';
-      ctx.strokeStyle = '#060b14'; ctx.lineWidth = 4*fs; ctx.lineJoin = 'round';
-      ctx.strokeText(lbl, x, y - (14*fs));
-      ctx.fillStyle = '#f1f5f9';
-      ctx.fillText(lbl, x, y - (14*fs));
-    });
+    // Score labels above dots (toggleable)
+    if (showScores) {
+      pts.forEach(p => {
+        const x = xS(p.age), y = yS(p.sc);
+        const lbl = p.sc.toFixed(0);
+        ctx.font = `bold ${11*fs}px Inter,sans-serif`; ctx.textAlign = 'center';
+        ctx.strokeStyle = '#060b14'; ctx.lineWidth = 4*fs; ctx.lineJoin = 'round';
+        ctx.strokeText(lbl, x, y - 14*fs);
+        ctx.fillStyle = '#f1f5f9'; ctx.fillText(lbl, x, y - 14*fs);
+      });
+    }
 
-    // Axis title
+    // Axis titles
     ctx.fillStyle = '#374151'; ctx.font = `${9*fs}px Inter,sans-serif`; ctx.textAlign = 'center';
-    ctx.fillText('Age', pad.l + pw / 2, pad.t + ph + (32*fs));
-    ctx.save(); ctx.translate(pad.l - (36*fs), pad.t + ph / 2); ctx.rotate(-Math.PI / 2);
+    ctx.fillText('Age', pad.l + pw / 2, pad.t + ph + 32*fs);
+    ctx.save(); ctx.translate(pad.l - 36*fs, pad.t + ph / 2); ctx.rotate(-Math.PI / 2);
     ctx.textAlign = 'center'; ctx.fillText('Score', 0, 0); ctx.restore();
 
-    // League legend — bottom left, pill style
-    const legY = pad.t + ph + (44*fs);
+    // Legend — pill style bottom
+    const legY = pad.t + ph + 44*fs;
     let legX = pad.l;
     leagueList.forEach(l => {
       const col = leagueColorMap[l] || '#3b7de8';
+      ctx.font = `${9*fs}px Inter,sans-serif`;
       const tw = ctx.measureText(l).width;
-      const pillW = tw + (20*fs), pillH = 14*fs, pillR = 5*fs;
-      // pill bg
+      const pillW = tw + 20*fs, pillH = 14*fs;
       ctx.fillStyle = col + '22';
       ctx.beginPath();
-      ctx.roundRect ? ctx.roundRect(legX, legY - pillH + 3, pillW, pillH, pillR)
-                    : ctx.rect(legX, legY - pillH + 3, pillW, pillH);
+      if (ctx.roundRect) ctx.roundRect(legX, legY - pillH + 3, pillW, pillH, 5*fs);
+      else ctx.rect(legX, legY - pillH + 3, pillW, pillH);
       ctx.fill();
-      // dot
       ctx.beginPath(); ctx.arc(legX + 8*fs, legY - pillH/2 + 5, 4*fs, 0, Math.PI*2);
       ctx.fillStyle = col; ctx.fill();
-      // text
-      ctx.fillStyle = '#94a3b8'; ctx.font = `${9*fs}px Inter,sans-serif`; ctx.textAlign = 'left';
+      ctx.fillStyle = '#94a3b8'; ctx.textAlign = 'left';
       ctx.fillText(l, legX + 15*fs, legY - 2);
       legX += pillW + 8*fs;
     });
   }
 
-  // ── Draw squad scatter ─────────────────────────────────────────────────────
   // ── Draw squad scatter ─────────────────────────────────────────────────────
   function drawSquad(canvas, W, H, dpr=1, forExport=false) {
     if (!canvas) return;
@@ -627,6 +609,7 @@ function CareerTab({ player, players }) {
     const isCurrentView=squadSection==='current';
     const pad={t:forExport?100:32,r:forExport?180:130,b:forExport?90:48,l:forExport?90:52};
     const pw=W-pad.l-pad.r, ph=H-pad.t-pad.b;
+
     // X=Age, Y=score
     const ages=teamPlayers.map(p=>Number(p.age));
     const scores=teamPlayers.map(p=>isCurrentView?p.careerScore:p.potentialScore);
@@ -636,9 +619,22 @@ function CareerTab({ player, players }) {
     const maxS=Math.ceil((Math.max(...scores)+6)/scoreStep)*scoreStep;
     const xS=a=>pad.l+((a-minA)/(maxA-minA))*pw;
     const yS=v=>pad.t+ph-((v-minS)/(maxS-minS||1))*ph;
+
+    // Diverging score colour: green(82+) → yellow(67) → red(54-)
+    const scoreColor=v=>{
+      if(v>=82) return '#22c55e';
+      if(v>=78) return '#4ade80';
+      if(v>=72) return '#86efac';
+      if(v>=67) return '#fde047';
+      if(v>=61) return '#fb923c';
+      if(v>=57) return '#f87171';
+      return '#ef4444';
+    };
+
     // Background
     ctx.fillStyle='#060b14'; ctx.fillRect(0,0,W,H);
     ctx.fillStyle='#080d18'; ctx.fillRect(pad.l,pad.t,pw,ph);
+
     // Title
     if(forExport){
       ctx.fillStyle='#f1f5f9'; ctx.font=`bold ${26*fs}px Inter,sans-serif`; ctx.textAlign='left';
@@ -646,31 +642,33 @@ function CareerTab({ player, players }) {
       ctx.fillStyle='#64748b'; ctx.font=`${13*fs}px Inter,sans-serif`;
       ctx.fillText((isCurrentView?'Current Ability':'Potential Ability')+'  ·  Age vs Score', pad.l, pad.t-18);
     }
-    // Tier lines clipped to plot, labels outside right
+
+    // Tier lines — prominent, clipped, labels right
     const TIER_LINES=[
-      {score:82,label:'Elite PL',color:'#3b7de8'},
-      {score:78,label:'Excellent PL',color:'#60a5fa'},
-      {score:72,label:'PL Level',color:'#22c55e'},
-      {score:67,label:'V.Good Champ',color:'#a3e635'},
-      {score:61,label:'Championship',color:'#f59e0b'},
-      {score:57,label:'League One',color:'#fb923c'},
-      {score:54,label:'League Two',color:'#94a3b8'},
+      {score:82,label:'Elite PL',color:'#22c55e'},
+      {score:78,label:'Excellent PL',color:'#4ade80'},
+      {score:72,label:'PL Level',color:'#86efac'},
+      {score:67,label:'Very Good Champ',color:'#fde047'},
+      {score:61,label:'Championship',color:'#fb923c'},
+      {score:57,label:'League One',color:'#f87171'},
+      {score:54,label:'League Two',color:'#ef4444'},
     ];
     ctx.save(); ctx.beginPath(); ctx.rect(pad.l,pad.t,pw,ph); ctx.clip();
     TIER_LINES.forEach(t=>{
       if(t.score<=minS||t.score>=maxS) return;
       const y=yS(t.score);
-      ctx.setLineDash([6,6]); ctx.strokeStyle=t.color+'28'; ctx.lineWidth=forExport?2:1;
+      ctx.setLineDash([8,6]); ctx.strokeStyle=t.color+'66'; ctx.lineWidth=forExport?3:1.8;
       ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(pad.l+pw,y); ctx.stroke(); ctx.setLineDash([]);
     });
     ctx.restore();
     TIER_LINES.forEach(t=>{
       if(t.score<=minS||t.score>=maxS) return;
       const y=yS(t.score);
-      ctx.fillStyle=t.color+'cc'; ctx.font=`bold ${9*fs}px Inter,sans-serif`; ctx.textAlign='left';
+      ctx.fillStyle=t.color; ctx.font=`bold ${9*fs}px Inter,sans-serif`; ctx.textAlign='left';
       ctx.fillText(t.label, pad.l+pw+10, y+4);
     });
-    // Y grid + labels every scoreStep
+
+    // Y grid + labels
     for(let v=minS;v<=maxS;v+=scoreStep){
       const y=yS(v);
       if(y<pad.t-1||y>pad.t+ph+1) continue;
@@ -679,6 +677,7 @@ function CareerTab({ player, players }) {
       ctx.fillStyle='#374151'; ctx.font=`${9*fs}px Inter,sans-serif`; ctx.textAlign='right';
       ctx.fillText(v, pad.l-8, y+3.5);
     }
+
     // X grid + age labels
     const ageInts=[];
     for(let a=Math.ceil(minA);a<=Math.floor(maxA);a++) ageInts.push(a);
@@ -692,64 +691,71 @@ function CareerTab({ player, players }) {
       ctx.fillStyle='#475569'; ctx.font=`${10*fs}px Inter,sans-serif`; ctx.textAlign='center';
       ctx.fillText(String(a), x, pad.t+ph+18*fs);
     });
+
     // Y axis line
     ctx.strokeStyle='#1e293b'; ctx.lineWidth=forExport?2:1; ctx.setLineDash([]);
     ctx.beginPath(); ctx.moveTo(pad.l,pad.t); ctx.lineTo(pad.l,pad.t+ph+1); ctx.stroke();
-    // Dots first pass
-    teamPlayers.forEach(p=>{
-      const x=xS(Number(p.age));
-      const y=yS(isCurrentView?p.careerScore:p.potentialScore);
-      const col=POS_COLORS[p.roleKey]||'#94a3b8';
-      const isThis=p.name===player.name;
-      const r=(isThis?9:6)*fs;
-      ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2);
-      ctx.fillStyle=col; ctx.fill();
-      ctx.strokeStyle=isThis?'#ffffff':'#060b14'; ctx.lineWidth=isThis?2.5*fs:1.5*fs; ctx.stroke();
-    });
-    // Labels with collision nudge
+
+    // Compute label positions with collision avoidance
+    const dotR = (forExport?9:6)*fs;
     const lblData=teamPlayers.map(p=>{
       const x=xS(Number(p.age));
-      const y=yS(isCurrentView?p.careerScore:p.potentialScore);
-      return {x,y,surname:p.name.split(' ').slice(-1)[0],isThis:p.name===player.name,lx:x+(10*fs),ly:y+(4*fs)};
+      const sc=isCurrentView?p.careerScore:p.potentialScore;
+      const y=yS(sc);
+      return {x,y,sc,surname:p.name.split(' ').slice(-1)[0],isThis:p.name===player.name,lx:x+dotR+4,ly:y+4};
     });
-    for(let i=0;i<lblData.length;i++){
-      for(let j=i+1;j<lblData.length;j++){
-        const a=lblData[i],b=lblData[j];
-        if(Math.abs(a.lx-b.lx)<55*fs&&Math.abs(a.ly-b.ly)<13*fs){
-          if(a.y>=b.y) a.ly+=14*fs; else b.ly+=14*fs;
+    // Multi-pass nudge
+    for(let pass=0;pass<4;pass++){
+      for(let i=0;i<lblData.length;i++){
+        for(let j=i+1;j<lblData.length;j++){
+          const a=lblData[i],b=lblData[j];
+          const dx=Math.abs(a.lx-b.lx), dy=Math.abs(a.ly-b.ly);
+          if(dx<60*fs&&dy<14*fs){
+            const push=14*fs-dy;
+            if(a.y>=b.y){a.ly+=push/2;b.ly-=push/2;}
+            else{b.ly+=push/2;a.ly-=push/2;}
+          }
         }
       }
     }
-    lblData.forEach(({x,y,surname,isThis,lx,ly})=>{
+
+    // Draw dots
+    teamPlayers.forEach((p,i)=>{
+      const sc=isCurrentView?p.careerScore:p.potentialScore;
+      const x=xS(Number(p.age)), y=yS(sc);
+      const col=scoreColor(sc);
+      const isThis=p.name===player.name;
+      ctx.beginPath(); ctx.arc(x,y,isThis?dotR*1.3:dotR,0,Math.PI*2);
+      ctx.fillStyle=col; ctx.fill();
+      ctx.strokeStyle=isThis?'#ffffff':'#060b14';
+      ctx.lineWidth=isThis?2.5*fs:1.5*fs; ctx.stroke();
+    });
+
+    // Draw labels
+    lblData.forEach(({lx,ly,surname,isThis})=>{
       ctx.font=`${isThis?'bold ':''}${(isThis?10:9)*fs}px Inter,sans-serif`;
-      ctx.strokeStyle='#060b14'; ctx.lineWidth=3.5*fs; ctx.lineJoin='round';
+      ctx.strokeStyle='#060b14'; ctx.lineWidth=3.5*fs; ctx.lineJoin='round'; ctx.textAlign='left';
       ctx.strokeText(surname,lx,ly);
-      ctx.fillStyle=isThis?'#ffffff':'#c8d4e8';
+      ctx.fillStyle=isThis?'#ffffff':'#e2e8f4';
       ctx.fillText(surname,lx,ly);
     });
+
     // Axis titles
     ctx.fillStyle='#374151'; ctx.font=`${9*fs}px Inter,sans-serif`; ctx.textAlign='center';
-    ctx.fillText('Age', pad.l+pw/2, pad.t+ph+(32*fs));
-    ctx.save(); ctx.translate(pad.l-(36*fs),pad.t+ph/2); ctx.rotate(-Math.PI/2);
+    ctx.fillText('Age', pad.l+pw/2, pad.t+ph+32*fs);
+    ctx.save(); ctx.translate(pad.l-36*fs,pad.t+ph/2); ctx.rotate(-Math.PI/2);
     ctx.textAlign='center'; ctx.fillText(isCurrentView?'Current Score':'Potential Score',0,0); ctx.restore();
-    // Legend pills
-    const legY=pad.t+ph+(44*fs);
-    let legX=pad.l;
-    Object.entries(POS_COLORS).forEach(([k,c])=>{
-      ctx.font=`${9*fs}px Inter,sans-serif`;
-      const tw=ctx.measureText(k).width;
-      const pillW=tw+(20*fs),pillH=14*fs,pillR=5*fs;
-      ctx.fillStyle=c+'22';
-      ctx.beginPath();
-      if(ctx.roundRect) ctx.roundRect(legX,legY-pillH+3,pillW,pillH,pillR);
-      else ctx.rect(legX,legY-pillH+3,pillW,pillH);
-      ctx.fill();
-      ctx.beginPath(); ctx.arc(legX+8*fs,legY-pillH/2+5,4*fs,0,Math.PI*2);
-      ctx.fillStyle=c; ctx.fill();
-      ctx.fillStyle='#94a3b8'; ctx.textAlign='left';
-      ctx.fillText(k,legX+15*fs,legY-2);
-      legX+=pillW+8*fs;
-    });
+
+    // Score legend strip top-right
+    if(forExport){
+      const stripLabels=[{sc:85,l:'Elite PL'},{sc:75,l:'PL Level'},{sc:64,l:'Championship'},{sc:55,l:'League One'}];
+      let sx=pad.l+pw-300*fs, sy=pad.t-50;
+      stripLabels.forEach(({sc,l})=>{
+        ctx.beginPath(); ctx.arc(sx,sy+8,7*fs,0,Math.PI*2); ctx.fillStyle=scoreColor(sc); ctx.fill();
+        ctx.fillStyle='#94a3b8'; ctx.font=`${9*fs}px Inter,sans-serif`; ctx.textAlign='left';
+        ctx.fillText(l, sx+12*fs, sy+12); sx+=120*fs;
+      });
+    }
   }
 
   // ── useEffect: career ──────────────────────────────────────────────────────
@@ -758,8 +764,8 @@ function CareerTab({ player, players }) {
     const canvas=canvasRef.current;
     if(!canvas) return;
     const W=canvas.offsetWidth||500, H=260;
-    drawCareer(canvas, W, H, window.devicePixelRatio||1, false);
-  },[view,historyWithAge,showForecast,leagueColorMap]);
+    drawCareer(canvas, W, H, window.devicePixelRatio||1, false, showScores);
+  },[view,historyWithAge,showForecast,showScores,leagueColorMap]);
 
   // ── useEffect: squad ───────────────────────────────────────────────────────
   useEffect(()=>{
@@ -774,7 +780,7 @@ function CareerTab({ player, players }) {
   function handleDownload() {
     const offscreen=document.createElement('canvas');
     if(view==='player') {
-      drawCareer(offscreen, 1920, 1080, 1, true);
+      drawCareer(offscreen, 1920, 1080, 1, true, showScores);
     } else {
       drawSquad(offscreen, 1920, 1080, 1, true);
     }
@@ -826,7 +832,11 @@ function CareerTab({ player, players }) {
           <div style={{...SEC,marginBottom:0}}>Career Score by Age</div>
           <label style={{display:'flex',alignItems:'center',gap:5,fontSize:11,color:'#94a3b8',cursor:'pointer',marginLeft:'auto'}}>
             <input type="checkbox" checked={showForecast} onChange={e=>setShowForecast(e.target.checked)} style={{accentColor:'#22c55e'}}/>
-            Show Forecast to Potential
+            Show Forecast
+          </label>
+          <label style={{display:'flex',alignItems:'center',gap:5,fontSize:11,color:'#94a3b8',cursor:'pointer'}}>
+            <input type="checkbox" checked={showScores} onChange={e=>setShowScores(e.target.checked)} style={{accentColor:'#3b7de8'}}/>
+            Show Scores
           </label>
         </div>
         {history.length<1
