@@ -361,6 +361,364 @@ function getSimilar(player, allPlayers){
     .slice(0,5);
 }
 
+
+// ─── League colour palette for career chart ───────────────────────────────────
+const LEAGUE_COLORS = [
+  '#3b7de8','#f59e0b','#22c55e','#a78bfa','#f97316','#ec4899',
+  '#06b6d4','#84cc16','#e11d48','#8b5cf6','#14b8a6','#fb923c',
+];
+
+// ─── Position group colours for squad scatter ─────────────────────────────────
+const POS_COLORS = { GK:'#f59e0b', CB:'#3b7de8', FB:'#22c55e', CM:'#a78bfa', ATT:'#f97316', CF:'#ec4899' };
+
+function CareerTab({ player, players }) {
+  const [view, setView] = React.useState('player'); // 'player' | 'squad'
+  const [showForecast, setShowForecast] = React.useState(false);
+  const [squadSection, setSquadSection] = React.useState('current'); // 'current' | 'potential'
+  const canvasRef = useRef(null);
+  const squadRef = useRef(null);
+
+  // ── Derive per-season age from current age + season offset ──────────────────
+  const SEASON_ORDER = ['2018-19','2019-20','2020-21','2021-22','2022-23','2023-24','2024-25','2025-26'];
+  const currentSeasonIdx = SEASON_ORDER.indexOf('2025-26');
+  const currentAge = Number(player.age) || 25;
+
+  // Deduplicate sh — one point per season, highest sc
+  const dedupHistory = React.useMemo(() => {
+    const byS = {};
+    (player.sh || []).forEach(h => {
+      if (h.sc == null) return;
+      if (!byS[h.s] || h.sc > byS[h.s].sc) byS[h.s] = h;
+    });
+    return Object.values(byS).sort((a, b) => {
+      const ai = SEASON_ORDER.indexOf(a.s), bi = SEASON_ORDER.indexOf(b.s);
+      return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+    });
+  }, [player.sh]);
+
+  const history = dedupHistory.filter(h => h.sc != null);
+
+  // Assign age to each season point
+  const historyWithAge = history.map(h => {
+    const idx = SEASON_ORDER.indexOf(h.s);
+    const offset = idx === -1 ? 0 : idx - currentSeasonIdx;
+    return { ...h, age: currentAge + offset };
+  });
+
+  // Unique leagues for colour mapping
+  const leagueList = [...new Set(historyWithAge.map(h => h.l).filter(Boolean))];
+  const leagueColorMap = {};
+  leagueList.forEach((l, i) => { leagueColorMap[l] = LEAGUE_COLORS[i % LEAGUE_COLORS.length]; });
+
+  // ── Career chart (canvas) ───────────────────────────────────────────────────
+  useEffect(() => {
+    if (view !== 'player') return;
+    const canvas = canvasRef.current;
+    if (!canvas || history.length < 1) return;
+    const W = canvas.offsetWidth || 500, H = 240;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = W * dpr; canvas.height = H * dpr;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    const ctx = canvas.getContext('2d'); ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, W, H);
+
+    const pad = { t: 20, r: 24, b: 36, l: 40 };
+    const pw = W - pad.l - pad.r, ph = H - pad.t - pad.b;
+
+    const pts = historyWithAge;
+    const allScores = showForecast && player.potentialScore
+      ? [...pts.map(p => p.sc), player.potentialScore]
+      : pts.map(p => p.sc);
+    const minS = Math.max(38, Math.min(...allScores) - 6);
+    const maxS = Math.min(100, Math.max(...allScores) + 8);
+
+    const ages = pts.map(p => p.age);
+    const minA = Math.min(...ages) - 0.5;
+    const maxA = Math.max(...ages) + (showForecast ? 2.5 : 0.5);
+
+    const xS = a => pad.l + ((a - minA) / (maxA - minA)) * pw;
+    const yS = v => pad.t + ph - ((v - minS) / (maxS - minS || 1)) * ph;
+
+    // Background
+    ctx.fillStyle = '#07090f'; ctx.fillRect(0, 0, W, H);
+
+    // League tier reference lines
+    const TIER_LINES = [
+      { score: 82, label: 'Elite PL', color: '#3b7de8' },
+      { score: 72, label: 'PL Level', color: '#22c55e' },
+      { score: 61, label: 'Championship', color: '#f59e0b' },
+      { score: 54, label: 'League One', color: '#94a3b8' },
+    ];
+    TIER_LINES.forEach(t => {
+      if (t.score < minS || t.score > maxS) return;
+      const y = yS(t.score);
+      ctx.setLineDash([4, 4]);
+      ctx.strokeStyle = t.color + '44'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l + pw, y); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = t.color + 'bb'; ctx.font = 'bold 8px Inter,sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText(t.label, pad.l + pw - 2, y - 3);
+    });
+
+    // Grid lines + Y labels
+    [0, 0.25, 0.5, 0.75, 1].forEach(f => {
+      const y = pad.t + ph * (1 - f);
+      ctx.strokeStyle = '#131c2e'; ctx.lineWidth = 0.6; ctx.setLineDash([]);
+      ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l + pw, y); ctx.stroke();
+      ctx.fillStyle = '#475569'; ctx.font = '8px Inter,sans-serif'; ctx.textAlign = 'right';
+      ctx.fillText(Math.round(minS + f * (maxS - minS)), pad.l - 4, y + 3);
+    });
+
+    // Smooth line through points
+    if (pts.length >= 2) {
+      ctx.beginPath();
+      pts.forEach((p, i) => {
+        const x = xS(p.age), y = yS(p.sc);
+        if (i === 0) { ctx.moveTo(x, y); return; }
+        const prev = pts[i - 1];
+        const px = xS(prev.age), py = yS(prev.sc);
+        const cx1 = px + (x - px) * 0.5, cx2 = x - (x - px) * 0.5;
+        ctx.bezierCurveTo(cx1, py, cx2, y, x, y);
+      });
+      ctx.strokeStyle = '#3b7de8'; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.stroke();
+    }
+
+    // Forecast line
+    if (showForecast && player.potentialScore && pts.length >= 1) {
+      const lastPt = pts[pts.length - 1];
+      const lx = xS(lastPt.age), ly = yS(lastPt.sc);
+      const fx = xS(lastPt.age + 2), fy = yS(Math.min(player.potentialScore, maxS - 1));
+      ctx.beginPath(); ctx.setLineDash([5, 4]);
+      ctx.moveTo(lx, ly); ctx.lineTo(fx, fy);
+      ctx.strokeStyle = '#22c55e'; ctx.lineWidth = 1.8; ctx.stroke();
+      ctx.setLineDash([]);
+      // Forecast dot
+      ctx.beginPath(); ctx.arc(fx, fy, 5, 0, Math.PI * 2);
+      ctx.fillStyle = '#22c55e'; ctx.fill();
+      ctx.strokeStyle = '#07090f'; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.fillStyle = '#22c55e'; ctx.font = 'bold 9px Inter,sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText('Pot: ' + player.potentialScore.toFixed(0), fx, fy - 9);
+    }
+
+    // Season dots coloured by league
+    pts.forEach(p => {
+      const x = xS(p.age), y = yS(p.sc);
+      const col = leagueColorMap[p.l] || '#3b7de8';
+      ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI * 2);
+      ctx.fillStyle = col; ctx.fill();
+      ctx.strokeStyle = '#07090f'; ctx.lineWidth = 1.5; ctx.stroke();
+      // Score label above dot
+      ctx.fillStyle = '#e2e8f4'; ctx.font = 'bold 9px Inter,sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText(p.sc.toFixed(0), x, y - 9);
+      // Age label below x axis
+      ctx.fillStyle = '#64748b'; ctx.font = '8px Inter,sans-serif';
+      ctx.fillText(p.age, x, H - 4);
+    });
+
+    // X axis label
+    ctx.fillStyle = '#475569'; ctx.font = '8px Inter,sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('Age', pad.l + pw / 2, H - 0);
+
+  }, [view, historyWithAge, showForecast, leagueColorMap]);
+
+  // ── Squad scatter (canvas) ──────────────────────────────────────────────────
+  useEffect(() => {
+    if (view !== 'squad') return;
+    const canvas = squadRef.current;
+    if (!canvas) return;
+
+    // Get all players from same team
+    const teamPlayers = (players || []).filter(p =>
+      p.team === player.team && p.careerScore != null && p.potentialScore != null
+    );
+    if (teamPlayers.length === 0) return;
+
+    const W = canvas.offsetWidth || 500, H = 300;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = W * dpr; canvas.height = H * dpr;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    const ctx = canvas.getContext('2d'); ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, W, H);
+
+    const isCurrentView = squadSection === 'current';
+    const pad = { t: 20, r: 20, b: 36, l: 40 };
+    const pw = W - pad.l - pad.r, ph = H - pad.t - pad.b;
+
+    const allScores = teamPlayers.flatMap(p => [p.careerScore, p.potentialScore]);
+    const minS = Math.max(38, Math.min(...allScores) - 4);
+    const maxS = Math.min(98, Math.max(...allScores) + 4);
+
+    const xS = v => pad.l + ((v - minS) / (maxS - minS)) * pw;
+    const yS = v => pad.t + ph - ((v - minS) / (maxS - minS)) * ph;
+
+    ctx.fillStyle = '#07090f'; ctx.fillRect(0, 0, W, H);
+
+    // Grid
+    [0, 0.25, 0.5, 0.75, 1].forEach(f => {
+      const v = minS + f * (maxS - minS);
+      const x = xS(v), y = yS(v);
+      ctx.strokeStyle = '#131c2e'; ctx.lineWidth = 0.6;
+      ctx.beginPath(); ctx.moveTo(x, pad.t); ctx.lineTo(x, pad.t + ph); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l + pw, y); ctx.stroke();
+      ctx.fillStyle = '#475569'; ctx.font = '8px Inter,sans-serif';
+      ctx.textAlign = 'center'; ctx.fillText(Math.round(v), x, H - 4);
+      ctx.textAlign = 'right'; ctx.fillText(Math.round(v), pad.l - 4, y + 3);
+    });
+
+    // Diagonal reference line
+    ctx.beginPath(); ctx.setLineDash([4, 4]);
+    ctx.moveTo(pad.l, pad.t + ph); ctx.lineTo(pad.l + pw, pad.t);
+    ctx.strokeStyle = '#1e2d45'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Axis labels
+    ctx.fillStyle = '#64748b'; ctx.font = '9px Inter,sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Current Ability', pad.l + pw / 2, H - 0);
+    ctx.save(); ctx.translate(10, pad.t + ph / 2); ctx.rotate(-Math.PI / 2);
+    ctx.fillText('Potential Ability', 0, 0); ctx.restore();
+
+    // Dots
+    teamPlayers.forEach(p => {
+      const x = xS(p.careerScore);
+      const y = yS(isCurrentView ? p.careerScore : p.potentialScore);
+      const rk = p.roleKey || 'CM';
+      const col = POS_COLORS[rk] || '#94a3b8';
+      const isThis = p.name === player.name;
+
+      ctx.beginPath(); ctx.arc(x, isCurrentView ? yS(p.careerScore) : y, isThis ? 7 : 5, 0, Math.PI * 2);
+      ctx.fillStyle = col; ctx.fill();
+      ctx.strokeStyle = isThis ? '#ffffff' : '#07090f'; ctx.lineWidth = isThis ? 2 : 1.2; ctx.stroke();
+
+      // Name label for selected player
+      if (isThis) {
+        ctx.fillStyle = '#e2e8f4'; ctx.font = 'bold 9px Inter,sans-serif'; ctx.textAlign = 'left';
+        ctx.fillText(p.name.split(' ').slice(-1)[0], x + 9, isCurrentView ? yS(p.careerScore) + 4 : y + 4);
+      }
+    });
+
+  }, [view, squadSection, players, player]);
+
+  // ── Legend for league colours ───────────────────────────────────────────────
+  const LeagueLegend = () => (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 12px', marginTop: 8 }}>
+      {leagueList.map(l => (
+        <div key={l} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <div style={{ width: 8, height: 8, borderRadius: '50%', background: leagueColorMap[l], flexShrink: 0 }} />
+          <span style={{ fontSize: 10, color: '#64748b' }}>{l}</span>
+        </div>
+      ))}
+    </div>
+  );
+
+  // ── Pos legend for squad ────────────────────────────────────────────────────
+  const PosLegend = () => (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 12px', marginTop: 8 }}>
+      {Object.entries(POS_COLORS).map(([k, c]) => (
+        <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <div style={{ width: 8, height: 8, borderRadius: '50%', background: c, flexShrink: 0 }} />
+          <span style={{ fontSize: 10, color: '#64748b' }}>{k}</span>
+        </div>
+      ))}
+    </div>
+  );
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+      {/* View toggle */}
+      <div style={{ display: 'flex', gap: 6 }}>
+        {[['player', '📈 Player Career'], ['squad', '👥 Squad View']].map(([v, label]) => (
+          <button key={v} onClick={() => setView(v)} style={{
+            padding: '5px 14px', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: 'pointer', border: 'none',
+            background: view === v ? '#3b7de8' : '#0d1624', color: view === v ? '#fff' : '#64748b',
+          }}>{label}</button>
+        ))}
+      </div>
+
+      {/* ── Player Career View ── */}
+      {view === 'player' && (<>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <div style={{ ...SEC, marginBottom: 0 }}>Career Score by Age</div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#94a3b8', cursor: 'pointer', marginLeft: 'auto' }}>
+            <input type="checkbox" checked={showForecast} onChange={e => setShowForecast(e.target.checked)} style={{ accentColor: '#22c55e' }} />
+            Show Forecast
+          </label>
+        </div>
+
+        {history.length < 1
+          ? <div style={{ color: '#475569', fontSize: 12 }}>No career data available.</div>
+          : <>
+            <div style={{ background: '#07090f', borderRadius: 7, padding: '8px 4px 2px', border: '1px solid #0d1220' }}>
+              <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: 240, borderRadius: 6 }} />
+            </div>
+            <LeagueLegend />
+
+            {/* Score summary row */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8 }}>
+              {[
+                { label: 'Career Score', val: player.careerScore, color: scoreBandColor(player.careerScore) },
+                { label: 'Peak Score', val: player.peakScore, color: scoreBandColor(player.peakScore) },
+                { label: 'Potential', val: player.potentialScore, color: scoreBandColor(player.potentialScore) },
+              ].map(({ label, val, color }) => (
+                <div key={label} style={{ background: '#0d1624', border: '1px solid #1e2d45', borderRadius: 8, padding: '10px', textAlign: 'center' }}>
+                  <div style={{ fontSize: 8, fontWeight: 700, color: '#475569', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>{label}</div>
+                  <div style={{ fontSize: 20, fontWeight: 800, color, lineHeight: 1 }}>{typeof val === 'number' ? val.toFixed(1) : '—'}</div>
+                  <div style={{ fontSize: 9, color: '#475569', marginTop: 2 }}>{typeof val === 'number' ? scoreLabel(val) : ''}</div>
+                </div>
+              ))}
+            </div>
+          </>
+        }
+      </>)}
+
+      {/* ── Squad View ── */}
+      {view === 'squad' && (<>
+        <div style={{ ...SEC, marginBottom: 0 }}>{player.team} — Squad Analysis</div>
+
+        {/* Section toggle */}
+        <div style={{ display: 'flex', gap: 6 }}>
+          {[['current', 'Current Ability'], ['potential', 'Potential Ability']].map(([s, label]) => (
+            <button key={s} onClick={() => setSquadSection(s)} style={{
+              padding: '5px 14px', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: 'pointer', border: 'none',
+              background: squadSection === s ? '#1e2d45' : '#0d1624', color: squadSection === s ? '#e2e8f4' : '#64748b',
+            }}>{label}</button>
+          ))}
+        </div>
+
+        <div style={{ background: '#07090f', borderRadius: 7, padding: '8px 4px 2px', border: '1px solid #0d1220' }}>
+          <canvas ref={squadRef} style={{ display: 'block', width: '100%', height: 300, borderRadius: 6 }} />
+        </div>
+        <PosLegend />
+
+        {/* Squad table */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {(players || [])
+            .filter(p => p.team === player.team && p.careerScore != null)
+            .sort((a, b) => (squadSection === 'current' ? b.careerScore - a.careerScore : b.potentialScore - a.potentialScore))
+            .slice(0, 20)
+            .map(p => {
+              const score = squadSection === 'current' ? p.careerScore : p.potentialScore;
+              const isThis = p.name === player.name;
+              return (
+                <div key={p.name} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 8px', borderRadius: 6, background: isThis ? '#0e2040' : '#0a1220', border: isThis ? '1px solid #3b7de8' : '1px solid transparent' }}>
+                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: POS_COLORS[p.roleKey] || '#94a3b8', flexShrink: 0 }} />
+                  <div style={{ flex: 1, fontSize: 11, color: isThis ? '#93c5fd' : '#c8d4e8', fontWeight: isThis ? 700 : 400 }}>{p.name}</div>
+                  <div style={{ fontSize: 10, color: '#475569', width: 30 }}>{p.roleKey}</div>
+                  <div style={{ width: 80, background: '#0c1120', borderRadius: 3, height: 5 }}>
+                    <div style={{ width: `${Math.min(((score - 40) / 50) * 100, 100)}%`, height: '100%', borderRadius: 3, background: scoreBandColor(score) }} />
+                  </div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: scoreBandColor(score), width: 32, textAlign: 'right' }}>{score != null ? score.toFixed(0) : '—'}</div>
+                </div>
+              );
+            })}
+        </div>
+      </>)}
+    </div>
+  );
+}
+
 export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=false}) {
   const SEASON_ORDER_ARR=['2025-26','2026','2025','2024-25','2024','2023-24','2023','2022-23','2022','2021-22','2021','2020-21','2020','2019-20','2018-19'];
   // Build selectable options from allSeasonsSummary standard rows, deduped by season+league
@@ -473,11 +831,13 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
         <div style={{display:'flex',borderBottom:'1px solid #1e2d45',background:'#09111e',overflowX:'auto'}}>
           <TabBtn label="Profile" active={tab==='profile'} onClick={()=>setTab('profile')}/>
           <TabBtn label="Forecast & Potential" active={tab==='forecast'} onClick={()=>setTab('forecast')}/>
+          <TabBtn label="Career" active={tab==='career'} onClick={()=>setTab('career')}/>
         </div>
 
         <div style={{padding:'18px 22px',display:'flex',flexDirection:'column',gap:18}}>
 
           {rawMode&&<div style={{padding:'6px 14px',background:'#2d1a00',borderBottom:'1px solid #92400e',fontSize:10,color:'#fbbf24',fontWeight:600}}>★ Raw mode — scores show unweighted league percentile (no league strength discount). Stars reflect performance vs league peers only.</div>}
+      {tab==='career'&&<CareerTab player={player} players={players}/>}
       {tab==='profile'&&(<>
             {/* Score cards with stars */}
             <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8}}>
