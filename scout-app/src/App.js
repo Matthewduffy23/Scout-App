@@ -244,12 +244,30 @@ export default function App(){
   const [attrFilters,setAttrFilters]=useState(new Set()); // active attribute keys // hide MV by default, show xValue
   const [showColPicker,setShowColPicker]=useState(false); // default: only show players active 2022-23+
 
+  const posCache=React.useRef({});
+  const RK_TO_FILE={'GK':'gk','CB':'cb','FB':'fb','CM':'cm','ATT':'att','CF':'cf'};
+
   useEffect(()=>{
-    const files=['gk','cb','fb','cm','att','cf'];
-    Promise.all(files.map(f=>fetch(`/players_${f}.json`).then(r=>r.json()).catch(()=>[])))
-      .then(results=>{setAll(results.flat());setLoading(false);})
-      .catch(()=>setLoading(false));
-  },[]);
+    if(!isMobile){
+      // Desktop: load all 6 files once on mount
+      if(Object.keys(posCache.current).length>0){setAll(Object.values(posCache.current).flat());setLoading(false);return;}
+      const files=['gk','cb','fb','cm','att','cf'];
+      Promise.all(files.map(f=>fetch(`/players_${f}.json`).then(r=>r.json()).catch(()=>[])))
+        .then(results=>{
+          files.forEach((f,i)=>{posCache.current[f]=results[i];});
+          setAll(results.flat());setLoading(false);
+        }).catch(()=>setLoading(false));
+    } else {
+      // Mobile: load only the file for current pos
+      const rkNow=Object.entries(ROLE_KEY_LABELS).find(([,v])=>v===pos)?.[0]||'CF';
+      const fileKey=RK_TO_FILE[rkNow]||'cf';
+      if(posCache.current[fileKey]){setAll(posCache.current[fileKey]);setLoading(false);return;}
+      setLoading(true);
+      fetch(`/players_${fileKey}.json`).then(r=>r.json()).catch(()=>[])
+        .then(data=>{posCache.current[fileKey]=data;setAll(data);setLoading(false);})
+        .catch(()=>setLoading(false));
+    }
+  },[pos]);
   useEffect(()=>{setRoleFilter('');setRoleScoreMin(50);setScoreMode('complete');},[pos]);
   useEffect(()=>{if(activePreset&&PRESET_LEAGUES[activePreset]){setActivePresetLeagues([...PRESET_LEAGUES[activePreset]]);}  },[activePreset]);
 
