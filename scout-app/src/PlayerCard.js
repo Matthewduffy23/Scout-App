@@ -378,6 +378,8 @@ function CareerTab({ player, players }) {
   const [highlightPlayer, setHighlightPlayer] = React.useState(true);
   const [showTitle, setShowTitle] = React.useState(true);
   const [filterOutliers, setFilterOutliers] = React.useState(true);
+  const [showCumul, setShowCumul] = React.useState(false);
+  const [showCumulSquad, setShowCumulSquad] = React.useState(false);
   const [squadSection, setSquadSection] = React.useState('current');
   const canvasRef = useRef(null);
   const squadRef = useRef(null);
@@ -411,7 +413,7 @@ function CareerTab({ player, players }) {
 
   // ── Draw career chart ──────────────────────────────────────────────────────
   // ── Draw career chart ──────────────────────────────────────────────────────
-  function drawCareer(canvas, W, H, dpr=1, forExport=false, showScores=true, showTitle=true) {
+  function drawCareer(canvas, W, H, dpr=1, forExport=false, showScores=true, showTitle=true, showCumul=false) {
     if (!canvas || history.length < 1) return;
     canvas.width = W * dpr; canvas.height = H * dpr;
     if (!forExport) { canvas.style.width = W + 'px'; canvas.style.height = H + 'px'; }
@@ -422,7 +424,25 @@ function CareerTab({ player, players }) {
     const titleH = (forExport && showTitle) ? 90*fs : 10;
     const pad = { t: forExport ? titleH+30 : 28, r: forExport?220:130, b: forExport?80:48, l: forExport?80:52 };
     const pw = W - pad.l - pad.r, ph = H - pad.t - pad.b;
-    const pts = historyWithAge;
+
+    // Build cumulative score series using seasonsDetail for minutes weighting
+    const sd = player.seasonsDetail || {};
+    const rawPts = historyWithAge.filter(h => !h.displayOnly);
+
+    // Compute cumulative score at each season point
+    const cumulPts = rawPts.map((_, idx) => {
+      const subset = rawPts.slice(0, idx + 1);
+      let totalMins = 0, weightedSum = 0;
+      subset.forEach(h => {
+        const mins = (sd[h.s] && sd[h.s].minutes) ? sd[h.s].minutes : 500;
+        weightedSum += h.sc * mins;
+        totalMins += mins;
+      });
+      const cumScore = totalMins > 0 ? weightedSum / totalMins : rawPts[idx].sc;
+      return { ...rawPts[idx], sc: Math.round(cumScore * 10) / 10 };
+    });
+
+    const pts = showCumul ? cumulPts : rawPts;
     const allScores = showForecast && player.potentialScore ? [...pts.map(p=>p.sc), player.potentialScore] : pts.map(p=>p.sc);
     const scoreStep = 5;
     const minS = Math.floor((Math.min(...allScores) - 4) / scoreStep) * scoreStep;
@@ -436,38 +456,32 @@ function CareerTab({ player, players }) {
     ctx.fillStyle = '#060b14'; ctx.fillRect(0, 0, W, H);
     ctx.fillStyle = '#07101e'; ctx.fillRect(pad.l, pad.t, pw, ph);
 
-    // Title — only if showTitle, font sized to fit
     if (forExport && showTitle) {
       const nameParts = player.name.split(' ');
       const displayName = nameParts.length > 1 ? nameParts[0][0] + '. ' + nameParts.slice(1).join(' ') : player.name;
-      // Auto-size font to fit within pw
       let fontSize = 28*fs;
       ctx.font = `bold ${fontSize}px Inter,sans-serif`;
-      while (ctx.measureText(displayName).width > pw * 0.6 && fontSize > 14*fs) { fontSize -= fs; ctx.font = `bold ${fontSize}px Inter,sans-serif`; }
-      ctx.fillStyle = '#f8fafc'; ctx.textAlign = 'left';
-      ctx.fillText(displayName, pad.l, pad.t - 42);
+      while (ctx.measureText(displayName).width > pw * 0.55 && fontSize > 14*fs) { fontSize -= fs; ctx.font = `bold ${fontSize}px Inter,sans-serif`; }
+      ctx.fillStyle = '#f8fafc'; ctx.textAlign = 'left'; ctx.fillText(displayName, pad.l, pad.t - 42);
       ctx.fillStyle = '#475569'; ctx.font = `${11*fs}px Inter,sans-serif`;
-      ctx.fillText('Career Trajectory  ·  Score by Age', pad.l, pad.t - 18);
+      const subtitle = showCumul ? 'Cumulative Career Score  ·  By Age' : 'Career Trajectory  ·  Score by Age';
+      ctx.fillText(subtitle, pad.l, pad.t - 18);
       ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(pad.l, pad.t - 8); ctx.lineTo(pad.l + pw, pad.t - 8); ctx.stroke();
     }
 
     // Tier lines
     const TIER_LINES = [
-      {score:82,label:'Elite PL',color:'#3b7de8'},
-      {score:78,label:'Excellent PL',color:'#60a5fa'},
-      {score:72,label:'PL Level',color:'#22c55e'},
-      {score:67,label:'V.Good Champ',color:'#a3e635'},
-      {score:61,label:'Championship',color:'#f59e0b'},
-      {score:57,label:'League One',color:'#fb923c'},
+      {score:82,label:'Elite PL',color:'#3b7de8'},{score:78,label:'Excellent PL',color:'#60a5fa'},
+      {score:72,label:'PL Level',color:'#22c55e'},{score:67,label:'V.Good Champ',color:'#a3e635'},
+      {score:61,label:'Championship',color:'#f59e0b'},{score:57,label:'League One',color:'#fb923c'},
       {score:54,label:'League Two',color:'#94a3b8'},
     ];
     ctx.save(); ctx.beginPath(); ctx.rect(pad.l, pad.t, pw, ph); ctx.clip();
     TIER_LINES.forEach(t => {
       if (t.score <= minS || t.score >= maxS) return;
-      const y = yS(t.score);
       ctx.setLineDash([7,5]); ctx.strokeStyle = t.color+'44'; ctx.lineWidth = forExport?2.5:1.2;
-      ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(pad.l+pw,y); ctx.stroke(); ctx.setLineDash([]);
+      ctx.beginPath(); ctx.moveTo(pad.l, yS(t.score)); ctx.lineTo(pad.l+pw, yS(t.score)); ctx.stroke(); ctx.setLineDash([]);
     });
     ctx.restore();
     TIER_LINES.forEach(t => {
@@ -557,23 +571,34 @@ function CareerTab({ player, players }) {
     ctx.textAlign='center'; ctx.fillText('Score',0,0); ctx.restore();
   }
 
-  function drawSquad(canvas, W, H, dpr=1, forExport=false, highlightMe=true, showTitle=true, filterOutliers=true) {
+  function drawSquad(canvas, W, H, dpr=1, forExport=false, highlightMe=true, showTitle=true, filterOutliers=true, showCumulSquad=false) {
     if (!canvas) return;
     let teamPlayers=(players||[]).filter(p=>p.team===player.team&&p.careerScore!=null&&p.potentialScore!=null);
     if(teamPlayers.length===0) return;
 
-    // Outlier filter — remove players whose score is > 2 std deviations below mean
+    // Outlier filter — 2 SD below mean
     if (filterOutliers && teamPlayers.length > 4) {
-      const isCurrentView2=squadSection==='current';
-      const sc=teamPlayers.map(p=>isCurrentView2?p.careerScore:p.potentialScore);
+      const isCV=squadSection==='current';
+      const sc=teamPlayers.map(p=>isCV?p.careerScore:p.potentialScore);
       const mean=sc.reduce((a,b)=>a+b,0)/sc.length;
       const std=Math.sqrt(sc.map(v=>(v-mean)**2).reduce((a,b)=>a+b,0)/sc.length);
-      const cutoff=mean-2*std;
-      teamPlayers=teamPlayers.filter(p=>{
-        const v=isCurrentView2?p.careerScore:p.potentialScore;
-        return v>=cutoff;
-      });
+      teamPlayers=teamPlayers.filter(p=>(isCV?p.careerScore:p.potentialScore)>=mean-2*std);
     }
+
+    // For cumulative score mode, compute cumul score per player using their sh + seasonsDetail
+    const getScore = (p) => {
+      if (!showCumulSquad) return squadSection==='current' ? p.careerScore : p.potentialScore;
+      // Compute cumulative weighted score using all sh seasons
+      const pSd = p.seasonsDetail || {};
+      const pts = (p.sh||[]).filter(h=>h.sc!=null&&!h.displayOnly);
+      if (!pts.length) return p.careerScore;
+      let totalMins=0, weightedSum=0;
+      pts.forEach(h=>{
+        const mins=(pSd[h.s]&&pSd[h.s].minutes)?pSd[h.s].minutes:500;
+        weightedSum+=h.sc*mins; totalMins+=mins;
+      });
+      return totalMins>0 ? Math.round((weightedSum/totalMins)*10)/10 : p.careerScore;
+    };
 
     canvas.width=W*dpr; canvas.height=H*dpr;
     if(!forExport){canvas.style.width=W+'px'; canvas.style.height=H+'px';}
@@ -586,7 +611,7 @@ function CareerTab({ player, players }) {
     const pw=W-pad.l-pad.r, ph=H-pad.t-pad.b;
 
     const ages=teamPlayers.map(p=>Number(p.age));
-    const scores=teamPlayers.map(p=>isCurrentView?p.careerScore:p.potentialScore);
+    const scores=teamPlayers.map(p=>getScore(p));
     const minA=Math.min(...ages)-1, maxA=Math.max(...ages)+1;
     const scoreStep=5;
     const minS=Math.floor((Math.min(...scores)-4)/scoreStep)*scoreStep;
@@ -602,14 +627,14 @@ function CareerTab({ player, players }) {
     ctx.fillStyle='#060b14'; ctx.fillRect(0,0,W,H);
     ctx.fillStyle='#07101e'; ctx.fillRect(pad.l,pad.t,pw,ph);
 
-    // Title — auto-size font
     if(forExport&&showTitle){
       let fontSize=28*fs;
       ctx.font=`bold ${fontSize}px Inter,sans-serif`;
       while(ctx.measureText(player.team).width>pw*0.55&&fontSize>14*fs){fontSize-=fs;ctx.font=`bold ${fontSize}px Inter,sans-serif`;}
       ctx.fillStyle='#f8fafc'; ctx.textAlign='left'; ctx.fillText(player.team,pad.l,pad.t-42);
       ctx.fillStyle='#475569'; ctx.font=`${11*fs}px Inter,sans-serif`;
-      ctx.fillText((isCurrentView?'Current Ability':'Potential Ability')+'  ·  Age vs Score',pad.l,pad.t-18);
+      const subtitle = showCumulSquad ? 'Cumulative Score  ·  Age vs Score' : (isCurrentView?'Current Ability':'Potential Ability')+'  ·  Age vs Score';
+      ctx.fillText(subtitle,pad.l,pad.t-18);
       ctx.strokeStyle='#1e293b'; ctx.lineWidth=1;
       ctx.beginPath(); ctx.moveTo(pad.l,pad.t-8); ctx.lineTo(pad.l+pw,pad.t-8); ctx.stroke();
     }
@@ -624,9 +649,8 @@ function CareerTab({ player, players }) {
     ctx.save(); ctx.beginPath(); ctx.rect(pad.l,pad.t,pw,ph); ctx.clip();
     TIER_LINES.forEach(t=>{
       if(t.score<=minS||t.score>=maxS) return;
-      const y=yS(t.score);
       ctx.setLineDash([7,5]); ctx.strokeStyle=t.color+'55'; ctx.lineWidth=forExport?2.5:1.4;
-      ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(pad.l+pw,y); ctx.stroke(); ctx.setLineDash([]);
+      ctx.beginPath(); ctx.moveTo(pad.l,yS(t.score)); ctx.lineTo(pad.l+pw,yS(t.score)); ctx.stroke(); ctx.setLineDash([]);
     });
     ctx.restore();
     TIER_LINES.forEach(t=>{
@@ -659,29 +683,46 @@ function CareerTab({ player, players }) {
     ctx.strokeStyle='#1e293b'; ctx.lineWidth=forExport?1.5:0.8; ctx.setLineDash([]);
     ctx.beginPath(); ctx.moveTo(pad.l,pad.t); ctx.lineTo(pad.l,pad.t+ph); ctx.lineTo(pad.l+pw,pad.t+ph); ctx.stroke();
 
-    // Label positions with collision avoidance
+    // Build label data — smart label placement
     const dotR=(forExport?9:6)*fs;
     const lblData=teamPlayers.map(p=>{
-      const sc=isCurrentView?p.careerScore:p.potentialScore;
-      const x=xS(Number(p.age)),y=yS(sc);
+      const sc=getScore(p);
+      const x=xS(Number(p.age)), y=yS(sc);
       const isThis=highlightMe&&p.name===player.name;
-      return{x,y,sc,surname:p.name.split(' ').slice(-1)[0],isThis,lx:x+dotR+5,ly:y+4,dimmed:highlightMe&&p.name!==player.name};
+      const surname=p.name.split(' ').slice(-1)[0];
+      // Try 4 anchor positions, pick best (right, above-right, below-right, left)
+      return {x,y,sc,surname,isThis,lx:x+dotR+5,ly:y+4,dimmed:highlightMe&&p.name!==player.name};
     });
-    for(let pass=0;pass<8;pass++){
+
+    // Multi-pass nudge — push vertically AND horizontally if needed
+    for(let pass=0;pass<10;pass++){
       for(let i=0;i<lblData.length;i++){
         for(let j=i+1;j<lblData.length;j++){
           const a=lblData[i],b=lblData[j];
-          if(Math.abs(a.lx-b.lx)<70*fs&&Math.abs(a.ly-b.ly)<13*fs){
-            const push=(13*fs-Math.abs(a.ly-b.ly))/2+1;
-            if(a.y>=b.y){a.ly+=push;b.ly-=push;}else{b.ly+=push;a.ly-=push;}
+          const dx=Math.abs(a.lx-b.lx), dy=Math.abs(a.ly-b.ly);
+          const overlapX=dx<72*fs, overlapY=dy<13*fs;
+          if(overlapX&&overlapY){
+            const pushY=(13*fs-dy)/2+1;
+            if(a.y>=b.y){a.ly+=pushY;b.ly-=pushY;}else{b.ly+=pushY;a.ly-=pushY;}
           }
         }
       }
     }
 
+    // Draw connector lines for labels pushed far from dot
+    lblData.forEach(({x,y,lx,ly,dimmed})=>{
+      const dist=Math.sqrt((lx-x-dotR)**2+(ly-4-y)**2);
+      if(dist>18*fs){
+        ctx.globalAlpha=dimmed?0.15:0.25;
+        ctx.strokeStyle='#94a3b8'; ctx.lineWidth=0.8*fs; ctx.setLineDash([3,3]);
+        ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(lx-2,ly-2); ctx.stroke();
+        ctx.setLineDash([]); ctx.globalAlpha=1;
+      }
+    });
+
     // Dots
     teamPlayers.forEach(p=>{
-      const sc=isCurrentView?p.careerScore:p.potentialScore;
+      const sc=getScore(p);
       const x=xS(Number(p.age)),y=yS(sc),col=scoreColor(sc);
       const isThis=highlightMe&&p.name===player.name;
       const dimmed=highlightMe&&p.name!==player.name;
@@ -693,7 +734,7 @@ function CareerTab({ player, players }) {
 
     // Labels
     lblData.forEach(({lx,ly,surname,isThis,dimmed})=>{
-      ctx.font=`${isThis?'bold ':''  }${(isThis?10:9)*fs}px Inter,sans-serif`;
+      ctx.font=`${isThis?'bold ':''}${(isThis?10:9)*fs}px Inter,sans-serif`;
       ctx.globalAlpha=dimmed?0.25:1;
       ctx.strokeStyle='#060b14'; ctx.lineWidth=3.5*fs; ctx.lineJoin='round'; ctx.textAlign='left';
       ctx.strokeText(surname,lx,ly); ctx.fillStyle=isThis?'#ffffff':'#d1d5db'; ctx.fillText(surname,lx,ly);
@@ -704,7 +745,7 @@ function CareerTab({ player, players }) {
     ctx.fillStyle='#374151'; ctx.font=`${9*fs}px Inter,sans-serif`; ctx.textAlign='center';
     ctx.fillText('Age',pad.l+pw/2,pad.t+ph+34*fs);
     ctx.save(); ctx.translate(pad.l-38*fs,pad.t+ph/2); ctx.rotate(-Math.PI/2);
-    ctx.textAlign='center'; ctx.fillText(isCurrentView?'Current Score':'Potential Score',0,0); ctx.restore();
+    ctx.textAlign='center'; ctx.fillText(showCumulSquad?'Cumulative Score':isCurrentView?'Current Score':'Potential Score',0,0); ctx.restore();
   }
 
   // ── useEffect: career ──────────────────────────────────────────────────────
@@ -713,8 +754,8 @@ function CareerTab({ player, players }) {
     const canvas=canvasRef.current;
     if(!canvas) return;
     const W=canvas.offsetWidth||500, H=260;
-    drawCareer(canvas, W, H, window.devicePixelRatio||1, false, showScores, showTitle);
-  },[view,historyWithAge,showForecast,showScores,showTitle,leagueColorMap]);
+    drawCareer(canvas, W, H, window.devicePixelRatio||1, false, showScores, showTitle, showCumul);
+  },[view,historyWithAge,showForecast,showScores,showTitle,showCumul,leagueColorMap]);
 
   // ── useEffect: squad ───────────────────────────────────────────────────────
   useEffect(()=>{
@@ -722,16 +763,16 @@ function CareerTab({ player, players }) {
     const canvas=squadRef.current;
     if(!canvas) return;
     const W=canvas.offsetWidth||500, H=340;
-    drawSquad(canvas, W, H, window.devicePixelRatio||1, false, highlightPlayer, showTitle, filterOutliers);
-  },[view,squadSection,players,player,highlightPlayer,showTitle,filterOutliers]);
+    drawSquad(canvas, W, H, window.devicePixelRatio||1, false, highlightPlayer, showTitle, filterOutliers, showCumulSquad);
+  },[view,squadSection,players,player,highlightPlayer,showTitle,filterOutliers,showCumulSquad]);
 
   // ── Download 1920×1080 ─────────────────────────────────────────────────────
   function handleDownload() {
     const offscreen=document.createElement('canvas');
     if(view==='player') {
-      drawCareer(offscreen, 1920, 1080, 1, true, showScores, showTitle);
+      drawCareer(offscreen, 1920, 1080, 1, true, showScores, showTitle, showCumul);
     } else {
-      drawSquad(offscreen, 1920, 1080, 1, true, highlightPlayer, showTitle, filterOutliers);
+      drawSquad(offscreen, 1920, 1080, 1, true, highlightPlayer, showTitle, filterOutliers, showCumulSquad);
     }
     offscreen.toBlob(blob=>{
       const url=URL.createObjectURL(blob);
@@ -791,6 +832,10 @@ function CareerTab({ player, players }) {
             <input type="checkbox" checked={showTitle} onChange={e=>setShowTitle(e.target.checked)} style={{accentColor:'#3b7de8'}}/>
             Show Title
           </label>
+          <label style={{display:'flex',alignItems:'center',gap:5,fontSize:11,color:'#94a3b8',cursor:'pointer'}}>
+            <input type="checkbox" checked={showCumul} onChange={e=>setShowCumul(e.target.checked)} style={{accentColor:'#a78bfa'}}/>
+            Cumulative
+          </label>
         </div>
         {history.length<1
           ?<div style={{color:'#475569',fontSize:12}}>No career data available.</div>
@@ -837,6 +882,10 @@ function CareerTab({ player, players }) {
           <label style={{display:'flex',alignItems:'center',gap:5,fontSize:11,color:'#94a3b8',cursor:'pointer'}}>
             <input type="checkbox" checked={showTitle} onChange={e=>setShowTitle(e.target.checked)} style={{accentColor:'#3b7de8'}}/>
             Show Title
+          </label>
+          <label style={{display:'flex',alignItems:'center',gap:5,fontSize:11,color:'#94a3b8',cursor:'pointer'}}>
+            <input type="checkbox" checked={showCumulSquad} onChange={e=>setShowCumulSquad(e.target.checked)} style={{accentColor:'#a78bfa'}}/>
+            Cumulative
           </label>
         </div>
         <div style={{background:'#07090f',borderRadius:8,padding:'8px 4px 2px',border:'1px solid #0d1220'}}>
