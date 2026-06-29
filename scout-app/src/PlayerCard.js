@@ -421,8 +421,8 @@ function CareerTab({ player, players }) {
     ctx.clearRect(0, 0, W, H);
 
     const fs = forExport ? 2.4 : 1;
-    const titleH = (forExport && showTitle) ? 90*fs : 10;
-    const pad = { t: forExport ? titleH+30 : 28, r: forExport?220:130, b: forExport?80:48, l: forExport?80:52 };
+    const titleH = (forExport && showTitle) ? 110*fs : 10;
+    const pad = { t: forExport ? titleH+50 : 28, r: forExport?220:130, b: forExport?80:48, l: forExport?80:52 };
     const pw = W - pad.l - pad.r, ph = H - pad.t - pad.b;
 
     // Build cumulative score series using seasonsDetail for minutes weighting
@@ -447,11 +447,11 @@ function CareerTab({ player, players }) {
     const pts = showCumul ? cumulPts : rawPts;
     const allScores = showForecast && player.potentialScore ? [...pts.map(p=>p.sc), player.potentialScore] : pts.map(p=>p.sc);
     const scoreStep = 5;
-    const minS = Math.floor((Math.min(...allScores) - 4) / scoreStep) * scoreStep;
-    const maxS = Math.ceil((Math.max(...allScores) + 6) / scoreStep) * scoreStep;
+    const minS = Math.floor((Math.min(...allScores) - 3) / scoreStep) * scoreStep;
+    const maxS = Math.ceil((Math.max(...allScores) + 3) / scoreStep) * scoreStep;
     const ages = pts.map(p=>p.age);
-    const minA = Math.min(...ages) - 0.8;
-    const maxA = Math.max(...ages) + (showForecast ? 2.8 : 0.8);
+    const minA = Math.min(...ages) - 0.5;
+    const maxA = Math.max(...ages) + (showForecast ? 2.5 : 0.5);
     const xS = a => pad.l + ((a - minA) / (maxA - minA)) * pw;
     const yS = v => pad.t + ph - ((v - minS) / (maxS - minS || 1)) * ph;
 
@@ -464,12 +464,12 @@ function CareerTab({ player, players }) {
       let fontSize = 28*fs;
       ctx.font = `bold ${fontSize}px Inter,sans-serif`;
       while (ctx.measureText(displayName).width > pw * 0.55 && fontSize > 14*fs) { fontSize -= fs; ctx.font = `bold ${fontSize}px Inter,sans-serif`; }
-      ctx.fillStyle = '#f8fafc'; ctx.textAlign = 'left'; ctx.fillText(displayName, pad.l, pad.t - 42);
-      ctx.fillStyle = '#475569'; ctx.font = `${11*fs}px Inter,sans-serif`;
+      ctx.fillStyle = '#f8fafc'; ctx.textAlign = 'left'; ctx.fillText(displayName, pad.l, pad.t - 56);
+      ctx.fillStyle = '#64748b'; ctx.font = `${12*fs}px Inter,sans-serif`;
       const subtitle = showCumul ? 'Cumulative Career Score  ·  By Age' : 'Career Trajectory  ·  Score by Age';
-      ctx.fillText(subtitle, pad.l, pad.t - 18);
+      ctx.fillText(subtitle, pad.l, pad.t - 28);
       ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(pad.l, pad.t - 8); ctx.lineTo(pad.l + pw, pad.t - 8); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(pad.l, pad.t - 14); ctx.lineTo(pad.l + pw, pad.t - 14); ctx.stroke();
     }
 
     // Tier lines
@@ -537,7 +537,9 @@ function CareerTab({ player, players }) {
 
     // Forecast
     if (showForecast&&player.potentialScore&&pts.length>=1) {
-      const last=pts[pts.length-1], fAge=last.age+2, fScore=Math.min(player.potentialScore,maxS-1);
+      const last=pts[pts.length-1];
+      const peakAge=player.estPeakAge&&player.estPeakAge>last.age?player.estPeakAge:last.age+2;
+      const fAge=peakAge, fScore=Math.min(player.potentialScore,maxS-1);
       const lx=xS(last.age),ly=yS(last.sc),fx=xS(fAge),fy=yS(fScore);
       ctx.setLineDash([8,6]); ctx.beginPath(); ctx.moveTo(lx,ly); ctx.lineTo(fx,fy);
       ctx.strokeStyle='#22c55e'; ctx.lineWidth=forExport?3:2; ctx.lineCap='round'; ctx.stroke(); ctx.setLineDash([]);
@@ -608,16 +610,16 @@ function CareerTab({ player, players }) {
     ctx.clearRect(0,0,W,H);
     const fs=forExport?2.4:1;
     const isCurrentView=squadSection==='current';
-    const titleH=(forExport&&showTitle)?90*fs:10;
-    const pad={t:forExport?titleH+30:32, r:forExport?220:130, b:forExport?80:48, l:forExport?80:52};
+    const titleH=(forExport&&showTitle)?110*fs:10;
+    const pad={t:forExport?titleH+50:32, r:forExport?220:130, b:forExport?80:48, l:forExport?80:52};
     const pw=W-pad.l-pad.r, ph=H-pad.t-pad.b;
 
     const ages=teamPlayers.map(p=>Number(p.age));
     const scores=teamPlayers.map(p=>getScore(p));
-    const minA=Math.min(...ages)-1, maxA=Math.max(...ages)+1;
+    const minA=Math.min(...ages)-0.5, maxA=Math.max(...ages)+0.5;
     const scoreStep=5;
-    const minS=Math.floor((Math.min(...scores)-4)/scoreStep)*scoreStep;
-    const maxS=Math.ceil((Math.max(...scores)+6)/scoreStep)*scoreStep;
+    const minS=Math.floor((Math.min(...scores)-3)/scoreStep)*scoreStep;
+    const maxS=Math.ceil((Math.max(...scores)+3)/scoreStep)*scoreStep;
     const xS=a=>pad.l+((a-minA)/(maxA-minA))*pw;
     const yS=v=>pad.t+ph-((v-minS)/(maxS-minS||1))*ph;
 
@@ -633,12 +635,12 @@ function CareerTab({ player, players }) {
       let fontSize=28*fs;
       ctx.font=`bold ${fontSize}px Inter,sans-serif`;
       while(ctx.measureText(player.team).width>pw*0.55&&fontSize>14*fs){fontSize-=fs;ctx.font=`bold ${fontSize}px Inter,sans-serif`;}
-      ctx.fillStyle='#f8fafc'; ctx.textAlign='left'; ctx.fillText(player.team,pad.l,pad.t-42);
-      ctx.fillStyle='#475569'; ctx.font=`${11*fs}px Inter,sans-serif`;
+      ctx.fillStyle='#f8fafc'; ctx.textAlign='left'; ctx.fillText(player.team,pad.l,pad.t-56);
+      ctx.fillStyle='#64748b'; ctx.font=`${12*fs}px Inter,sans-serif`;
       const subtitle = showCumulSquad ? 'Cumulative Score  ·  Age vs Score' : (isCurrentView?'Current Ability':'Potential Ability')+'  ·  Age vs Score';
-      ctx.fillText(subtitle,pad.l,pad.t-18);
+      ctx.fillText(subtitle,pad.l,pad.t-28);
       ctx.strokeStyle='#1e293b'; ctx.lineWidth=1;
-      ctx.beginPath(); ctx.moveTo(pad.l,pad.t-8); ctx.lineTo(pad.l+pw,pad.t-8); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(pad.l,pad.t-14); ctx.lineTo(pad.l+pw,pad.t-14); ctx.stroke();
     }
 
     // Tier lines
