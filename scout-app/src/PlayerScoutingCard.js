@@ -301,9 +301,9 @@ const APP_ROLES = {
   GK:  ['Shot Stopper GK','Ball Playing GK','Sweeper GK'],
   CB:  ['Ball Playing CB','Wide CB','Box Defender'],
   FB:  ['Build Up FB','Attacking FB','Defensive FB'],
-  CM:  ['Deep Playmaker CM','Advanced Playmaker CM','Defensive CM','Defensive','Ball Carrying CM','Box to Box CM','Goal Threat CM'],
-  ATT: ['Playmaker ATT','Goal Threat ATT','Ball Carrier ATT'],
-  CF:  ['Target Man CF','Goal Threat CF','Link Up CF'],
+  CM:  ['Deep Playmaker CM','Advanced Playmaker CM','Defensive CM','Defensive','Defensive DM','Ball Carrying CM','Box to Box CM','Goal Threat CM'],
+  ATT: ['Playmaker ATT','Goal Threat ATT','Ball Carrier ATT','Wide Creator ATT'],
+  CF:  ['Target Man CF','Goal Threat CF','Link Up CF','False 9 CF'],
 };
 // Roles used for the performance trend label — excludes certain roles per position
 const TREND_ROLES = {
@@ -624,54 +624,65 @@ const PITCH_DOT_DEFAULT = '#a3a3a3';
 // ── Metric label display map: pipeline label → display label ──────────────
 const METRIC_LABEL_MAP = {
   // Attacking
+  'Crosses per 90': 'Crosses',
   'Crosses': 'Crosses',
   'Accurate crosses, %': 'Crossing Accuracy %',
   'Crossing accuracy': 'Crossing Accuracy %',
-  'Non-penalty goals': 'Goals: Non-Penalty',
   'Non-penalty goals per 90': 'Goals: Non-Penalty',
+  'Non-penalty goals': 'Goals: Non-Penalty',
+  'xG per 90': 'xG',
   'xG': 'xG',
+  'xA per 90': 'Expected Assists',
   'xA': 'Expected Assists',
+  'Offensive duels per 90': 'Offensive Duels',
   'Offensive duels': 'Offensive Duels',
   'Offensive duels won, %': 'Offensive Duel Success %',
+  'Progressive runs per 90': 'Progressive Runs',
   'Progressive runs': 'Progressive Runs',
+  'Shots per 90': 'Shots',
   'Shots': 'Shots',
-  'Shots on target, %': 'Shooting Accuracy %',
-  'Touches in box': 'Touches in Opposition Box',
   'Touches in box per 90': 'Touches in Opposition Box',
+  'Touches in box': 'Touches in Opposition Box',
+  'Shots on target, %': 'Shooting Accuracy %',
   // Defensive
+  'Aerial duels per 90': 'Aerial Duels',
   'Aerial duels': 'Aerial Duels',
   'Aerial duels won, %': 'Aerial Duel Success %',
+  'Defensive duels per 90': 'Defensive Duels',
   'Defensive duels': 'Defensive Duels',
   'Defensive duels won, %': 'Defensive Duel Success %',
+  'Shots blocked per 90': 'Shots Blocked',
+  'Shots blocked': 'Shots Blocked',
   'PAdj Interceptions': 'PAdj. Interceptions',
   'PAdj. Interceptions': 'PAdj. Interceptions',
   // Possession
-  'Deep completions': 'Deep Completions',
   'Deep completions per 90': 'Deep Completions',
+  'Deep completions': 'Deep Completions',
+  'Dribbles per 90': 'Dribbles',
   'Dribbles': 'Dribbles',
   'Successful dribbles, %': 'Dribbling Success %',
-  'Key passes': 'Key Passes',
-  'Key passes per 90': 'Key Passes',
-  'Forward passes': 'Forward Passes',
   'Forward passes per 90': 'Forward Passes',
+  'Forward passes': 'Forward Passes',
   'Accurate forward passes, %': 'Forward Passing %',
-  'Long passes': 'Long Passes',
+  'Key passes per 90': 'Key passes',
+  'Key passes': 'Key passes',
   'Long passes per 90': 'Long Passes',
+  'Long passes': 'Long Passes',
   'Accurate long passes, %': 'Long Passing %',
-  'Passes': 'Passes',
   'Passes per 90': 'Passes',
+  'Passes': 'Passes',
   'Accurate passes, %': 'Passing %',
-  'Passes to final third': 'Passes to Final 3rd',
   'Passes to final third per 90': 'Passes to Final 3rd',
+  'Passes to final third': 'Passes to Final 3rd',
   'Accurate passes to final third, %': 'Passes to Final 3rd %',
-  'Passes to penalty area': 'Passes to Penalty Area',
   'Passes to penalty area per 90': 'Passes to Penalty Area',
+  'Passes to penalty area': 'Passes to Penalty Area',
   'Accurate passes to penalty area, %': 'Pass to Penalty Area %',
-  'Progressive passes': 'Progressive Passes',
   'Progressive passes per 90': 'Progressive Passes',
+  'Progressive passes': 'Progressive Passes',
   'Accurate progressive passes, %': 'Progressive Passing %',
-  'Smart passes': 'Smart Passes',
   'Smart passes per 90': 'Smart Passes',
+  'Smart passes': 'Smart Passes',
 };
 
 // ── Role display name overrides for scouting card ───────────────────────
@@ -1034,9 +1045,9 @@ export function buildCardElement(player, manual = {}) {
 
       <!-- PERCENTILE CHART (Feature F) -->
       <div style="position:absolute;top:409px;left:0px;width:876px;height:671px;overflow:hidden;box-sizing:border-box;padding-left:24px;">
-        ${groups.A && groups.A.length ? `<div style="font-size:24px;font-weight:700;color:#d1d5db;margin:0 0 6px;">${isGK ? 'Goalkeeping' : 'Attacking'}</div>${buildGroupBars('A')}` : ''}
-        ${groups.D && groups.D.length ? `<div style="font-size:24px;font-weight:700;color:#d1d5db;margin:8px 0 6px;">Defensive</div>${buildGroupBars('D')}` : ''}
-        ${groups.P && groups.P.length ? `<div style="font-size:24px;font-weight:700;color:#d1d5db;margin:8px 0 6px;">Possession</div>${buildGroupBars('P')}` : ''}
+        ${groups.A && groups.A.length ? `<div style="font-size:24px;font-weight:800;color:#f3f5f7;margin:0 0 6px;">${isGK ? 'Goalkeeping' : 'Attacking'}</div>${buildGroupBars('A')}` : ''}
+        ${groups.D && groups.D.length ? `<div style="font-size:24px;font-weight:800;color:#f3f5f7;margin:8px 0 6px;">Defensive</div>${buildGroupBars('D')}` : ''}
+        ${groups.P && groups.P.length ? `<div style="font-size:24px;font-weight:800;color:#f3f5f7;margin:8px 0 6px;">Possession</div>${buildGroupBars('P')}` : ''}
         <div style="display:flex;align-items:center;margin-top:6px;">
           <div style="width:188px;flex-shrink:0;"></div>
           <div style="flex:1;position:relative;height:22px;">

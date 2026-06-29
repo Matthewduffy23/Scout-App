@@ -4,10 +4,10 @@ import { scoreBandColor, formatMV, formatFoot, ROLE_KEY_LABELS, divColor, LEAGUE
 const APP_ROLES = {
   GK:  ['Shot Stopper GK','Ball Playing GK','Sweeper GK'],
   CB:  ['Ball Playing CB','Wide CB','Box Defender'],
-  FB:  ['Build Up FB','Attacking FB','Defensive FB'],
-  CM:  ['Deep Playmaker CM','Advanced Playmaker CM','Defensive CM','Defensive','Ball Carrying CM','Box to Box CM','Goal Threat CM'],
+  FB:  ['Build Up FB','Attacking FB','Defensive FB','Wide Creator FB','Wide Carrier FB'],
+  CM:  ['Deep Playmaker CM','Advanced Playmaker CM','Defensive Midfielder DM','Goal Threat CM','Ball Carrying CM','Box-to-Box CM'],
   ATT: ['Playmaker ATT','Goal Threat ATT','Ball Carrier ATT'],
-  CF:  ['Target Man CF','Goal Threat CF','Link Up CF'],
+  CF:  ['Target Man CF','Goal Threat CF','Link Up CF','False-9 Runner CF','False-9 Passer CF'],
 };
 const TOKEN_TO_POS_KEY = {
   GK:'GK', CB:'CB', LCB:'CB', RCB:'CB',
