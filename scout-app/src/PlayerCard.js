@@ -461,15 +461,15 @@ function CareerTab({ player, players }) {
     if (forExport && showTitle) {
       const nameParts = player.name.split(' ');
       const displayName = nameParts.length > 1 ? nameParts[0][0] + '. ' + nameParts.slice(1).join(' ') : player.name;
-      let fontSize = 32*fs;
+      let fontSize = 18*fs;
       ctx.font = `bold ${fontSize}px Inter,sans-serif`;
-      while (ctx.measureText(displayName).width > pw * 0.7 && fontSize > 16*fs) { fontSize -= fs; ctx.font = `bold ${fontSize}px Inter,sans-serif`; }
+      while (ctx.measureText(displayName).width > pw * 0.7 && fontSize > 10*fs) { fontSize -= fs; ctx.font = `bold ${fontSize}px Inter,sans-serif`; }
       const titleY = 52*fs;
       const subtitleY = titleY + 26*fs;
       const separatorY = subtitleY + 16*fs;
       ctx.fillStyle = '#f8fafc'; ctx.textAlign = 'left'; ctx.fillText(displayName, pad.l, titleY);
       ctx.fillStyle = '#64748b'; ctx.font = `${13*fs}px Inter,sans-serif`;
-      const subtitle = showCumul ? displayName + '  —  Cumulative Career Score' : displayName + '  —  Career Trajectory';
+      const subtitle = showCumul ? displayName + ': Cumulative Career Score' : displayName + ': Career Trajectory';
       ctx.font = `${13*fs}px Inter,sans-serif`;
       ctx.fillStyle = '#64748b'; ctx.fillText(subtitle, pad.l, subtitleY);
       ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 1;
@@ -650,11 +650,11 @@ function CareerTab({ player, players }) {
     ctx.fillStyle='#07101e'; ctx.fillRect(pad.l,pad.t,pw,ph);
 
     if(forExport&&showTitle){
-      let fontSize=32*fs;
+      let fontSize=18*fs;
       ctx.font=`bold ${fontSize}px Inter,sans-serif`;
       const abilityLabel = showCumulSquad ? 'Cumulative Score' : (isCurrentView?'Current Ability':'Potential Ability');
-      const fullTitle = player.team + '  —  ' + abilityLabel;
-      while(ctx.measureText(fullTitle).width>pw*0.8&&fontSize>16*fs){fontSize-=fs;ctx.font=`bold ${fontSize}px Inter,sans-serif`;}
+      const fullTitle = player.team + ': ' + abilityLabel;
+      while(ctx.measureText(fullTitle).width>pw*0.8&&fontSize>10*fs){fontSize-=fs;ctx.font=`bold ${fontSize}px Inter,sans-serif`;}
       const titleY=48*fs, separatorY=titleY+20*fs;
       ctx.fillStyle='#f8fafc'; ctx.textAlign='left'; ctx.fillText(fullTitle,pad.l,titleY);
       ctx.strokeStyle='#1e293b'; ctx.lineWidth=1;
