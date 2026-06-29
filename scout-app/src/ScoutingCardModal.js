@@ -49,6 +49,7 @@ export default function ScoutingCardModal({ player, onClose }) {
   const [positionColors, setPositionColors] = useState({});
   const [selectedSeasonKey, setSelectedSeasonKey] = useState('');
   const [selectedLeague, setSelectedLeague] = useState('');
+  const [seasonStatsLabel, setSeasonStatsLabel] = useState('');
   const [busy, setBusy] = useState(false);
 
   const handlePosImage = (e) => {
@@ -95,6 +96,7 @@ export default function ScoutingCardModal({ player, onClose }) {
         positionColors,
         selectedSeasonKey: selectedSeasonKey || undefined,
         selectedLeague: selectedLeague || undefined,
+        seasonStatsLabel: seasonStatsLabel || undefined,
       });
     } catch (err) {
       alert('Failed to generate card: ' + err.message);
@@ -314,6 +316,13 @@ export default function ScoutingCardModal({ player, onClose }) {
           <div style={{ fontSize: 10, color: '#6b7a99', marginTop: 4 }}>
             This is the "Av Rat" pill in the Season Stats row (left panel) — separate from the Last 5 Match Ratings above.
           </div>
+        </div>
+
+        <div style={sectionStyle}>
+          <label style={labelStyle}>Season Stats Header Label</label>
+          <input style={inputStyle} value={seasonStatsLabel} onChange={e => setSeasonStatsLabel(e.target.value)} placeholder="Season Stats" />
+          <div style={{ fontSize: 10, color: '#6b7a99', marginTop: 4 }}>Override the "Season Stats" title — e.g. "24-25 Stats"</div>
+
         </div>
 
         <div style={sectionStyle}>

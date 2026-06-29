@@ -5,7 +5,7 @@ const APP_ROLES = {
   GK:  ['Shot Stopper GK','Ball Playing GK','Sweeper GK'],
   CB:  ['Ball Playing CB','Wide CB','Box Defender'],
   FB:  ['Build Up FB','Attacking FB','Defensive FB'],
-  CM:  ['Deep Playmaker CM','Advanced Playmaker CM','Defensive CM','Ball Carrying CM','Goal Threat CM'],
+  CM:  ['Deep Playmaker CM','Advanced Playmaker CM','Defensive CM','Defensive','Ball Carrying CM','Box to Box CM','Goal Threat CM'],
   ATT: ['Playmaker ATT','Goal Threat ATT','Ball Carrier ATT'],
   CF:  ['Target Man CF','Goal Threat CF','Link Up CF'],
 };

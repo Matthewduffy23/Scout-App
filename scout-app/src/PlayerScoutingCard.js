@@ -301,7 +301,7 @@ const APP_ROLES = {
   GK:  ['Shot Stopper GK','Ball Playing GK','Sweeper GK'],
   CB:  ['Ball Playing CB','Wide CB','Box Defender'],
   FB:  ['Build Up FB','Attacking FB','Defensive FB'],
-  CM:  ['Deep Playmaker CM','Advanced Playmaker CM','Defensive CM','Ball Carrying CM','Goal Threat CM'],
+  CM:  ['Deep Playmaker CM','Advanced Playmaker CM','Defensive CM','Defensive','Ball Carrying CM','Box to Box CM','Goal Threat CM'],
   ATT: ['Playmaker ATT','Goal Threat ATT','Ball Carrier ATT'],
   CF:  ['Target Man CF','Goal Threat CF','Link Up CF'],
 };
@@ -1004,7 +1004,7 @@ export function buildCardElement(player, manual = {}) {
       </div>
 
       <!-- SEASON STATS -->
-      <div style="position:absolute;top:300px;left:17px;font-size:26.6px;font-weight:700;color:${ACCENT_PINK};">Season Stats</div>
+      <div style="position:absolute;top:300px;left:17px;font-size:26.6px;font-weight:700;color:${ACCENT_PINK};">${manual.seasonStatsLabel || 'Season Stats'}</div>
       <div style="position:absolute;top:356px;left:17px;display:flex;align-items:center;gap:8px;">
         ${LEAGUE_LOGOS[leagueName] ? `<div style="width:30px;height:30px;flex-shrink:0;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${LEAGUE_LOGOS[leagueName]}');"></div>` : ''}
         <span style="font-size:20px;font-weight:500;color:#fff;max-width:170px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${leagueDisplayName}</span>
@@ -1034,9 +1034,9 @@ export function buildCardElement(player, manual = {}) {
 
       <!-- PERCENTILE CHART (Feature F) -->
       <div style="position:absolute;top:409px;left:0px;width:876px;height:671px;overflow:hidden;box-sizing:border-box;padding-left:24px;">
-        ${groups.A && groups.A.length ? `<div style="font-size:24px;font-weight:800;color:#f3f5f7;margin:0 0 6px;">${isGK ? 'Goalkeeping' : 'Attacking'}</div>${buildGroupBars('A')}` : ''}
-        ${groups.D && groups.D.length ? `<div style="font-size:24px;font-weight:800;color:#f3f5f7;margin:8px 0 6px;">Defensive</div>${buildGroupBars('D')}` : ''}
-        ${groups.P && groups.P.length ? `<div style="font-size:24px;font-weight:800;color:#f3f5f7;margin:8px 0 6px;">Possession</div>${buildGroupBars('P')}` : ''}
+        ${groups.A && groups.A.length ? `<div style="font-size:24px;font-weight:700;color:#d1d5db;margin:0 0 6px;">${isGK ? 'Goalkeeping' : 'Attacking'}</div>${buildGroupBars('A')}` : ''}
+        ${groups.D && groups.D.length ? `<div style="font-size:24px;font-weight:700;color:#d1d5db;margin:8px 0 6px;">Defensive</div>${buildGroupBars('D')}` : ''}
+        ${groups.P && groups.P.length ? `<div style="font-size:24px;font-weight:700;color:#d1d5db;margin:8px 0 6px;">Possession</div>${buildGroupBars('P')}` : ''}
         <div style="display:flex;align-items:center;margin-top:6px;">
           <div style="width:188px;flex-shrink:0;"></div>
           <div style="flex:1;position:relative;height:22px;">
