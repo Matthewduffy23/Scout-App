@@ -44,6 +44,7 @@ export default function ScoutingCardModal({ player, onClose }) {
   const [valueOverride, setValueOverride] = useState('');
   const [positionOverride, setPositionOverride] = useState('');
   const [footOverride, setFootOverride] = useState('');
+  const [statsOverrides, setStatsOverrides] = useState({apps:'',gls:'',asts:'',xg:'',xa:'',mins:''});
   const [birthDate, setBirthDate] = useState('');
   const [importanceOverride, setImportanceOverride] = useState('');
   const [positionColors, setPositionColors] = useState({});
@@ -91,6 +92,7 @@ export default function ScoutingCardModal({ player, onClose }) {
         valueOverride,
         positionOverride,
         footOverride,
+        statsOverrides,
         birthDate,
         importanceOverride,
         positionColors,
@@ -315,6 +317,18 @@ export default function ScoutingCardModal({ player, onClose }) {
           <input style={inputStyle} value={seasonAvgRatingOverride} onChange={e => setSeasonAvgRatingOverride(e.target.value)} placeholder="auto from data" />
           <div style={{ fontSize: 10, color: '#6b7a99', marginTop: 4 }}>
             This is the "Av Rat" pill in the Season Stats row (left panel) — separate from the Last 5 Match Ratings above.
+          </div>
+        </div>
+
+        <div style={sectionStyle}>
+          <label style={labelStyle}>Season Stats Overrides</label>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+            {[['apps','Apps'],['gls','Gls'],['asts','Asts'],['xg','xG'],['xa','xA'],['mins','Mins']].map(([k,lab]) => (
+              <div key={k}>
+                <label style={{ fontSize: 10, color: '#94a3b8', display: 'block', marginBottom: 3 }}>{lab}</label>
+                <input style={inputStyle} value={statsOverrides[k]} onChange={e => setStatsOverrides(s => ({...s, [k]: e.target.value}))} placeholder="auto" />
+              </div>
+            ))}
           </div>
         </div>
 

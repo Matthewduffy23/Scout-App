@@ -1029,12 +1029,12 @@ export function buildCardElement(player, manual = {}) {
           ['Save%',595, gkSaveRate != null ? gkSaveRate.toFixed(1)+'%' : '—'],
           ['Mins', 678, statsRow.mins ? statsRow.mins.toLocaleString() : '—'],
         ] : [
-          ['Apps', 235, statsRow.m != null ? String(statsRow.m) : '—', 250],
-          ['Gls',  332, statsRow.g != null ? String(statsRow.g) : '0'],
-          ['Asts', 408, statsRow.a != null ? String(statsRow.a) : '0'],
-          ['xG',   500, fmt1(xgSeason)],
-          ['xA',   595, fmt1(xaSeason)],
-          ['Mins', 678, statsRow.mins ? statsRow.mins.toLocaleString() : '—'],
+          ['Apps', 235, manual.statsOverrides?.apps || (statsRow.m != null ? String(statsRow.m) : '—'), 250],
+          ['Gls',  332, manual.statsOverrides?.gls || (statsRow.g != null ? String(statsRow.g) : '0')],
+          ['Asts', 408, manual.statsOverrides?.asts || (statsRow.a != null ? String(statsRow.a) : '0')],
+          ['xG',   500, manual.statsOverrides?.xg || fmt1(xgSeason)],
+          ['xA',   595, manual.statsOverrides?.xa || fmt1(xaSeason)],
+          ['Mins', 678, manual.statsOverrides?.mins || (statsRow.mins ? statsRow.mins.toLocaleString() : '—')],
         ];
         const heads = cols.map(([lab,x]) => `<div style="position:absolute;top:319px;left:${x}px;font-size:20px;font-weight:500;color:#d9d9d9;">${lab}</div>`).join('');
         const vals = cols.map(([,x,v,vx]) => `<div style="position:absolute;top:357px;left:${vx || x}px;font-size:20px;font-weight:500;color:#fff;">${v}</div>`).join('');
