@@ -429,8 +429,10 @@ function CareerTab({ player, players }) {
     const sd = player.seasonsDetail || {};
     const rawPts = historyWithAge.filter(h => !h.displayOnly);
 
-    // Compute cumulative score at each season point
+    // Compute cumulative score at each season point, anchored to player.careerScore at final point
     const cumulPts = rawPts.map((_, idx) => {
+      const isLast = idx === rawPts.length - 1;
+      if (isLast) return { ...rawPts[idx], sc: player.careerScore };
       const subset = rawPts.slice(0, idx + 1);
       let totalMins = 0, weightedSum = 0;
       subset.forEach(h => {
