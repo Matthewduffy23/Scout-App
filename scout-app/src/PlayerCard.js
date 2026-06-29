@@ -379,6 +379,7 @@ function CareerTab({ player, players }) {
   const [showTitle, setShowTitle] = React.useState(true);
   const [filterOutliers, setFilterOutliers] = React.useState(true);
   const [showCumul, setShowCumul] = React.useState(false);
+  const [showCeiling, setShowCeiling] = React.useState(false);
   const [showCumulSquad, setShowCumulSquad] = React.useState(false);
   const [squadSection, setSquadSection] = React.useState('current');
   const canvasRef = useRef(null);
@@ -413,7 +414,7 @@ function CareerTab({ player, players }) {
 
   // ── Draw career chart ──────────────────────────────────────────────────────
   // ── Draw career chart ──────────────────────────────────────────────────────
-  function drawCareer(canvas, W, H, dpr=1, forExport=false, showScores=true, showTitle=true, showCumul=false) {
+  function drawCareer(canvas, W, H, dpr=1, forExport=false, showScores=true, showTitle=true, showCumul=false, showCeiling=false) {
     if (!canvas || history.length < 1) return;
     canvas.width = W * dpr; canvas.height = H * dpr;
     if (!forExport) { canvas.style.width = W + 'px'; canvas.style.height = H + 'px'; }
@@ -445,7 +446,12 @@ function CareerTab({ player, players }) {
     });
 
     const pts = showCumul ? cumulPts : rawPts;
-    const allScores = showForecast && player.potentialScore ? [...pts.map(p=>p.sc), player.potentialScore] : pts.map(p=>p.sc);
+    const ceilingScore = showCeiling && player.potentialCeiling ? player.potentialCeiling : null;
+    const allScores = [
+      ...pts.map(p=>p.sc),
+      ...(showForecast && player.potentialScore ? [player.potentialScore] : []),
+      ...(ceilingScore ? [ceilingScore] : []),
+    ];
     const scoreStep = 5;
     const minS = Math.floor((Math.min(...allScores) - 3) / scoreStep) * scoreStep;
     const maxS = Math.ceil((Math.max(...allScores) + 3) / scoreStep) * scoreStep;
@@ -569,6 +575,23 @@ function CareerTab({ player, players }) {
       }
     }
 
+    // Ceiling line + dot
+    if (showCeiling && player.potentialCeiling && pts.length >= 1) {
+      const last=pts[pts.length-1];
+      const cAge=player.estPeakAge&&player.estPeakAge>last.age?player.estPeakAge:last.age+2;
+      const cScore=Math.min(player.potentialCeiling, maxS-1);
+      const lx2=xS(last.age), ly2=yS(last.sc);
+      const rawCx=xS(cAge), cx=Math.min(rawCx, pad.l+pw-20*fs), cy=yS(cScore);
+      ctx.setLineDash([4,4]); ctx.beginPath(); ctx.moveTo(lx2,ly2); ctx.lineTo(cx,cy);
+      ctx.strokeStyle='#a78bfa'; ctx.lineWidth=forExport?2.5:1.8; ctx.lineCap='round'; ctx.stroke(); ctx.setLineDash([]);
+      ctx.beginPath(); ctx.arc(cx,cy,forExport?9:6,0,Math.PI*2); ctx.fillStyle='#a78bfa'; ctx.fill();
+      ctx.strokeStyle='#060b14'; ctx.lineWidth=forExport?2:1.5; ctx.stroke();
+      ctx.font=`bold ${10*fs}px Inter,sans-serif`; ctx.textAlign='center';
+      ctx.strokeStyle='#060b14'; ctx.lineWidth=3*fs; ctx.lineJoin='round';
+      ctx.strokeText('Ceil '+cScore.toFixed(0),cx,cy-14*fs);
+      ctx.fillStyle='#a78bfa'; ctx.fillText('Ceil '+cScore.toFixed(0),cx,cy-14*fs);
+    }
+
     // Dots
     pts.forEach(p=>{
       const x=xS(p.age),y=yS(p.sc),col=leagueColorMap[p.l]||'#3b7de8';
@@ -636,8 +659,9 @@ function CareerTab({ player, players }) {
     const scores=teamPlayers.map(p=>getScore(p));
     const minA=Math.min(...ages)-0.5, maxA=Math.max(...ages)+0.5;
     const scoreStep=5;
-    const minS=Math.floor((Math.min(...scores)-3)/scoreStep)*scoreStep;
-    const maxS=Math.ceil((Math.max(...scores)+3)/scoreStep)*scoreStep;
+    const rawMinS=Math.min(...scores), rawMaxS=Math.max(...scores);
+    const minS=Math.floor((rawMinS-2)/scoreStep)*scoreStep;
+    const maxS=Math.ceil((rawMaxS+2)/scoreStep)*scoreStep;
     const xS=a=>pad.l+((a-minA)/(maxA-minA))*pw;
     const yS=v=>pad.t+ph-((v-minS)/(maxS-minS||1))*ph;
 
@@ -787,8 +811,8 @@ function CareerTab({ player, players }) {
     const canvas=canvasRef.current;
     if(!canvas) return;
     const W=canvas.offsetWidth||500, H=260;
-    drawCareer(canvas, W, H, window.devicePixelRatio||1, false, showScores, showTitle, showCumul);
-  },[view,historyWithAge,showForecast,showScores,showTitle,showCumul,leagueColorMap]);
+    drawCareer(canvas, W, H, window.devicePixelRatio||1, false, showScores, showTitle, showCumul, showCeiling);
+  },[view,historyWithAge,showForecast,showScores,showTitle,showCumul,showCeiling,leagueColorMap]);
 
   // ── useEffect: squad ───────────────────────────────────────────────────────
   useEffect(()=>{
@@ -803,7 +827,7 @@ function CareerTab({ player, players }) {
   function handleDownload() {
     const offscreen=document.createElement('canvas');
     if(view==='player') {
-      drawCareer(offscreen, 1920, 1080, 1, true, showScores, showTitle, showCumul);
+      drawCareer(offscreen, 1920, 1080, 1, true, showScores, showTitle, showCumul, showCeiling);
     } else {
       drawSquad(offscreen, 1920, 1080, 1, true, highlightPlayer, showTitle, filterOutliers, showCumulSquad);
     }
@@ -869,6 +893,10 @@ function CareerTab({ player, players }) {
             <input type="checkbox" checked={showCumul} onChange={e=>setShowCumul(e.target.checked)} style={{accentColor:'#a78bfa'}}/>
             Cumulative
           </label>
+          {player.potentialCeiling&&<label style={{display:'flex',alignItems:'center',gap:5,fontSize:11,color:'#94a3b8',cursor:'pointer'}}>
+            <input type="checkbox" checked={showCeiling} onChange={e=>setShowCeiling(e.target.checked)} style={{accentColor:'#a78bfa'}}/>
+            Show Ceiling
+          </label>}
         </div>
         {history.length<1
           ?<div style={{color:'#475569',fontSize:12}}>No career data available.</div>
