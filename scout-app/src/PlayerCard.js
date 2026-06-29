@@ -505,14 +505,20 @@ function CareerTab({ player, players }) {
     }
 
     // X grid + age labels
+    const usedLabelX = [];
     for (let a=Math.ceil(minA); a<=Math.floor(maxA); a++) {
       const x=xS(a); if(x<pad.l||x>pad.l+pw) continue;
       ctx.strokeStyle='#0d1829'; ctx.lineWidth=forExport?1:0.5; ctx.setLineDash([]);
       ctx.beginPath(); ctx.moveTo(x,pad.t); ctx.lineTo(x,pad.t+ph); ctx.stroke();
       ctx.strokeStyle='#1e293b'; ctx.lineWidth=forExport?1.5:0.8;
       ctx.beginPath(); ctx.moveTo(x,pad.t+ph); ctx.lineTo(x,pad.t+ph+5); ctx.stroke();
-      ctx.fillStyle='#4b5563'; ctx.font=`${10*fs}px Inter,sans-serif`; ctx.textAlign='center';
-      ctx.fillText(String(a), x, pad.t+ph+18*fs);
+      // Skip label if too close to another already drawn label
+      const tooClose = usedLabelX.some(ux => Math.abs(ux - x) < 22*fs);
+      if (!tooClose) {
+        ctx.fillStyle='#4b5563'; ctx.font=`${10*fs}px Inter,sans-serif`; ctx.textAlign='center';
+        ctx.fillText(String(a), x, pad.t+ph+18*fs);
+        usedLabelX.push(x);
+      }
     }
 
     // Axes border
@@ -700,8 +706,12 @@ function CareerTab({ player, players }) {
       const x=xS(Number(p.age)), y=yS(sc);
       const isThis=highlightMe&&p.name===player.name;
       const surname=p.name.split(' ').slice(-1)[0];
-      // Try 4 anchor positions, pick best (right, above-right, below-right, left)
-      return {x,y,sc,surname,isThis,lx:x+dotR+5,ly:y+4,dimmed:highlightMe&&p.name!==player.name};
+      // Place label right of dot by default, flip left if near right edge
+      const labelW = surname.length * 7 * fs;
+      const nearRight = (x + dotR + 5 + labelW) > (pad.l + pw - 10*fs);
+      const initLx = nearRight ? x - dotR - 5 - labelW : x + dotR + 5;
+      const initAlign = nearRight ? 'left' : 'left';
+      return {x,y,sc,surname,isThis,lx:initLx,ly:y+4,dimmed:highlightMe&&p.name!==player.name,flipLeft:nearRight};
     });
 
     // Multi-pass nudge — push vertically AND horizontally if needed
@@ -720,12 +730,13 @@ function CareerTab({ player, players }) {
     }
 
     // Draw connector lines for labels pushed far from dot
-    lblData.forEach(({x,y,lx,ly,dimmed})=>{
-      const dist=Math.sqrt((lx-x-dotR)**2+(ly-4-y)**2);
+    lblData.forEach(({x,y,lx,ly,dimmed,flipLeft})=>{
+      const anchorX = flipLeft ? x - dotR : x + dotR;
+      const dist=Math.sqrt((lx-anchorX)**2+(ly-4-y)**2);
       if(dist>18*fs){
         ctx.globalAlpha=dimmed?0.15:0.25;
         ctx.strokeStyle='#94a3b8'; ctx.lineWidth=0.8*fs; ctx.setLineDash([3,3]);
-        ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(lx-2,ly-2); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(lx,ly-4); ctx.stroke();
         ctx.setLineDash([]); ctx.globalAlpha=1;
       }
     });
@@ -743,11 +754,17 @@ function CareerTab({ player, players }) {
     });
 
     // Labels
-    lblData.forEach(({lx,ly,surname,isThis,dimmed})=>{
+    lblData.forEach(({x,lx,ly,surname,isThis,dimmed,flipLeft})=>{
       ctx.font=`${isThis?'bold ':''}${(isThis?10:9)*fs}px Inter,sans-serif`;
       ctx.globalAlpha=dimmed?0.25:1;
-      ctx.strokeStyle='#060b14'; ctx.lineWidth=3.5*fs; ctx.lineJoin='round'; ctx.textAlign='left';
-      ctx.strokeText(surname,lx,ly); ctx.fillStyle=isThis?'#ffffff':'#d1d5db'; ctx.fillText(surname,lx,ly);
+      ctx.strokeStyle='#060b14'; ctx.lineWidth=3.5*fs; ctx.lineJoin='round';
+      ctx.textAlign='left';
+      // Clamp label so it stays within plot bounds
+      const labelW2 = ctx.measureText(surname).width;
+      const clampedLx = flipLeft
+        ? Math.max(pad.l + 2, lx)
+        : Math.min(lx, pad.l + pw - labelW2 - 8*fs);
+      ctx.strokeText(surname,clampedLx,ly); ctx.fillStyle=isThis?'#ffffff':'#d1d5db'; ctx.fillText(surname,clampedLx,ly);
       ctx.globalAlpha=1;
     });
 
