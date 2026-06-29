@@ -31,6 +31,7 @@ function flagUrl(country) {
 import { openOnePager } from './PlayerOnePager';
 import { Photo, Crest } from './utils';
 import ScoutingCardModal from './ScoutingCardModal';
+import QuickCardModal from './QuickCard';
 
 const INTERNATIONAL_LEAGUES = new Set(['UEFA WC Qualifiers.','UEFA U21 Euros.','UEFA U19 Euros.','Asia WC Qualifiers.','AFCON.','AFCON U20.','AFCON U17.','AFCON Qualifiers.','S.America Qualifiers.','U20 World Cup.','U17 World Cup.']);
 const CONTINENTAL_LEAGUES = new Set(['Conference League.','Conference League Qualifiers.','Europa League.','Europa League Qualifiers.','Champions League.','Champions League Qualifiers.','Asia Champions League.','Africa Champions League.','Copa Libertadores.','U20 Copa.','Club World Cup.','UEFA Youth League.']);
@@ -999,6 +1000,7 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
   const [grpTab,setGrpTab]=useState('A');
   const [rawModeLocal,setRawModeLocal]=useState(false);
   const [showScoutingCard,setShowScoutingCard]=useState(false);
+  const [showQuickCard,setShowQuickCard]=useState(false);
   const rawMode = rawModeProp || rawModeLocal; // external prop takes precedence
   const sd=(player.seasonsDetail||{})[selSKey]||{};
   // Find the matching allSeasonsSummary row for accurate team/league/score display
@@ -1082,6 +1084,9 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
             </button>
             <button onClick={()=>setShowScoutingCard(true)} style={{background:'#3a0e2a',border:'1px solid #ff66c4',color:'#ff8fd4',borderRadius:6,padding:'0 10px',height:28,display:'flex',alignItems:'center',gap:5,fontSize:11,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>
               <span style={{fontSize:13}}>🖼</span> Scouting Card
+            </button>
+            <button onClick={()=>setShowQuickCard(true)} style={{background:'#0e2a1c',border:'1px solid #22c55e',color:'#86efac',borderRadius:6,padding:'0 10px',height:28,display:'flex',alignItems:'center',gap:5,fontSize:11,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>
+              <span style={{fontSize:13}}>⚡</span> Quick Card
             </button>
             <button onClick={onClose} style={{background:'none',border:'1px solid #1e2d45',color:'#94a3b8',borderRadius:6,width:28,height:28,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,cursor:'pointer'}}>×</button>
           </div>
@@ -1387,6 +1392,7 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
         </div>
       </div>
       {showScoutingCard&&<ScoutingCardModal player={player} onClose={()=>setShowScoutingCard(false)}/>}
+      {showQuickCard&&<QuickCardModal player={player} players={players} onClose={()=>setShowQuickCard(false)}/>}
     </div>
   );
 }
