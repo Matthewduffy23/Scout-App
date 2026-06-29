@@ -421,8 +421,8 @@ function CareerTab({ player, players }) {
     ctx.clearRect(0, 0, W, H);
 
     const fs = forExport ? 2.4 : 1;
-    const titleH = (forExport && showTitle) ? 110*fs : 10;
-    const pad = { t: forExport ? titleH+50 : 28, r: forExport?220:130, b: forExport?80:48, l: forExport?80:52 };
+    const titleH = (forExport && showTitle) ? 120*fs : 10;
+    const pad = { t: forExport ? titleH+40 : 28, r: forExport?220:130, b: forExport?80:48, l: forExport?80:52 };
     const pw = W - pad.l - pad.r, ph = H - pad.t - pad.b;
 
     // Build cumulative score series using seasonsDetail for minutes weighting
@@ -461,15 +461,18 @@ function CareerTab({ player, players }) {
     if (forExport && showTitle) {
       const nameParts = player.name.split(' ');
       const displayName = nameParts.length > 1 ? nameParts[0][0] + '. ' + nameParts.slice(1).join(' ') : player.name;
-      let fontSize = 28*fs;
+      let fontSize = 32*fs;
       ctx.font = `bold ${fontSize}px Inter,sans-serif`;
-      while (ctx.measureText(displayName).width > pw * 0.55 && fontSize > 14*fs) { fontSize -= fs; ctx.font = `bold ${fontSize}px Inter,sans-serif`; }
-      ctx.fillStyle = '#f8fafc'; ctx.textAlign = 'left'; ctx.fillText(displayName, pad.l, pad.t - 56);
-      ctx.fillStyle = '#64748b'; ctx.font = `${12*fs}px Inter,sans-serif`;
+      while (ctx.measureText(displayName).width > pw * 0.7 && fontSize > 16*fs) { fontSize -= fs; ctx.font = `bold ${fontSize}px Inter,sans-serif`; }
+      const titleY = 52*fs;
+      const subtitleY = titleY + 26*fs;
+      const separatorY = subtitleY + 16*fs;
+      ctx.fillStyle = '#f8fafc'; ctx.textAlign = 'left'; ctx.fillText(displayName, pad.l, titleY);
+      ctx.fillStyle = '#64748b'; ctx.font = `${13*fs}px Inter,sans-serif`;
       const subtitle = showCumul ? 'Cumulative Career Score  ·  By Age' : 'Career Trajectory  ·  Score by Age';
-      ctx.fillText(subtitle, pad.l, pad.t - 28);
+      ctx.fillText(subtitle, pad.l, subtitleY);
       ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(pad.l, pad.t - 14); ctx.lineTo(pad.l + pw, pad.t - 14); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(pad.l, separatorY); ctx.lineTo(pad.l + pw, separatorY); ctx.stroke();
     }
 
     // Tier lines
@@ -540,7 +543,9 @@ function CareerTab({ player, players }) {
       const last=pts[pts.length-1];
       const peakAge=player.estPeakAge&&player.estPeakAge>last.age?player.estPeakAge:last.age+2;
       const fAge=peakAge, fScore=Math.min(player.potentialScore,maxS-1);
-      const lx=xS(last.age),ly=yS(last.sc),fx=xS(fAge),fy=yS(fScore);
+      const lx=xS(last.age),ly=yS(last.sc);
+      // Clamp forecast x to plot right edge minus small margin
+      const rawFx=xS(fAge), fx=Math.min(rawFx, pad.l+pw-20*fs), fy=yS(fScore);
       ctx.setLineDash([8,6]); ctx.beginPath(); ctx.moveTo(lx,ly); ctx.lineTo(fx,fy);
       ctx.strokeStyle='#22c55e'; ctx.lineWidth=forExport?3:2; ctx.lineCap='round'; ctx.stroke(); ctx.setLineDash([]);
       ctx.beginPath(); ctx.arc(fx,fy,forExport?10:7,0,Math.PI*2); ctx.fillStyle='#22c55e'; ctx.fill();
@@ -548,7 +553,7 @@ function CareerTab({ player, players }) {
       ctx.font=`bold ${10*fs}px Inter,sans-serif`; ctx.textAlign='center';
       ctx.strokeStyle='#060b14'; ctx.lineWidth=3.5*fs; ctx.lineJoin='round';
       ctx.strokeText('Pot '+fScore.toFixed(0),fx,fy-15*fs); ctx.fillStyle='#22c55e'; ctx.fillText('Pot '+fScore.toFixed(0),fx,fy-15*fs);
-      ctx.fillStyle='#4b5563'; ctx.font=`${10*fs}px Inter,sans-serif`; ctx.fillText(String(fAge),fx,pad.t+ph+18*fs);
+      ctx.fillStyle='#4b5563'; ctx.font=`${10*fs}px Inter,sans-serif`; ctx.fillText('Age '+String(fAge),fx,pad.t+ph+18*fs);
     }
 
     // Dots
@@ -610,8 +615,8 @@ function CareerTab({ player, players }) {
     ctx.clearRect(0,0,W,H);
     const fs=forExport?2.4:1;
     const isCurrentView=squadSection==='current';
-    const titleH=(forExport&&showTitle)?110*fs:10;
-    const pad={t:forExport?titleH+50:32, r:forExport?220:130, b:forExport?80:48, l:forExport?80:52};
+    const titleH=(forExport&&showTitle)?120*fs:10;
+    const pad={t:forExport?titleH+40:32, r:forExport?220:130, b:forExport?80:48, l:forExport?80:52};
     const pw=W-pad.l-pad.r, ph=H-pad.t-pad.b;
 
     const ages=teamPlayers.map(p=>Number(p.age));
@@ -632,15 +637,16 @@ function CareerTab({ player, players }) {
     ctx.fillStyle='#07101e'; ctx.fillRect(pad.l,pad.t,pw,ph);
 
     if(forExport&&showTitle){
-      let fontSize=28*fs;
+      let fontSize=32*fs;
       ctx.font=`bold ${fontSize}px Inter,sans-serif`;
-      while(ctx.measureText(player.team).width>pw*0.55&&fontSize>14*fs){fontSize-=fs;ctx.font=`bold ${fontSize}px Inter,sans-serif`;}
-      ctx.fillStyle='#f8fafc'; ctx.textAlign='left'; ctx.fillText(player.team,pad.l,pad.t-56);
-      ctx.fillStyle='#64748b'; ctx.font=`${12*fs}px Inter,sans-serif`;
+      while(ctx.measureText(player.team).width>pw*0.7&&fontSize>16*fs){fontSize-=fs;ctx.font=`bold ${fontSize}px Inter,sans-serif`;}
+      const titleY=52*fs, subtitleY=titleY+26*fs, separatorY=subtitleY+16*fs;
+      ctx.fillStyle='#f8fafc'; ctx.textAlign='left'; ctx.fillText(player.team,pad.l,titleY);
+      ctx.fillStyle='#64748b'; ctx.font=`${13*fs}px Inter,sans-serif`;
       const subtitle = showCumulSquad ? 'Cumulative Score  ·  Age vs Score' : (isCurrentView?'Current Ability':'Potential Ability')+'  ·  Age vs Score';
-      ctx.fillText(subtitle,pad.l,pad.t-28);
+      ctx.fillText(subtitle,pad.l,subtitleY);
       ctx.strokeStyle='#1e293b'; ctx.lineWidth=1;
-      ctx.beginPath(); ctx.moveTo(pad.l,pad.t-14); ctx.lineTo(pad.l+pw,pad.t-14); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(pad.l,separatorY); ctx.lineTo(pad.l+pw,separatorY); ctx.stroke();
     }
 
     // Tier lines
