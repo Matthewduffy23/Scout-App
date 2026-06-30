@@ -514,29 +514,31 @@ export default function QuickCardModal({ player, players, onClose }) {
   const handleDownload = async () => {
     setDownloading(true);
     setDownloadError(null);
+    const { toPng } = await import('html-to-image');
     await ensureMontserratEmbedded();
-    // Small delay to let fonts settle
-    await new Promise(r => setTimeout(r, 400));
     const el = buildQuickCardElement(player, players);
     try {
-      const { toPng } = await import('html-to-image');
-      const cardNode = el.querySelector('#qc-card-root');
+      const cardNode = el.querySelector('#qc-card-root') || el;
       const opts = {
-        width: 1920, height: 1080, pixelRatio: 1, backgroundColor: BG,
-        cacheBust: true, skipFonts: true,
+        width: 1920,
+        height: 1080,
+        pixelRatio: 1,
+        backgroundColor: BG,
+        cacheBust: true,
+        fontEmbedCSS: MONTSERRAT_EMBED_CSS,
         imagePlaceholder: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
       };
+      await toPng(cardNode, opts);
       const dataUrl = await toPng(cardNode, opts);
       const a = document.createElement('a');
       a.download = `${player.name.replace(/\s+/g,'_')}_quick_card.png`;
       a.href = dataUrl;
       a.click();
     } catch(e) {
-      console.error('QuickCard download error:', e);
-      setDownloadError('Download failed — try again');
-    }
-    finally {
-      if (document.body.contains(el)) document.body.removeChild(el);
+      console.error('QuickCard error:', e);
+      setDownloadError('Failed — try again');
+    } finally {
+      document.body.removeChild(el);
       setDownloading(false);
     }
   };
