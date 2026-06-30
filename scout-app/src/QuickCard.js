@@ -510,6 +510,7 @@ function buildQuickCardElement(player, players) {
 export default function QuickCardModal({ player, players, onClose }) {
   const [downloading, setDownloading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState(null);
+  const [error, setError] = useState(null);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -521,14 +522,16 @@ export default function QuickCardModal({ player, players, onClose }) {
         const cardNode = el.querySelector('#qc-card-root');
         const opts = {
           width: 1920, height: 1080, pixelRatio: 1, backgroundColor: BG,
-          cacheBust: true, fontEmbedCSS: MONTSERRAT_EMBED_CSS,
+          cacheBust: true, skipFonts: false,
           imagePlaceholder: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
         };
-        await toPng(cardNode, opts);
         const dataUrl = await toPng(cardNode, opts);
         if (!cancelled) setPreviewUrl(dataUrl);
-      } catch(e) { console.error(e); }
-      finally { document.body.removeChild(el); }
+      } catch(e) {
+        console.error('QuickCard render error:', e);
+        if (!cancelled) setError(String(e));
+      }
+      finally { if (document.body.contains(el)) document.body.removeChild(el); }
     })();
     return () => { cancelled = true; };
   }, [player, players]);
@@ -542,7 +545,7 @@ export default function QuickCardModal({ player, players, onClose }) {
       const cardNode = el.querySelector('#qc-card-root');
       const opts = {
         width: 1920, height: 1080, pixelRatio: 1, backgroundColor: BG,
-        cacheBust: true, fontEmbedCSS: MONTSERRAT_EMBED_CSS,
+        cacheBust: true, skipFonts: false,
         imagePlaceholder: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
       };
       const dataUrl = await toPng(cardNode, opts);
@@ -550,9 +553,9 @@ export default function QuickCardModal({ player, players, onClose }) {
       a.download = `${player.name.replace(/\s+/g,'_')}_quick_card.png`;
       a.href = dataUrl;
       a.click();
-    } catch(e) { console.error(e); }
+    } catch(e) { console.error('QuickCard download error:', e); }
     finally {
-      document.body.removeChild(el);
+      if (document.body.contains(el)) document.body.removeChild(el);
       setDownloading(false);
     }
   };
@@ -584,7 +587,9 @@ export default function QuickCardModal({ player, players, onClose }) {
         <div style={{padding:16}}>
           {previewUrl
             ? <img src={previewUrl} style={{width:'100%',borderRadius:8,display:'block'}} alt="Quick Card preview"/>
-            : <div style={{color:'#64748b',fontSize:13,textAlign:'center',padding:'60px 0'}}>Generating preview…</div>
+            : error
+              ? <div style={{color:'#f87171',fontSize:12,textAlign:'center',padding:'40px 20px'}}>Render error: {error}<br/><br/>Try downloading directly.</div>
+              : <div style={{color:'#64748b',fontSize:13,textAlign:'center',padding:'60px 0'}}>Generating preview…</div>
           }
         </div>
 
