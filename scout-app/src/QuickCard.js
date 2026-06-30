@@ -305,32 +305,24 @@ const PLACEHOLDER_ROLES = [
 
 function rolesRankedSvgHtml() {
   const roles = PLACEHOLDER_ROLES;
-  const w = 880, rowH = 52, numDots = 10, dotR = 10;
-  const labelW = 220;
-  const dotsAreaW = w - labelW - 60;
-  const dotSpacing = (dotsAreaW - dotR * 2) / (numDots - 1);
-  const h = roles.length * rowH + 8;
-
-  const rows = roles.map(([disp, score], i) => {
+  const rows = roles.map(([disp, score]) => {
     const sc = Math.round(score);
-    const filled = Math.max(0, Math.min(numDots, Math.round(sc / 10)));
+    const filled = Math.max(0, Math.min(10, Math.round(sc / 10)));
     const col = scoreTierColor(sc);
-    const y = i * rowH + rowH / 2 + 4;
-    const dots = Array.from({length: numDots}, (_, d) => {
-      const cx = labelW + dotR + d * dotSpacing;
-      return d < filled
-        ? `<circle cx="${cx}" cy="${y}" r="${dotR}" fill="${col}"/>`
-        : `<circle cx="${cx}" cy="${y}" r="${dotR}" fill="none" stroke="${col}" stroke-width="2" opacity="0.45"/>`;
+    const dots = Array.from({length: 10}, (_, d) => {
+      const f = d < filled;
+      return `<span style="display:inline-block;width:18px;height:18px;border-radius:50%;margin-right:6px;background:${f ? col : 'transparent'};border:2px solid ${col};opacity:${f ? 1 : 0.4};"></span>`;
     }).join('');
-    const scoreX = labelW + dotR + (numDots - 1) * dotSpacing + dotR + 18;
     return `
-      <text x="0" y="${y + 6}" font-family="Montserrat,sans-serif" font-size="18" font-weight="700" fill="#c8d2e0">${disp}</text>
-      ${dots}
-      <text x="${scoreX}" y="${y + 6}" font-family="Montserrat,sans-serif" font-size="17" font-weight="800" fill="${col}">${sc}</text>`;
+      <div style="display:flex;align-items:center;margin-bottom:8px;">
+        <span style="width:240px;flex-shrink:0;font-size:17px;font-weight:600;color:#c8d2e0;">${disp}</span>
+        <span style="display:flex;align-items:center;">${dots}</span>
+        <span style="font-size:17px;font-weight:800;color:${col};margin-left:10px;">${sc}</span>
+      </div>`;
   }).join('');
-
-  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">${rows}</svg>`;
+  return `<div style="font-family:'Montserrat',sans-serif;">${rows}</div>`;
 }
+
 
 function buildQuickCardElement(player, players) {
   const seasonsDetailObj = player.seasonsDetail || {};
@@ -400,7 +392,7 @@ function buildQuickCardElement(player, players) {
   container.style.width = '1920px';
   container.style.height = '1080px';
 
-  const rolesRankedHtml = rolesRankedSvgHtml();
+  const rolesRankedHtml = rolesRankedSvgHtml(sortedRoles);
 
   const attributeTagsHtml = (arr, bg, fg, border) => arr.slice(0,6).map(s =>
     `<span style="font-size:13px;background:${bg};color:${fg};border:1px solid ${border};border-radius:14px;padding:4px 11px;display:inline-block;margin:0 6px 6px 0;">${s}</span>`
@@ -443,12 +435,12 @@ function buildQuickCardElement(player, players) {
       <div style="position:absolute;left:882px;top:42px;font-size:36px;font-weight:800;color:#fff;${sdTeam.length >= 16 ? 'letter-spacing:-1px;' : ''}">${sdTeam}</div>
       <div style="position:absolute;left:882px;top:92px;font-size:26px;font-weight:500;color:#d0d8ea;">${sdLeague}</div>
 
-      <div style="position:absolute;left:1020px;top:30px;width:3px;height:210px;background:#737373;"></div>
+      <div style="position:absolute;left:1168px;top:30px;width:3px;height:210px;background:#737373;"></div>
 
       <!-- INFO BOX — bigger -->
       ${[['Height:', cmToFeet(player.height) || '—'], ['Value:', (player.xValue > 0 ? formatMV(player.xValue) : '—')], ['Contract:', (player.contractYear && player.contractYear !== 'nan') ? String(player.contractYear) : '—']].map(([k,v],i) => `
-        <div style="position:absolute;left:1040px;top:${42 + i*64}px;font-size:24px;font-weight:600;color:#9aa3b8;">${k}</div>
-        <div style="position:absolute;left:1210px;top:${42 + i*64}px;font-size:24px;font-weight:700;color:#fff;">${v}</div>`).join('')}
+        <div style="position:absolute;left:1204px;top:${42 + i*64}px;font-size:24px;font-weight:600;color:#9aa3b8;">${k}</div>
+        <div style="position:absolute;left:1370px;top:${42 + i*64}px;font-size:24px;font-weight:700;color:#fff;">${v}</div>`).join('')}
 
       <!-- GBE — bigger, more presence -->
       <div style="position:absolute;top:20px;right:28px;width:390px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.10);border-radius:12px;padding:18px 22px;">
@@ -490,13 +482,24 @@ function buildQuickCardElement(player, players) {
 
       <!-- ROLE SCORES -->
       <div style="position:absolute;top:298px;left:984px;width:920px;">
-        <div style="font-size:26.6px;font-weight:700;color:${ACCENT_PINK};margin-bottom:14px;">Role Scores</div>
-        <div style="display:flex;justify-content:flex-start;">${rolesRankedHtml}</div>
+        <div style="font-size:26.6px;font-weight:700;color:${ACCENT_PINK};margin-bottom:18px;">Role Scores</div>
+        ${rolesRankedHtml}
       </div>
 
-      <!-- TEAM CONTEXT -->
-      <div style="position:absolute;top:620px;left:984px;width:920px;">
-        <div style="font-size:26.6px;font-weight:700;color:${ACCENT_PINK};margin-bottom:14px;">Team Context</div>
+      <!-- divider between role scores and team context -->
+      <div style="position:absolute;left:984px;top:780px;width:920px;height:2px;background:rgba(255,255,255,0.06);"></div>
+
+      <!-- Key Attributes / Dev Areas -->
+      ${(strengths.length>0 || weaknesses.length>0) ? `
+      <div style="position:absolute;top:794px;left:984px;width:920px;">
+        ${strengths.length>0 ? `<span style="font-size:13px;font-weight:700;color:#7a8499;text-transform:uppercase;letter-spacing:.06em;margin-right:10px;">Strengths</span>${attributeTagsHtml(strengths.slice(0,4), '#0e2a1c', '#86efac', '#22c55e44')}` : ''}
+        ${weaknesses.length>0 ? `<span style="font-size:13px;font-weight:700;color:#7a8499;text-transform:uppercase;letter-spacing:.06em;margin:0 10px 0 18px;">Areas</span>${attributeTagsHtml(weaknesses.slice(0,3), '#2a0e0e', '#fca5a5', '#ef444444')}` : ''}
+      </div>` : ''}
+
+      <!-- TEAM CONTEXT — range bar showing where player sits in squad -->
+      <div style="position:absolute;top:${(strengths.length>0||weaknesses.length>0) ? 850 : 800}px;left:984px;width:920px;">
+        <div style="font-size:26.6px;font-weight:700;color:${ACCENT_PINK};margin-bottom:2px;">Team Context</div>
+        <div style="font-size:13px;color:#5e6678;margin-bottom:18px;">${sdTeam} · squad score distribution</div>
         ${teamRangeBarHtml(player.careerScore, teamPlayers.map(p=>p.careerScore), 880)}
       </div>
 
@@ -513,7 +516,6 @@ export default function QuickCardModal({ player, players, onClose }) {
   const handleDownload = async () => {
     setDownloading(true);
     const { toPng } = await import('html-to-image');
-    await ensureMontserratEmbedded();
     const el = buildQuickCardElement(player, players);
     try {
       const cardNode = el.querySelector('#qc-card-root') || el;
