@@ -754,6 +754,9 @@ export function buildCardElement(player, manual = {}) {
   // which hid valid 70+ roles that just weren't tracked in the latest season slice.)
   const seasonRoles = sd.roles || {};
   const roleSource = { ...rcs, ...seasonRoles };
+  if (typeof window !== 'undefined') {
+    console.log('[ROLE DEBUG]', player.name, { posKey, validRoles, rcs, seasonRoles, roleSource });
+  }
   const sortedRoles = Object.entries(roleSource)
     .filter(([role, score]) => (validRoles.length === 0 || validRoles.includes(role)) && (role !== 'Goal Threat CM' || Number(score) >= 70))
     .sort((a, b) => b[1] - a[1])
