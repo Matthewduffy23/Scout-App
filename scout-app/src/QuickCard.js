@@ -153,13 +153,15 @@ function cmToFeet(cm) {
 function barRow(label, pct, rawVal, rowH = 18) {
   const p = Math.max(0, Math.min(100, pct || 0));
   const bc = barColor(p);
-  const barH = Math.max(8, Math.min(rowH - 4, 14));
+  const barH = Math.max(8, Math.min(rowH - 6, 28));
+  const labelFs = Math.min(14, Math.max(11, Math.round(rowH * 0.42)));
+  const valFs = Math.min(12, Math.max(9, Math.round(rowH * 0.32)));
   return `
     <div style="display:flex;align-items:center;height:${rowH}px;">
-      <div style="width:188px;flex-shrink:0;font-size:12px;font-weight:600;color:${LABEL_COL};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${label}</div>
-      <div style="flex:1;position:relative;height:${barH}px;background:#1b2636;border-radius:2px;">
-        <div style="position:relative;height:100%;width:${p}%;background:${bc};border-radius:2px;">
-          ${rawVal != null ? `<span style="position:absolute;left:4px;top:50%;transform:translateY(-50%);font-size:9px;color:#0b0b0b;font-weight:600;white-space:nowrap;">${rawVal}</span>` : ''}
+      <div style="width:200px;flex-shrink:0;font-size:${labelFs}px;font-weight:600;color:${LABEL_COL};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${label}</div>
+      <div style="flex:1;position:relative;height:${barH}px;background:#1b2636;border-radius:3px;">
+        <div style="position:relative;height:100%;width:${p}%;background:${bc};border-radius:3px;">
+          ${rawVal != null ? `<span style="position:absolute;left:6px;top:50%;transform:translateY(-50%);font-size:${valFs}px;color:#0b0b0b;font-weight:700;white-space:nowrap;">${rawVal}</span>` : ''}
         </div>
         <div style="position:absolute;left:50%;top:0;width:2px;height:100%;background:repeating-linear-gradient(to bottom, rgba(255,255,255,.95) 0 4px, transparent 4px 7px);"></div>
       </div>
@@ -167,12 +169,12 @@ function barRow(label, pct, rawVal, rowH = 18) {
 }
 
 // ─── Lollipop chart for ALL role scores ──────────────────────────────────────
-function rolesDotsSvg(sortedRoles, w = 760, rowH = 36) {
+function rolesDotsSvg(sortedRoles, w = 880, rowH = 56) {
   if (!sortedRoles.length) return '';
-  const labelW = 240;
+  const labelW = 280;
   const numDots = 10;
-  const dotR = 9;
-  const dotsAreaW = w - labelW - 20;
+  const dotR = 13;
+  const dotsAreaW = w - labelW - 50;
   const dotSpacing = (dotsAreaW - dotR * 2) / (numDots - 1);
   const h = sortedRoles.length * rowH + 6;
 
@@ -181,7 +183,7 @@ function rolesDotsSvg(sortedRoles, w = 760, rowH = 36) {
     const filled = Math.max(0, Math.min(numDots, Math.round(sc / 10)));
     const col = scoreTierColor(sc);
     const disp = ROLE_DISPLAY_NAMES[role] || role;
-    const labelTrunc = disp.length > 26 ? disp.slice(0, 25) + '…' : disp;
+    const labelTrunc = disp.length > 24 ? disp.slice(0, 23) + '…' : disp;
     const y = i * rowH + rowH / 2 + 4;
 
     const dots = Array.from({length: numDots}, (_, d) => {
@@ -189,12 +191,12 @@ function rolesDotsSvg(sortedRoles, w = 760, rowH = 36) {
       const isFilled = d < filled;
       return isFilled
         ? `<circle cx="${cx}" cy="${y}" r="${dotR}" fill="${col}"/>`
-        : `<circle cx="${cx}" cy="${y}" r="${dotR}" fill="none" stroke="${col}" stroke-width="1.5" opacity="0.5"/>`;
+        : `<circle cx="${cx}" cy="${y}" r="${dotR}" fill="none" stroke="${col}" stroke-width="2" opacity="0.5"/>`;
     }).join('');
 
     return `
-      <text x="0" y="${y + 5}" font-family="Montserrat,sans-serif" font-size="16" font-weight="600" fill="#c8d2e0">${labelTrunc}</text>
-      <text x="${labelW + dotR + (numDots-1)*dotSpacing + dotR + 14}" y="${y + 5}" font-family="Montserrat,sans-serif" font-size="15" font-weight="800" fill="${col}">${sc}</text>
+      <text x="0" y="${y + 6}" font-family="Montserrat,sans-serif" font-size="21" font-weight="700" fill="#c8d2e0">${labelTrunc}</text>
+      <text x="${labelW + dotR + (numDots-1)*dotSpacing + dotR + 18}" y="${y + 6}" font-family="Montserrat,sans-serif" font-size="20" font-weight="800" fill="${col}">${sc}</text>
       ${dots}
     `;
   }).join('');
@@ -322,9 +324,9 @@ function buildQuickCardElement(player, players) {
   const FULL_OVERHEAD = 193;
   const SECTION_TITLE_H = 48;
   const FIXED_OVERHEAD = FULL_OVERHEAD - (3 - activeSections) * SECTION_TITLE_H;
-  const MIN_ROW_H = 8, MAX_ROW_H = 55;
+  const MIN_ROW_H = 14, MAX_ROW_H = 60;
   let rowH = totalRows > 0
-    ? Math.max(MIN_ROW_H, Math.min(MAX_ROW_H, Math.floor((CHART_HEIGHT - FIXED_OVERHEAD) / totalRows) - 1))
+    ? Math.max(MIN_ROW_H, Math.min(MAX_ROW_H, Math.floor((CHART_HEIGHT - FIXED_OVERHEAD) / totalRows)))
     : MAX_ROW_H;
 
   const buildGroupBars = (grpKey) => {
@@ -344,8 +346,8 @@ function buildQuickCardElement(player, players) {
   container.style.width = '1920px';
   container.style.height = '1080px';
 
-  const rolesSvg = rolesDotsSvg(sortedRoles, 900, 38);
-  const radarSvg = teamRadarSvg(TEAM_PLACEHOLDER, 220);
+  const rolesSvg = rolesDotsSvg(sortedRoles, 880, 56);
+  const radarSvg = teamRadarSvg(TEAM_PLACEHOLDER, 280);
 
   const attributeTagsHtml = (arr, bg, fg, border) => arr.slice(0,6).map(s =>
     `<span style="font-size:13px;background:${bg};color:${fg};border:1px solid ${border};border-radius:14px;padding:4px 11px;display:inline-block;margin:0 6px 6px 0;">${s}</span>`
@@ -395,11 +397,23 @@ function buildQuickCardElement(player, players) {
         <div style="position:absolute;left:1196px;top:${56 + i*50}px;font-size:20px;font-weight:600;color:#d9d9d9;">${k}</div>
         <div style="position:absolute;left:1311px;top:${56 + i*50}px;font-size:20px;font-weight:600;color:#fff;">${v}</div>`).join('')}
 
-      <!-- GBE — integrated header stat, matches Height/Value/Contract row style -->
-      <div style="position:absolute;left:1196px;top:206px;font-size:20px;font-weight:600;color:#d9d9d9;">GBE Points:</div>
-      <div style="position:absolute;left:1370px;top:206px;display:flex;align-items:baseline;gap:8px;">
-        <span style="font-size:20px;font-weight:700;color:#fff;">${gbeTotal} pts</span>
-        <span style="font-size:13px;font-weight:800;color:${gbeColor};background:${gbeColor}22;border:1px solid ${gbeColor};border-radius:5px;padding:1px 8px;">${gbeStatus}</span>
+      <!-- GBE — tidy standalone block, top-right corner -->
+      <div style="position:absolute;top:32px;right:32px;width:260px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:14px 18px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+          <span style="font-size:13px;font-weight:700;color:#9aa3b8;text-transform:uppercase;letter-spacing:.08em;">GBE Calculation</span>
+          <span style="font-size:11px;font-weight:800;color:${gbeColor};background:${gbeColor}22;border:1px solid ${gbeColor};border-radius:5px;padding:2px 8px;">${gbeStatus}</span>
+        </div>
+        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:10px;">
+          <span style="font-size:30px;font-weight:900;color:#fff;">${gbeTotal}</span>
+          <span style="font-size:13px;color:#7a8499;">points</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:5px;">
+          ${[['Band',`B${band}`],['Dom',domPts],['Cont',contPts],['Band Pts',lqPts],['Finish',finishPts],['Prog',progPts]].map(([l,v])=>`
+            <div style="background:rgba(255,255,255,0.05);border-radius:4px;padding:3px 4px;text-align:center;">
+              <div style="font-size:7px;color:#7a8499;text-transform:uppercase;">${l}</div>
+              <div style="font-size:12px;font-weight:800;color:#dbe1ee;">${v}</div>
+            </div>`).join('')}
+        </div>
       </div>
 
       <!-- ============ LEFT COLUMN: SEASON STATS + bars (self-contained, scales own row height) ============ -->
@@ -424,41 +438,40 @@ function buildQuickCardElement(player, players) {
       <!-- vertical divider between bars and right column -->
       <div style="position:absolute;left:944px;top:368px;width:2px;height:671px;background:rgba(255,255,255,0.06);"></div>
 
-      <!-- ============ RIGHT COLUMN (fills the dead space): ROLE SCORES, then KEY ATTRIBUTES, then TEAM CONTEXT ============ -->
+      <!-- ============ RIGHT COLUMN: ROLE SCORES (top ~half) then TEAM CONTEXT (bottom ~half), both scaled to fill ============ -->
 
       <!-- ROLE SCORES -->
-      <div style="position:absolute;top:312px;left:984px;width:920px;">
-        <div style="font-size:26.6px;font-weight:700;color:${ACCENT_PINK};margin-bottom:18px;">Role Scores</div>
-        ${rolesSvg}
+      <div style="position:absolute;top:368px;left:984px;width:920px;height:330px;box-sizing:border-box;">
+        <div style="font-size:26.6px;font-weight:700;color:${ACCENT_PINK};margin-bottom:22px;">Role Scores</div>
+        <div style="display:flex;justify-content:center;">${rolesSvg}</div>
       </div>
 
-      <!-- Key Attributes / Dev Areas -->
+      <!-- divider between role scores and team context -->
+      <div style="position:absolute;left:984px;top:716px;width:920px;height:2px;background:rgba(255,255,255,0.06);"></div>
+
+      <!-- Key Attributes / Dev Areas (compact strip, sits in divider gap if present) -->
       ${(strengths.length>0 || weaknesses.length>0) ? `
-      <div style="position:absolute;top:640px;left:984px;width:920px;">
-        ${strengths.length>0 ? `
-        <div style="font-size:16px;font-weight:700;color:${ACCENT_PINK};text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;">Key Attributes</div>
-        <div style="margin-bottom:18px;">${attributeTagsHtml(strengths, '#0e2a1c', '#86efac', '#22c55e44')}</div>` : ''}
-        ${weaknesses.length>0 ? `
-        <div style="font-size:16px;font-weight:700;color:${ACCENT_PINK};text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;">Development Areas</div>
-        <div>${attributeTagsHtml(weaknesses, '#2a0e0e', '#fca5a5', '#ef444444')}</div>` : ''}
+      <div style="position:absolute;top:730px;left:984px;width:920px;">
+        ${strengths.length>0 ? `<span style="font-size:13px;font-weight:700;color:#7a8499;text-transform:uppercase;letter-spacing:.06em;margin-right:10px;">Strengths</span>${attributeTagsHtml(strengths.slice(0,4), '#0e2a1c', '#86efac', '#22c55e44')}` : ''}
+        ${weaknesses.length>0 ? `<span style="font-size:13px;font-weight:700;color:#7a8499;text-transform:uppercase;letter-spacing:.06em;margin:0 10px 0 18px;">Areas</span>${attributeTagsHtml(weaknesses.slice(0,3), '#2a0e0e', '#fca5a5', '#ef444444')}` : ''}
       </div>` : ''}
 
       <!-- TEAM CONTEXT -->
-      <div style="position:absolute;top:840px;left:984px;width:920px;display:flex;align-items:flex-start;gap:40px;">
+      <div style="position:absolute;top:${(strengths.length>0||weaknesses.length>0) ? 800 : 760}px;left:984px;width:920px;display:flex;align-items:center;gap:60px;">
         <div style="flex-shrink:0;">
           <div style="font-size:26.6px;font-weight:700;color:${ACCENT_PINK};margin-bottom:2px;">Team Context</div>
-          <div style="font-size:13px;color:#5e6678;margin-bottom:10px;">${sdTeam} · placeholder data</div>
+          <div style="font-size:13px;color:#5e6678;margin-bottom:14px;">${sdTeam} · placeholder data</div>
           ${radarSvg}
         </div>
         ${squadAvg ? `
-        <div style="display:flex;flex-direction:column;gap:18px;padding-top:48px;">
-          <div>
-            <div style="font-size:12px;color:#7a8499;text-transform:uppercase;letter-spacing:.06em;">Squad Avg</div>
-            <div style="font-size:26px;font-weight:800;color:#dbe1ee;">${squadAvg.toFixed(1)}</div>
+        <div style="display:flex;flex-direction:column;gap:28px;">
+          <div style="background:rgba(255,255,255,0.04);border-radius:10px;padding:16px 24px;">
+            <div style="font-size:13px;color:#7a8499;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">Squad Avg</div>
+            <div style="font-size:34px;font-weight:800;color:#dbe1ee;">${squadAvg.toFixed(1)}</div>
           </div>
-          <div>
-            <div style="font-size:12px;color:#7a8499;text-transform:uppercase;letter-spacing:.06em;">vs Squad</div>
-            <div style="font-size:26px;font-weight:800;color:${player.careerScore>squadAvg?'#7ed957':'#ff914d'};">${player.careerScore>squadAvg?'+':''}${(player.careerScore-squadAvg).toFixed(1)}</div>
+          <div style="background:rgba(255,255,255,0.04);border-radius:10px;padding:16px 24px;">
+            <div style="font-size:13px;color:#7a8499;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">vs Squad</div>
+            <div style="font-size:34px;font-weight:800;color:${player.careerScore>squadAvg?'#7ed957':'#ff914d'};">${player.careerScore>squadAvg?'+':''}${(player.careerScore-squadAvg).toFixed(1)}</div>
           </div>
         </div>` : ''}
       </div>
