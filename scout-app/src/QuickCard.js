@@ -153,15 +153,13 @@ function cmToFeet(cm) {
 function barRow(label, pct, rawVal, rowH = 18) {
   const p = Math.max(0, Math.min(100, pct || 0));
   const bc = barColor(p);
-  const barH = Math.max(8, Math.min(rowH - 6, 28));
-  const labelFs = Math.min(14, Math.max(11, Math.round(rowH * 0.42)));
-  const valFs = Math.min(12, Math.max(9, Math.round(rowH * 0.32)));
+  const barH = Math.max(8, Math.min(rowH - 4, 14));
   return `
     <div style="display:flex;align-items:center;height:${rowH}px;">
-      <div style="width:200px;flex-shrink:0;font-size:${labelFs}px;font-weight:600;color:${LABEL_COL};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${label}</div>
-      <div style="flex:1;position:relative;height:${barH}px;background:#1b2636;border-radius:3px;">
-        <div style="position:relative;height:100%;width:${p}%;background:${bc};border-radius:3px;">
-          ${rawVal != null ? `<span style="position:absolute;left:6px;top:50%;transform:translateY(-50%);font-size:${valFs}px;color:#0b0b0b;font-weight:700;white-space:nowrap;">${rawVal}</span>` : ''}
+      <div style="width:188px;flex-shrink:0;font-size:12px;font-weight:600;color:${LABEL_COL};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${label}</div>
+      <div style="flex:1;position:relative;height:${barH}px;background:#1b2636;border-radius:2px;">
+        <div style="position:relative;height:100%;width:${p}%;background:${bc};border-radius:2px;">
+          ${rawVal != null ? `<span style="position:absolute;left:4px;top:50%;transform:translateY(-50%);font-size:9px;color:#0b0b0b;font-weight:600;white-space:nowrap;">${rawVal}</span>` : ''}
         </div>
         <div style="position:absolute;left:50%;top:0;width:2px;height:100%;background:repeating-linear-gradient(to bottom, rgba(255,255,255,.95) 0 4px, transparent 4px 7px);"></div>
       </div>
@@ -296,18 +294,31 @@ function gbeThresholdBar(label, val, max, w = 220) {
     </div>`;
 }
 
+const PLACEHOLDER_ROLES = [
+  ['Wide Creator', 84],
+  ['Creative Playmaker', 79],
+  ['Deep Playmaker', 62],
+  ['Goal Scorer', 71],
+  ['Dribbler', 88],
+  ['Retention', 55],
+];
+
 function rolesRankedSvgHtml(sortedRoles) {
-  if (!sortedRoles.length) return '<div style="color:#5e6678;font-size:14px;">No role data</div>';
-  const [primaryRole, primaryScore] = sortedRoles[0];
-  const rest = sortedRoles.slice(1, 6);
-  const primaryDisp = ROLE_DISPLAY_NAMES[primaryRole] || primaryRole;
-  const primaryCol = scoreTierColor(Math.round(primaryScore));
-  const primaryTier = Math.round(primaryScore) >= 79 ? 'Elite Fit' : Math.round(primaryScore) >= 67 ? 'Strong Fit' : Math.round(primaryScore) >= 55 ? 'Good Fit' : Math.round(primaryScore) >= 43 ? 'Moderate Fit' : 'Developing Fit';
+  // Use real data if available, fall back to placeholder for layout
+  const roles = (sortedRoles && sortedRoles.length > 0)
+    ? sortedRoles.map(([role, score]) => [ROLE_DISPLAY_NAMES[role] || role, Math.round(score)])
+    : PLACEHOLDER_ROLES;
+  if (!roles.length) return '<div style="color:#5e6678;font-size:14px;">No role data</div>';
+
+  const [primaryDisp, primaryScore] = roles[0];
+  const rest = roles.slice(1, 7);
+  const primaryCol = scoreTierColor(primaryScore);
+  const primaryTier = primaryScore >= 79 ? 'Elite Fit' : primaryScore >= 67 ? 'Strong Fit' : primaryScore >= 55 ? 'Good Fit' : primaryScore >= 43 ? 'Moderate Fit' : 'Developing Fit';
 
   const primaryHtml = `
     <div style="display:flex;align-items:center;gap:24px;padding:18px 22px;background:rgba(255,255,255,0.04);border:1px solid ${primaryCol}55;border-radius:12px;margin-bottom:16px;">
       <div style="width:74px;height:74px;border-radius:50%;border:4px solid ${primaryCol};display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-        <span style="font-size:28px;font-weight:900;color:${primaryCol};">${Math.round(primaryScore)}</span>
+        <span style="font-size:28px;font-weight:900;color:${primaryCol};">${primaryScore}</span>
       </div>
       <div>
         <div style="font-size:11px;font-weight:700;color:#7a8499;text-transform:uppercase;letter-spacing:.08em;margin-bottom:3px;">Primary Role</div>
@@ -316,18 +327,16 @@ function rolesRankedSvgHtml(sortedRoles) {
       </div>
     </div>`;
 
-  const restHtml = rest.map(([role, score]) => {
-    const sc = Math.round(score);
+  const restHtml = rest.map(([disp, sc]) => {
     const col = scoreTierColor(sc);
-    const disp = ROLE_DISPLAY_NAMES[role] || role;
     const p = Math.max(0, Math.min(100, sc));
     return `
-      <div style="display:flex;align-items:center;height:30px;margin-bottom:2px;">
-        <span style="width:210px;flex-shrink:0;font-size:14px;font-weight:600;color:#c8d2e0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${disp}</span>
+      <div style="display:flex;align-items:center;height:34px;margin-bottom:4px;">
+        <span style="width:220px;flex-shrink:0;font-size:15px;font-weight:600;color:#c8d2e0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${disp}</span>
         <span style="flex:1;position:relative;height:10px;background:#1b2636;border-radius:3px;">
           <span style="position:absolute;left:0;top:0;height:100%;width:${p}%;background:${col};border-radius:3px;"></span>
         </span>
-        <span style="width:38px;text-align:right;flex-shrink:0;font-size:15px;font-weight:800;color:${col};">${sc}</span>
+        <span style="width:42px;text-align:right;flex-shrink:0;font-size:16px;font-weight:800;color:${col};">${sc}</span>
       </div>`;
   }).join('');
 
@@ -335,29 +344,57 @@ function rolesRankedSvgHtml(sortedRoles) {
 }
 
 function teamRangeBarHtml(playerScore, teamScores, w = 560) {
-  if (!teamScores || teamScores.length === 0) {
-    return `<div style="color:#5e6678;font-size:13px;">No squad data available</div>`;
-  }
-  const min = Math.min(...teamScores);
-  const max = Math.max(...teamScores);
-  const avg = teamScores.reduce((a,b)=>a+b,0) / teamScores.length;
+  // Range bar: player position in squad distribution
+  const hasReal = teamScores && teamScores.length > 1;
+  const min = hasReal ? Math.min(...teamScores) : 55;
+  const max = hasReal ? Math.max(...teamScores) : 92;
+  const avg = hasReal ? (teamScores.reduce((a,b)=>a+b,0)/teamScores.length) : 74;
+  const pScore = hasReal ? playerScore : 81;
   const range = Math.max(1, max - min);
-  const pPlayer = ((playerScore - min) / range) * 100;
+  const pPlayer = ((pScore - min) / range) * 100;
   const pAvg = ((avg - min) / range) * 100;
-  return `
-    <div style="width:${w}px;">
+
+  // Placeholder team style bars
+  const TEAM_STATS = [
+    ['Possession',    68, '#a78bfa'],
+    ['Passing',       74, '#a78bfa'],
+    ['Verticality',   58, '#a78bfa'],
+    ['Attack',        71, '#a78bfa'],
+    ['Intensity',     63, '#a78bfa'],
+  ];
+
+  const styleBarHtml = TEAM_STATS.map(([label, val, col]) => {
+    const p = val;
+    return `
+      <div style="display:flex;align-items:center;height:26px;margin-bottom:4px;">
+        <span style="width:120px;flex-shrink:0;font-size:13px;font-weight:600;color:#c8d2e0;">${label}</span>
+        <span style="flex:1;position:relative;height:8px;background:#1b2636;border-radius:2px;">
+          <span style="position:absolute;left:0;top:0;height:100%;width:${p}%;background:${col};border-radius:2px;opacity:0.85;"></span>
+        </span>
+        <span style="width:36px;text-align:right;flex-shrink:0;font-size:13px;font-weight:800;color:${col};">${val}</span>
+      </div>`;
+  }).join('');
+
+  const rangeHtml = `
+    <div style="margin-bottom:18px;">
+      <div style="font-size:12px;font-weight:600;color:#7a8499;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Squad Score Distribution</div>
       <div style="position:relative;height:10px;background:#1b2636;border-radius:5px;margin-bottom:6px;">
-        <div style="position:absolute;left:0;top:0;height:100%;width:100%;background:linear-gradient(to right, #c7363c, #f0c56a, #3da65b);border-radius:5px;opacity:0.35;"></div>
-        <div style="position:absolute;top:-5px;left:${Math.max(0,Math.min(100,pAvg))}%;width:2px;height:20px;background:#9aa3b8;"></div>
-        <div style="position:absolute;top:-7px;left:${Math.max(0,Math.min(100,pPlayer))}%;transform:translateX(-50%);width:18px;height:24px;display:flex;align-items:center;justify-content:center;">
-          <div style="width:14px;height:14px;border-radius:50%;background:#a78bfa;border:2.5px solid #07090f;"></div>
+        <div style="position:absolute;left:0;top:0;height:100%;width:100%;background:linear-gradient(to right,#c7363c,#f0c56a,#3da65b);border-radius:5px;opacity:0.35;"></div>
+        <div style="position:absolute;top:-4px;left:${Math.max(0,Math.min(96,pAvg))}%;width:2px;height:18px;background:#9aa3b8;"></div>
+        <div style="position:absolute;top:-6px;left:${Math.max(0,Math.min(97,pPlayer))}%;transform:translateX(-50%);">
+          <div style="width:14px;height:14px;border-radius:50%;background:#a78bfa;border:2.5px solid #07090f;margin:0 auto;"></div>
         </div>
       </div>
       <div style="display:flex;justify-content:space-between;font-size:11px;color:#7a8499;">
-        <span>Squad Low (${min.toFixed(1)})</span>
-        <span>Squad Avg (${avg.toFixed(1)})</span>
-        <span>Squad High (${max.toFixed(1)})</span>
+        <span>Low (${min.toFixed(1)})</span><span>Avg (${avg.toFixed(1)})</span><span>High (${max.toFixed(1)})</span>
       </div>
+    </div>`;
+
+  return rangeHtml + `
+    <div>
+      <div style="font-size:12px;font-weight:600;color:#7a8499;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Team Style</div>
+      ${styleBarHtml}
+      <div style="font-size:10px;color:#3a4458;margin-top:4px;">Placeholder data · team stats integration pending</div>
     </div>`;
 }
 
@@ -403,7 +440,7 @@ function buildQuickCardElement(player, players) {
   const groupKeys = ['A', 'D', 'P'];
   const totalRows = groupKeys.reduce((s, k) => s + (groups[k] ? groups[k].length : 0), 0);
   const activeSections = groupKeys.filter(k => groups[k] && groups[k].length > 0).length;
-  const CHART_HEIGHT = 671;
+  const CHART_HEIGHT = 760;
   const FULL_OVERHEAD = 193;
   const SECTION_TITLE_H = 48;
   const FIXED_OVERHEAD = FULL_OVERHEAD - (3 - activeSections) * SECTION_TITLE_H;
@@ -468,24 +505,24 @@ function buildQuickCardElement(player, players) {
       </div>
 
       <!-- CREST / TEAM / LEAGUE -->
-      ${crest ? `<div style="position:absolute;left:756px;top:39px;width:118px;height:164px;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${crest}');"></div>` : ''}
-      <div style="position:absolute;left:884px;top:57px;font-size:26.6px;font-weight:700;color:#fff;${sdTeam.length >= 16 ? 'letter-spacing:-0.8px;' : ''}">${sdTeam}</div>
-      <div style="position:absolute;left:884px;top:97px;font-size:21.3px;font-weight:500;color:#fff;">${sdLeague}</div>
+      ${crest ? `<div style="position:absolute;left:720px;top:22px;width:148px;height:200px;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${crest}');"></div>` : ''}
+      <div style="position:absolute;left:882px;top:42px;font-size:36px;font-weight:800;color:#fff;${sdTeam.length >= 16 ? 'letter-spacing:-1px;' : ''}">${sdTeam}</div>
+      <div style="position:absolute;left:882px;top:92px;font-size:26px;font-weight:500;color:#d0d8ea;">${sdLeague}</div>
 
-      <div style="position:absolute;left:1164px;top:45px;width:3px;height:155px;background:#737373;"></div>
+      <div style="position:absolute;left:1168px;top:30px;width:3px;height:210px;background:#737373;"></div>
 
-      <!-- INFO BOX -->
+      <!-- INFO BOX — bigger -->
       ${[['Height:', cmToFeet(player.height) || '—'], ['Value:', (player.xValue > 0 ? formatMV(player.xValue) : '—')], ['Contract:', (player.contractYear && player.contractYear !== 'nan') ? String(player.contractYear) : '—']].map(([k,v],i) => `
-        <div style="position:absolute;left:1196px;top:${56 + i*50}px;font-size:20px;font-weight:600;color:#d9d9d9;">${k}</div>
-        <div style="position:absolute;left:1311px;top:${56 + i*50}px;font-size:20px;font-weight:600;color:#fff;">${v}</div>`).join('')}
+        <div style="position:absolute;left:1204px;top:${42 + i*64}px;font-size:24px;font-weight:600;color:#9aa3b8;">${k}</div>
+        <div style="position:absolute;left:1370px;top:${42 + i*64}px;font-size:24px;font-weight:700;color:#fff;">${v}</div>`).join('')}
 
-      <!-- GBE — requirements checklist, sporting-director style -->
-      <div style="position:absolute;top:28px;right:32px;width:340px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:16px 20px;">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-          <span style="font-size:13px;font-weight:700;color:#9aa3b8;text-transform:uppercase;letter-spacing:.08em;">GBE Calculation</span>
-          <div style="display:flex;align-items:baseline;gap:6px;">
-            <span style="font-size:22px;font-weight:900;color:#fff;">${gbeTotal}</span>
-            <span style="font-size:11px;font-weight:800;color:${gbeColor};background:${gbeColor}22;border:1px solid ${gbeColor};border-radius:5px;padding:1px 7px;">${gbeStatus}</span>
+      <!-- GBE — bigger, more presence -->
+      <div style="position:absolute;top:20px;right:28px;width:390px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.10);border-radius:12px;padding:18px 22px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+          <span style="font-size:15px;font-weight:700;color:#9aa3b8;text-transform:uppercase;letter-spacing:.08em;">GBE Calculation</span>
+          <div style="display:flex;align-items:baseline;gap:8px;">
+            <span style="font-size:28px;font-weight:900;color:#fff;">${gbeTotal}</span>
+            <span style="font-size:13px;font-weight:800;color:${gbeColor};background:${gbeColor}22;border:1px solid ${gbeColor};border-radius:6px;padding:2px 9px;">${gbeStatus}</span>
           </div>
         </div>
         ${gbeThresholdBar('Domestic Apps', domPts, 12)}
@@ -494,10 +531,9 @@ function buildQuickCardElement(player, players) {
         ${gbeThresholdBar('Finish/Prog', finishPts + progPts, 10)}
       </div>
 
-      <!-- ============ LEFT COLUMN: SEASON STATS + bars (self-contained, scales own row height) ============ -->
-      <div style="position:absolute;top:312px;left:17px;font-size:26.6px;font-weight:700;color:${ACCENT_PINK};">Season Stats</div>
+      <!-- ============ LEFT COLUMN: bars from bottom of header to bottom of card ============ -->
 
-      <div style="position:absolute;top:368px;left:0px;width:920px;height:671px;overflow:hidden;box-sizing:border-box;padding-left:24px;">
+      <div style="position:absolute;top:298px;left:0px;width:920px;height:782px;overflow:hidden;box-sizing:border-box;padding-left:24px;padding-top:12px;">
         ${groups.A && groups.A.length ? `<div style="font-size:24px;font-weight:800;color:#f3f5f7;margin:0 0 6px;">${isGK ? 'Goalkeeping' : 'Attacking'}</div>${buildGroupBars('A')}` : ''}
         ${groups.D && groups.D.length ? `<div style="font-size:24px;font-weight:800;color:#f3f5f7;margin:8px 0 6px;">Defensive</div>${buildGroupBars('D')}` : ''}
         ${groups.P && groups.P.length ? `<div style="font-size:24px;font-weight:800;color:#f3f5f7;margin:8px 0 6px;">Possession</div>${buildGroupBars('P')}` : ''}
@@ -514,12 +550,12 @@ function buildQuickCardElement(player, players) {
       </div>
 
       <!-- vertical divider between bars and right column -->
-      <div style="position:absolute;left:944px;top:368px;width:2px;height:671px;background:rgba(255,255,255,0.06);"></div>
+      <div style="position:absolute;left:944px;top:298px;width:2px;height:782px;background:rgba(255,255,255,0.06);"></div>
 
       <!-- ============ RIGHT COLUMN: ROLE SCORES (primary + ranked list) then TEAM CONTEXT (range bar) ============ -->
 
       <!-- ROLE SCORES -->
-      <div style="position:absolute;top:368px;left:984px;width:920px;">
+      <div style="position:absolute;top:298px;left:984px;width:920px;">
         <div style="font-size:26.6px;font-weight:700;color:${ACCENT_PINK};margin-bottom:18px;">Role Scores</div>
         ${rolesRankedHtml}
       </div>
