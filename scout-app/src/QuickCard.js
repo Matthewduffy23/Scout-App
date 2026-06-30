@@ -509,23 +509,40 @@ function buildQuickCardElement(player, players) {
 
 export default function QuickCardModal({ player, players, onClose }) {
   const [downloading, setDownloading] = useState(false);
-  const [downloadError, setDownloadError] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { toPng } = await import('html-to-image');
+      await ensureMontserratEmbedded();
+      const el = buildQuickCardElement(player, players);
+      try {
+        const cardNode = el.querySelector('#qc-card-root') || el;
+        const opts = {
+          width: 1920, height: 1080, pixelRatio: 1, backgroundColor: BG,
+          cacheBust: true, fontEmbedCSS: MONTSERRAT_EMBED_CSS,
+          imagePlaceholder: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+        };
+        await toPng(cardNode, opts);
+        const dataUrl = await toPng(cardNode, opts);
+        if (!cancelled) setPreviewUrl(dataUrl);
+      } catch(e) { console.error('QuickCard preview error:', e); }
+      finally { document.body.removeChild(el); }
+    })();
+    return () => { cancelled = true; };
+  }, [player, players]);
 
   const handleDownload = async () => {
     setDownloading(true);
-    setDownloadError(null);
     const { toPng } = await import('html-to-image');
     await ensureMontserratEmbedded();
     const el = buildQuickCardElement(player, players);
     try {
       const cardNode = el.querySelector('#qc-card-root') || el;
       const opts = {
-        width: 1920,
-        height: 1080,
-        pixelRatio: 1,
-        backgroundColor: BG,
-        cacheBust: true,
-        fontEmbedCSS: MONTSERRAT_EMBED_CSS,
+        width: 1920, height: 1080, pixelRatio: 1, backgroundColor: BG,
+        cacheBust: true, fontEmbedCSS: MONTSERRAT_EMBED_CSS,
         imagePlaceholder: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
       };
       await toPng(cardNode, opts);
@@ -534,14 +551,10 @@ export default function QuickCardModal({ player, players, onClose }) {
       a.download = `${player.name.replace(/\s+/g,'_')}_quick_card.png`;
       a.href = dataUrl;
       a.click();
-    } catch(e) {
-      console.error('QuickCard error:', e);
-      setDownloadError('Failed — try again');
-    } finally {
-      document.body.removeChild(el);
-      setDownloading(false);
-    }
+    } catch(e) { console.error('QuickCard download error:', e); }
+    finally { document.body.removeChild(el); setDownloading(false); }
   };
+
 
   return (
     <div
@@ -549,32 +562,23 @@ export default function QuickCardModal({ player, players, onClose }) {
       onClick={e=>{if(e.target===e.currentTarget)onClose();}}
     >
       <div style={{background:'#09111e',border:'1px solid #1e2d45',borderRadius:12,width:'min(1100px,98vw)',maxHeight:'95vh',overflowY:'auto',boxShadow:'0 8px 40px rgba(0,0,0,.7)'}}>
-
-        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 16px',borderBottom:'1px solid #1e2d45'}}>
-          <div style={{fontSize:13,fontWeight:700,color:'#e2e8f4'}}>⚡ Quick Card — {player.name}</div>
-          <button
-            onClick={onClose}
-            style={{background:'none',border:'1px solid #1e2d45',color:'#94a3b8',borderRadius:6,width:28,height:28,fontSize:16,cursor:'pointer',lineHeight:1}}
-          >×</button>
-        </div>
-
-        <div style={{padding:24,textAlign:'center'}}>
-          <div style={{color:'#64748b',fontSize:13,marginBottom:8}}>
-            {player.name} · {player.team} · {player.league}
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 16px',borderBottom:'1px solid #1e2d45',position:'sticky',top:0,background:'#09111e',zIndex:1}}>
+          <div style={{fontSize:13,fontWeight:700,color:'#e2e8f4'}}>⚡ Quick Card</div>
+          <div style={{display:'flex',gap:8}}>
+            <button onClick={handleDownload} disabled={downloading}
+              style={{background:'#0e2a1c',border:'1px solid #22c55e',color:'#86efac',borderRadius:6,padding:'5px 14px',fontSize:11,fontWeight:700,cursor:'pointer',opacity:downloading?0.6:1}}>
+              {downloading ? 'Saving…' : '⬇ Download 1920×1080'}
+            </button>
+            <button onClick={onClose}
+              style={{background:'none',border:'1px solid #1e2d45',color:'#94a3b8',borderRadius:6,width:28,height:28,fontSize:16,cursor:'pointer',lineHeight:1}}>×</button>
           </div>
-          <div style={{color:'#475569',fontSize:12,marginBottom:24}}>
-            1920×1080 card — click Download to generate and save
-          </div>
-          {downloadError && <div style={{color:'#f87171',fontSize:12,marginBottom:16}}>{downloadError}</div>}
-          <button
-            onClick={handleDownload}
-            disabled={downloading}
-            style={{background:'#0e2a1c',border:'1px solid #22c55e',color:'#86efac',borderRadius:8,padding:'10px 28px',fontSize:13,fontWeight:700,cursor:downloading?'wait':'pointer',opacity:downloading?0.6:1}}
-          >
-            {downloading ? 'Generating…' : '⬇ Download 1920×1080 PNG'}
-          </button>
         </div>
-
+        <div style={{padding:16}}>
+          {previewUrl
+            ? <img src={previewUrl} style={{width:'100%',borderRadius:8,display:'block'}} alt="Quick Card preview"/>
+            : <div style={{color:'#64748b',fontSize:13,textAlign:'center',padding:'60px 0'}}>Generating preview…</div>
+          }
+        </div>
       </div>
     </div>
   );
