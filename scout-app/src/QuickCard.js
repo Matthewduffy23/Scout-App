@@ -305,9 +305,7 @@ const PLACEHOLDER_ROLES = [
 
 function rolesRankedSvgHtml(sortedRoles) {
   // Use real data if available, fall back to placeholder for layout
-  const roles = (sortedRoles && sortedRoles.length > 0)
-    ? sortedRoles.map(([role, score]) => [ROLE_DISPLAY_NAMES[role] || role, Math.round(score)])
-    : PLACEHOLDER_ROLES;
+  const roles = PLACEHOLDER_ROLES;
   if (!roles.length) return '<div style="color:#5e6678;font-size:14px;">No role data</div>';
 
   const [primaryDisp, primaryScore] = roles[0];
@@ -343,59 +341,42 @@ function rolesRankedSvgHtml(sortedRoles) {
   return primaryHtml + restHtml;
 }
 
-function teamRangeBarHtml(playerScore, teamScores, w = 560) {
-  // Range bar: player position in squad distribution
-  const hasReal = teamScores && teamScores.length > 1;
-  const min = hasReal ? Math.min(...teamScores) : 55;
-  const max = hasReal ? Math.max(...teamScores) : 92;
-  const avg = hasReal ? (teamScores.reduce((a,b)=>a+b,0)/teamScores.length) : 74;
-  const pScore = hasReal ? playerScore : 81;
+function metricRangeBar(label, val, min, max, avg) {
+  // Each metric shown as a range bar — same style as squad distribution
   const range = Math.max(1, max - min);
-  const pPlayer = ((pScore - min) / range) * 100;
-  const pAvg = ((avg - min) / range) * 100;
-
-  // Placeholder team style bars
-  const TEAM_STATS = [
-    ['Possession',    68, '#a78bfa'],
-    ['Passing',       74, '#a78bfa'],
-    ['Verticality',   58, '#a78bfa'],
-    ['Attack',        71, '#a78bfa'],
-    ['Intensity',     63, '#a78bfa'],
-  ];
-
-  const styleBarHtml = TEAM_STATS.map(([label, val, col]) => {
-    const p = val;
-    return `
-      <div style="display:flex;align-items:center;height:26px;margin-bottom:4px;">
-        <span style="width:120px;flex-shrink:0;font-size:13px;font-weight:600;color:#c8d2e0;">${label}</span>
-        <span style="flex:1;position:relative;height:8px;background:#1b2636;border-radius:2px;">
-          <span style="position:absolute;left:0;top:0;height:100%;width:${p}%;background:${col};border-radius:2px;opacity:0.85;"></span>
-        </span>
-        <span style="width:36px;text-align:right;flex-shrink:0;font-size:13px;font-weight:800;color:${col};">${val}</span>
-      </div>`;
-  }).join('');
-
-  const rangeHtml = `
+  const pVal  = Math.max(0, Math.min(97, ((val  - min) / range) * 100));
+  const pAvg  = Math.max(0, Math.min(96, ((avg  - min) / range) * 100));
+  return `
     <div style="margin-bottom:18px;">
-      <div style="font-size:12px;font-weight:600;color:#7a8499;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Squad Score Distribution</div>
-      <div style="position:relative;height:10px;background:#1b2636;border-radius:5px;margin-bottom:6px;">
-        <div style="position:absolute;left:0;top:0;height:100%;width:100%;background:linear-gradient(to right,#c7363c,#f0c56a,#3da65b);border-radius:5px;opacity:0.35;"></div>
-        <div style="position:absolute;top:-4px;left:${Math.max(0,Math.min(96,pAvg))}%;width:2px;height:18px;background:#9aa3b8;"></div>
-        <div style="position:absolute;top:-6px;left:${Math.max(0,Math.min(97,pPlayer))}%;transform:translateX(-50%);">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;">
+        <span style="font-size:15px;font-weight:700;color:#c8d2e0;">${label}</span>
+        <span style="font-size:22px;font-weight:900;color:#a78bfa;">${val}</span>
+      </div>
+      <div style="position:relative;height:10px;background:#1b2636;border-radius:5px;margin-bottom:5px;">
+        <div style="position:absolute;left:0;top:0;height:100%;width:100%;background:linear-gradient(to right,#1b2636,#a78bfa88,#a78bfa);border-radius:5px;opacity:0.4;"></div>
+        <div style="position:absolute;top:-4px;left:${pAvg}%;width:2px;height:18px;background:#5e6678;"></div>
+        <div style="position:absolute;top:-5px;left:${pVal}%;transform:translateX(-50%);">
           <div style="width:14px;height:14px;border-radius:50%;background:#a78bfa;border:2.5px solid #07090f;margin:0 auto;"></div>
         </div>
       </div>
-      <div style="display:flex;justify-content:space-between;font-size:11px;color:#7a8499;">
-        <span>Low (${min.toFixed(1)})</span><span>Avg (${avg.toFixed(1)})</span><span>High (${max.toFixed(1)})</span>
+      <div style="display:flex;justify-content:space-between;font-size:10px;color:#3a4458;">
+        <span>League Low (${min})</span><span>League Avg (${avg})</span><span>League High (${max})</span>
       </div>
     </div>`;
+}
 
-  return rangeHtml + `
-    <div>
-      <div style="font-size:12px;font-weight:600;color:#7a8499;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Team Style</div>
-      ${styleBarHtml}
-      <div style="font-size:10px;color:#3a4458;margin-top:4px;">Placeholder data · team stats integration pending</div>
-    </div>`;
+function teamRangeBarHtml(playerScore, teamScores, w = 560) {
+  const TEAM_METRICS = [
+    // [label, team val, leagueMin, leagueMax, leagueAvg]
+    ['Possession',  68,  38, 80, 52],
+    ['Passing',     74,  42, 88, 61],
+    ['Verticality', 58,  30, 82, 54],
+    ['Attack',      71,  35, 91, 58],
+    ['Intensity',   63,  28, 85, 56],
+  ];
+
+  return `<div style="font-size:11px;color:#3a4458;margin-bottom:16px;text-transform:uppercase;letter-spacing:.06em;font-weight:600;">Team Metrics · Placeholder data</div>
+    ${TEAM_METRICS.map(([label,val,mn,mx,av]) => metricRangeBar(label,val,mn,mx,av)).join('')}`;
 }
 
 function buildQuickCardElement(player, players) {
@@ -509,12 +490,12 @@ function buildQuickCardElement(player, players) {
       <div style="position:absolute;left:882px;top:42px;font-size:36px;font-weight:800;color:#fff;${sdTeam.length >= 16 ? 'letter-spacing:-1px;' : ''}">${sdTeam}</div>
       <div style="position:absolute;left:882px;top:92px;font-size:26px;font-weight:500;color:#d0d8ea;">${sdLeague}</div>
 
-      <div style="position:absolute;left:1168px;top:30px;width:3px;height:210px;background:#737373;"></div>
+      <div style="position:absolute;left:1096px;top:30px;width:3px;height:210px;background:#737373;"></div>
 
       <!-- INFO BOX — bigger -->
       ${[['Height:', cmToFeet(player.height) || '—'], ['Value:', (player.xValue > 0 ? formatMV(player.xValue) : '—')], ['Contract:', (player.contractYear && player.contractYear !== 'nan') ? String(player.contractYear) : '—']].map(([k,v],i) => `
-        <div style="position:absolute;left:1204px;top:${42 + i*64}px;font-size:24px;font-weight:600;color:#9aa3b8;">${k}</div>
-        <div style="position:absolute;left:1370px;top:${42 + i*64}px;font-size:24px;font-weight:700;color:#fff;">${v}</div>`).join('')}
+        <div style="position:absolute;left:1116px;top:${42 + i*64}px;font-size:24px;font-weight:600;color:#9aa3b8;">${k}</div>
+        <div style="position:absolute;left:1286px;top:${42 + i*64}px;font-size:24px;font-weight:700;color:#fff;">${v}</div>`).join('')}
 
       <!-- GBE — bigger, more presence -->
       <div style="position:absolute;top:20px;right:28px;width:390px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.10);border-radius:12px;padding:18px 22px;">
