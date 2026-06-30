@@ -747,11 +747,14 @@ export function buildCardElement(player, manual = {}) {
   const rawPosToken = (player.position || '').split(',')[0].trim();
   const posKey = TOKEN_TO_POS_KEY[rawPosToken] || player.roleKey;
   const validRoles = (posKey && APP_ROLES[posKey]) || [];
-  // Use per-season role scores from seasonsDetail if available, fall back to career scores
+  // Merge per-season role scores with career scores — prefer season score per role,
+  // but fall back to career score for any role missing from the season slice.
+  // (Previously: if seasonRoles had ANY entry, the whole career map was discarded,
+  // which hid valid 70+ roles that just weren't tracked in the latest season slice.)
   const seasonRoles = sd.roles || {};
-  const roleSource = Object.keys(seasonRoles).length > 0 ? seasonRoles : rcs;
+  const roleSource = { ...rcs, ...seasonRoles };
   const sortedRoles = Object.entries(roleSource)
-    .filter(([role, score]) => (validRoles.length === 0 || validRoles.includes(role)) && score >= 70)
+    .filter(([role, score]) => (validRoles.length === 0 || validRoles.includes(role)) && Number(score) >= 70)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 3);
   const groups = sd.g || {};

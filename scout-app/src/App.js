@@ -41,25 +41,21 @@ export function StarDisplay({score,size=11}){
 }
 
 const METRIC_OPTIONS=[
-  {label:'xG per 90',key:'xG per 90'},{label:'xA per 90',key:'xA per 90'},
-  {label:'Goals (non-pen)',key:'Non-penalty goals per 90'},{label:'Shots per 90',key:'Shots per 90'},
-  {label:'Touches in Box',key:'Touches in box per 90'},{label:'Progressive Runs',key:'Progressive runs per 90'},
-  {label:'Crosses per 90',key:'Crosses per 90'},{label:'Pass % accuracy',key:'Accurate passes, %'},
-  {label:'Passes per 90',key:'Passes per 90'},{label:'Prog Passes',key:'Progressive passes per 90'},
-  {label:'Dribbles per 90',key:'Dribbles per 90'},{label:'Dribble %',key:'Successful dribbles, %'},
-  {label:'Key Passes',key:'Key passes per 90'},{label:'Deep Completions',key:'Deep completions per 90'},
-  {label:'Def Duel Win %',key:'Defensive duels won, %'},{label:'Aerial Win %',key:'Aerial duels won, %'},
-  {label:'Interceptions',key:'PAdj Interceptions'},{label:'Def Duels per 90',key:'Defensive duels per 90'},
+  {label:'xG per 90',key:'xG'},{label:'xA per 90',key:'xA'},
+  {label:'Goals (non-pen)',key:'Goals: Non-Penalty'},{label:'Shots per 90',key:'Shots'},
+  {label:'Touches in Box',key:'Touches in Box'},{label:'Progressive Runs',key:'Progressive Runs'},
+  {label:'Crosses per 90',key:'Crosses'},{label:'Pass % accuracy',key:'Pass %'},
+  {label:'Passes per 90',key:'Passes'},{label:'Prog Passes',key:'Progressive Passes'},
+  {label:'Dribbles per 90',key:'Dribbles'},{label:'Dribble %',key:'Dribble %'},
+  {label:'Key Passes',key:'Key Passes'},{label:'Deep Completions',key:'Deep Completions'},
+  {label:'Def Duel Win %',key:'Def Duel Win %'},{label:'Aerial Win %',key:'Aerial Duel %'},
+  {label:'Interceptions',key:'PAdj Interceptions'},{label:'Def Duels per 90',key:'Def Duels'},
 ];
 
 function getMetricPct(player,metricKey){
-  // Use allSeasonsSummary[0].s to get the correct latest season key,
-  // since Object.values ordering is not guaranteed and breaks for mid-season transfer players
-  const sdMap=player.seasonsDetail||{};
-  const latestKey=(player.allSeasonsSummary&&player.allSeasonsSummary[0])
-    ? player.allSeasonsSummary[0].s
-    : Object.keys(sdMap)[0];
-  const sd=sdMap[latestKey]||{};
+  const seasons=Object.values(player.seasonsDetail||{});
+  if(!seasons.length) return null;
+  const sd=seasons[0];
   for(const grp of ['A','D','P']){
     const found=(sd.g?.[grp]||[]).find(x=>x[0]===metricKey);
     if(found) return {pct:found[1],val:found[2]};
@@ -169,8 +165,7 @@ export default function App(){
   const [page,setPage]=useState(0);
 
   const [search,setSearch]=useState('');
-  const isMobile=typeof navigator!=='undefined'&&/iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-  const [pos,setPos]=useState(isMobile?'Striker':'All');
+  const [pos,setPos]=useState('All');
   const [roleFilters,setRoleFilters]=useState(new Set());
   const [roleFilter,setRoleFilter]=useState('');
   const [roleScoreMin,setRoleScoreMin]=useState(50);
@@ -204,7 +199,6 @@ export default function App(){
   const [ageMin,setAgeMin]=useState(16);
   const [ageMax,setAgeMax]=useState(38);
   const [foot,setFoot]=useState('Any');
-  const [minHeight,setMinHeight]=useState(0);
   const [minScore,setMinScore]=useState(40);
   const [minSeas,setMinSeas]=useState(1);
   const [mvMax,setMvMax]=useState(50);
@@ -244,30 +238,12 @@ export default function App(){
   const [attrFilters,setAttrFilters]=useState(new Set()); // active attribute keys // hide MV by default, show xValue
   const [showColPicker,setShowColPicker]=useState(false); // default: only show players active 2022-23+
 
-  const posCache=React.useRef({});
-  const RK_TO_FILE={'GK':'gk','CB':'cb','FB':'fb','CM':'cm','ATT':'att','CF':'cf'};
-
   useEffect(()=>{
-    if(!isMobile){
-      // Desktop: load all 6 files once on mount
-      if(Object.keys(posCache.current).length>0){setAll(Object.values(posCache.current).flat());setLoading(false);return;}
-      const files=['gk','cb','fb','cm','att','cf'];
-      Promise.all(files.map(f=>fetch(`/players_${f}.json`).then(r=>r.json()).catch(()=>[])))
-        .then(results=>{
-          files.forEach((f,i)=>{posCache.current[f]=results[i];});
-          setAll(results.flat());setLoading(false);
-        }).catch(()=>setLoading(false));
-    } else {
-      // Mobile: load only the file for current pos
-      const rkNow=Object.entries(ROLE_KEY_LABELS).find(([,v])=>v===pos)?.[0]||'CF';
-      const fileKey=RK_TO_FILE[rkNow]||'cf';
-      if(posCache.current[fileKey]){setAll(posCache.current[fileKey]);setLoading(false);return;}
-      setLoading(true);
-      fetch(`/players_${fileKey}.json`).then(r=>r.json()).catch(()=>[])
-        .then(data=>{posCache.current[fileKey]=data;setAll(data);setLoading(false);})
-        .catch(()=>setLoading(false));
-    }
-  },[pos]);
+    const files=['gk','cb','fb','cm','att','cf'];
+    Promise.all(files.map(f=>fetch(`/players_${f}.json`).then(r=>r.json()).catch(()=>[])))
+      .then(results=>{setAll(results.flat());setLoading(false);})
+      .catch(()=>setLoading(false));
+  },[]);
   useEffect(()=>{setRoleFilter('');setRoleScoreMin(50);setScoreMode('complete');},[pos]);
   useEffect(()=>{if(activePreset&&PRESET_LEAGUES[activePreset]){setActivePresetLeagues([...PRESET_LEAGUES[activePreset]]);}  },[activePreset]);
 
@@ -312,7 +288,6 @@ export default function App(){
       if(pls<lsMin||pls>lsMax) return false;
       if(p.age<ageMin||p.age>ageMax) return false;
       if(foot!=='Any'&&p.foot!==foot) return false;
-      if(minHeight>0&&(!p.height||Number(p.height)<minHeight)) return false;
       const ds=getDisplayScore(p);
       if(ds===null) return false; // no data for that season
       if(ds<minScore) return false;
@@ -367,12 +342,12 @@ export default function App(){
       for(const mf of metricFilters){
         if(!mf.key) continue;
         const m=getMetricPct(p,mf.key);
-        if(!m) return false; // player doesn't have this metric — exclude
+        if(!m) continue;
         if(m.pct<mf.min||m.pct>mf.max) return false;
       }
       return true;
     });
-  },[all,search,pos,leagues,ageMin,ageMax,foot,minHeight,minScore,minSeas,showMvFilter,mvMax,showContractFilter,contractBefore,roleFilter,roleScoreMin,seasonFilter,metricFilters,xValueFilter,onlyElite,getDisplayScore,recentOnly,showXValueFilter,xValueMin,xValueMax,attrFilters,minMins,currentLeagueOnly,played2526,potentialMin,lsMin,lsMax,escOnly,gbeMin,natFilter,softMode,roleFilters,shortlist,showShortlist,notPlayingOnly]);
+  },[all,search,pos,leagues,ageMin,ageMax,foot,minScore,minSeas,showMvFilter,mvMax,showContractFilter,contractBefore,roleFilter,roleScoreMin,seasonFilter,metricFilters,xValueFilter,onlyElite,getDisplayScore,recentOnly,showXValueFilter,xValueMin,xValueMax,attrFilters,minMins,currentLeagueOnly,played2526,potentialMin,lsMin,lsMax,escOnly,gbeMin,natFilter,softMode,roleFilters,shortlist,showShortlist,notPlayingOnly]);
 
   const sorted=useMemo(()=>{
     const a=[...filtered];
@@ -404,7 +379,7 @@ export default function App(){
     avgAge:filtered.length?filtered.reduce((s,p)=>s+p.age,0)/filtered.length:0,
   }),[filtered,getDisplayScore]);
 
-  const reset=()=>{setSearch('');setPos(isMobile?'Striker':'All');setRoleFilter('');setRoleFilters(new Set());setSoftMode(false);setRoleFilters(new Set());setSoftMode(false);setRoleScoreMin(50);setActivePreset('');setActivePresetLeagues(null);setShowHidden(false);setShowYouth(false);setActiveBands(new Set());setActiveRegions(new Set());setLsMin(0);setLsMax(101);setAgeMin(16);setAgeMax(38);setFoot('Any');setMinHeight(0);setMinScore(40);setMinSeas(1);setShowMvFilter(false);setMvMax(50);setShowContractFilter(false);setContractBefore(2028);setSeasonFilter('all');setScoreMode('complete');setMetricFilters([]);setXValueFilter('');setRawMode(false);setOnlyElite(false);setRecentOnly(true);setShowXValueFilter(false);setXValueMin(0);setXValueMax(50);setAttrFilters(new Set());setMinMins(500);setCurrentLeagueOnly(false);setPotentialMin(40);setPlayed2526(false);setEscOnly(false);setGbeMin(0);setNatFilter('');setNotPlayingOnly(false);setShowShortlist(false);setSoftMode(false);setRoleFilters(new Set());setPage(0);};
+  const reset=()=>{setSearch('');setPos('All');setRoleFilter('');setRoleFilters(new Set());setSoftMode(false);setRoleFilters(new Set());setSoftMode(false);setRoleScoreMin(50);setActivePreset('');setActivePresetLeagues(null);setShowHidden(false);setShowYouth(false);setActiveBands(new Set());setActiveRegions(new Set());setLsMin(0);setLsMax(101);setAgeMin(16);setAgeMax(38);setFoot('Any');setMinScore(40);setMinSeas(1);setShowMvFilter(false);setMvMax(50);setShowContractFilter(false);setContractBefore(2028);setSeasonFilter('all');setScoreMode('complete');setMetricFilters([]);setXValueFilter('');setRawMode(false);setOnlyElite(false);setRecentOnly(true);setShowXValueFilter(false);setXValueMin(0);setXValueMax(50);setAttrFilters(new Set());setMinMins(500);setCurrentLeagueOnly(false);setPotentialMin(40);setPlayed2526(false);setEscOnly(false);setGbeMin(0);setNatFilter('');setNotPlayingOnly(false);setShowShortlist(false);setSoftMode(false);setRoleFilters(new Set());setPage(0);};
 
   if(loading) return <div style={{...T.app,alignItems:'center',justifyContent:'center'}}><style>{'@keyframes spin{to{transform:rotate(360deg)}}'}</style><div style={{width:24,height:24,border:'2px solid #1e2d45',borderTop:'2px solid #3b7de8',borderRadius:'50%',animation:'spin 0.8s linear infinite'}}/><div style={{color:'#94a3b8',fontSize:11,marginTop:8}}>Loading…</div></div>;
 
@@ -429,17 +404,13 @@ export default function App(){
           <div style={T.fg}>
             <div style={T.sw}><span style={T.si3}>⌕</span><input style={T.si2} placeholder="Player or team…" value={search} onChange={e=>{setSearch(e.target.value);setPage(0);}}/></div>
           </div>
-          <div style={T.fg}>
-            <span style={T.fl}>Nationality</span>
-            <div style={T.sw}><span style={T.si3}>🏳</span><input style={T.si2} placeholder="e.g. France, Brazil…" value={natFilter} onChange={e=>{setNatFilter(e.target.value);setPage(0);}}/></div>
-          </div>
           <div style={T.dv}/>
 
           {/* Scoring modes */}
           <div style={T.fg}>
             <span style={T.fl}>Position Group</span>
             <select style={T.sel} value={pos} onChange={e=>{setPos(e.target.value);setAttrFilters(new Set());setMinMins(0);setCurrentLeagueOnly(false);setPage(0);}}>
-              {!isMobile&&<option>All</option>}
+              <option>All</option>
               {Object.values(ROLE_KEY_LABELS).map(v=><option key={v}>{v}</option>)}
             </select>
           </div>
@@ -470,20 +441,20 @@ export default function App(){
           {pos!=='All'&&rk&&(<>
             <div style={T.fg}>
               <span style={T.fl}>Scoring Mode</span>
-              <select style={T.sel} value={scoreMode} onChange={e=>{const v=e.target.value;setScoreMode(v);setSort(v!=='complete'?{col:'roleScore',asc:false}:{col:'careerScore',asc:false});if(v!=='complete'){setRoleFilter('');setRoleFilters(new Set());}setPage(0);}}>
+              <select style={T.sel} value={scoreMode} onChange={e=>{const v=e.target.value;setScoreMode(v);setSort(v!=='complete'?{col:'roleScore',asc:false}:{col:'careerScore',asc:false});setPage(0);}}>
                 <option value="complete">Complete Score</option>
                 {(ROLES_BY_KEY[rk]||[]).map(r=><option key={r} value={r}>{r}</option>)}
               </select>
               {scoreMode!=='complete'&&<div style={{fontSize:9,color:'#60a5fa',marginTop:3}}>Sorted by {scoreMode} career avg</div>}
             </div>
-            {scoreMode==='complete'&&(<div style={T.fg}>
+            <div style={T.fg}>
               <span style={T.fl}>Filter by Role</span>
               <select style={T.sel} value={roleFilter} onChange={e=>{const v=e.target.value;setRoleFilter(v);if(v){setRoleFilters(s=>{const n=new Set(s);n.has(v)?n.delete(v):n.add(v);return n;});}else{setRoleFilters(new Set());}setPage(0);}}>
                 <option value="">Any role</option>
                 {(ROLES_BY_KEY[rk]||[]).map(r=><option key={r}>{r}</option>)}
               </select>
-            </div>)}
-            {roleFilter&&scoreMode==='complete'&&(
+            </div>
+            {roleFilter&&(
               <div style={T.fg}>
                 <span style={T.fl}>Min {roleFilter}: <strong style={{color:'#60a5fa'}}>{roleScoreMin}</strong></span>
                 <input type="range" style={T.sl} min={40} max={95} step={1} value={roleScoreMin} onChange={e=>{setRoleScoreMin(Number(e.target.value));setPage(0);}}/>
@@ -590,22 +561,6 @@ export default function App(){
                 <span style={{fontSize:9.5,color:showYouth?'#e2e8f4':'#94a3b8'}}>Show Youth</span>
               </label>
             </div>
-            {showYouth&&(
-              <div style={{marginBottom:8}}>
-                <span style={{fontSize:9,color:'#94a3b8',display:'block',marginBottom:4}}>Specific Youth League</span>
-                <select style={T.sel} onChange={e=>{
-                  const v=e.target.value;
-                  if(!v){setActivePresetLeagues([...YOUTH_LEAGUES]);}
-                  else{setActivePresetLeagues([v]);}
-                  setPage(0);
-                }}>
-                  <option value="">All Youth Leagues</option>
-                  {[...YOUTH_LEAGUES].sort((a,b)=>a.localeCompare(b)).map(lg=>(
-                    <option key={lg} value={lg}>{lg}</option>
-                  ))}
-                </select>
-              </div>
-            )}
             {/* League Strength Range */}
             <div style={{marginBottom:8}}>
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
@@ -663,26 +618,8 @@ export default function App(){
             </select>
           </div>
           <div style={T.fg}>
-            <span style={T.fl}>Min Height</span>
-            <select style={T.sel} value={minHeight} onChange={e=>{setMinHeight(Number(e.target.value));setPage(0);}}>
-              <option value={0}>Any</option>
-              <option value={163}>5'4"+</option>
-              <option value={168}>5'6"+</option>
-              <option value={170}>5'7"+</option>
-              <option value={173}>5'8"+</option>
-              <option value={175}>5'9"+</option>
-              <option value={178}>5'10"+</option>
-              <option value={180}>5'11"+</option>
-              <option value={183}>6'0"+</option>
-              <option value={185}>6'1"+</option>
-              <option value={188}>6'2"+</option>
-              <option value={190}>6'3"+</option>
-              <option value={193}>6'4"+</option>
-            </select>
-          </div>
-          <div style={T.fg}>
-            <span style={T.fl}>Min {scoreMode!=='complete'?scoreMode:'Score'}: <strong style={{color:'#60a5fa'}}>{minScore}</strong></span>
-            <input type="range" style={T.sl} min={40} max={scoreMode!=='complete'?95:85} step={1} value={minScore} onChange={e=>{setMinScore(Number(e.target.value));setPage(0);}}/>
+            <span style={T.fl}>Min Score: <strong style={{color:'#60a5fa'}}>{minScore}</strong></span>
+            <input type="range" style={T.sl} min={40} max={85} step={1} value={minScore} onChange={e=>{setMinScore(Number(e.target.value));setPage(0);}}/>
           </div>
           <div style={T.fg}>
             <span style={T.fl}>Min Potential: <strong style={{color:'#60a5fa'}}>{potentialMin<=40?'Any':potentialMin}</strong></span>
@@ -706,6 +643,10 @@ export default function App(){
                   <span key={v} onClick={()=>{setGbeMin(v);setPage(0);}} style={{padding:'2px 7px',borderRadius:4,fontSize:10,cursor:'pointer',background:gbeMin===v?'#3b82f6':'#1e293b',color:gbeMin===v?'#fff':'#94a3b8',border:`1px solid ${gbeMin===v?'#3b82f6':'#334155'}`}}>{v===0?'Any':v+'+'}</span>
                 ))}
               </div>
+            </div>
+            <div style={{marginTop:6}}>
+              <div style={{fontSize:10,color:'#94a3b8',marginBottom:3}}>NATIONALITY</div>
+              <input value={natFilter} onChange={e=>{setNatFilter(e.target.value);setPage(0);}} placeholder="e.g. France, Brazil" style={{width:'100%',background:'#1e293b',border:'1px solid #334155',borderRadius:4,padding:'4px 7px',fontSize:10,color:'#e2e8f4',outline:'none'}}/>
             </div>
             <label style={T.cr} onClick={()=>{setNotPlayingOnly(p=>!p);setPage(0);}}>
               <div style={T.cb(notPlayingOnly)}>{notPlayingOnly&&<span style={{color:'#fff',fontSize:8,lineHeight:1}}>✓</span>}</div>

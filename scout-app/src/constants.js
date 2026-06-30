@@ -246,7 +246,7 @@ export const POSITION_ATTRIBUTES = {
     { key:'tackler',      label:'Tackler',         tests:[{m:'Defensive duels won, %',p:70}] },
     { key:'securePasser', label:'Secure Passer',   tests:[{m:'Accurate passes, %',p:70}] },
     { key:'progressive',  label:'Progressive',     tests:[{m:'Progressive passes per 90',p:70}] },
-    { key:'verticalPass', label:'Vertical Passer', tests:[{m:'Forward passes per 90',p:70},{m:'Accurate forward passes, %',p:60}] },
+    { key:'verticalPass', label:'Vertical Passer', tests:[{m:'Progressive passes per 90',vs:'Passes per 90',ratio:2}] },
     { key:'ballCarrier',  label:'Ball Carrier',    tests:[{m:'Dribbles per 90',p:70},{m:'Progressive runs per 90',p:70}] },
   ],
   FB: [
@@ -255,7 +255,7 @@ export const POSITION_ATTRIBUTES = {
     { key:'lockdown',     label:'Lockdown',        tests:[{m:'Defensive duels per 90',p:70},{m:'Defensive duels won, %',p:70}] },
     { key:'securePasser', label:'Secure Passer',   tests:[{m:'Accurate passes, %',p:70}] },
     { key:'progressive',  label:'Progressive',     tests:[{m:'Progressive passes per 90',p:70}] },
-    { key:'verticalPass', label:'Vertical Passer', tests:[{m:'Forward passes per 90',p:70},{m:'Accurate forward passes, %',p:60}] },
+    { key:'verticalPass', label:'Vertical Passer', tests:[{m:'Progressive passes per 90',vs:'Passes per 90',ratio:2}] },
     { key:'ballCarrier',  label:'Ball Carrier',    tests:[{m:'Dribbles per 90',p:70},{m:'Progressive runs per 90',p:70}] },
     { key:'veryAttacking',label:'Very Attacking',  tests:[{m:'Touches in box per 90',p:75}] },
   ],
@@ -265,7 +265,7 @@ export const POSITION_ATTRIBUTES = {
     { key:'advPlaymaker', label:'Advanced Playmaker',tests:[{m:'Passes to penalty area per 90',p:70}] },
     { key:'chanceCreator',label:'Chance Creator',   tests:[{m:'xA per 90',p:70}] },
     { key:'securePasser', label:'Secure Passer',    tests:[{m:'Accurate passes, %',p:75}] },
-    { key:'verticalPass', label:'Vertical Passer',  tests:[{m:'Progressive passes per 90',p:60}] },
+    { key:'verticalPass', label:'Vertical Passer',  tests:[{m:'Progressive passes per 90',vs:'Passes per 90',ratio:2}] },
     { key:'ballCarrier',  label:'Ball Carrier',     tests:[{m:'Dribbles per 90',p:70},{m:'Progressive runs per 90',p:70}] },
     { key:'boxCrasher',   label:'Box Crasher',      tests:[{m:'Touches in box per 90',p:80}] },
     { key:'aerial',       label:'Aerial',           tests:[{m:'Aerial duels won, %',p:70}] },
@@ -316,6 +316,17 @@ export function playerHasAttribute(attr, gGroups) {
     return allMetrics.find(x=>x[0]===lbl||x[0]===mName);
   };
   return attr.tests.every(t=>{
+    // Ratio test: compares one metric's percentile against a multiple of another's,
+    // e.g. { m:'Progressive passes per 90', vs:'Passes per 90', ratio:2 } means
+    // progressive-passes percentile must be at least 2x the passes percentile.
+    if(t.vs){
+      const foundM = find(t.m);
+      const foundVs = find(t.vs);
+      if(!foundM||!foundVs) return false;
+      const pctM = foundM[1], pctVs = foundVs[1];
+      if(pctVs<=0) return pctM>0; // avoid div-by-zero; any signal beats zero baseline
+      return pctM >= pctVs * (t.ratio||2);
+    }
     const found = find(t.m);
     if(!found) return false;
     const pct = found[1];
