@@ -324,6 +324,40 @@ function rolesRankedSvgHtml() {
 }
 
 
+
+function teamRangeBarHtml(playerScore, teamScores, w = 560) {
+  const TEAM_METRICS = [
+    ['Possession',  68, 38, 80, 52],
+    ['Passing',     74, 42, 88, 61],
+    ['Verticality', 58, 30, 82, 54],
+    ['Attack',      71, 35, 91, 58],
+    ['Intensity',   63, 28, 85, 56],
+  ];
+  const metricBars = TEAM_METRICS.map(([label, val, mn, mx, av]) => {
+    const range = Math.max(1, mx - mn);
+    const pVal = Math.max(1, Math.min(97, ((val - mn) / range) * 100));
+    const pAvg = Math.max(1, Math.min(96, ((av  - mn) / range) * 100));
+    return `
+      <div style="margin-bottom:10px;">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
+          <span style="font-size:14px;font-weight:700;color:#c8d2e0;">${label}</span>
+          <span style="font-size:18px;font-weight:900;color:#a78bfa;">${val}</span>
+        </div>
+        <div style="position:relative;height:8px;background:#1b2636;border-radius:4px;margin-bottom:3px;">
+          <div style="position:absolute;left:0;top:0;height:100%;width:100%;background:linear-gradient(to right,#c7363c,#f0c56a,#3da65b);border-radius:4px;opacity:0.35;"></div>
+          <div style="position:absolute;top:-4px;left:${pAvg}%;width:2px;height:16px;background:#5e6678;"></div>
+          <div style="position:absolute;top:-4px;left:${pVal}%;transform:translateX(-50%);">
+            <div style="width:12px;height:12px;border-radius:50%;background:#a78bfa;border:2px solid #07090f;margin:0 auto;"></div>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:#3a4458;">
+          <span>Low (${mn})</span><span>Avg (${av})</span><span>High (${mx})</span>
+        </div>
+      </div>`;
+  }).join('');
+  return `<div style="font-size:11px;font-weight:600;color:#5e6678;text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px;">Placeholder data</div>${metricBars}`;
+}
+
 function buildQuickCardElement(player, players) {
   const seasonsDetailObj = player.seasonsDetail || {};
   const chosenSeasonKey = (player.allSeasonsSummary && player.allSeasonsSummary[0] && player.allSeasonsSummary[0].s)
