@@ -344,7 +344,7 @@ function buildQuickCardElement(player, players) {
   container.style.width = '1920px';
   container.style.height = '1080px';
 
-  const rolesSvg = rolesDotsSvg(sortedRoles, 760, 36);
+  const rolesSvg = rolesDotsSvg(sortedRoles, 900, 38);
   const radarSvg = teamRadarSvg(TEAM_PLACEHOLDER, 220);
 
   const attributeTagsHtml = (arr, bg, fg, border) => arr.slice(0,6).map(s =>
@@ -395,20 +395,17 @@ function buildQuickCardElement(player, players) {
         <div style="position:absolute;left:1196px;top:${56 + i*50}px;font-size:20px;font-weight:600;color:#d9d9d9;">${k}</div>
         <div style="position:absolute;left:1311px;top:${56 + i*50}px;font-size:20px;font-weight:600;color:#fff;">${v}</div>`).join('')}
 
-      <!-- GBE — proper stat block, top-right, same visual weight as info box -->
-      <div style="position:absolute;top:40px;right:32px;text-align:right;">
-        <div style="font-size:18px;font-weight:700;color:#9aa3b8;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;">GBE Calculation</div>
-        <div style="display:inline-flex;align-items:baseline;gap:10px;">
-          <span style="font-size:34px;font-weight:900;color:#fff;">${gbeTotal}</span>
-          <span style="font-size:16px;font-weight:600;color:#9aa3b8;">pts</span>
-          <span style="font-size:15px;font-weight:800;color:${gbeColor};background:${gbeColor}22;border:1px solid ${gbeColor};border-radius:6px;padding:2px 10px;">${gbeStatus}</span>
-        </div>
+      <!-- GBE — integrated header stat, matches Height/Value/Contract row style -->
+      <div style="position:absolute;left:1196px;top:206px;font-size:20px;font-weight:600;color:#d9d9d9;">GBE Points:</div>
+      <div style="position:absolute;left:1370px;top:206px;display:flex;align-items:baseline;gap:8px;">
+        <span style="font-size:20px;font-weight:700;color:#fff;">${gbeTotal} pts</span>
+        <span style="font-size:13px;font-weight:800;color:${gbeColor};background:${gbeColor}22;border:1px solid ${gbeColor};border-radius:5px;padding:1px 8px;">${gbeStatus}</span>
       </div>
 
-      <!-- ============ LEFT: SEASON STATS + bars ============ -->
+      <!-- ============ LEFT COLUMN: SEASON STATS + bars (self-contained, scales own row height) ============ -->
       <div style="position:absolute;top:312px;left:17px;font-size:26.6px;font-weight:700;color:${ACCENT_PINK};">Season Stats</div>
 
-      <div style="position:absolute;top:368px;left:0px;width:920px;height:530px;overflow:hidden;box-sizing:border-box;padding-left:24px;">
+      <div style="position:absolute;top:368px;left:0px;width:920px;height:671px;overflow:hidden;box-sizing:border-box;padding-left:24px;">
         ${groups.A && groups.A.length ? `<div style="font-size:24px;font-weight:800;color:#f3f5f7;margin:0 0 6px;">${isGK ? 'Goalkeeping' : 'Attacking'}</div>${buildGroupBars('A')}` : ''}
         ${groups.D && groups.D.length ? `<div style="font-size:24px;font-weight:800;color:#f3f5f7;margin:8px 0 6px;">Defensive</div>${buildGroupBars('D')}` : ''}
         ${groups.P && groups.P.length ? `<div style="font-size:24px;font-weight:800;color:#f3f5f7;margin:8px 0 6px;">Possession</div>${buildGroupBars('P')}` : ''}
@@ -424,48 +421,47 @@ function buildQuickCardElement(player, players) {
         </div>
       </div>
 
-      <!-- ============ FULL-WIDTH ROW: ROLE SCORES + TEAM CONTEXT ============ -->
-      <div style="position:absolute;top:900px;left:0px;width:1920px;height:180px;display:flex;gap:0;box-sizing:border-box;padding:0 40px;">
+      <!-- vertical divider between bars and right column -->
+      <div style="position:absolute;left:944px;top:368px;width:2px;height:671px;background:rgba(255,255,255,0.06);"></div>
 
-        <!-- ROLE SCORES — left half, real size -->
-        <div style="flex:1;padding-right:40px;">
-          <div style="font-size:22px;font-weight:800;color:#dbe1ee;margin-bottom:14px;">ROLE SCORES</div>
-          ${rolesSvg}
-        </div>
+      <!-- ============ RIGHT COLUMN (fills the dead space): ROLE SCORES, then KEY ATTRIBUTES, then TEAM CONTEXT ============ -->
 
-        <div style="width:2px;align-self:stretch;background:rgba(255,255,255,0.08);margin:0 20px;"></div>
-
-        <!-- TEAM CONTEXT — right half, real size -->
-        <div style="flex:1;padding-left:20px;display:flex;align-items:flex-start;gap:32px;">
-          <div style="flex-shrink:0;">
-            <div style="font-size:22px;font-weight:800;color:#dbe1ee;margin-bottom:2px;">TEAM CONTEXT</div>
-            <div style="font-size:12px;color:#5e6678;margin-bottom:8px;">${sdTeam} · placeholder data</div>
-            ${radarSvg}
-          </div>
-          ${squadAvg ? `
-          <div style="display:flex;flex-direction:column;gap:14px;padding-top:38px;">
-            <div>
-              <div style="font-size:11px;color:#7a8499;text-transform:uppercase;letter-spacing:.06em;">Squad Avg</div>
-              <div style="font-size:24px;font-weight:800;color:#dbe1ee;">${squadAvg.toFixed(1)}</div>
-            </div>
-            <div>
-              <div style="font-size:11px;color:#7a8499;text-transform:uppercase;letter-spacing:.06em;">vs Squad</div>
-              <div style="font-size:24px;font-weight:800;color:${player.careerScore>squadAvg?'#7ed957':'#ff914d'};">${player.careerScore>squadAvg?'+':''}${(player.careerScore-squadAvg).toFixed(1)}</div>
-            </div>
-          </div>` : ''}
-        </div>
+      <!-- ROLE SCORES -->
+      <div style="position:absolute;top:312px;left:984px;width:920px;">
+        <div style="font-size:26.6px;font-weight:700;color:${ACCENT_PINK};margin-bottom:18px;">Role Scores</div>
+        ${rolesSvg}
       </div>
 
-      <!-- Key Attributes / Dev Areas — top of right column, where score badge used to be -->
+      <!-- Key Attributes / Dev Areas -->
       ${(strengths.length>0 || weaknesses.length>0) ? `
-      <div style="position:absolute;top:330px;left:960px;width:920px;">
+      <div style="position:absolute;top:640px;left:984px;width:920px;">
         ${strengths.length>0 ? `
-        <div style="font-size:14px;font-weight:700;color:${ACCENT_PINK};text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;">Key Attributes</div>
+        <div style="font-size:16px;font-weight:700;color:${ACCENT_PINK};text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;">Key Attributes</div>
         <div style="margin-bottom:18px;">${attributeTagsHtml(strengths, '#0e2a1c', '#86efac', '#22c55e44')}</div>` : ''}
         ${weaknesses.length>0 ? `
-        <div style="font-size:14px;font-weight:700;color:${ACCENT_PINK};text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;">Development Areas</div>
+        <div style="font-size:16px;font-weight:700;color:${ACCENT_PINK};text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;">Development Areas</div>
         <div>${attributeTagsHtml(weaknesses, '#2a0e0e', '#fca5a5', '#ef444444')}</div>` : ''}
       </div>` : ''}
+
+      <!-- TEAM CONTEXT -->
+      <div style="position:absolute;top:840px;left:984px;width:920px;display:flex;align-items:flex-start;gap:40px;">
+        <div style="flex-shrink:0;">
+          <div style="font-size:26.6px;font-weight:700;color:${ACCENT_PINK};margin-bottom:2px;">Team Context</div>
+          <div style="font-size:13px;color:#5e6678;margin-bottom:10px;">${sdTeam} · placeholder data</div>
+          ${radarSvg}
+        </div>
+        ${squadAvg ? `
+        <div style="display:flex;flex-direction:column;gap:18px;padding-top:48px;">
+          <div>
+            <div style="font-size:12px;color:#7a8499;text-transform:uppercase;letter-spacing:.06em;">Squad Avg</div>
+            <div style="font-size:26px;font-weight:800;color:#dbe1ee;">${squadAvg.toFixed(1)}</div>
+          </div>
+          <div>
+            <div style="font-size:12px;color:#7a8499;text-transform:uppercase;letter-spacing:.06em;">vs Squad</div>
+            <div style="font-size:26px;font-weight:800;color:${player.careerScore>squadAvg?'#7ed957':'#ff914d'};">${player.careerScore>squadAvg?'+':''}${(player.careerScore-squadAvg).toFixed(1)}</div>
+          </div>
+        </div>` : ''}
+      </div>
 
     </div>
   `;
