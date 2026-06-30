@@ -301,7 +301,7 @@ const APP_ROLES = {
   GK:  ['Shot Stopper GK','Ball Playing GK','Sweeper GK'],
   CB:  ['Ball Playing CB','Wide CB','Box Defender'],
   FB:  ['Build Up FB','Attacking FB','Defensive FB'],
-  CM:  ['Deep Playmaker CM','Advanced Playmaker CM','Defensive CM','Defensive','Defensive DM','Ball Carrying CM','Box to Box CM','Goal Threat CM'],
+  CM:  ['Defensive Midfielder DM','Ball Carrying CM','Deep Playmaker CM','Advanced Playmaker CM','Goal Threat CM'],
   ATT: ['Playmaker ATT','Goal Threat ATT','Ball Carrier ATT','Wide Creator ATT'],
   CF:  ['Target Man CF','Goal Threat CF','Link Up CF','False 9 CF'],
 };
@@ -625,64 +625,40 @@ const PITCH_DOT_DEFAULT = '#a3a3a3';
 const METRIC_LABEL_MAP = {
   // Attacking
   'Crosses per 90': 'Crosses',
-  'Crosses': 'Crosses',
   'Accurate crosses, %': 'Crossing Accuracy %',
-  'Crossing accuracy': 'Crossing Accuracy %',
   'Non-penalty goals per 90': 'Goals: Non-Penalty',
-  'Non-penalty goals': 'Goals: Non-Penalty',
   'xG per 90': 'xG',
-  'xG': 'xG',
   'xA per 90': 'Expected Assists',
-  'xA': 'Expected Assists',
   'Offensive duels per 90': 'Offensive Duels',
-  'Offensive duels': 'Offensive Duels',
   'Offensive duels won, %': 'Offensive Duel Success %',
   'Progressive runs per 90': 'Progressive Runs',
-  'Progressive runs': 'Progressive Runs',
   'Shots per 90': 'Shots',
-  'Shots': 'Shots',
   'Touches in box per 90': 'Touches in Opposition Box',
-  'Touches in box': 'Touches in Opposition Box',
-  'Shots on target, %': 'Shooting Accuracy %',
   // Defensive
   'Aerial duels per 90': 'Aerial Duels',
-  'Aerial duels': 'Aerial Duels',
   'Aerial duels won, %': 'Aerial Duel Success %',
   'Defensive duels per 90': 'Defensive Duels',
-  'Defensive duels': 'Defensive Duels',
   'Defensive duels won, %': 'Defensive Duel Success %',
   'Shots blocked per 90': 'Shots Blocked',
-  'Shots blocked': 'Shots Blocked',
   'PAdj Interceptions': 'PAdj. Interceptions',
-  'PAdj. Interceptions': 'PAdj. Interceptions',
   // Possession
   'Deep completions per 90': 'Deep Completions',
-  'Deep completions': 'Deep Completions',
   'Dribbles per 90': 'Dribbles',
-  'Dribbles': 'Dribbles',
   'Successful dribbles, %': 'Dribbling Success %',
   'Forward passes per 90': 'Forward Passes',
-  'Forward passes': 'Forward Passes',
   'Accurate forward passes, %': 'Forward Passing %',
   'Key passes per 90': 'Key passes',
-  'Key passes': 'Key passes',
   'Long passes per 90': 'Long Passes',
-  'Long passes': 'Long Passes',
   'Accurate long passes, %': 'Long Passing %',
   'Passes per 90': 'Passes',
-  'Passes': 'Passes',
   'Accurate passes, %': 'Passing %',
   'Passes to final third per 90': 'Passes to Final 3rd',
-  'Passes to final third': 'Passes to Final 3rd',
   'Accurate passes to final third, %': 'Passes to Final 3rd %',
   'Passes to penalty area per 90': 'Passes to Penalty Area',
-  'Passes to penalty area': 'Passes to Penalty Area',
   'Accurate passes to penalty area, %': 'Pass to Penalty Area %',
-  'Progressive passes per 90': 'Progressive Passes',
-  'Progressive passes': 'Progressive Passes',
-  'Accurate progressive passes, %': 'Progressive Passing %',
+  'Progressive passes per 90': 'Progessive Passes',
+  'Accurate progressive passes, %': 'Progessive Passing %',
   'Smart passes per 90': 'Smart Passes',
-  'Smart passes': 'Smart Passes',
 };
 
 // ── Role display name overrides for scouting card ───────────────────────
@@ -775,7 +751,7 @@ export function buildCardElement(player, manual = {}) {
   const seasonRoles = sd.roles || {};
   const roleSource = Object.keys(seasonRoles).length > 0 ? seasonRoles : rcs;
   const sortedRoles = Object.entries(roleSource)
-    .filter(([role]) => validRoles.length === 0 || validRoles.includes(role))
+    .filter(([role, score]) => (validRoles.length === 0 || validRoles.includes(role)) && score >= 70)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 3);
   const groups = sd.g || {};
@@ -938,7 +914,7 @@ export function buildCardElement(player, manual = {}) {
       <div style="position:absolute;left:1164px;top:45px;width:3px;height:155px;background:#737373;"></div>
 
       <!-- INFO BOX -->
-      ${[['Height:', manual.height || cmToFeet(player.height) || '—'], ['Value:', manual.valueOverride || (player.xValue > 0 ? formatMV(player.xValue) : '—')], ['Contract:', (player.contractYear && player.contractYear !== 'nan') ? String(player.contractYear) : '—']].map(([k,v],i) => `
+      ${[['Height:', manual.height || cmToFeet(player.height) || '—'], ['Value:', manual.valueOverride || (player.xValue > 0 ? formatMV(player.xValue) : '—')], ['Contract:', manual.contractOverride || ((player.contractYear && player.contractYear !== 'nan') ? String(player.contractYear) : '—')]].map(([k,v],i) => `
         <div style="position:absolute;left:1196px;top:${56 + i*50}px;font-size:20px;font-weight:600;color:#d9d9d9;">${k}</div>
         <div style="position:absolute;left:1311px;top:${56 + i*50}px;font-size:20px;font-weight:600;color:#fff;">${v}</div>`).join('')}
 

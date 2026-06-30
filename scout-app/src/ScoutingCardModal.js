@@ -42,6 +42,7 @@ export default function ScoutingCardModal({ player, onClose }) {
   const [iphoneExport, setIphoneExport] = useState(false);
   const [nameOverride, setNameOverride] = useState('');
   const [valueOverride, setValueOverride] = useState('');
+  const [contractOverride, setContractOverride] = useState('');
   const [positionOverride, setPositionOverride] = useState('');
   const [footOverride, setFootOverride] = useState('');
   const [statsOverrides, setStatsOverrides] = useState({apps:'',gls:'',asts:'',xg:'',xa:'',mins:''});
@@ -90,6 +91,7 @@ export default function ScoutingCardModal({ player, onClose }) {
         iphoneExport,
         nameOverride,
         valueOverride,
+        contractOverride,
         positionOverride,
         footOverride,
         statsOverrides,
@@ -160,6 +162,10 @@ export default function ScoutingCardModal({ player, onClose }) {
           <div style={{ flex: 1 }}>
             <label style={labelStyle}>Value Override</label>
             <input style={inputStyle} value={valueOverride} onChange={e => setValueOverride(e.target.value)} placeholder="e.g. €35m" />
+          </div>
+          <div style={{ flex: 1 }}>
+            <label style={labelStyle}>Contract Override</label>
+            <input style={inputStyle} value={contractOverride} onChange={e => setContractOverride(e.target.value)} placeholder="e.g. 2027" />
           </div>
           <div style={{ width: 110 }}>
             <label style={labelStyle}>Foot</label>

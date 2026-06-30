@@ -41,15 +41,15 @@ export function StarDisplay({score,size=11}){
 }
 
 const METRIC_OPTIONS=[
-  {label:'xG per 90',key:'xG'},{label:'xA per 90',key:'xA'},
-  {label:'Goals (non-pen)',key:'Goals: Non-Penalty'},{label:'Shots per 90',key:'Shots'},
-  {label:'Touches in Box',key:'Touches in Box'},{label:'Progressive Runs',key:'Progressive Runs'},
-  {label:'Crosses per 90',key:'Crosses'},{label:'Pass % accuracy',key:'Pass %'},
-  {label:'Passes per 90',key:'Passes'},{label:'Prog Passes',key:'Progressive Passes'},
-  {label:'Dribbles per 90',key:'Dribbles'},{label:'Dribble %',key:'Dribble %'},
-  {label:'Key Passes',key:'Key Passes'},{label:'Deep Completions',key:'Deep Completions'},
-  {label:'Def Duel Win %',key:'Def Duel Win %'},{label:'Aerial Win %',key:'Aerial Duel %'},
-  {label:'Interceptions',key:'PAdj Interceptions'},{label:'Def Duels per 90',key:'Def Duels'},
+  {label:'xG per 90',key:'xG per 90'},{label:'xA per 90',key:'xA per 90'},
+  {label:'Goals (non-pen)',key:'Non-penalty goals per 90'},{label:'Shots per 90',key:'Shots per 90'},
+  {label:'Touches in Box',key:'Touches in box per 90'},{label:'Progressive Runs',key:'Progressive runs per 90'},
+  {label:'Crosses per 90',key:'Crosses per 90'},{label:'Pass % accuracy',key:'Accurate passes, %'},
+  {label:'Passes per 90',key:'Passes per 90'},{label:'Prog Passes',key:'Progressive passes per 90'},
+  {label:'Dribbles per 90',key:'Dribbles per 90'},{label:'Dribble %',key:'Successful dribbles, %'},
+  {label:'Key Passes',key:'Key passes per 90'},{label:'Deep Completions',key:'Deep completions per 90'},
+  {label:'Def Duel Win %',key:'Defensive duels won, %'},{label:'Aerial Win %',key:'Aerial duels won, %'},
+  {label:'Interceptions',key:'PAdj Interceptions'},{label:'Def Duels per 90',key:'Defensive duels per 90'},
 ];
 
 function getMetricPct(player,metricKey){
@@ -470,20 +470,20 @@ export default function App(){
           {pos!=='All'&&rk&&(<>
             <div style={T.fg}>
               <span style={T.fl}>Scoring Mode</span>
-              <select style={T.sel} value={scoreMode} onChange={e=>{const v=e.target.value;setScoreMode(v);setSort(v!=='complete'?{col:'roleScore',asc:false}:{col:'careerScore',asc:false});setPage(0);}}>
+              <select style={T.sel} value={scoreMode} onChange={e=>{const v=e.target.value;setScoreMode(v);setSort(v!=='complete'?{col:'roleScore',asc:false}:{col:'careerScore',asc:false});if(v!=='complete'){setRoleFilter('');setRoleFilters(new Set());}setPage(0);}}>
                 <option value="complete">Complete Score</option>
                 {(ROLES_BY_KEY[rk]||[]).map(r=><option key={r} value={r}>{r}</option>)}
               </select>
               {scoreMode!=='complete'&&<div style={{fontSize:9,color:'#60a5fa',marginTop:3}}>Sorted by {scoreMode} career avg</div>}
             </div>
-            <div style={T.fg}>
+            {scoreMode==='complete'&&(<div style={T.fg}>
               <span style={T.fl}>Filter by Role</span>
               <select style={T.sel} value={roleFilter} onChange={e=>{const v=e.target.value;setRoleFilter(v);if(v){setRoleFilters(s=>{const n=new Set(s);n.has(v)?n.delete(v):n.add(v);return n;});}else{setRoleFilters(new Set());}setPage(0);}}>
                 <option value="">Any role</option>
                 {(ROLES_BY_KEY[rk]||[]).map(r=><option key={r}>{r}</option>)}
               </select>
-            </div>
-            {roleFilter&&(
+            </div>)}
+            {roleFilter&&scoreMode==='complete'&&(
               <div style={T.fg}>
                 <span style={T.fl}>Min {roleFilter}: <strong style={{color:'#60a5fa'}}>{roleScoreMin}</strong></span>
                 <input type="range" style={T.sl} min={40} max={95} step={1} value={roleScoreMin} onChange={e=>{setRoleScoreMin(Number(e.target.value));setPage(0);}}/>
@@ -681,8 +681,8 @@ export default function App(){
             </select>
           </div>
           <div style={T.fg}>
-            <span style={T.fl}>Min Score: <strong style={{color:'#60a5fa'}}>{minScore}</strong></span>
-            <input type="range" style={T.sl} min={40} max={85} step={1} value={minScore} onChange={e=>{setMinScore(Number(e.target.value));setPage(0);}}/>
+            <span style={T.fl}>Min {scoreMode!=='complete'?scoreMode:'Score'}: <strong style={{color:'#60a5fa'}}>{minScore}</strong></span>
+            <input type="range" style={T.sl} min={40} max={scoreMode!=='complete'?95:85} step={1} value={minScore} onChange={e=>{setMinScore(Number(e.target.value));setPage(0);}}/>
           </div>
           <div style={T.fg}>
             <span style={T.fl}>Min Potential: <strong style={{color:'#60a5fa'}}>{potentialMin<=40?'Any':potentialMin}</strong></span>
