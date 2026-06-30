@@ -303,81 +303,33 @@ const PLACEHOLDER_ROLES = [
   ['Retention', 55],
 ];
 
-function rolesRankedSvgHtml(sortedRoles) {
-  // Use real data if available, fall back to placeholder for layout
-  const roles = (sortedRoles && sortedRoles.length > 0)
-    ? sortedRoles.map(([role, score]) => [ROLE_DISPLAY_NAMES[role] || role, Math.round(score)])
-    : PLACEHOLDER_ROLES;
-  if (!roles.length) return '<div style="color:#5e6678;font-size:14px;">No role data</div>';
+function rolesRankedSvgHtml() {
+  const roles = PLACEHOLDER_ROLES;
+  const w = 880, rowH = 52, numDots = 10, dotR = 10;
+  const labelW = 220;
+  const dotsAreaW = w - labelW - 60;
+  const dotSpacing = (dotsAreaW - dotR * 2) / (numDots - 1);
+  const h = roles.length * rowH + 8;
 
-  const [primaryDisp, primaryScore] = roles[0];
-  const rest = roles.slice(1, 7);
-  const primaryCol = scoreTierColor(primaryScore);
-  const primaryTier = primaryScore >= 79 ? 'Elite Fit' : primaryScore >= 67 ? 'Strong Fit' : primaryScore >= 55 ? 'Good Fit' : primaryScore >= 43 ? 'Moderate Fit' : 'Developing Fit';
-
-  const primaryHtml = `
-    <div style="display:flex;align-items:center;gap:24px;padding:18px 22px;background:rgba(255,255,255,0.04);border:1px solid ${primaryCol}55;border-radius:12px;margin-bottom:16px;">
-      <div style="width:74px;height:74px;border-radius:50%;border:4px solid ${primaryCol};display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-        <span style="font-size:28px;font-weight:900;color:${primaryCol};">${primaryScore}</span>
-      </div>
-      <div>
-        <div style="font-size:11px;font-weight:700;color:#7a8499;text-transform:uppercase;letter-spacing:.08em;margin-bottom:3px;">Primary Role</div>
-        <div style="font-size:24px;font-weight:800;color:#fff;line-height:1.15;">${primaryDisp}</div>
-        <div style="font-size:13px;font-weight:600;color:${primaryCol};">${primaryTier}</div>
-      </div>
-    </div>`;
-
-  const restHtml = rest.map(([disp, sc]) => {
+  const rows = roles.map(([disp, score], i) => {
+    const sc = Math.round(score);
+    const filled = Math.max(0, Math.min(numDots, Math.round(sc / 10)));
     const col = scoreTierColor(sc);
-    const p = Math.max(0, Math.min(100, sc));
+    const y = i * rowH + rowH / 2 + 4;
+    const dots = Array.from({length: numDots}, (_, d) => {
+      const cx = labelW + dotR + d * dotSpacing;
+      return d < filled
+        ? `<circle cx="${cx}" cy="${y}" r="${dotR}" fill="${col}"/>`
+        : `<circle cx="${cx}" cy="${y}" r="${dotR}" fill="none" stroke="${col}" stroke-width="2" opacity="0.45"/>`;
+    }).join('');
+    const scoreX = labelW + dotR + (numDots - 1) * dotSpacing + dotR + 18;
     return `
-      <div style="display:flex;align-items:center;height:34px;margin-bottom:4px;">
-        <span style="width:220px;flex-shrink:0;font-size:15px;font-weight:600;color:#c8d2e0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${disp}</span>
-        <span style="flex:1;position:relative;height:10px;background:#1b2636;border-radius:3px;">
-          <span style="position:absolute;left:0;top:0;height:100%;width:${p}%;background:${col};border-radius:3px;"></span>
-        </span>
-        <span style="width:42px;text-align:right;flex-shrink:0;font-size:16px;font-weight:800;color:${col};">${sc}</span>
-      </div>`;
+      <text x="0" y="${y + 6}" font-family="Montserrat,sans-serif" font-size="18" font-weight="700" fill="#c8d2e0">${disp}</text>
+      ${dots}
+      <text x="${scoreX}" y="${y + 6}" font-family="Montserrat,sans-serif" font-size="17" font-weight="800" fill="${col}">${sc}</text>`;
   }).join('');
 
-  return primaryHtml + restHtml;
-}
-
-function teamRangeBarHtml(playerScore, teamScores, w = 560) {
-  // Placeholder team metrics — each shown as a league range bar (same style, red-gold-green gradient)
-  const TEAM_METRICS = [
-    // [label, teamVal, leagueMin, leagueMax, leagueAvg]
-    ['Possession',  68, 38, 80, 52],
-    ['Passing',     74, 42, 88, 61],
-    ['Verticality', 58, 30, 82, 54],
-    ['Attack',      71, 35, 91, 58],
-    ['Intensity',   63, 28, 85, 56],
-  ];
-
-  const metricBars = TEAM_METRICS.map(([label, val, mn, mx, av]) => {
-    const range = Math.max(1, mx - mn);
-    const pVal = Math.max(0, Math.min(97, ((val - mn) / range) * 100));
-    const pAvg = Math.max(0, Math.min(96, ((av  - mn) / range) * 100));
-    return `
-      <div style="margin-bottom:10px;">
-        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
-          <span style="font-size:14px;font-weight:700;color:#c8d2e0;">${label}</span>
-          <span style="font-size:18px;font-weight:900;color:#a78bfa;">${val}</span>
-        </div>
-        <div style="position:relative;height:8px;background:#1b2636;border-radius:4px;margin-bottom:3px;">
-          <div style="position:absolute;left:0;top:0;height:100%;width:100%;background:linear-gradient(to right,#c7363c,#f0c56a,#3da65b);border-radius:4px;opacity:0.35;"></div>
-          <div style="position:absolute;top:-4px;left:${pAvg}%;width:2px;height:16px;background:#5e6678;"></div>
-          <div style="position:absolute;top:-4px;left:${pVal}%;transform:translateX(-50%);">
-            <div style="width:12px;height:12px;border-radius:50%;background:#a78bfa;border:2px solid #07090f;margin:0 auto;"></div>
-          </div>
-        </div>
-        <div style="display:flex;justify-content:space-between;font-size:10px;color:#3a4458;">
-          <span>Low (${mn})</span><span>Avg (${av})</span><span>High (${mx})</span>
-        </div>
-      </div>`;
-  }).join('');
-
-  return `<div style="font-size:11px;font-weight:600;color:#5e6678;text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px;">Placeholder data · pending integration</div>${metricBars}`;
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">${rows}</svg>`;
 }
 
 function buildQuickCardElement(player, players) {
@@ -448,7 +400,7 @@ function buildQuickCardElement(player, players) {
   container.style.width = '1920px';
   container.style.height = '1080px';
 
-  const rolesRankedHtml = rolesRankedSvgHtml(sortedRoles);
+  const rolesRankedHtml = rolesRankedSvgHtml();
 
   const attributeTagsHtml = (arr, bg, fg, border) => arr.slice(0,6).map(s =>
     `<span style="font-size:13px;background:${bg};color:${fg};border:1px solid ${border};border-radius:14px;padding:4px 11px;display:inline-block;margin:0 6px 6px 0;">${s}</span>`
@@ -491,12 +443,12 @@ function buildQuickCardElement(player, players) {
       <div style="position:absolute;left:882px;top:42px;font-size:36px;font-weight:800;color:#fff;${sdTeam.length >= 16 ? 'letter-spacing:-1px;' : ''}">${sdTeam}</div>
       <div style="position:absolute;left:882px;top:92px;font-size:26px;font-weight:500;color:#d0d8ea;">${sdLeague}</div>
 
-      <div style="position:absolute;left:1168px;top:30px;width:3px;height:210px;background:#737373;"></div>
+      <div style="position:absolute;left:1020px;top:30px;width:3px;height:210px;background:#737373;"></div>
 
       <!-- INFO BOX — bigger -->
       ${[['Height:', cmToFeet(player.height) || '—'], ['Value:', (player.xValue > 0 ? formatMV(player.xValue) : '—')], ['Contract:', (player.contractYear && player.contractYear !== 'nan') ? String(player.contractYear) : '—']].map(([k,v],i) => `
-        <div style="position:absolute;left:1204px;top:${42 + i*64}px;font-size:24px;font-weight:600;color:#9aa3b8;">${k}</div>
-        <div style="position:absolute;left:1370px;top:${42 + i*64}px;font-size:24px;font-weight:700;color:#fff;">${v}</div>`).join('')}
+        <div style="position:absolute;left:1040px;top:${42 + i*64}px;font-size:24px;font-weight:600;color:#9aa3b8;">${k}</div>
+        <div style="position:absolute;left:1210px;top:${42 + i*64}px;font-size:24px;font-weight:700;color:#fff;">${v}</div>`).join('')}
 
       <!-- GBE — bigger, more presence -->
       <div style="position:absolute;top:20px;right:28px;width:390px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.10);border-radius:12px;padding:18px 22px;">
@@ -539,7 +491,7 @@ function buildQuickCardElement(player, players) {
       <!-- ROLE SCORES -->
       <div style="position:absolute;top:298px;left:984px;width:920px;">
         <div style="font-size:26.6px;font-weight:700;color:${ACCENT_PINK};margin-bottom:14px;">Role Scores</div>
-        ${rolesRankedHtml}
+        <div style="display:flex;justify-content:flex-start;">${rolesRankedHtml}</div>
       </div>
 
       <!-- TEAM CONTEXT -->
