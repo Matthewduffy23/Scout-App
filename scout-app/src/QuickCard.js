@@ -509,29 +509,6 @@ function buildQuickCardElement(player, players) {
 
 export default function QuickCardModal({ player, players, onClose }) {
   const [downloading, setDownloading] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState(null);
-
-  React.useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const { toPng } = await import('html-to-image');
-      await ensureMontserratEmbedded();
-      const el = buildQuickCardElement(player, players);
-      try {
-        const cardNode = el.querySelector('#qc-card-root') || el;
-        const opts = {
-          width: 1920, height: 1080, pixelRatio: 1, backgroundColor: BG,
-          cacheBust: true, fontEmbedCSS: MONTSERRAT_EMBED_CSS,
-          imagePlaceholder: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
-        };
-        await toPng(cardNode, opts);
-        const dataUrl = await toPng(cardNode, opts);
-        if (!cancelled) setPreviewUrl(dataUrl);
-      } catch(e) { console.error('QuickCard preview error:', e); }
-      finally { document.body.removeChild(el); }
-    })();
-    return () => { cancelled = true; };
-  }, [player, players]);
 
   const handleDownload = async () => {
     setDownloading(true);
@@ -551,33 +528,23 @@ export default function QuickCardModal({ player, players, onClose }) {
       a.download = `${player.name.replace(/\s+/g,'_')}_quick_card.png`;
       a.href = dataUrl;
       a.click();
-    } catch(e) { console.error('QuickCard download error:', e); }
+    } catch(e) { console.error(e); }
     finally { document.body.removeChild(el); setDownloading(false); }
   };
 
-
   return (
-    <div
-      style={{position:'fixed',inset:0,background:'rgba(0,0,0,.85)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}
-      onClick={e=>{if(e.target===e.currentTarget)onClose();}}
-    >
-      <div style={{background:'#09111e',border:'1px solid #1e2d45',borderRadius:12,width:'min(1100px,98vw)',maxHeight:'95vh',overflowY:'auto',boxShadow:'0 8px 40px rgba(0,0,0,.7)'}}>
-        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 16px',borderBottom:'1px solid #1e2d45',position:'sticky',top:0,background:'#09111e',zIndex:1}}>
-          <div style={{fontSize:13,fontWeight:700,color:'#e2e8f4'}}>⚡ Quick Card</div>
-          <div style={{display:'flex',gap:8}}>
-            <button onClick={handleDownload} disabled={downloading}
-              style={{background:'#0e2a1c',border:'1px solid #22c55e',color:'#86efac',borderRadius:6,padding:'5px 14px',fontSize:11,fontWeight:700,cursor:'pointer',opacity:downloading?0.6:1}}>
-              {downloading ? 'Saving…' : '⬇ Download 1920×1080'}
-            </button>
-            <button onClick={onClose}
-              style={{background:'none',border:'1px solid #1e2d45',color:'#94a3b8',borderRadius:6,width:28,height:28,fontSize:16,cursor:'pointer',lineHeight:1}}>×</button>
-          </div>
-        </div>
-        <div style={{padding:16}}>
-          {previewUrl
-            ? <img src={previewUrl} style={{width:'100%',borderRadius:8,display:'block'}} alt="Quick Card preview"/>
-            : <div style={{color:'#64748b',fontSize:13,textAlign:'center',padding:'60px 0'}}>Generating preview…</div>
-          }
+    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.85)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center'}}
+      onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
+      <div style={{background:'#09111e',border:'1px solid #1e2d45',borderRadius:12,padding:32,textAlign:'center',boxShadow:'0 8px 40px rgba(0,0,0,.7)',minWidth:320}}>
+        <div style={{fontSize:15,fontWeight:700,color:'#e2e8f4',marginBottom:8}}>⚡ Quick Card</div>
+        <div style={{fontSize:12,color:'#64748b',marginBottom:24}}>{player.name} · {player.team}</div>
+        <div style={{display:'flex',gap:10,justifyContent:'center'}}>
+          <button onClick={handleDownload} disabled={downloading}
+            style={{background:'#0e2a1c',border:'1px solid #22c55e',color:'#86efac',borderRadius:6,padding:'8px 18px',fontSize:12,fontWeight:700,cursor:'pointer',opacity:downloading?0.6:1}}>
+            {downloading ? 'Generating…' : '⬇ Download 1920×1080'}
+          </button>
+          <button onClick={onClose}
+            style={{background:'none',border:'1px solid #1e2d45',color:'#94a3b8',borderRadius:6,padding:'8px 14px',fontSize:12,cursor:'pointer'}}>Close</button>
         </div>
       </div>
     </div>
