@@ -549,7 +549,7 @@ function rolePill(roleName, score, width = 320) {
   const sc = Math.round(score);
   const bc = scoreTierColor(sc);
   const displayName = ROLE_DISPLAY_NAMES[roleName] || roleName;
-  const tightSpacing = (roleName === 'Deep Playmaker CM' || roleName === 'Advanced Playmaker CM');
+  const tightSpacing = (roleName === 'Deep Playmaker CM' || roleName === 'Advanced Playmaker CM' || roleName === 'Defensive Midfielder DM' || roleName === 'Goal Threat CM');
   const letterSpacingStyle = (roleName === 'Advanced Playmaker CM') ? 'letter-spacing:-1.2px;' : (tightSpacing ? 'letter-spacing:-0.5px;' : '');
   return `
     <div style="display:flex;align-items:center;justify-content:space-between;width:${width}px;height:46px;margin:0 auto 14px;">
@@ -755,7 +755,7 @@ export function buildCardElement(player, manual = {}) {
   const seasonRoles = sd.roles || {};
   const roleSource = { ...rcs, ...seasonRoles };
   const sortedRoles = Object.entries(roleSource)
-    .filter(([role, score]) => (validRoles.length === 0 || validRoles.includes(role)) && (posKey !== 'CM' || Number(score) >= 70))
+    .filter(([role, score]) => (validRoles.length === 0 || validRoles.includes(role)) && (role !== 'Goal Threat CM' || Number(score) >= 70))
     .sort((a, b) => b[1] - a[1])
     .slice(0, 3);
   const groups = sd.g || {};
