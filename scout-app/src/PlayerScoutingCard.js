@@ -665,6 +665,7 @@ const METRIC_LABEL_MAP = {
 const ROLE_DISPLAY_NAMES = {
   'Deep Playmaker CM': 'Deep Playmaker',
   'Advanced Playmaker CM': 'Adv. Playmaker CM',
+  'Defensive Midfielder DM': 'Defensive Midfielder',
 };
 
 function pitchDiagramSvg(player, manual) {
@@ -754,7 +755,7 @@ export function buildCardElement(player, manual = {}) {
   const seasonRoles = sd.roles || {};
   const roleSource = { ...rcs, ...seasonRoles };
   const sortedRoles = Object.entries(roleSource)
-    .filter(([role, score]) => (validRoles.length === 0 || validRoles.includes(role)) && Number(score) >= 70)
+    .filter(([role, score]) => (validRoles.length === 0 || validRoles.includes(role)) && (posKey !== 'CM' || Number(score) >= 70))
     .sort((a, b) => b[1] - a[1])
     .slice(0, 3);
   const groups = sd.g || {};
