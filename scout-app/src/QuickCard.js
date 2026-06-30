@@ -278,6 +278,89 @@ function ensureMontserratEmbedded() {
   return _montserratEmbedPromise;
 }
 
+
+function gbeThresholdBar(label, val, max, w = 220) {
+  const p = Math.max(0, Math.min(100, (val / max) * 100));
+  const pass = val >= max * 0.5;
+  const col = pass ? '#3da65b' : (p > 0 ? '#f0c56a' : '#5e6678');
+  return `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px;">
+      <span style="width:13px;height:13px;border-radius:50%;flex-shrink:0;background:${pass?'#3da65b':'transparent'};border:1.5px solid ${pass?'#3da65b':'#5e6678'};display:flex;align-items:center;justify-content:center;">
+        ${pass ? `<span style="color:#07090f;font-size:9px;font-weight:900;line-height:1;">&#10003;</span>` : ''}
+      </span>
+      <span style="width:108px;flex-shrink:0;font-size:12px;font-weight:600;color:#c8d2e0;">${label}</span>
+      <span style="flex:1;position:relative;height:8px;background:#1b2636;border-radius:2px;">
+        <span style="position:absolute;left:0;top:0;height:100%;width:${p}%;background:${col};border-radius:2px;"></span>
+      </span>
+      <span style="width:46px;text-align:right;flex-shrink:0;font-size:12px;font-weight:800;color:#dbe1ee;">${val}/${max}</span>
+    </div>`;
+}
+
+function rolesRankedSvgHtml(sortedRoles) {
+  if (!sortedRoles.length) return '<div style="color:#5e6678;font-size:14px;">No role data</div>';
+  const [primaryRole, primaryScore] = sortedRoles[0];
+  const rest = sortedRoles.slice(1, 6);
+  const primaryDisp = ROLE_DISPLAY_NAMES[primaryRole] || primaryRole;
+  const primaryCol = scoreTierColor(Math.round(primaryScore));
+  const primaryTier = Math.round(primaryScore) >= 79 ? 'Elite Fit' : Math.round(primaryScore) >= 67 ? 'Strong Fit' : Math.round(primaryScore) >= 55 ? 'Good Fit' : Math.round(primaryScore) >= 43 ? 'Moderate Fit' : 'Developing Fit';
+
+  const primaryHtml = `
+    <div style="display:flex;align-items:center;gap:24px;padding:18px 22px;background:rgba(255,255,255,0.04);border:1px solid ${primaryCol}55;border-radius:12px;margin-bottom:16px;">
+      <div style="width:74px;height:74px;border-radius:50%;border:4px solid ${primaryCol};display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+        <span style="font-size:28px;font-weight:900;color:${primaryCol};">${Math.round(primaryScore)}</span>
+      </div>
+      <div>
+        <div style="font-size:11px;font-weight:700;color:#7a8499;text-transform:uppercase;letter-spacing:.08em;margin-bottom:3px;">Primary Role</div>
+        <div style="font-size:24px;font-weight:800;color:#fff;line-height:1.15;">${primaryDisp}</div>
+        <div style="font-size:13px;font-weight:600;color:${primaryCol};">${primaryTier}</div>
+      </div>
+    </div>`;
+
+  const restHtml = rest.map(([role, score]) => {
+    const sc = Math.round(score);
+    const col = scoreTierColor(sc);
+    const disp = ROLE_DISPLAY_NAMES[role] || role;
+    const p = Math.max(0, Math.min(100, sc));
+    return `
+      <div style="display:flex;align-items:center;height:30px;margin-bottom:2px;">
+        <span style="width:210px;flex-shrink:0;font-size:14px;font-weight:600;color:#c8d2e0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${disp}</span>
+        <span style="flex:1;position:relative;height:10px;background:#1b2636;border-radius:3px;">
+          <span style="position:absolute;left:0;top:0;height:100%;width:${p}%;background:${col};border-radius:3px;"></span>
+        </span>
+        <span style="width:38px;text-align:right;flex-shrink:0;font-size:15px;font-weight:800;color:${col};">${sc}</span>
+      </div>`;
+  }).join('');
+
+  return primaryHtml + restHtml;
+}
+
+function teamRangeBarHtml(playerScore, teamScores, w = 560) {
+  if (!teamScores || teamScores.length === 0) {
+    return `<div style="color:#5e6678;font-size:13px;">No squad data available</div>`;
+  }
+  const min = Math.min(...teamScores);
+  const max = Math.max(...teamScores);
+  const avg = teamScores.reduce((a,b)=>a+b,0) / teamScores.length;
+  const range = Math.max(1, max - min);
+  const pPlayer = ((playerScore - min) / range) * 100;
+  const pAvg = ((avg - min) / range) * 100;
+  return `
+    <div style="width:${w}px;">
+      <div style="position:relative;height:10px;background:#1b2636;border-radius:5px;margin-bottom:6px;">
+        <div style="position:absolute;left:0;top:0;height:100%;width:100%;background:linear-gradient(to right, #c7363c, #f0c56a, #3da65b);border-radius:5px;opacity:0.35;"></div>
+        <div style="position:absolute;top:-5px;left:${Math.max(0,Math.min(100,pAvg))}%;width:2px;height:20px;background:#9aa3b8;"></div>
+        <div style="position:absolute;top:-7px;left:${Math.max(0,Math.min(100,pPlayer))}%;transform:translateX(-50%);width:18px;height:24px;display:flex;align-items:center;justify-content:center;">
+          <div style="width:14px;height:14px;border-radius:50%;background:#a78bfa;border:2.5px solid #07090f;"></div>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:#7a8499;">
+        <span>Squad Low (${min.toFixed(1)})</span>
+        <span>Squad Avg (${avg.toFixed(1)})</span>
+        <span>Squad High (${max.toFixed(1)})</span>
+      </div>
+    </div>`;
+}
+
 function buildQuickCardElement(player, players) {
   const seasonsDetailObj = player.seasonsDetail || {};
   const chosenSeasonKey = (player.allSeasonsSummary && player.allSeasonsSummary[0] && player.allSeasonsSummary[0].s)
@@ -346,8 +429,7 @@ function buildQuickCardElement(player, players) {
   container.style.width = '1920px';
   container.style.height = '1080px';
 
-  const rolesSvg = rolesDotsSvg(sortedRoles, 880, 56);
-  const radarSvg = teamRadarSvg(TEAM_PLACEHOLDER, 280);
+  const rolesRankedHtml = rolesRankedSvgHtml(sortedRoles);
 
   const attributeTagsHtml = (arr, bg, fg, border) => arr.slice(0,6).map(s =>
     `<span style="font-size:13px;background:${bg};color:${fg};border:1px solid ${border};border-radius:14px;padding:4px 11px;display:inline-block;margin:0 6px 6px 0;">${s}</span>`
@@ -397,23 +479,19 @@ function buildQuickCardElement(player, players) {
         <div style="position:absolute;left:1196px;top:${56 + i*50}px;font-size:20px;font-weight:600;color:#d9d9d9;">${k}</div>
         <div style="position:absolute;left:1311px;top:${56 + i*50}px;font-size:20px;font-weight:600;color:#fff;">${v}</div>`).join('')}
 
-      <!-- GBE — tidy standalone block, top-right corner -->
-      <div style="position:absolute;top:32px;right:32px;width:260px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:14px 18px;">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+      <!-- GBE — requirements checklist, sporting-director style -->
+      <div style="position:absolute;top:28px;right:32px;width:340px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:16px 20px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
           <span style="font-size:13px;font-weight:700;color:#9aa3b8;text-transform:uppercase;letter-spacing:.08em;">GBE Calculation</span>
-          <span style="font-size:11px;font-weight:800;color:${gbeColor};background:${gbeColor}22;border:1px solid ${gbeColor};border-radius:5px;padding:2px 8px;">${gbeStatus}</span>
+          <div style="display:flex;align-items:baseline;gap:6px;">
+            <span style="font-size:22px;font-weight:900;color:#fff;">${gbeTotal}</span>
+            <span style="font-size:11px;font-weight:800;color:${gbeColor};background:${gbeColor}22;border:1px solid ${gbeColor};border-radius:5px;padding:1px 7px;">${gbeStatus}</span>
+          </div>
         </div>
-        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:10px;">
-          <span style="font-size:30px;font-weight:900;color:#fff;">${gbeTotal}</span>
-          <span style="font-size:13px;color:#7a8499;">points</span>
-        </div>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:5px;">
-          ${[['Band',`B${band}`],['Dom',domPts],['Cont',contPts],['Band Pts',lqPts],['Finish',finishPts],['Prog',progPts]].map(([l,v])=>`
-            <div style="background:rgba(255,255,255,0.05);border-radius:4px;padding:3px 4px;text-align:center;">
-              <div style="font-size:7px;color:#7a8499;text-transform:uppercase;">${l}</div>
-              <div style="font-size:12px;font-weight:800;color:#dbe1ee;">${v}</div>
-            </div>`).join('')}
-        </div>
+        ${gbeThresholdBar('Domestic Apps', domPts, 12)}
+        ${gbeThresholdBar('Continental', contPts, 8)}
+        ${gbeThresholdBar('League Band', lqPts, 12)}
+        ${gbeThresholdBar('Finish/Prog', finishPts + progPts, 10)}
       </div>
 
       <!-- ============ LEFT COLUMN: SEASON STATS + bars (self-contained, scales own row height) ============ -->
@@ -438,42 +516,29 @@ function buildQuickCardElement(player, players) {
       <!-- vertical divider between bars and right column -->
       <div style="position:absolute;left:944px;top:368px;width:2px;height:671px;background:rgba(255,255,255,0.06);"></div>
 
-      <!-- ============ RIGHT COLUMN: ROLE SCORES (top ~half) then TEAM CONTEXT (bottom ~half), both scaled to fill ============ -->
+      <!-- ============ RIGHT COLUMN: ROLE SCORES (primary + ranked list) then TEAM CONTEXT (range bar) ============ -->
 
       <!-- ROLE SCORES -->
-      <div style="position:absolute;top:368px;left:984px;width:920px;height:330px;box-sizing:border-box;">
-        <div style="font-size:26.6px;font-weight:700;color:${ACCENT_PINK};margin-bottom:22px;">Role Scores</div>
-        <div style="display:flex;justify-content:center;">${rolesSvg}</div>
+      <div style="position:absolute;top:368px;left:984px;width:920px;">
+        <div style="font-size:26.6px;font-weight:700;color:${ACCENT_PINK};margin-bottom:18px;">Role Scores</div>
+        ${rolesRankedHtml}
       </div>
 
       <!-- divider between role scores and team context -->
-      <div style="position:absolute;left:984px;top:716px;width:920px;height:2px;background:rgba(255,255,255,0.06);"></div>
+      <div style="position:absolute;left:984px;top:780px;width:920px;height:2px;background:rgba(255,255,255,0.06);"></div>
 
-      <!-- Key Attributes / Dev Areas (compact strip, sits in divider gap if present) -->
+      <!-- Key Attributes / Dev Areas -->
       ${(strengths.length>0 || weaknesses.length>0) ? `
-      <div style="position:absolute;top:730px;left:984px;width:920px;">
+      <div style="position:absolute;top:794px;left:984px;width:920px;">
         ${strengths.length>0 ? `<span style="font-size:13px;font-weight:700;color:#7a8499;text-transform:uppercase;letter-spacing:.06em;margin-right:10px;">Strengths</span>${attributeTagsHtml(strengths.slice(0,4), '#0e2a1c', '#86efac', '#22c55e44')}` : ''}
         ${weaknesses.length>0 ? `<span style="font-size:13px;font-weight:700;color:#7a8499;text-transform:uppercase;letter-spacing:.06em;margin:0 10px 0 18px;">Areas</span>${attributeTagsHtml(weaknesses.slice(0,3), '#2a0e0e', '#fca5a5', '#ef444444')}` : ''}
       </div>` : ''}
 
-      <!-- TEAM CONTEXT -->
-      <div style="position:absolute;top:${(strengths.length>0||weaknesses.length>0) ? 800 : 760}px;left:984px;width:920px;display:flex;align-items:center;gap:60px;">
-        <div style="flex-shrink:0;">
-          <div style="font-size:26.6px;font-weight:700;color:${ACCENT_PINK};margin-bottom:2px;">Team Context</div>
-          <div style="font-size:13px;color:#5e6678;margin-bottom:14px;">${sdTeam} · placeholder data</div>
-          ${radarSvg}
-        </div>
-        ${squadAvg ? `
-        <div style="display:flex;flex-direction:column;gap:28px;">
-          <div style="background:rgba(255,255,255,0.04);border-radius:10px;padding:16px 24px;">
-            <div style="font-size:13px;color:#7a8499;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">Squad Avg</div>
-            <div style="font-size:34px;font-weight:800;color:#dbe1ee;">${squadAvg.toFixed(1)}</div>
-          </div>
-          <div style="background:rgba(255,255,255,0.04);border-radius:10px;padding:16px 24px;">
-            <div style="font-size:13px;color:#7a8499;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">vs Squad</div>
-            <div style="font-size:34px;font-weight:800;color:${player.careerScore>squadAvg?'#7ed957':'#ff914d'};">${player.careerScore>squadAvg?'+':''}${(player.careerScore-squadAvg).toFixed(1)}</div>
-          </div>
-        </div>` : ''}
+      <!-- TEAM CONTEXT — range bar showing where player sits in squad -->
+      <div style="position:absolute;top:${(strengths.length>0||weaknesses.length>0) ? 850 : 800}px;left:984px;width:920px;">
+        <div style="font-size:26.6px;font-weight:700;color:${ACCENT_PINK};margin-bottom:2px;">Team Context</div>
+        <div style="font-size:13px;color:#5e6678;margin-bottom:18px;">${sdTeam} · squad score distribution</div>
+        ${teamRangeBarHtml(player.careerScore, teamPlayers.map(p=>p.careerScore), 880)}
       </div>
 
     </div>
