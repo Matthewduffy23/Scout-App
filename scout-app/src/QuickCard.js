@@ -280,17 +280,16 @@ function ensureMontserratEmbedded() {
 function gbeThresholdBar(label, val, max, w = 220) {
   const p = Math.max(0, Math.min(100, (val / max) * 100));
   const pass = val >= max * 0.5;
-  const col = pass ? '#3da65b' : (p > 0 ? '#f0c56a' : '#5e6678');
   return `
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px;">
-      <span style="width:13px;height:13px;border-radius:50%;flex-shrink:0;background:${pass?'#3da65b':'transparent'};border:1.5px solid ${pass?'#3da65b':'#5e6678'};display:flex;align-items:center;justify-content:center;">
+      <span style="width:13px;height:13px;border-radius:50%;flex-shrink:0;background:${pass?'#dbe1ee':'transparent'};border:1.5px solid ${pass?'#dbe1ee':'#3a4458'};display:flex;align-items:center;justify-content:center;flex-shrink:0;">
         ${pass ? `<span style="color:#07090f;font-size:9px;font-weight:900;line-height:1;">&#10003;</span>` : ''}
       </span>
-      <span style="width:108px;flex-shrink:0;font-size:12px;font-weight:600;color:#c8d2e0;">${label}</span>
-      <span style="flex:1;position:relative;height:8px;background:#1b2636;border-radius:2px;">
-        <span style="position:absolute;left:0;top:0;height:100%;width:${p}%;background:${col};border-radius:2px;"></span>
+      <span style="width:108px;flex-shrink:0;font-size:12px;font-weight:600;color:#9aa3b8;">${label}</span>
+      <span style="flex:1;position:relative;height:6px;background:#1b2636;border-radius:2px;">
+        <span style="position:absolute;left:0;top:0;height:100%;width:${p}%;background:#dbe1ee;border-radius:2px;opacity:0.7;"></span>
       </span>
-      <span style="width:46px;text-align:right;flex-shrink:0;font-size:12px;font-weight:800;color:#dbe1ee;">${val}/${max}</span>
+      <span style="width:46px;text-align:right;flex-shrink:0;font-size:12px;font-weight:700;color:#dbe1ee;">${val}/${max}</span>
     </div>`;
 }
 
@@ -469,12 +468,12 @@ function buildQuickCardElement(player, players) {
       <div style="position:absolute;left:882px;top:42px;font-size:36px;font-weight:800;color:#fff;${sdTeam.length >= 16 ? 'letter-spacing:-1px;' : ''}">${sdTeam}</div>
       <div style="position:absolute;left:882px;top:92px;font-size:26px;font-weight:500;color:#d0d8ea;">${sdLeague}</div>
 
-      <div style="position:absolute;left:1168px;top:30px;width:3px;height:210px;background:#737373;"></div>
+      <div style="position:absolute;left:1060px;top:30px;width:3px;height:210px;background:#737373;"></div>
 
       <!-- INFO BOX — bigger -->
       ${[['Height:', cmToFeet(player.height) || '—'], ['Value:', (player.xValue > 0 ? formatMV(player.xValue) : '—')], ['Contract:', (player.contractYear && player.contractYear !== 'nan') ? String(player.contractYear) : '—']].map(([k,v],i) => `
-        <div style="position:absolute;left:1204px;top:${42 + i*64}px;font-size:24px;font-weight:600;color:#9aa3b8;">${k}</div>
-        <div style="position:absolute;left:1370px;top:${42 + i*64}px;font-size:24px;font-weight:700;color:#fff;">${v}</div>`).join('')}
+        <div style="position:absolute;left:1080px;top:${42 + i*64}px;font-size:24px;font-weight:600;color:#9aa3b8;">${k}</div>
+        <div style="position:absolute;left:1230px;top:${42 + i*64}px;font-size:24px;font-weight:700;color:#fff;">${v}</div>`).join('')}
 
       <!-- GBE — bigger, more presence -->
       <div style="position:absolute;top:20px;right:28px;width:390px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.10);border-radius:12px;padding:18px 22px;">
@@ -521,17 +520,17 @@ function buildQuickCardElement(player, players) {
       </div>
 
       <!-- divider between role scores and team context -->
-      <div style="position:absolute;left:984px;top:780px;width:920px;height:2px;background:rgba(255,255,255,0.06);"></div>
+      <div style="position:absolute;left:984px;top:820px;width:920px;height:2px;background:rgba(255,255,255,0.06);"></div>
 
       <!-- Key Attributes / Dev Areas -->
       ${(strengths.length>0 || weaknesses.length>0) ? `
-      <div style="position:absolute;top:794px;left:984px;width:920px;">
+      <div style="position:absolute;top:834px;left:984px;width:920px;">
         ${strengths.length>0 ? `<span style="font-size:13px;font-weight:700;color:#7a8499;text-transform:uppercase;letter-spacing:.06em;margin-right:10px;">Strengths</span>${attributeTagsHtml(strengths.slice(0,4), '#0e2a1c', '#86efac', '#22c55e44')}` : ''}
         ${weaknesses.length>0 ? `<span style="font-size:13px;font-weight:700;color:#7a8499;text-transform:uppercase;letter-spacing:.06em;margin:0 10px 0 18px;">Areas</span>${attributeTagsHtml(weaknesses.slice(0,3), '#2a0e0e', '#fca5a5', '#ef444444')}` : ''}
       </div>` : ''}
 
       <!-- TEAM CONTEXT — range bar showing where player sits in squad -->
-      <div style="position:absolute;top:${(strengths.length>0||weaknesses.length>0) ? 850 : 800}px;left:984px;width:920px;">
+      <div style="position:absolute;top:${(strengths.length>0||weaknesses.length>0) ? 880 : 840}px;left:984px;width:920px;">
         <div style="font-size:26.6px;font-weight:700;color:${ACCENT_PINK};margin-bottom:2px;">Team Context</div>
         <div style="font-size:13px;color:#5e6678;margin-bottom:18px;">${sdTeam} · squad score distribution</div>
         ${teamRangeBarHtml(player.careerScore, teamPlayers.map(p=>p.careerScore), 880)}
