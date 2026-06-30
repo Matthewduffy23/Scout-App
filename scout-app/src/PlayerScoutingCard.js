@@ -549,7 +549,7 @@ function rolePill(roleName, score, width = 320) {
   const sc = Math.round(score);
   const bc = scoreTierColor(sc);
   const displayName = ROLE_DISPLAY_NAMES[roleName] || roleName;
-  const tightSpacing = (roleName === 'Deep Playmaker CM' || roleName === 'Advanced Playmaker CM' || roleName === 'Defensive Midfielder DM' || roleName === 'Goal Threat CM');
+  const tightSpacing = (roleName === 'Deep Playmaker CM' || roleName === 'Advanced Playmaker CM' || roleName === 'Goal Threat CM');
   const letterSpacingStyle = (roleName === 'Advanced Playmaker CM') ? 'letter-spacing:-1.2px;' : (tightSpacing ? 'letter-spacing:-0.5px;' : '');
   return `
     <div style="display:flex;align-items:center;justify-content:space-between;width:${width}px;height:46px;margin:0 auto 14px;">
@@ -665,7 +665,7 @@ const METRIC_LABEL_MAP = {
 const ROLE_DISPLAY_NAMES = {
   'Deep Playmaker CM': 'Deep Playmaker',
   'Advanced Playmaker CM': 'Adv. Playmaker CM',
-  'Defensive Midfielder DM': 'Defensive Midfielder',
+  'Defensive Midfielder DM': 'Defensive DM',
 };
 
 function pitchDiagramSvg(player, manual) {
