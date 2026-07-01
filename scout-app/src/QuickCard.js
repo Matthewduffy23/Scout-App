@@ -1,4 +1,4 @@
-// QuickCard v37 - JS-truncated league/info-box text (real fix), panels pushed down + gradient/shadow pop effect, GBE badge emphasis swapped, Scout Status pill (High Priority/Monitor/Database) in Biography panel
+// QuickCard v38 - orange FAIL badge in Exceptions Panel range, league flag via margin instead of flex gap, Scout Status pill anchored to panel bottom, Biography character limit (350/248) with live counter
 import React, { useState } from 'react';
 import { scoreLabel, formatFoot, formatMV } from './constants';
 
@@ -553,13 +553,15 @@ function buildQuickCardElement(player, players, manual = {}) {
   // actually applies, not a third badge state.
   const gbePass    = gbeTotal >= 15;
   const gbeStatus  = gbePass ? 'PASS' : 'FAIL';
-  const gbeColor   = gbePass ? '#3da65b' : '#c7363c';
   // Note shown under the bars for players who fail outright but still have a route in:
   //  - 10–14 pts: eligible for GBE Exceptions Panel review
   //  - <10 pts but flagged exceptional talent: ESC eligible
   // Players who pass, or who fail with no route in, get no extra note.
   const gbePanelEligible = !gbePass && gbeTotal >= 10;
   const gbeEscEligible   = !gbePass && gbeTotal < 10 && !!player.escEligible;
+  // FAIL badge is orange when the player is in the Exceptions Panel range —
+  // a distinct "not dead, needs review" signal vs a hard red no-route fail.
+  const gbeColor   = gbePass ? '#3da65b' : gbePanelEligible ? '#f0a637' : '#c7363c';
 
   // Team context — placeholder identity stats (team stats CSV not yet integrated)
   const teamPlayers = (players||[]).filter(p=>p.team===player.team&&p.careerScore!=null);
@@ -664,9 +666,9 @@ function buildQuickCardElement(player, players, manual = {}) {
       <!-- CREST / TEAM / LEAGUE -->
       ${crest ? `<div style="position:absolute;left:720px;top:22px;width:148px;height:200px;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${crest}');"></div>` : ''}
       <div style="position:absolute;left:882px;top:42px;font-size:36px;font-weight:800;color:#fff;${sdTeam.length >= 16 ? 'letter-spacing:-1px;' : ''}">${sdTeam}</div>
-      <div style="position:absolute;left:882px;top:94px;display:flex;align-items:center;gap:8px;">
+      <div style="position:absolute;left:882px;top:94px;display:flex;align-items:center;">
         <span style="font-size:21px;font-weight:500;color:#d0d8ea;white-space:nowrap;">${leagueDisplayName}</span>
-        ${countryToIso2(leagueToCountry(sdLeague)) ? `<div style="width:32px;height:20px;flex-shrink:0;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(leagueToCountry(sdLeague))}.png');border-radius:2px;"></div>` : ''}
+        ${countryToIso2(leagueToCountry(sdLeague)) ? `<div style="width:32px;height:20px;flex-shrink:0;margin-left:18px;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(leagueToCountry(sdLeague))}.png');border-radius:2px;"></div>` : ''}
       </div>
 
       <div style="position:absolute;left:1180px;top:30px;width:3px;height:210px;background:#737373;"></div>
@@ -741,7 +743,7 @@ function buildQuickCardElement(player, players, manual = {}) {
       <div style="position:absolute;top:${ROW2_TOP}px;left:${984 + STYLE_PANEL_W + PANEL_GAP_H}px;width:${CAREER_PANEL_W}px;height:${ROW2_PANEL_H}px;background:${PANEL_BG};border:1px solid ${PANEL_BORDER};border-radius:${PANEL_RADIUS}px;padding:${PANEL_PAD}px;box-sizing:border-box;overflow:hidden;box-shadow:${PANEL_SHADOW};">
         <div style="font-size:22px;font-weight:700;color:${ACCENT_PINK};margin-bottom:14px;">Biography</div>
         ${manual.biography ? `<div style="font-size:20px;line-height:1.5;font-weight:600;color:#fff;">${manual.biography}</div>` : ''}
-        ${manual.scoutStatus && SCOUT_STATUS_STYLES[manual.scoutStatus] ? `<div style="margin-top:16px;"><span style="display:inline-block;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;padding:6px 14px;border-radius:6px;background:${SCOUT_STATUS_STYLES[manual.scoutStatus].bg};color:${SCOUT_STATUS_STYLES[manual.scoutStatus].fg};border:1px solid ${SCOUT_STATUS_STYLES[manual.scoutStatus].border};">${manual.scoutStatus}</span></div>` : ''}
+        ${manual.scoutStatus && SCOUT_STATUS_STYLES[manual.scoutStatus] ? `<div style="position:absolute;left:${PANEL_PAD}px;bottom:${PANEL_PAD}px;"><span style="display:inline-block;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;padding:6px 14px;border-radius:6px;background:${SCOUT_STATUS_STYLES[manual.scoutStatus].bg};color:${SCOUT_STATUS_STYLES[manual.scoutStatus].fg};border:1px solid ${SCOUT_STATUS_STYLES[manual.scoutStatus].border};">${manual.scoutStatus}</span></div>` : ''}
       </div>` : ''}
 
     </div>
@@ -764,6 +766,7 @@ export default function QuickCardModal({ player, players, onClose }) {
   const [halfTeamContext, setHalfTeamContext] = useState(false);
   const [showForecast, setShowForecast] = useState(false);
   const [scoutStatus, setScoutStatus] = useState('');
+  const BIO_MAX_LENGTH = scoutStatus ? 248 : 350;
 
   const handleDownload = async () => {
     setDownloading(true);
@@ -810,8 +813,11 @@ export default function QuickCardModal({ player, players, onClose }) {
 
         {halfTeamContext && (
           <div style={{marginBottom:12}}>
-            <label style={qcLabelStyle}>Biography (optional)</label>
-            <textarea style={{...qcInputStyle,minHeight:60,resize:'vertical'}} value={biography} onChange={e=>setBiography(e.target.value)} placeholder="Short bio to fill the space next to Team Context…" />
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline'}}>
+              <label style={{...qcLabelStyle,marginBottom:0}}>Biography (optional)</label>
+              <span style={{fontSize:10,color: biography.length > BIO_MAX_LENGTH - 20 ? '#f87171' : '#64748b'}}>{biography.length} / {BIO_MAX_LENGTH}</span>
+            </div>
+            <textarea style={{...qcInputStyle,minHeight:60,resize:'vertical',marginTop:4}} value={biography} maxLength={BIO_MAX_LENGTH} onChange={e=>setBiography(e.target.value.slice(0,BIO_MAX_LENGTH))} placeholder="Short bio to fill the space next to Team Context…" />
           </div>
         )}
 
@@ -825,7 +831,11 @@ export default function QuickCardModal({ player, players, onClose }) {
                 { label: 'Database', bg: 'rgba(234,179,8,0.15)', fg: '#fde047', border: '#eab308' },
               ].map(opt => (
                 <button key={opt.label} type="button"
-                  onClick={() => setScoutStatus(scoutStatus === opt.label ? '' : opt.label)}
+                  onClick={() => {
+                    const next = scoutStatus === opt.label ? '' : opt.label;
+                    setScoutStatus(next);
+                    if (next && biography.length > 248) setBiography(biography.slice(0, 248));
+                  }}
                   style={{
                     flex: 1, fontSize: 10.5, fontWeight: 700, padding: '7px 4px', borderRadius: 6, cursor: 'pointer',
                     background: opt.bg, color: opt.fg,
