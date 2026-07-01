@@ -1,4 +1,4 @@
-// QuickCard v27 - all header/GBE/style/team fixes
+// QuickCard v28 - info box downsized, GBE pass/fail badge + panel/ESC note, GBE card spacing, Style/Team Context dynamic stacking
 import React, { useState } from 'react';
 import { scoreLabel, formatFoot, formatMV } from './constants';
 
@@ -313,7 +313,7 @@ function gbeThresholdBar(label, val, max, w = 220) {
   const p = Math.max(0, Math.min(100, (val / max) * 100));
   const pass = val >= max * 0.5;
   return `
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px;">
+    <div style="display:flex;align-items:center;gap:8px;">
       <span style="width:13px;height:13px;border-radius:50%;flex-shrink:0;background:${pass?'#dbe1ee':'transparent'};border:1.5px solid ${pass?'#dbe1ee':'#3a4458'};display:flex;align-items:center;justify-content:center;flex-shrink:0;">
         ${pass ? `<span style="color:#07090f;font-size:9px;font-weight:900;line-height:1;">&#10003;</span>` : ''}
       </span>
@@ -404,7 +404,7 @@ function teamRangeBarHtml(playerScore, teamScores, w = 560) {
         </div>
       </div>`;
   }).join('');
-  return `<div style="font-size:11px;font-weight:600;color:#5e6678;text-transform:uppercase;letter-spacing:.06em;margin-bottom:14px;">Placeholder · pending integration</div>${metricBars}`;
+  return metricBars;
 }
 
 function buildQuickCardElement(player, players) {
@@ -439,8 +439,18 @@ function buildQuickCardElement(player, players) {
   const finishPts = player.gbeFinishPts ?? 0;
   const progPts   = player.gbeProgPts   ?? 0;
   const gbeTotal  = player.gbeTotal     ?? (domPts+contPts+lqPts+finishPts+progPts);
-  const gbeStatus = gbeTotal>=15?'PASS':gbeTotal>=10?'PANEL':'FAIL';
-  const gbeColor  = gbeTotal>=15?'#3da65b':gbeTotal>=10?'#f0c56a':'#c7363c';
+  // Badge is a straight PASS/FAIL. Anything short of a pass is a fail — the
+  // exceptions-panel / ESC messaging is a separate note shown only when it
+  // actually applies, not a third badge state.
+  const gbePass    = gbeTotal >= 15;
+  const gbeStatus  = gbePass ? 'PASS' : 'FAIL';
+  const gbeColor   = gbePass ? '#3da65b' : '#c7363c';
+  // Note shown under the bars for players who fail outright but still have a route in:
+  //  - 10–14 pts: eligible for GBE Exceptions Panel review
+  //  - <10 pts but flagged exceptional talent: ESC eligible
+  // Players who pass, or who fail with no route in, get no extra note.
+  const gbePanelEligible = !gbePass && gbeTotal >= 10;
+  const gbeEscEligible   = !gbePass && gbeTotal < 10 && !!player.escEligible;
 
   // Team context — placeholder identity stats (team stats CSV not yet integrated)
   const teamPlayers = (players||[]).filter(p=>p.team===player.team&&p.careerScore!=null);
@@ -476,6 +486,17 @@ function buildQuickCardElement(player, players) {
   container.style.height = '1080px';
 
   const rolesRankedHtml = rolesRankedSvgHtml(sortedRoles);
+
+  // Style / Team Context share the right column and must be positioned back-to-back —
+  // computed from the actual rendered height of the roles list rather than a fixed guess,
+  // so they never leave a gap or overlap regardless of how many roles are shown.
+  const STYLE_TOP = 298;
+  const STYLE_HEADER_H = 44;
+  const ROLES_ROW_H = 50;
+  const rolesSvgHeight = PLACEHOLDER_ROLES.length * ROLES_ROW_H + 8;
+  const SECTION_GAP = 20;
+  const dividerTop = STYLE_TOP + STYLE_HEADER_H + rolesSvgHeight + SECTION_GAP;
+  const teamContextTop = dividerTop + 2 + SECTION_GAP;
 
   const attributeTagsHtml = (arr, bg, fg, border) => arr.slice(0,6).map(s =>
     `<span style="font-size:13px;background:${bg};color:${fg};border:1px solid ${border};border-radius:14px;padding:4px 11px;display:inline-block;margin:0 6px 6px 0;">${s}</span>`
@@ -525,25 +546,28 @@ function buildQuickCardElement(player, players) {
 
       <div style="position:absolute;left:1180px;top:30px;width:3px;height:210px;background:#737373;"></div>
 
-      <!-- INFO BOX — bigger -->
+      <!-- INFO BOX -->
       ${[['Height:', cmToFeet(player.height) || '—'], ['Value:', (player.xValue > 0 ? formatMV(player.xValue) : '—')], ['Contract:', (player.contractYear && player.contractYear !== 'nan') ? String(player.contractYear) : '—']].map(([k,v],i) => `
-        <div style="position:absolute;left:1200px;top:${42 + i*64}px;font-size:24px;font-weight:600;color:#9aa3b8;">${k}</div>
-        <div style="position:absolute;left:1360px;top:${42 + i*64}px;font-size:24px;font-weight:700;color:#fff;">${v}</div>`).join('')}
+        <div style="position:absolute;left:1200px;top:${48 + i*50}px;font-size:19px;font-weight:600;color:#9aa3b8;">${k}</div>
+        <div style="position:absolute;left:1340px;top:${48 + i*50}px;font-size:19px;font-weight:700;color:#fff;">${v}</div>`).join('')}
 
       <!-- GBE -->
-      <div style="position:absolute;top:18px;right:24px;width:360px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.10);border-radius:12px;padding:14px 18px;">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+      <div style="position:absolute;top:34px;right:24px;width:368px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.10);border-radius:12px;padding:18px 20px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
           <span style="font-size:13px;font-weight:700;color:#9aa3b8;text-transform:uppercase;letter-spacing:.08em;">GBE Calculation</span>
           <div style="display:flex;align-items:center;gap:8px;">
             <span style="font-size:22px;font-weight:900;color:#fff;">${gbeTotal} pts</span>
             <span style="font-size:12px;font-weight:800;color:${gbeColor};background:${gbeColor}22;border:1px solid ${gbeColor};border-radius:5px;padding:2px 8px;">${gbeStatus}</span>
           </div>
         </div>
-        ${gbeThresholdBar('Domestic Apps', domPts, 12)}
-        ${gbeThresholdBar('Continental', contPts, 8)}
-        ${gbeThresholdBar('League Band', lqPts, 12)}
-        ${gbeThresholdBar('Finish/Prog', finishPts + progPts, 10)}
-        ${(player.escEligible || gbeStatus === 'Fail / ESC Eligible') ? `<div style="margin-top:8px;font-size:10px;color:#f97316;border-top:1px solid rgba(249,115,22,0.2);padding-top:6px;">⚡ ESC Eligible — may qualify via exceptional talent panel</div>` : ''}
+        <div style="display:flex;flex-direction:column;gap:9px;">
+          ${gbeThresholdBar('Domestic Apps', domPts, 12)}
+          ${gbeThresholdBar('Continental', contPts, 8)}
+          ${gbeThresholdBar('League Band', lqPts, 12)}
+          ${gbeThresholdBar('Finish/Prog', finishPts + progPts, 10)}
+        </div>
+        ${gbePanelEligible ? `<div style="margin-top:12px;font-size:11px;font-weight:600;color:#f0c56a;border-top:1px solid rgba(240,197,106,0.2);padding-top:9px;">Eligible for GBE Exceptions Panel review</div>` : ''}
+        ${gbeEscEligible ? `<div style="margin-top:12px;font-size:11px;font-weight:600;color:#f97316;border-top:1px solid rgba(249,115,22,0.2);padding-top:9px;">⚡ ESC Eligible — may qualify via exceptional talent panel</div>` : ''}
       </div>
 
       <!-- ============ LEFT COLUMN: bars from bottom of header to bottom of card ============ -->
@@ -570,19 +594,17 @@ function buildQuickCardElement(player, players) {
       <!-- ============ RIGHT COLUMN: ROLE SCORES (primary + ranked list) then TEAM CONTEXT (range bar) ============ -->
 
       <!-- ROLE SCORES -->
-      <div style="position:absolute;top:298px;left:984px;width:920px;">
+      <div style="position:absolute;top:${STYLE_TOP}px;left:984px;width:920px;">
         <div style="font-size:26.6px;font-weight:700;color:${ACCENT_PINK};margin-bottom:18px;">Style</div>
         ${rolesRankedHtml}
       </div>
 
       <!-- divider between role scores and team context -->
-      <div style="position:absolute;left:984px;top:580px;width:920px;height:2px;background:rgba(255,255,255,0.06);"></div>
-
-
+      <div style="position:absolute;left:984px;top:${dividerTop}px;width:920px;height:2px;background:rgba(255,255,255,0.06);"></div>
 
       <!-- TEAM CONTEXT -->
-      <div style="position:absolute;top:600px;left:984px;width:920px;">
-        <div style="font-size:26.6px;font-weight:700;color:${ACCENT_PINK};margin-bottom:14px;">Team Context</div>
+      <div style="position:absolute;top:${teamContextTop}px;left:984px;width:920px;">
+        <div style="font-size:26.6px;font-weight:700;color:${ACCENT_PINK};margin-bottom:16px;">Team Context</div>
         ${teamRangeBarHtml(player.careerScore, teamPlayers.map(p=>p.careerScore), 880)}
       </div>
 
