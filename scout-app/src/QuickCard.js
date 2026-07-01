@@ -1,4 +1,4 @@
-// QuickCard v34 - Career forecast toggle (dashed line to potential score, matching PlayerCard.js's forecast logic); clarified raw vs cumulative score plotting
+// QuickCard v36 - Style/Career/Team Context/Biography as bordered FM-style panels; league name width/font fixed for real; career league bands always visible; info box smaller/nowrap
 import React, { useState } from 'react';
 import { scoreLabel, formatFoot, formatMV } from './constants';
 
@@ -361,9 +361,20 @@ function careerTrajectorySvg(player, w = 420, h = 284, showForecast = false) {
   const hasForecast = showForecast && player.potentialScore != null;
   const peakAge = hasForecast ? (player.estPeakAge && player.estPeakAge > last.age ? player.estPeakAge : last.age + 2) : null;
 
+  // League score bands — thresholds match constants.js's scoreLabel() tiers.
+  // NOTE: assumed "L2" for the fifth band (League Two) since that's the tier
+  // constants.js actually defines between League One and National League —
+  // flag if "Ligue 1" was meant literally, that's a different scale entirely.
+  const LEAGUE_BANDS = [
+    ['PL', 72], ['Champ', 61], ['L1', 57], ['L2', 54], ['NL', 50],
+  ];
+
   const scores = history.map(p => p.sc);
-  const minS = Math.min(...scores) - 3;
-  const maxS = Math.max(...scores, ...(hasForecast ? [player.potentialScore] : [])) + 3;
+  // Always include every band threshold in the visible range — otherwise a player
+  // who's spent their whole career above/below a given tier never shows it, which
+  // defeats the point of using them as career-long reference lines.
+  const minS = Math.min(...scores, ...LEAGUE_BANDS.map(b => b[1])) - 3;
+  const maxS = Math.max(...scores, ...LEAGUE_BANDS.map(b => b[1]), ...(hasForecast ? [player.potentialScore] : [])) + 3;
   const ages = history.map(p => p.age);
   const minA = Math.min(...ages);
   const maxA = Math.max(...ages, ...(hasForecast ? [peakAge] : []));
@@ -383,20 +394,12 @@ function careerTrajectorySvg(player, w = 420, h = 284, showForecast = false) {
       <text x="${fx.toFixed(1)}" y="${(pad.t + ph + 17).toFixed(1)}" font-family="Montserrat,sans-serif" font-size="10" font-weight="600" fill="#22c55e" text-anchor="middle">${Math.round(peakAge)}</text>`;
   })() : '';
 
-  // League score bands — thresholds match constants.js's scoreLabel() tiers.
-  // NOTE: assumed "L2" for the fifth band (League Two) since that's the tier
-  // constants.js actually defines between League One and National League —
-  // flag if "Ligue 1" was meant literally, that's a different scale entirely.
-  const LEAGUE_BANDS = [
-    ['PL', 72], ['Champ', 61], ['L1', 57], ['L2', 54], ['NL', 50],
-  ];
   const bandLines = LEAGUE_BANDS
-    .filter(([, val]) => val >= minS && val <= maxS)
     .map(([label, val]) => {
       const y = yS(val);
       return `
-        <line x1="${pad.l}" y1="${y.toFixed(1)}" x2="${pad.l + pw}" y2="${y.toFixed(1)}" stroke="rgba(255,255,255,0.09)" stroke-width="1" stroke-dasharray="3,3"/>
-        <text x="${(pad.l + pw - 3).toFixed(1)}" y="${(y - 3).toFixed(1)}" font-family="Montserrat,sans-serif" font-size="9" font-weight="700" fill="rgba(255,255,255,0.25)" text-anchor="end">${label}</text>`;
+        <line x1="${pad.l}" y1="${y.toFixed(1)}" x2="${pad.l + pw}" y2="${y.toFixed(1)}" stroke="rgba(255,255,255,0.15)" stroke-width="1" stroke-dasharray="3,3"/>
+        <text x="${(pad.l + pw - 3).toFixed(1)}" y="${(y - 3).toFixed(1)}" font-family="Montserrat,sans-serif" font-size="9" font-weight="700" fill="rgba(255,255,255,0.4)" text-anchor="end">${label}</text>`;
     }).join('');
 
   const dots = history.map(p => {
@@ -426,11 +429,11 @@ const PLACEHOLDER_ROLES = [
   ['Retention', 55],
 ];
 
-function rolesRankedSvgHtml(maxWidth = 440) {
+function rolesRankedSvgHtml(maxWidth = 408) {
   const roles = PLACEHOLDER_ROLES;
-  // Compact hexagons, closely packed, sized to sit in half the right column
-  // alongside a future career trajectory chart.
-  const R = 11;
+  // Compact hexagons, closely packed, sized to sit inside a padded panel
+  // alongside a career trajectory chart panel of the same width.
+  const R = 10;
   const hex = (cx, cy, opacity, col) => {
     const pts = Array.from({length:6}, (_,i) => {
       const a = Math.PI/180 * (60*i - 30);
@@ -440,12 +443,12 @@ function rolesRankedSvgHtml(maxWidth = 440) {
   };
 
   const rowH = 46;
-  const labelW = 158;
+  const labelW = 150;
   const numHex = 10;
   const W = R * 2;
-  const hexGap = 3;
+  const hexGap = 2;
   const totalHexW = numHex * W + (numHex - 1) * hexGap;
-  const rightPad = 12;
+  const rightPad = 10;
   const w = Math.min(maxWidth, labelW + totalHexW + rightPad);
   const h = roles.length * rowH + 8;
 
@@ -461,7 +464,7 @@ function rolesRankedSvgHtml(maxWidth = 440) {
       return hex(cx, y, opacity, isFilled ? col : '#dbe1ee');
     }).join('');
     return `
-      <text x="0" y="${y+5}" font-family="Montserrat,sans-serif" font-size="14" font-weight="600" fill="#c8d2e0">${disp}</text>
+      <text x="0" y="${y+5}" font-family="Montserrat,sans-serif" font-size="13" font-weight="600" fill="#c8d2e0">${disp}</text>
       ${hexes}`;
   }).join('');
 
@@ -582,21 +585,30 @@ function buildQuickCardElement(player, players, manual = {}) {
   container.style.width = '1920px';
   container.style.height = '1080px';
 
-  const STYLE_HALF_W = 440;
-  const rolesRankedHtml = rolesRankedSvgHtml(STYLE_HALF_W);
-  const CAREER_PANEL_W = 920 - STYLE_HALF_W - 40;
-  const careerChartHtml = careerTrajectorySvg(player, CAREER_PANEL_W - 10, PLACEHOLDER_ROLES.length * 46 + 8, !!manual.showForecast);
+  const PANEL_BG = 'rgba(255,255,255,0.05)';
+  const PANEL_BORDER = 'rgba(255,255,255,0.10)';
+  const PANEL_PAD = 20;
+  const PANEL_GAP_H = 24;
+  const PANEL_GAP_V = 20;
 
-  // Style / Team Context share the right column and must be positioned back-to-back —
-  // computed from the actual rendered height of the roles list rather than a fixed guess,
-  // so they never leave a gap or overlap regardless of how many roles are shown.
+  const STYLE_PANEL_W = Math.floor((920 - PANEL_GAP_H) / 2); // 448
+  const CAREER_PANEL_W = 920 - PANEL_GAP_H - STYLE_PANEL_W;  // 448
+  const rolesRankedHtml = rolesRankedSvgHtml(STYLE_PANEL_W - PANEL_PAD * 2);
+
   const STYLE_TOP = 298;
-  const STYLE_HEADER_H = 44;
+  const STYLE_HEADER_H = 40;
   const ROLES_ROW_H = 46;
   const rolesSvgHeight = PLACEHOLDER_ROLES.length * ROLES_ROW_H + 8;
-  const SECTION_GAP = 16;
-  const dividerTop = STYLE_TOP + STYLE_HEADER_H + rolesSvgHeight + SECTION_GAP;
-  const teamContextTop = dividerTop + 2 + SECTION_GAP;
+  const careerChartHtml = careerTrajectorySvg(player, CAREER_PANEL_W - PANEL_PAD * 2, rolesSvgHeight, !!manual.showForecast);
+
+  const ROW1_PANEL_H = PANEL_PAD * 2 + STYLE_HEADER_H + rolesSvgHeight;
+  const ROW2_TOP = STYLE_TOP + ROW1_PANEL_H + PANEL_GAP_V;
+
+  const TEAM_CONTEXT_CONTENT_H = STYLE_HEADER_H + 5 * 52; // header + 5 metric rows
+  const ROW2_PANEL_H = PANEL_PAD * 2 + TEAM_CONTEXT_CONTENT_H;
+
+  const teamContextPanelW = manual.halfTeamContext ? STYLE_PANEL_W : 920;
+  const teamContextBarW = teamContextPanelW - PANEL_PAD * 2;
 
   const attributeTagsHtml = (arr, bg, fg, border) => arr.slice(0,6).map(s =>
     `<span style="font-size:13px;background:${bg};color:${fg};border:1px solid ${border};border-radius:14px;padding:4px 11px;display:inline-block;margin:0 6px 6px 0;">${s}</span>`
@@ -639,17 +651,17 @@ function buildQuickCardElement(player, players, manual = {}) {
       <!-- CREST / TEAM / LEAGUE -->
       ${crest ? `<div style="position:absolute;left:720px;top:22px;width:148px;height:200px;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${crest}');"></div>` : ''}
       <div style="position:absolute;left:882px;top:42px;font-size:36px;font-weight:800;color:#fff;${sdTeam.length >= 16 ? 'letter-spacing:-1px;' : ''}">${sdTeam}</div>
-      <div style="position:absolute;left:882px;top:92px;width:288px;display:flex;align-items:center;gap:10px;">
-        <span style="min-width:0;font-size:24px;font-weight:500;color:#d0d8ea;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${leagueDisplayName}</span>
-        ${countryToIso2(leagueToCountry(sdLeague)) ? `<div style="width:34px;height:21px;flex-shrink:0;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(leagueToCountry(sdLeague))}.png');border-radius:2px;"></div>` : ''}
+      <div style="position:absolute;left:882px;top:94px;width:294px;display:flex;align-items:center;gap:8px;">
+        <span style="min-width:0;font-size:21px;font-weight:500;color:#d0d8ea;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${leagueDisplayName}</span>
+        ${countryToIso2(leagueToCountry(sdLeague)) ? `<div style="width:32px;height:20px;flex-shrink:0;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(leagueToCountry(sdLeague))}.png');border-radius:2px;"></div>` : ''}
       </div>
 
       <div style="position:absolute;left:1180px;top:30px;width:3px;height:210px;background:#737373;"></div>
 
       <!-- INFO BOX -->
       ${[['Height:', cmToFeet(player.height) || '—'], ['Value:', (player.xValue > 0 ? formatMV(player.xValue) : '—')], ['Contract:', (player.contractYear && player.contractYear !== 'nan') ? String(player.contractYear) : '—'], ['Agent:', manual.agentOverride || '—']].map(([k,v],i) => `
-        <div style="position:absolute;left:1200px;top:${44 + i*48}px;font-size:22px;font-weight:600;color:#9aa3b8;">${k}</div>
-        <div style="position:absolute;left:1345px;top:${44 + i*48}px;font-size:22px;font-weight:700;color:#fff;">${v}</div>`).join('')}
+        <div style="position:absolute;left:1200px;top:${44 + i*48}px;font-size:18px;font-weight:500;color:#9aa3b8;white-space:nowrap;">${k}</div>
+        <div style="position:absolute;left:1345px;top:${44 + i*48}px;font-size:18px;font-weight:600;color:#fff;white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis;">${v}</div>`).join('')}
 
       <!-- GBE -->
       <div style="position:absolute;top:34px;left:1510px;width:390px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.10);border-radius:12px;padding:20px 24px;">
@@ -691,37 +703,31 @@ function buildQuickCardElement(player, players, manual = {}) {
       <!-- vertical divider between bars and right column -->
       <div style="position:absolute;left:944px;top:298px;width:2px;height:782px;background:rgba(255,255,255,0.06);"></div>
 
-      <!-- ============ RIGHT COLUMN: STYLE (hexes, left half) + CAREER (trajectory, right half) then TEAM CONTEXT ============ -->
+      <!-- ============ RIGHT COLUMN: STYLE + CAREER panels (row 1), TEAM CONTEXT + BIOGRAPHY panels (row 2) ============ -->
 
-      <!-- STYLE -->
-      <div style="position:absolute;top:${STYLE_TOP}px;left:984px;width:${STYLE_HALF_W}px;">
-        <div style="font-size:26.6px;font-weight:700;color:${ACCENT_PINK};margin-bottom:18px;">Style</div>
+      <!-- STYLE panel -->
+      <div style="position:absolute;top:${STYLE_TOP}px;left:984px;width:${STYLE_PANEL_W}px;height:${ROW1_PANEL_H}px;background:${PANEL_BG};border:1px solid ${PANEL_BORDER};border-radius:12px;padding:${PANEL_PAD}px;box-sizing:border-box;overflow:hidden;">
+        <div style="font-size:22px;font-weight:700;color:${ACCENT_PINK};margin-bottom:14px;">Style</div>
         ${rolesRankedHtml}
       </div>
 
-      <!-- vertical divider between Style and Career -->
-      <div style="position:absolute;left:${984 + STYLE_HALF_W + 20}px;top:${STYLE_TOP}px;width:2px;height:${STYLE_HEADER_H + rolesSvgHeight}px;background:rgba(255,255,255,0.06);"></div>
-
-      <!-- CAREER (trajectory line chart from player.sh) -->
-      <div style="position:absolute;top:${STYLE_TOP}px;left:${984 + STYLE_HALF_W + 40}px;width:${CAREER_PANEL_W}px;">
-        <div style="font-size:26.6px;font-weight:700;color:${ACCENT_PINK};margin-bottom:18px;">Career</div>
+      <!-- CAREER panel (trajectory line chart from player.sh) -->
+      <div style="position:absolute;top:${STYLE_TOP}px;left:${984 + STYLE_PANEL_W + PANEL_GAP_H}px;width:${CAREER_PANEL_W}px;height:${ROW1_PANEL_H}px;background:${PANEL_BG};border:1px solid ${PANEL_BORDER};border-radius:12px;padding:${PANEL_PAD}px;box-sizing:border-box;overflow:hidden;">
+        <div style="font-size:22px;font-weight:700;color:${ACCENT_PINK};margin-bottom:14px;">Career</div>
         ${careerChartHtml}
       </div>
 
-      <!-- divider between style/career row and team context -->
-      <div style="position:absolute;left:984px;top:${dividerTop}px;width:920px;height:2px;background:rgba(255,255,255,0.06);"></div>
-
-      <!-- TEAM CONTEXT — half width (aligned with Style) when toggled, full width otherwise -->
-      <div style="position:absolute;top:${teamContextTop}px;left:984px;width:${manual.halfTeamContext ? STYLE_HALF_W : 920}px;">
-        <div style="font-size:26.6px;font-weight:700;color:${ACCENT_PINK};margin-bottom:16px;">Team Context</div>
-        ${teamRangeBarHtml(player.careerScore, teamPlayers.map(p=>p.careerScore), manual.halfTeamContext ? STYLE_HALF_W - 40 : 880)}
+      <!-- TEAM CONTEXT panel — half width (aligned with Style) when toggled, full width otherwise -->
+      <div style="position:absolute;top:${ROW2_TOP}px;left:984px;width:${teamContextPanelW}px;height:${ROW2_PANEL_H}px;background:${PANEL_BG};border:1px solid ${PANEL_BORDER};border-radius:12px;padding:${PANEL_PAD}px;box-sizing:border-box;overflow:hidden;">
+        <div style="font-size:22px;font-weight:700;color:${ACCENT_PINK};margin-bottom:14px;">Team Context</div>
+        ${teamRangeBarHtml(player.careerScore, teamPlayers.map(p=>p.careerScore), teamContextBarW)}
       </div>
 
       ${(manual.halfTeamContext && manual.biography) ? `
-      <!-- BIOGRAPHY (optional, only shown when Team Context is halved) -->
-      <div style="position:absolute;top:${teamContextTop}px;left:${984 + STYLE_HALF_W + 40}px;width:${CAREER_PANEL_W}px;">
-        <div style="font-size:26.6px;font-weight:700;color:${ACCENT_PINK};margin-bottom:16px;">Biography</div>
-        <div style="font-size:27.9px;line-height:1.5;font-weight:600;color:#fff;">${manual.biography}</div>
+      <!-- BIOGRAPHY panel (optional, only shown when Team Context is halved) -->
+      <div style="position:absolute;top:${ROW2_TOP}px;left:${984 + STYLE_PANEL_W + PANEL_GAP_H}px;width:${CAREER_PANEL_W}px;height:${ROW2_PANEL_H}px;background:${PANEL_BG};border:1px solid ${PANEL_BORDER};border-radius:12px;padding:${PANEL_PAD}px;box-sizing:border-box;overflow:hidden;">
+        <div style="font-size:22px;font-weight:700;color:${ACCENT_PINK};margin-bottom:14px;">Biography</div>
+        <div style="font-size:20px;line-height:1.5;font-weight:600;color:#fff;">${manual.biography}</div>
       </div>` : ''}
 
     </div>
