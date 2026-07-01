@@ -1,4 +1,4 @@
-// QuickCard v36 - Style/Career/Team Context/Biography as bordered FM-style panels; league name width/font fixed for real; career league bands always visible; info box smaller/nowrap
+// QuickCard v37 - JS-truncated league/info-box text (real fix), panels pushed down + gradient/shadow pop effect, GBE badge emphasis swapped, Scout Status pill (High Priority/Monitor/Database) in Biography panel
 import React, { useState } from 'react';
 import { scoreLabel, formatFoot, formatMV } from './constants';
 
@@ -139,6 +139,11 @@ function countryToIso2(name) {
 function leagueToCountry(leagueName) {
   if (!leagueName) return '';
   return String(leagueName).replace(/\s+\d+\.?\s*$/, '').trim();
+}
+
+function truncateText(str, maxChars) {
+  const s = String(str == null ? '' : str);
+  return s.length > maxChars ? s.slice(0, maxChars - 1).trimEnd() + '…' : s;
 }
 
 function slugN(s) {
@@ -420,6 +425,12 @@ function careerTrajectorySvg(player, w = 420, h = 284, showForecast = false) {
   </svg>`;
 }
 
+const SCOUT_STATUS_STYLES = {
+  'High Priority': { bg: '#14532d', fg: '#bbf7d0', border: '#22c55e' },
+  'Monitor':       { bg: 'rgba(134,239,172,0.15)', fg: '#86efac', border: '#4ade80' },
+  'Database':      { bg: 'rgba(234,179,8,0.15)', fg: '#fde047', border: '#eab308' },
+};
+
 const PLACEHOLDER_ROLES = [
   ['Wide Creator', 84],
   ['Creative Playmaker', 79],
@@ -576,7 +587,7 @@ function buildQuickCardElement(player, players, manual = {}) {
 
   const isGK = rawPosToken === 'GK' || (player.roleKey || '').startsWith('GK');
 
-  const leagueDisplayName = LEAGUE_DISPLAY_NAMES[sdLeague] || sdLeague;
+  const leagueDisplayName = truncateText(LEAGUE_DISPLAY_NAMES[sdLeague] || sdLeague, 17);
 
   const container = document.createElement('div');
   container.style.position = 'fixed';
@@ -585,17 +596,19 @@ function buildQuickCardElement(player, players, manual = {}) {
   container.style.width = '1920px';
   container.style.height = '1080px';
 
-  const PANEL_BG = 'rgba(255,255,255,0.05)';
-  const PANEL_BORDER = 'rgba(255,255,255,0.10)';
-  const PANEL_PAD = 20;
+  const PANEL_BG = 'linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.025))';
+  const PANEL_BORDER = 'rgba(255,255,255,0.13)';
+  const PANEL_SHADOW = '0 8px 24px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.06)';
+  const PANEL_RADIUS = 14;
+  const PANEL_PAD = 22;
   const PANEL_GAP_H = 24;
-  const PANEL_GAP_V = 20;
+  const PANEL_GAP_V = 24;
 
   const STYLE_PANEL_W = Math.floor((920 - PANEL_GAP_H) / 2); // 448
   const CAREER_PANEL_W = 920 - PANEL_GAP_H - STYLE_PANEL_W;  // 448
   const rolesRankedHtml = rolesRankedSvgHtml(STYLE_PANEL_W - PANEL_PAD * 2);
 
-  const STYLE_TOP = 298;
+  const STYLE_TOP = 322;
   const STYLE_HEADER_H = 40;
   const ROLES_ROW_H = 46;
   const rolesSvgHeight = PLACEHOLDER_ROLES.length * ROLES_ROW_H + 8;
@@ -651,8 +664,8 @@ function buildQuickCardElement(player, players, manual = {}) {
       <!-- CREST / TEAM / LEAGUE -->
       ${crest ? `<div style="position:absolute;left:720px;top:22px;width:148px;height:200px;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${crest}');"></div>` : ''}
       <div style="position:absolute;left:882px;top:42px;font-size:36px;font-weight:800;color:#fff;${sdTeam.length >= 16 ? 'letter-spacing:-1px;' : ''}">${sdTeam}</div>
-      <div style="position:absolute;left:882px;top:94px;width:294px;display:flex;align-items:center;gap:8px;">
-        <span style="min-width:0;font-size:21px;font-weight:500;color:#d0d8ea;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${leagueDisplayName}</span>
+      <div style="position:absolute;left:882px;top:94px;display:flex;align-items:center;gap:8px;">
+        <span style="font-size:21px;font-weight:500;color:#d0d8ea;white-space:nowrap;">${leagueDisplayName}</span>
         ${countryToIso2(leagueToCountry(sdLeague)) ? `<div style="width:32px;height:20px;flex-shrink:0;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(leagueToCountry(sdLeague))}.png');border-radius:2px;"></div>` : ''}
       </div>
 
@@ -661,15 +674,15 @@ function buildQuickCardElement(player, players, manual = {}) {
       <!-- INFO BOX -->
       ${[['Height:', cmToFeet(player.height) || '—'], ['Value:', (player.xValue > 0 ? formatMV(player.xValue) : '—')], ['Contract:', (player.contractYear && player.contractYear !== 'nan') ? String(player.contractYear) : '—'], ['Agent:', manual.agentOverride || '—']].map(([k,v],i) => `
         <div style="position:absolute;left:1200px;top:${44 + i*48}px;font-size:18px;font-weight:500;color:#9aa3b8;white-space:nowrap;">${k}</div>
-        <div style="position:absolute;left:1345px;top:${44 + i*48}px;font-size:18px;font-weight:600;color:#fff;white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis;">${v}</div>`).join('')}
+        <div style="position:absolute;left:1345px;top:${44 + i*48}px;font-size:18px;font-weight:600;color:#fff;white-space:nowrap;">${truncateText(v, 20)}</div>`).join('')}
 
       <!-- GBE -->
       <div style="position:absolute;top:34px;left:1510px;width:390px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.10);border-radius:12px;padding:20px 24px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
           <span style="font-size:15px;font-weight:700;color:#9aa3b8;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;">GBE Calculation</span>
           <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;">
-            <span style="font-size:26px;font-weight:900;color:#fff;white-space:nowrap;">${gbeTotal} pts</span>
-            <span style="font-size:13px;font-weight:800;color:${gbeColor};background:${gbeColor}22;border:1px solid ${gbeColor};border-radius:5px;padding:3px 10px;white-space:nowrap;">${gbeStatus}</span>
+            <span style="font-size:19px;font-weight:800;color:#fff;white-space:nowrap;">${gbeTotal} pts</span>
+            <span style="font-size:16px;font-weight:800;color:${gbeColor};background:${gbeColor}22;border:1px solid ${gbeColor};border-radius:6px;padding:5px 14px;white-space:nowrap;">${gbeStatus}</span>
           </div>
         </div>
         <div style="display:flex;flex-direction:column;gap:11px;">
@@ -684,7 +697,7 @@ function buildQuickCardElement(player, players, manual = {}) {
 
       <!-- ============ LEFT COLUMN: bars from bottom of header to bottom of card ============ -->
 
-      <div style="position:absolute;top:298px;left:0px;width:920px;height:782px;overflow:hidden;box-sizing:border-box;padding-left:24px;padding-top:12px;">
+      <div style="position:absolute;top:${STYLE_TOP}px;left:0px;width:920px;height:${1080-STYLE_TOP}px;overflow:hidden;box-sizing:border-box;padding-left:24px;padding-top:12px;">
         ${groups.A && groups.A.length ? `<div style="font-size:24px;font-weight:800;color:#f3f5f7;margin:0 0 6px;">${isGK ? 'Goalkeeping' : 'Attacking'}</div>${buildGroupBars('A')}` : ''}
         ${groups.D && groups.D.length ? `<div style="font-size:24px;font-weight:800;color:#f3f5f7;margin:8px 0 6px;">Defensive</div>${buildGroupBars('D')}` : ''}
         ${groups.P && groups.P.length ? `<div style="font-size:24px;font-weight:800;color:#f3f5f7;margin:8px 0 6px;">Possession</div>${buildGroupBars('P')}` : ''}
@@ -701,33 +714,34 @@ function buildQuickCardElement(player, players, manual = {}) {
       </div>
 
       <!-- vertical divider between bars and right column -->
-      <div style="position:absolute;left:944px;top:298px;width:2px;height:782px;background:rgba(255,255,255,0.06);"></div>
+      <div style="position:absolute;left:944px;top:${STYLE_TOP}px;width:2px;height:${1080-STYLE_TOP}px;background:rgba(255,255,255,0.06);"></div>
 
       <!-- ============ RIGHT COLUMN: STYLE + CAREER panels (row 1), TEAM CONTEXT + BIOGRAPHY panels (row 2) ============ -->
 
       <!-- STYLE panel -->
-      <div style="position:absolute;top:${STYLE_TOP}px;left:984px;width:${STYLE_PANEL_W}px;height:${ROW1_PANEL_H}px;background:${PANEL_BG};border:1px solid ${PANEL_BORDER};border-radius:12px;padding:${PANEL_PAD}px;box-sizing:border-box;overflow:hidden;">
+      <div style="position:absolute;top:${STYLE_TOP}px;left:984px;width:${STYLE_PANEL_W}px;height:${ROW1_PANEL_H}px;background:${PANEL_BG};border:1px solid ${PANEL_BORDER};border-radius:${PANEL_RADIUS}px;padding:${PANEL_PAD}px;box-sizing:border-box;overflow:hidden;box-shadow:${PANEL_SHADOW};">
         <div style="font-size:22px;font-weight:700;color:${ACCENT_PINK};margin-bottom:14px;">Style</div>
         ${rolesRankedHtml}
       </div>
 
       <!-- CAREER panel (trajectory line chart from player.sh) -->
-      <div style="position:absolute;top:${STYLE_TOP}px;left:${984 + STYLE_PANEL_W + PANEL_GAP_H}px;width:${CAREER_PANEL_W}px;height:${ROW1_PANEL_H}px;background:${PANEL_BG};border:1px solid ${PANEL_BORDER};border-radius:12px;padding:${PANEL_PAD}px;box-sizing:border-box;overflow:hidden;">
+      <div style="position:absolute;top:${STYLE_TOP}px;left:${984 + STYLE_PANEL_W + PANEL_GAP_H}px;width:${CAREER_PANEL_W}px;height:${ROW1_PANEL_H}px;background:${PANEL_BG};border:1px solid ${PANEL_BORDER};border-radius:${PANEL_RADIUS}px;padding:${PANEL_PAD}px;box-sizing:border-box;overflow:hidden;box-shadow:${PANEL_SHADOW};">
         <div style="font-size:22px;font-weight:700;color:${ACCENT_PINK};margin-bottom:14px;">Career</div>
         ${careerChartHtml}
       </div>
 
       <!-- TEAM CONTEXT panel — half width (aligned with Style) when toggled, full width otherwise -->
-      <div style="position:absolute;top:${ROW2_TOP}px;left:984px;width:${teamContextPanelW}px;height:${ROW2_PANEL_H}px;background:${PANEL_BG};border:1px solid ${PANEL_BORDER};border-radius:12px;padding:${PANEL_PAD}px;box-sizing:border-box;overflow:hidden;">
+      <div style="position:absolute;top:${ROW2_TOP}px;left:984px;width:${teamContextPanelW}px;height:${ROW2_PANEL_H}px;background:${PANEL_BG};border:1px solid ${PANEL_BORDER};border-radius:${PANEL_RADIUS}px;padding:${PANEL_PAD}px;box-sizing:border-box;overflow:hidden;box-shadow:${PANEL_SHADOW};">
         <div style="font-size:22px;font-weight:700;color:${ACCENT_PINK};margin-bottom:14px;">Team Context</div>
         ${teamRangeBarHtml(player.careerScore, teamPlayers.map(p=>p.careerScore), teamContextBarW)}
       </div>
 
-      ${(manual.halfTeamContext && manual.biography) ? `
+      ${(manual.halfTeamContext && (manual.biography || manual.scoutStatus)) ? `
       <!-- BIOGRAPHY panel (optional, only shown when Team Context is halved) -->
-      <div style="position:absolute;top:${ROW2_TOP}px;left:${984 + STYLE_PANEL_W + PANEL_GAP_H}px;width:${CAREER_PANEL_W}px;height:${ROW2_PANEL_H}px;background:${PANEL_BG};border:1px solid ${PANEL_BORDER};border-radius:12px;padding:${PANEL_PAD}px;box-sizing:border-box;overflow:hidden;">
+      <div style="position:absolute;top:${ROW2_TOP}px;left:${984 + STYLE_PANEL_W + PANEL_GAP_H}px;width:${CAREER_PANEL_W}px;height:${ROW2_PANEL_H}px;background:${PANEL_BG};border:1px solid ${PANEL_BORDER};border-radius:${PANEL_RADIUS}px;padding:${PANEL_PAD}px;box-sizing:border-box;overflow:hidden;box-shadow:${PANEL_SHADOW};">
         <div style="font-size:22px;font-weight:700;color:${ACCENT_PINK};margin-bottom:14px;">Biography</div>
-        <div style="font-size:20px;line-height:1.5;font-weight:600;color:#fff;">${manual.biography}</div>
+        ${manual.biography ? `<div style="font-size:20px;line-height:1.5;font-weight:600;color:#fff;">${manual.biography}</div>` : ''}
+        ${manual.scoutStatus && SCOUT_STATUS_STYLES[manual.scoutStatus] ? `<div style="margin-top:16px;"><span style="display:inline-block;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;padding:6px 14px;border-radius:6px;background:${SCOUT_STATUS_STYLES[manual.scoutStatus].bg};color:${SCOUT_STATUS_STYLES[manual.scoutStatus].fg};border:1px solid ${SCOUT_STATUS_STYLES[manual.scoutStatus].border};">${manual.scoutStatus}</span></div>` : ''}
       </div>` : ''}
 
     </div>
@@ -749,11 +763,12 @@ export default function QuickCardModal({ player, players, onClose }) {
   const [biography, setBiography] = useState('');
   const [halfTeamContext, setHalfTeamContext] = useState(false);
   const [showForecast, setShowForecast] = useState(false);
+  const [scoutStatus, setScoutStatus] = useState('');
 
   const handleDownload = async () => {
     setDownloading(true);
     const { toPng } = await import('html-to-image');
-    const el = buildQuickCardElement(player, players, { agentOverride, biography, halfTeamContext, showForecast });
+    const el = buildQuickCardElement(player, players, { agentOverride, biography, halfTeamContext, showForecast, scoutStatus });
     try {
       const cardNode = el.querySelector('#qc-card-root') || el;
       const opts = {
@@ -797,6 +812,28 @@ export default function QuickCardModal({ player, players, onClose }) {
           <div style={{marginBottom:12}}>
             <label style={qcLabelStyle}>Biography (optional)</label>
             <textarea style={{...qcInputStyle,minHeight:60,resize:'vertical'}} value={biography} onChange={e=>setBiography(e.target.value)} placeholder="Short bio to fill the space next to Team Context…" />
+          </div>
+        )}
+
+        {halfTeamContext && (
+          <div style={{marginBottom:12}}>
+            <label style={qcLabelStyle}>Scout Status (optional)</label>
+            <div style={{display:'flex',gap:6}}>
+              {[
+                { label: 'High Priority', bg: '#14532d', fg: '#bbf7d0', border: '#22c55e' },
+                { label: 'Monitor', bg: 'rgba(134,239,172,0.15)', fg: '#86efac', border: '#4ade80' },
+                { label: 'Database', bg: 'rgba(234,179,8,0.15)', fg: '#fde047', border: '#eab308' },
+              ].map(opt => (
+                <button key={opt.label} type="button"
+                  onClick={() => setScoutStatus(scoutStatus === opt.label ? '' : opt.label)}
+                  style={{
+                    flex: 1, fontSize: 10.5, fontWeight: 700, padding: '7px 4px', borderRadius: 6, cursor: 'pointer',
+                    background: opt.bg, color: opt.fg,
+                    border: scoutStatus === opt.label ? `2px solid ${opt.border}` : '1px solid transparent',
+                    opacity: scoutStatus && scoutStatus !== opt.label ? 0.5 : 1,
+                  }}>{opt.label}</button>
+              ))}
+            </div>
           </div>
         )}
 
