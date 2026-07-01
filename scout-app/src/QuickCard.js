@@ -1,4 +1,4 @@
-// QuickCard v28 - info box downsized, GBE pass/fail badge + panel/ESC note, GBE card spacing, Style/Team Context dynamic stacking
+// QuickCard v29 - bigger/centered GBE card, fixed league/flag overlap, larger info box, Style header removed + hex graph fills width, tightened Team Context spacing
 import React, { useState } from 'react';
 import { scoreLabel, formatFoot, formatMV } from './constants';
 
@@ -313,15 +313,15 @@ function gbeThresholdBar(label, val, max, w = 220) {
   const p = Math.max(0, Math.min(100, (val / max) * 100));
   const pass = val >= max * 0.5;
   return `
-    <div style="display:flex;align-items:center;gap:8px;">
-      <span style="width:13px;height:13px;border-radius:50%;flex-shrink:0;background:${pass?'#dbe1ee':'transparent'};border:1.5px solid ${pass?'#dbe1ee':'#3a4458'};display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-        ${pass ? `<span style="color:#07090f;font-size:9px;font-weight:900;line-height:1;">&#10003;</span>` : ''}
+    <div style="display:flex;align-items:center;gap:9px;">
+      <span style="width:15px;height:15px;border-radius:50%;flex-shrink:0;background:${pass?'#dbe1ee':'transparent'};border:1.5px solid ${pass?'#dbe1ee':'#3a4458'};display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+        ${pass ? `<span style="color:#07090f;font-size:10px;font-weight:900;line-height:1;">&#10003;</span>` : ''}
       </span>
-      <span style="width:108px;flex-shrink:0;font-size:12px;font-weight:600;color:#9aa3b8;">${label}</span>
-      <span style="flex:1;position:relative;height:6px;background:#1b2636;border-radius:2px;">
+      <span style="width:118px;flex-shrink:0;font-size:13px;font-weight:600;color:#9aa3b8;">${label}</span>
+      <span style="flex:1;position:relative;height:7px;background:#1b2636;border-radius:2px;">
         <span style="position:absolute;left:0;top:0;height:100%;width:${p}%;background:#dbe1ee;border-radius:2px;opacity:0.7;"></span>
       </span>
-      <span style="width:46px;text-align:right;flex-shrink:0;font-size:12px;font-weight:700;color:#dbe1ee;">${val}/${max}</span>
+      <span style="width:50px;text-align:right;flex-shrink:0;font-size:13px;font-weight:700;color:#dbe1ee;">${val}/${max}</span>
     </div>`;
 }
 
@@ -334,9 +334,10 @@ const PLACEHOLDER_ROLES = [
   ['Retention', 55],
 ];
 
-function rolesRankedSvgHtml() {
+function rolesRankedSvgHtml(targetWidth = 900) {
   const roles = PLACEHOLDER_ROLES;
-  // Bigger hexagons, no score number
+  // Bigger hexagons, no score number — hex spacing stretches to fill targetWidth
+  // instead of leaving dead space on the right of the column.
   const R = 15, W = 34, H = 34;
   const hex = (cx, cy, opacity, col) => {
     const pts = Array.from({length:6}, (_,i) => {
@@ -349,9 +350,10 @@ function rolesRankedSvgHtml() {
   const rowH = 50;
   const labelW = 230;
   const numHex = 10;
-  const hexGap = 6;
-  const totalHexW = numHex * W + (numHex-1) * hexGap;
-  const w = labelW + totalHexW + 20;
+  const rightPad = 20;
+  const totalHexW = Math.max(numHex * W, targetWidth - labelW - rightPad);
+  const hexGap = (totalHexW - numHex * W) / (numHex - 1);
+  const w = labelW + totalHexW + rightPad;
   const h = roles.length * rowH + 8;
 
   const rows = roles.map(([disp, score], i) => {
@@ -387,7 +389,7 @@ function teamRangeBarHtml(playerScore, teamScores, w = 560) {
     const pAvg = Math.max(2, Math.min(96, ((av  - mn) / range) * 100));
     const col = scoreTierColor(val);
     return `
-      <div style="margin-bottom:14px;">
+      <div style="margin-bottom:11px;">
         <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px;">
           <span style="font-size:15px;font-weight:700;color:#c8d2e0;">${label}</span>
           <span style="font-size:20px;font-weight:900;color:${col};">${val}</span>
@@ -485,17 +487,16 @@ function buildQuickCardElement(player, players) {
   container.style.width = '1920px';
   container.style.height = '1080px';
 
-  const rolesRankedHtml = rolesRankedSvgHtml(sortedRoles);
+  const rolesRankedHtml = rolesRankedSvgHtml(900);
 
   // Style / Team Context share the right column and must be positioned back-to-back —
   // computed from the actual rendered height of the roles list rather than a fixed guess,
   // so they never leave a gap or overlap regardless of how many roles are shown.
   const STYLE_TOP = 298;
-  const STYLE_HEADER_H = 44;
   const ROLES_ROW_H = 50;
   const rolesSvgHeight = PLACEHOLDER_ROLES.length * ROLES_ROW_H + 8;
-  const SECTION_GAP = 20;
-  const dividerTop = STYLE_TOP + STYLE_HEADER_H + rolesSvgHeight + SECTION_GAP;
+  const SECTION_GAP = 16;
+  const dividerTop = STYLE_TOP + rolesSvgHeight + SECTION_GAP;
   const teamContextTop = dividerTop + 2 + SECTION_GAP;
 
   const attributeTagsHtml = (arr, bg, fg, border) => arr.slice(0,6).map(s =>
@@ -539,35 +540,33 @@ function buildQuickCardElement(player, players) {
       <!-- CREST / TEAM / LEAGUE -->
       ${crest ? `<div style="position:absolute;left:720px;top:22px;width:148px;height:200px;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${crest}');"></div>` : ''}
       <div style="position:absolute;left:882px;top:42px;font-size:36px;font-weight:800;color:#fff;${sdTeam.length >= 16 ? 'letter-spacing:-1px;' : ''}">${sdTeam}</div>
-      <div style="position:absolute;left:882px;top:92px;display:flex;align-items:center;gap:10px;">
-        <span style="font-size:24px;font-weight:500;color:#d0d8ea;white-space:nowrap;">${LEAGUE_DISPLAY_NAMES[sdLeague] || sdLeague}</span>
-        ${countryToIso2(leagueToCountry(sdLeague)) ? `<div style="width:34px;height:21px;flex-shrink:0;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(leagueToCountry(sdLeague))}.png');border-radius:2px;align-self:center;"></div>` : ''}
-      </div>
+      <div style="position:absolute;left:882px;top:92px;width:210px;font-size:24px;font-weight:500;color:#d0d8ea;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${LEAGUE_DISPLAY_NAMES[sdLeague] || sdLeague}</div>
+      ${countryToIso2(leagueToCountry(sdLeague)) ? `<div style="position:absolute;left:1112px;top:96px;width:34px;height:21px;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(leagueToCountry(sdLeague))}.png');border-radius:2px;"></div>` : ''}
 
       <div style="position:absolute;left:1180px;top:30px;width:3px;height:210px;background:#737373;"></div>
 
       <!-- INFO BOX -->
       ${[['Height:', cmToFeet(player.height) || '—'], ['Value:', (player.xValue > 0 ? formatMV(player.xValue) : '—')], ['Contract:', (player.contractYear && player.contractYear !== 'nan') ? String(player.contractYear) : '—']].map(([k,v],i) => `
-        <div style="position:absolute;left:1200px;top:${48 + i*50}px;font-size:19px;font-weight:600;color:#9aa3b8;">${k}</div>
-        <div style="position:absolute;left:1340px;top:${48 + i*50}px;font-size:19px;font-weight:700;color:#fff;">${v}</div>`).join('')}
+        <div style="position:absolute;left:1200px;top:${46 + i*54}px;font-size:22px;font-weight:600;color:#9aa3b8;">${k}</div>
+        <div style="position:absolute;left:1345px;top:${46 + i*54}px;font-size:22px;font-weight:700;color:#fff;">${v}</div>`).join('')}
 
       <!-- GBE -->
-      <div style="position:absolute;top:34px;right:24px;width:368px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.10);border-radius:12px;padding:18px 20px;">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
-          <span style="font-size:13px;font-weight:700;color:#9aa3b8;text-transform:uppercase;letter-spacing:.08em;">GBE Calculation</span>
-          <div style="display:flex;align-items:center;gap:8px;">
-            <span style="font-size:22px;font-weight:900;color:#fff;">${gbeTotal} pts</span>
-            <span style="font-size:12px;font-weight:800;color:${gbeColor};background:${gbeColor}22;border:1px solid ${gbeColor};border-radius:5px;padding:2px 8px;">${gbeStatus}</span>
+      <div style="position:absolute;top:34px;left:1340px;width:420px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.10);border-radius:12px;padding:20px 24px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
+          <span style="font-size:15px;font-weight:700;color:#9aa3b8;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;">GBE Calculation</span>
+          <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;">
+            <span style="font-size:26px;font-weight:900;color:#fff;white-space:nowrap;">${gbeTotal} pts</span>
+            <span style="font-size:13px;font-weight:800;color:${gbeColor};background:${gbeColor}22;border:1px solid ${gbeColor};border-radius:5px;padding:3px 10px;white-space:nowrap;">${gbeStatus}</span>
           </div>
         </div>
-        <div style="display:flex;flex-direction:column;gap:9px;">
+        <div style="display:flex;flex-direction:column;gap:11px;">
           ${gbeThresholdBar('Domestic Apps', domPts, 12)}
           ${gbeThresholdBar('Continental', contPts, 8)}
           ${gbeThresholdBar('League Band', lqPts, 12)}
           ${gbeThresholdBar('Finish/Prog', finishPts + progPts, 10)}
         </div>
-        ${gbePanelEligible ? `<div style="margin-top:12px;font-size:11px;font-weight:600;color:#f0c56a;border-top:1px solid rgba(240,197,106,0.2);padding-top:9px;">Eligible for GBE Exceptions Panel review</div>` : ''}
-        ${gbeEscEligible ? `<div style="margin-top:12px;font-size:11px;font-weight:600;color:#f97316;border-top:1px solid rgba(249,115,22,0.2);padding-top:9px;">⚡ ESC Eligible — may qualify via exceptional talent panel</div>` : ''}
+        ${gbePanelEligible ? `<div style="margin-top:14px;font-size:12px;font-weight:600;color:#f0c56a;border-top:1px solid rgba(240,197,106,0.2);padding-top:10px;">Eligible for GBE Exceptions Panel review</div>` : ''}
+        ${gbeEscEligible ? `<div style="margin-top:14px;font-size:12px;font-weight:600;color:#f97316;border-top:1px solid rgba(249,115,22,0.2);padding-top:10px;">⚡ ESC Eligible — may qualify via exceptional talent panel</div>` : ''}
       </div>
 
       <!-- ============ LEFT COLUMN: bars from bottom of header to bottom of card ============ -->
@@ -593,9 +592,8 @@ function buildQuickCardElement(player, players) {
 
       <!-- ============ RIGHT COLUMN: ROLE SCORES (primary + ranked list) then TEAM CONTEXT (range bar) ============ -->
 
-      <!-- ROLE SCORES -->
+      <!-- ROLE SCORES (no header — graph starts at column top) -->
       <div style="position:absolute;top:${STYLE_TOP}px;left:984px;width:920px;">
-        <div style="font-size:26.6px;font-weight:700;color:${ACCENT_PINK};margin-bottom:18px;">Style</div>
         ${rolesRankedHtml}
       </div>
 
