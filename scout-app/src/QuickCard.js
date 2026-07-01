@@ -1,4 +1,4 @@
-// QuickCard v31 - real Career trajectory chart wired from player.sh (matches PlayerCard.js's CareerTab logic)
+// QuickCard v34 - Career forecast toggle (dashed line to potential score, matching PlayerCard.js's forecast logic); clarified raw vs cumulative score plotting
 import React, { useState } from 'react';
 import { scoreLabel, formatFoot, formatMV } from './constants';
 
@@ -139,15 +139,6 @@ function countryToIso2(name) {
 function leagueToCountry(leagueName) {
   if (!leagueName) return '';
   return String(leagueName).replace(/\s+\d+\.?\s*$/, '').trim();
-}
-
-let _measureCanvas = null;
-function measureTextWidth(text, font) {
-  if (typeof document === 'undefined') return String(text || '').length * 12;
-  _measureCanvas = _measureCanvas || document.createElement('canvas');
-  const ctx = _measureCanvas.getContext('2d');
-  ctx.font = font;
-  return ctx.measureText(String(text || '')).width;
 }
 
 function slugN(s) {
@@ -338,7 +329,7 @@ function gbeThresholdBar(label, val, max, w = 220) {
 // offsets from player.sh (season history) the same way the full career chart does.
 const SEASON_ORDER = ['2018-19','2019-20','2020-21','2021-22','2022-23','2023-24','2024-25','2025-26'];
 
-function careerTrajectorySvg(player, w = 420, h = 284) {
+function careerTrajectorySvg(player, w = 420, h = 284, showForecast = false) {
   const currentAge = Number(player.age) || 25;
   const currentSeasonIdx = SEASON_ORDER.indexOf('2025-26');
 
@@ -365,14 +356,48 @@ function careerTrajectorySvg(player, w = 420, h = 284) {
 
   const pad = { t: 18, r: 16, b: 26, l: 16 };
   const pw = w - pad.l - pad.r, ph = h - pad.t - pad.b;
+
+  const last = history[history.length - 1];
+  const hasForecast = showForecast && player.potentialScore != null;
+  const peakAge = hasForecast ? (player.estPeakAge && player.estPeakAge > last.age ? player.estPeakAge : last.age + 2) : null;
+
   const scores = history.map(p => p.sc);
-  const minS = Math.min(...scores) - 3, maxS = Math.max(...scores) + 3;
+  const minS = Math.min(...scores) - 3;
+  const maxS = Math.max(...scores, ...(hasForecast ? [player.potentialScore] : [])) + 3;
   const ages = history.map(p => p.age);
-  const minA = Math.min(...ages), maxA = Math.max(...ages);
+  const minA = Math.min(...ages);
+  const maxA = Math.max(...ages, ...(hasForecast ? [peakAge] : []));
   const xS = a => pad.l + (maxA === minA ? pw / 2 : ((a - minA) / (maxA - minA)) * pw);
   const yS = v => pad.t + ph - ((v - minS) / (maxS - minS || 1)) * ph;
 
   const linePts = history.map(p => `${xS(p.age).toFixed(1)},${yS(p.sc).toFixed(1)}`).join(' ');
+
+  const forecastHtml = hasForecast ? (() => {
+    const fScore = Math.min(player.potentialScore, maxS - 1);
+    const lx = xS(last.age), ly = yS(last.sc);
+    const fx = Math.min(xS(peakAge), pad.l + pw - 6), fy = yS(fScore);
+    return `
+      <line x1="${lx.toFixed(1)}" y1="${ly.toFixed(1)}" x2="${fx.toFixed(1)}" y2="${fy.toFixed(1)}" stroke="#22c55e" stroke-width="2" stroke-dasharray="6,4" stroke-linecap="round"/>
+      <circle cx="${fx.toFixed(1)}" cy="${fy.toFixed(1)}" r="5" fill="#22c55e" stroke="#07090f" stroke-width="1.5"/>
+      <text x="${fx.toFixed(1)}" y="${(fy - 11).toFixed(1)}" font-family="Montserrat,sans-serif" font-size="11" font-weight="700" fill="#22c55e" text-anchor="middle">Pot ${fScore.toFixed(0)}</text>
+      <text x="${fx.toFixed(1)}" y="${(pad.t + ph + 17).toFixed(1)}" font-family="Montserrat,sans-serif" font-size="10" font-weight="600" fill="#22c55e" text-anchor="middle">${Math.round(peakAge)}</text>`;
+  })() : '';
+
+  // League score bands — thresholds match constants.js's scoreLabel() tiers.
+  // NOTE: assumed "L2" for the fifth band (League Two) since that's the tier
+  // constants.js actually defines between League One and National League —
+  // flag if "Ligue 1" was meant literally, that's a different scale entirely.
+  const LEAGUE_BANDS = [
+    ['PL', 72], ['Champ', 61], ['L1', 57], ['L2', 54], ['NL', 50],
+  ];
+  const bandLines = LEAGUE_BANDS
+    .filter(([, val]) => val >= minS && val <= maxS)
+    .map(([label, val]) => {
+      const y = yS(val);
+      return `
+        <line x1="${pad.l}" y1="${y.toFixed(1)}" x2="${pad.l + pw}" y2="${y.toFixed(1)}" stroke="rgba(255,255,255,0.09)" stroke-width="1" stroke-dasharray="3,3"/>
+        <text x="${(pad.l + pw - 3).toFixed(1)}" y="${(y - 3).toFixed(1)}" font-family="Montserrat,sans-serif" font-size="9" font-weight="700" fill="rgba(255,255,255,0.25)" text-anchor="end">${label}</text>`;
+    }).join('');
 
   const dots = history.map(p => {
     const cx = xS(p.age), cy = yS(p.sc);
@@ -384,9 +409,11 @@ function careerTrajectorySvg(player, w = 420, h = 284) {
   }).join('');
 
   return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
+    ${bandLines}
     <line x1="${pad.l}" y1="${pad.t + ph}" x2="${pad.l + pw}" y2="${pad.t + ph}" stroke="#1e2a3e" stroke-width="1"/>
     <polyline points="${linePts}" fill="none" stroke="#a78bfa" stroke-width="2.5"/>
     ${dots}
+    ${forecastHtml}
   </svg>`;
 }
 
@@ -475,7 +502,7 @@ function teamRangeBarHtml(playerScore, teamScores, w = 560) {
   return metricBars;
 }
 
-function buildQuickCardElement(player, players) {
+function buildQuickCardElement(player, players, manual = {}) {
   const seasonsDetailObj = player.seasonsDetail || {};
   const chosenSeasonKey = (player.allSeasonsSummary && player.allSeasonsSummary[0] && player.allSeasonsSummary[0].s)
     || Object.keys(seasonsDetailObj).sort().reverse()[0];
@@ -547,10 +574,6 @@ function buildQuickCardElement(player, players) {
   const isGK = rawPosToken === 'GK' || (player.roleKey || '').startsWith('GK');
 
   const leagueDisplayName = LEAGUE_DISPLAY_NAMES[sdLeague] || sdLeague;
-  const LEAGUE_FONT = "500 24px 'Montserrat', sans-serif";
-  const LEAGUE_MAX_W = 250;
-  const leagueTextW = Math.min(LEAGUE_MAX_W, measureTextWidth(leagueDisplayName, LEAGUE_FONT));
-  const leagueFlagLeft = 882 + leagueTextW + 10;
 
   const container = document.createElement('div');
   container.style.position = 'fixed';
@@ -562,7 +585,7 @@ function buildQuickCardElement(player, players) {
   const STYLE_HALF_W = 440;
   const rolesRankedHtml = rolesRankedSvgHtml(STYLE_HALF_W);
   const CAREER_PANEL_W = 920 - STYLE_HALF_W - 40;
-  const careerChartHtml = careerTrajectorySvg(player, CAREER_PANEL_W - 10, PLACEHOLDER_ROLES.length * 46 + 8);
+  const careerChartHtml = careerTrajectorySvg(player, CAREER_PANEL_W - 10, PLACEHOLDER_ROLES.length * 46 + 8, !!manual.showForecast);
 
   // Style / Team Context share the right column and must be positioned back-to-back —
   // computed from the actual rendered height of the roles list rather than a fixed guess,
@@ -616,15 +639,17 @@ function buildQuickCardElement(player, players) {
       <!-- CREST / TEAM / LEAGUE -->
       ${crest ? `<div style="position:absolute;left:720px;top:22px;width:148px;height:200px;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${crest}');"></div>` : ''}
       <div style="position:absolute;left:882px;top:42px;font-size:36px;font-weight:800;color:#fff;${sdTeam.length >= 16 ? 'letter-spacing:-1px;' : ''}">${sdTeam}</div>
-      <div style="position:absolute;left:882px;top:92px;max-width:${LEAGUE_MAX_W}px;font-size:24px;font-weight:500;color:#d0d8ea;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${leagueDisplayName}</div>
-      ${countryToIso2(leagueToCountry(sdLeague)) ? `<div style="position:absolute;left:${leagueFlagLeft}px;top:95px;width:34px;height:21px;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(leagueToCountry(sdLeague))}.png');border-radius:2px;"></div>` : ''}
+      <div style="position:absolute;left:882px;top:92px;width:288px;display:flex;align-items:center;gap:10px;">
+        <span style="min-width:0;font-size:24px;font-weight:500;color:#d0d8ea;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${leagueDisplayName}</span>
+        ${countryToIso2(leagueToCountry(sdLeague)) ? `<div style="width:34px;height:21px;flex-shrink:0;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(leagueToCountry(sdLeague))}.png');border-radius:2px;"></div>` : ''}
+      </div>
 
       <div style="position:absolute;left:1180px;top:30px;width:3px;height:210px;background:#737373;"></div>
 
       <!-- INFO BOX -->
-      ${[['Height:', cmToFeet(player.height) || '—'], ['Value:', (player.xValue > 0 ? formatMV(player.xValue) : '—')], ['Contract:', (player.contractYear && player.contractYear !== 'nan') ? String(player.contractYear) : '—']].map(([k,v],i) => `
-        <div style="position:absolute;left:1200px;top:${46 + i*54}px;font-size:22px;font-weight:600;color:#9aa3b8;">${k}</div>
-        <div style="position:absolute;left:1345px;top:${46 + i*54}px;font-size:22px;font-weight:700;color:#fff;">${v}</div>`).join('')}
+      ${[['Height:', cmToFeet(player.height) || '—'], ['Value:', (player.xValue > 0 ? formatMV(player.xValue) : '—')], ['Contract:', (player.contractYear && player.contractYear !== 'nan') ? String(player.contractYear) : '—'], ['Agent:', manual.agentOverride || '—']].map(([k,v],i) => `
+        <div style="position:absolute;left:1200px;top:${44 + i*48}px;font-size:22px;font-weight:600;color:#9aa3b8;">${k}</div>
+        <div style="position:absolute;left:1345px;top:${44 + i*48}px;font-size:22px;font-weight:700;color:#fff;">${v}</div>`).join('')}
 
       <!-- GBE -->
       <div style="position:absolute;top:34px;left:1510px;width:390px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.10);border-radius:12px;padding:20px 24px;">
@@ -686,11 +711,18 @@ function buildQuickCardElement(player, players) {
       <!-- divider between style/career row and team context -->
       <div style="position:absolute;left:984px;top:${dividerTop}px;width:920px;height:2px;background:rgba(255,255,255,0.06);"></div>
 
-      <!-- TEAM CONTEXT -->
-      <div style="position:absolute;top:${teamContextTop}px;left:984px;width:920px;">
+      <!-- TEAM CONTEXT — half width (aligned with Style) when toggled, full width otherwise -->
+      <div style="position:absolute;top:${teamContextTop}px;left:984px;width:${manual.halfTeamContext ? STYLE_HALF_W : 920}px;">
         <div style="font-size:26.6px;font-weight:700;color:${ACCENT_PINK};margin-bottom:16px;">Team Context</div>
-        ${teamRangeBarHtml(player.careerScore, teamPlayers.map(p=>p.careerScore), 880)}
+        ${teamRangeBarHtml(player.careerScore, teamPlayers.map(p=>p.careerScore), manual.halfTeamContext ? STYLE_HALF_W - 40 : 880)}
       </div>
+
+      ${(manual.halfTeamContext && manual.biography) ? `
+      <!-- BIOGRAPHY (optional, only shown when Team Context is halved) -->
+      <div style="position:absolute;top:${teamContextTop}px;left:${984 + STYLE_HALF_W + 40}px;width:${CAREER_PANEL_W}px;">
+        <div style="font-size:26.6px;font-weight:700;color:${ACCENT_PINK};margin-bottom:16px;">Biography</div>
+        <div style="font-size:27.9px;line-height:1.5;font-weight:600;color:#fff;">${manual.biography}</div>
+      </div>` : ''}
 
     </div>
   `;
@@ -699,13 +731,23 @@ function buildQuickCardElement(player, players) {
   return container;
 }
 
+const qcInputStyle = {
+  width: '100%', background: '#0d1424', border: '1px solid #1e2d4a', borderRadius: 5,
+  color: '#fff', padding: '7px 9px', fontSize: 11.5, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box',
+};
+const qcLabelStyle = { fontSize: 10, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4, display: 'block', textAlign: 'left' };
+
 export default function QuickCardModal({ player, players, onClose }) {
   const [downloading, setDownloading] = useState(false);
+  const [agentOverride, setAgentOverride] = useState('');
+  const [biography, setBiography] = useState('');
+  const [halfTeamContext, setHalfTeamContext] = useState(false);
+  const [showForecast, setShowForecast] = useState(false);
 
   const handleDownload = async () => {
     setDownloading(true);
     const { toPng } = await import('html-to-image');
-    const el = buildQuickCardElement(player, players);
+    const el = buildQuickCardElement(player, players, { agentOverride, biography, halfTeamContext, showForecast });
     try {
       const cardNode = el.querySelector('#qc-card-root') || el;
       const opts = {
@@ -726,10 +768,33 @@ export default function QuickCardModal({ player, players, onClose }) {
   return (
     <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.85)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center'}}
       onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
-      <div style={{background:'#09111e',border:'1px solid #1e2d45',borderRadius:12,padding:32,textAlign:'center',boxShadow:'0 8px 40px rgba(0,0,0,.7)',minWidth:320}}>
+      <div style={{background:'#09111e',border:'1px solid #1e2d45',borderRadius:12,padding:32,textAlign:'center',boxShadow:'0 8px 40px rgba(0,0,0,.7)',minWidth:320,maxWidth:360}}>
         <div style={{fontSize:15,fontWeight:700,color:'#e2e8f4',marginBottom:8}}>⚡ Quick Card</div>
-        <div style={{fontSize:12,color:'#64748b',marginBottom:24}}>{player.name} · {player.team}</div>
-        <div style={{display:'flex',gap:10,justifyContent:'center'}}>
+        <div style={{fontSize:12,color:'#64748b',marginBottom:20}}>{player.name} · {player.team}</div>
+
+        <div style={{marginBottom:12}}>
+          <label style={qcLabelStyle}>Agent</label>
+          <input style={qcInputStyle} value={agentOverride} onChange={e=>setAgentOverride(e.target.value)} placeholder="—" />
+        </div>
+
+        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12,textAlign:'left'}}>
+          <input type="checkbox" id="qc-half-tc" checked={halfTeamContext} onChange={e=>setHalfTeamContext(e.target.checked)} style={{cursor:'pointer'}} />
+          <label htmlFor="qc-half-tc" style={{fontSize:11.5,color:'#cbd5e1',cursor:'pointer'}}>Team Context half-width (aligned with Style)</label>
+        </div>
+
+        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12,textAlign:'left'}}>
+          <input type="checkbox" id="qc-forecast" checked={showForecast} onChange={e=>setShowForecast(e.target.checked)} style={{cursor:'pointer'}} />
+          <label htmlFor="qc-forecast" style={{fontSize:11.5,color:'#cbd5e1',cursor:'pointer'}}>Show Career forecast (dashed line to potential)</label>
+        </div>
+
+        {halfTeamContext && (
+          <div style={{marginBottom:12}}>
+            <label style={qcLabelStyle}>Biography (optional)</label>
+            <textarea style={{...qcInputStyle,minHeight:60,resize:'vertical'}} value={biography} onChange={e=>setBiography(e.target.value)} placeholder="Short bio to fill the space next to Team Context…" />
+          </div>
+        )}
+
+        <div style={{display:'flex',gap:10,justifyContent:'center',marginTop:20}}>
           <button onClick={handleDownload} disabled={downloading}
             style={{background:'#0e2a1c',border:'1px solid #22c55e',color:'#86efac',borderRadius:6,padding:'8px 18px',fontSize:12,fontWeight:700,cursor:'pointer',opacity:downloading?0.6:1}}>
             {downloading ? 'Generating…' : '⬇ Download 1920×1080'}
