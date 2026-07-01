@@ -1,4 +1,4 @@
-// QuickCard v29 - bigger/centered GBE card, fixed league/flag overlap, larger info box, Style header removed + hex graph fills width, tightened Team Context spacing
+// QuickCard v31 - real Career trajectory chart wired from player.sh (matches PlayerCard.js's CareerTab logic)
 import React, { useState } from 'react';
 import { scoreLabel, formatFoot, formatMV } from './constants';
 
@@ -139,6 +139,15 @@ function countryToIso2(name) {
 function leagueToCountry(leagueName) {
   if (!leagueName) return '';
   return String(leagueName).replace(/\s+\d+\.?\s*$/, '').trim();
+}
+
+let _measureCanvas = null;
+function measureTextWidth(text, font) {
+  if (typeof document === 'undefined') return String(text || '').length * 12;
+  _measureCanvas = _measureCanvas || document.createElement('canvas');
+  const ctx = _measureCanvas.getContext('2d');
+  ctx.font = font;
+  return ctx.measureText(String(text || '')).width;
 }
 
 function slugN(s) {
@@ -325,6 +334,62 @@ function gbeThresholdBar(label, val, max, w = 220) {
     </div>`;
 }
 
+// Season order matches PlayerCard.js's CareerTab — used to derive age-per-season
+// offsets from player.sh (season history) the same way the full career chart does.
+const SEASON_ORDER = ['2018-19','2019-20','2020-21','2021-22','2022-23','2023-24','2024-25','2025-26'];
+
+function careerTrajectorySvg(player, w = 420, h = 284) {
+  const currentAge = Number(player.age) || 25;
+  const currentSeasonIdx = SEASON_ORDER.indexOf('2025-26');
+
+  const byS = {};
+  (player.sh || []).forEach(hEntry => {
+    if (hEntry.sc == null) return;
+    if (!byS[hEntry.s] || hEntry.sc > byS[hEntry.s].sc) byS[hEntry.s] = hEntry;
+  });
+  const history = Object.values(byS)
+    .filter(hEntry => hEntry.sc != null && !hEntry.displayOnly)
+    .sort((a, b) => {
+      const ai = SEASON_ORDER.indexOf(a.s), bi = SEASON_ORDER.indexOf(b.s);
+      return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+    })
+    .map(hEntry => {
+      const idx = SEASON_ORDER.indexOf(hEntry.s);
+      const offset = idx === -1 ? 0 : idx - currentSeasonIdx;
+      return { ...hEntry, age: currentAge + offset };
+    });
+
+  if (history.length < 2) {
+    return `<div style="font-size:13px;color:#5e6678;padding:6px 0;">Not enough season history.</div>`;
+  }
+
+  const pad = { t: 18, r: 16, b: 26, l: 16 };
+  const pw = w - pad.l - pad.r, ph = h - pad.t - pad.b;
+  const scores = history.map(p => p.sc);
+  const minS = Math.min(...scores) - 3, maxS = Math.max(...scores) + 3;
+  const ages = history.map(p => p.age);
+  const minA = Math.min(...ages), maxA = Math.max(...ages);
+  const xS = a => pad.l + (maxA === minA ? pw / 2 : ((a - minA) / (maxA - minA)) * pw);
+  const yS = v => pad.t + ph - ((v - minS) / (maxS - minS || 1)) * ph;
+
+  const linePts = history.map(p => `${xS(p.age).toFixed(1)},${yS(p.sc).toFixed(1)}`).join(' ');
+
+  const dots = history.map(p => {
+    const cx = xS(p.age), cy = yS(p.sc);
+    const col = scoreTierColor(p.sc);
+    return `
+      <circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="5" fill="${col}" stroke="#07090f" stroke-width="1.5"/>
+      <text x="${cx.toFixed(1)}" y="${(cy - 11).toFixed(1)}" font-family="Montserrat,sans-serif" font-size="11" font-weight="700" fill="${col}" text-anchor="middle">${p.sc.toFixed(1)}</text>
+      <text x="${cx.toFixed(1)}" y="${(pad.t + ph + 17).toFixed(1)}" font-family="Montserrat,sans-serif" font-size="10" font-weight="600" fill="#5e6678" text-anchor="middle">${Math.round(p.age)}</text>`;
+  }).join('');
+
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
+    <line x1="${pad.l}" y1="${pad.t + ph}" x2="${pad.l + pw}" y2="${pad.t + ph}" stroke="#1e2a3e" stroke-width="1"/>
+    <polyline points="${linePts}" fill="none" stroke="#a78bfa" stroke-width="2.5"/>
+    ${dots}
+  </svg>`;
+}
+
 const PLACEHOLDER_ROLES = [
   ['Wide Creator', 84],
   ['Creative Playmaker', 79],
@@ -334,11 +399,11 @@ const PLACEHOLDER_ROLES = [
   ['Retention', 55],
 ];
 
-function rolesRankedSvgHtml(targetWidth = 900) {
+function rolesRankedSvgHtml(maxWidth = 440) {
   const roles = PLACEHOLDER_ROLES;
-  // Bigger hexagons, no score number — hex spacing stretches to fill targetWidth
-  // instead of leaving dead space on the right of the column.
-  const R = 15, W = 34, H = 34;
+  // Compact hexagons, closely packed, sized to sit in half the right column
+  // alongside a future career trajectory chart.
+  const R = 11;
   const hex = (cx, cy, opacity, col) => {
     const pts = Array.from({length:6}, (_,i) => {
       const a = Math.PI/180 * (60*i - 30);
@@ -347,13 +412,14 @@ function rolesRankedSvgHtml(targetWidth = 900) {
     return `<polygon points="${pts}" fill="${col}" opacity="${opacity}" stroke="#07090f" stroke-width="1.5"/>`;
   };
 
-  const rowH = 50;
-  const labelW = 230;
+  const rowH = 46;
+  const labelW = 158;
   const numHex = 10;
-  const rightPad = 20;
-  const totalHexW = Math.max(numHex * W, targetWidth - labelW - rightPad);
-  const hexGap = (totalHexW - numHex * W) / (numHex - 1);
-  const w = labelW + totalHexW + rightPad;
+  const W = R * 2;
+  const hexGap = 3;
+  const totalHexW = numHex * W + (numHex - 1) * hexGap;
+  const rightPad = 12;
+  const w = Math.min(maxWidth, labelW + totalHexW + rightPad);
   const h = roles.length * rowH + 8;
 
   const rows = roles.map(([disp, score], i) => {
@@ -368,7 +434,7 @@ function rolesRankedSvgHtml(targetWidth = 900) {
       return hex(cx, y, opacity, isFilled ? col : '#dbe1ee');
     }).join('');
     return `
-      <text x="0" y="${y+6}" font-family="Montserrat,sans-serif" font-size="18" font-weight="600" fill="#c8d2e0">${disp}</text>
+      <text x="0" y="${y+5}" font-family="Montserrat,sans-serif" font-size="14" font-weight="600" fill="#c8d2e0">${disp}</text>
       ${hexes}`;
   }).join('');
 
@@ -480,6 +546,12 @@ function buildQuickCardElement(player, players) {
 
   const isGK = rawPosToken === 'GK' || (player.roleKey || '').startsWith('GK');
 
+  const leagueDisplayName = LEAGUE_DISPLAY_NAMES[sdLeague] || sdLeague;
+  const LEAGUE_FONT = "500 24px 'Montserrat', sans-serif";
+  const LEAGUE_MAX_W = 250;
+  const leagueTextW = Math.min(LEAGUE_MAX_W, measureTextWidth(leagueDisplayName, LEAGUE_FONT));
+  const leagueFlagLeft = 882 + leagueTextW + 10;
+
   const container = document.createElement('div');
   container.style.position = 'fixed';
   container.style.left = '-9999px';
@@ -487,16 +559,20 @@ function buildQuickCardElement(player, players) {
   container.style.width = '1920px';
   container.style.height = '1080px';
 
-  const rolesRankedHtml = rolesRankedSvgHtml(900);
+  const STYLE_HALF_W = 440;
+  const rolesRankedHtml = rolesRankedSvgHtml(STYLE_HALF_W);
+  const CAREER_PANEL_W = 920 - STYLE_HALF_W - 40;
+  const careerChartHtml = careerTrajectorySvg(player, CAREER_PANEL_W - 10, PLACEHOLDER_ROLES.length * 46 + 8);
 
   // Style / Team Context share the right column and must be positioned back-to-back —
   // computed from the actual rendered height of the roles list rather than a fixed guess,
   // so they never leave a gap or overlap regardless of how many roles are shown.
   const STYLE_TOP = 298;
-  const ROLES_ROW_H = 50;
+  const STYLE_HEADER_H = 44;
+  const ROLES_ROW_H = 46;
   const rolesSvgHeight = PLACEHOLDER_ROLES.length * ROLES_ROW_H + 8;
   const SECTION_GAP = 16;
-  const dividerTop = STYLE_TOP + rolesSvgHeight + SECTION_GAP;
+  const dividerTop = STYLE_TOP + STYLE_HEADER_H + rolesSvgHeight + SECTION_GAP;
   const teamContextTop = dividerTop + 2 + SECTION_GAP;
 
   const attributeTagsHtml = (arr, bg, fg, border) => arr.slice(0,6).map(s =>
@@ -540,8 +616,8 @@ function buildQuickCardElement(player, players) {
       <!-- CREST / TEAM / LEAGUE -->
       ${crest ? `<div style="position:absolute;left:720px;top:22px;width:148px;height:200px;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${crest}');"></div>` : ''}
       <div style="position:absolute;left:882px;top:42px;font-size:36px;font-weight:800;color:#fff;${sdTeam.length >= 16 ? 'letter-spacing:-1px;' : ''}">${sdTeam}</div>
-      <div style="position:absolute;left:882px;top:92px;width:210px;font-size:24px;font-weight:500;color:#d0d8ea;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${LEAGUE_DISPLAY_NAMES[sdLeague] || sdLeague}</div>
-      ${countryToIso2(leagueToCountry(sdLeague)) ? `<div style="position:absolute;left:1112px;top:96px;width:34px;height:21px;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(leagueToCountry(sdLeague))}.png');border-radius:2px;"></div>` : ''}
+      <div style="position:absolute;left:882px;top:92px;max-width:${LEAGUE_MAX_W}px;font-size:24px;font-weight:500;color:#d0d8ea;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${leagueDisplayName}</div>
+      ${countryToIso2(leagueToCountry(sdLeague)) ? `<div style="position:absolute;left:${leagueFlagLeft}px;top:95px;width:34px;height:21px;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(leagueToCountry(sdLeague))}.png');border-radius:2px;"></div>` : ''}
 
       <div style="position:absolute;left:1180px;top:30px;width:3px;height:210px;background:#737373;"></div>
 
@@ -551,7 +627,7 @@ function buildQuickCardElement(player, players) {
         <div style="position:absolute;left:1345px;top:${46 + i*54}px;font-size:22px;font-weight:700;color:#fff;">${v}</div>`).join('')}
 
       <!-- GBE -->
-      <div style="position:absolute;top:34px;left:1340px;width:420px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.10);border-radius:12px;padding:20px 24px;">
+      <div style="position:absolute;top:34px;left:1510px;width:390px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.10);border-radius:12px;padding:20px 24px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
           <span style="font-size:15px;font-weight:700;color:#9aa3b8;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;">GBE Calculation</span>
           <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;">
@@ -590,14 +666,24 @@ function buildQuickCardElement(player, players) {
       <!-- vertical divider between bars and right column -->
       <div style="position:absolute;left:944px;top:298px;width:2px;height:782px;background:rgba(255,255,255,0.06);"></div>
 
-      <!-- ============ RIGHT COLUMN: ROLE SCORES (primary + ranked list) then TEAM CONTEXT (range bar) ============ -->
+      <!-- ============ RIGHT COLUMN: STYLE (hexes, left half) + CAREER (trajectory, right half) then TEAM CONTEXT ============ -->
 
-      <!-- ROLE SCORES (no header — graph starts at column top) -->
-      <div style="position:absolute;top:${STYLE_TOP}px;left:984px;width:920px;">
+      <!-- STYLE -->
+      <div style="position:absolute;top:${STYLE_TOP}px;left:984px;width:${STYLE_HALF_W}px;">
+        <div style="font-size:26.6px;font-weight:700;color:${ACCENT_PINK};margin-bottom:18px;">Style</div>
         ${rolesRankedHtml}
       </div>
 
-      <!-- divider between role scores and team context -->
+      <!-- vertical divider between Style and Career -->
+      <div style="position:absolute;left:${984 + STYLE_HALF_W + 20}px;top:${STYLE_TOP}px;width:2px;height:${STYLE_HEADER_H + rolesSvgHeight}px;background:rgba(255,255,255,0.06);"></div>
+
+      <!-- CAREER (trajectory line chart from player.sh) -->
+      <div style="position:absolute;top:${STYLE_TOP}px;left:${984 + STYLE_HALF_W + 40}px;width:${CAREER_PANEL_W}px;">
+        <div style="font-size:26.6px;font-weight:700;color:${ACCENT_PINK};margin-bottom:18px;">Career</div>
+        ${careerChartHtml}
+      </div>
+
+      <!-- divider between style/career row and team context -->
       <div style="position:absolute;left:984px;top:${dividerTop}px;width:920px;height:2px;background:rgba(255,255,255,0.06);"></div>
 
       <!-- TEAM CONTEXT -->
