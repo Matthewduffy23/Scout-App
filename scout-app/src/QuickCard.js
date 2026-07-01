@@ -1,4 +1,4 @@
-// QuickCard v25 - positions, league names+flags, hexagon style dots, monochrome GBE
+// QuickCard v27 - all header/GBE/style/team fixes
 import React, { useState } from 'react';
 import { scoreLabel, formatFoot, formatMV } from './constants';
 
@@ -336,8 +336,8 @@ const PLACEHOLDER_ROLES = [
 
 function rolesRankedSvgHtml() {
   const roles = PLACEHOLDER_ROLES;
-  // Hexagon path (flat-top, r=11)
-  const R = 11, W = 26, H = 26;
+  // Bigger hexagons, no score number
+  const R = 15, W = 34, H = 34;
   const hex = (cx, cy, opacity, col) => {
     const pts = Array.from({length:6}, (_,i) => {
       const a = Math.PI/180 * (60*i - 30);
@@ -346,12 +346,12 @@ function rolesRankedSvgHtml() {
     return `<polygon points="${pts}" fill="${col}" opacity="${opacity}" stroke="#07090f" stroke-width="1.5"/>`;
   };
 
-  const rowH = 44;
-  const labelW = 220;
+  const rowH = 50;
+  const labelW = 230;
   const numHex = 10;
-  const hexGap = 4;
+  const hexGap = 6;
   const totalHexW = numHex * W + (numHex-1) * hexGap;
-  const w = labelW + totalHexW + 70;
+  const w = labelW + totalHexW + 20;
   const h = roles.length * rowH + 8;
 
   const rows = roles.map(([disp, score], i) => {
@@ -362,15 +362,12 @@ function rolesRankedSvgHtml() {
     const hexes = Array.from({length: numHex}, (_, d) => {
       const cx = labelW + d * (W + hexGap) + W/2;
       const isFilled = d < filled;
-      // Fading effect: filled hexes fade from full to 0.5 opacity left to right
-      const opacity = isFilled ? (1 - (d / numHex) * 0.45).toFixed(2) : 0.12;
+      const opacity = isFilled ? (1 - (d / numHex) * 0.4).toFixed(2) : 0.1;
       return hex(cx, y, opacity, isFilled ? col : '#dbe1ee');
     }).join('');
-    const scoreX = labelW + totalHexW + 20;
     return `
-      <text x="0" y="${y+6}" font-family="Montserrat,sans-serif" font-size="17" font-weight="600" fill="#c8d2e0">${disp}</text>
-      ${hexes}
-      <text x="${scoreX}" y="${y+6}" font-family="Montserrat,sans-serif" font-size="18" font-weight="800" fill="${col}">${sc}</text>`;
+      <text x="0" y="${y+6}" font-family="Montserrat,sans-serif" font-size="18" font-weight="600" fill="#c8d2e0">${disp}</text>
+      ${hexes}`;
   }).join('');
 
   return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">${rows}</svg>`;
@@ -495,12 +492,14 @@ function buildQuickCardElement(player, players) {
 
       <!-- NAME / POSITION / FOOT / FLAG / AGE -->
       <div style="position:absolute;left:248px;top:24px;width:560px;font-size:53.2px;font-weight:700;line-height:1.05;letter-spacing:-0.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${player.name}</div>
-      <div style="position:absolute;left:248px;top:87px;display:flex;align-items:baseline;gap:15px;">
+      <div style="position:absolute;left:248px;top:90px;display:flex;align-items:center;gap:12px;">
         <span style="font-size:26.6px;font-weight:600;color:#fff;white-space:nowrap;">${POSITION_LABELS[rawPosToken] || rawPosToken}</span>
-        ${(player.foot && player.foot !== 'unknown' && player.foot !== 'nan') ? `<span style="font-size:21.3px;color:#c0c0c0;white-space:nowrap;">${formatFoot(player.foot)}</span>` : ''}
+        ${(player.foot && player.foot !== 'unknown' && player.foot !== 'nan') ? `<span style="font-size:21.3px;color:#c0c0c0;white-space:nowrap;padding-left:6px;">· ${formatFoot(player.foot)}</span>` : ''}
       </div>
-      ${countryToIso2(player.birthCountry) ? `<div style="position:absolute;left:248px;top:152px;width:36px;height:22px;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(player.birthCountry)}.png');"></div>` : ''}
-      <div style="position:absolute;left:${countryToIso2(player.birthCountry) ? 296 : 248}px;top:153px;font-size:26.6px;font-weight:600;color:#fff;white-space:nowrap;">${player.age} years old</div>
+      <div style="position:absolute;left:248px;top:148px;display:flex;align-items:center;gap:10px;">
+        ${countryToIso2(player.birthCountry) ? `<div style="width:36px;height:22px;flex-shrink:0;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(player.birthCountry)}.png');border-radius:2px;"></div>` : ''}
+        <span style="font-size:26.6px;font-weight:600;color:#fff;white-space:nowrap;">${player.age} years old</span>
+      </div>
 
       <!-- APPS / GOALS / ASSISTS / MINS row (replaces nav links) -->
       <div style="position:absolute;left:248px;top:227px;display:flex;align-items:baseline;gap:32px;">
@@ -520,30 +519,31 @@ function buildQuickCardElement(player, players) {
       ${crest ? `<div style="position:absolute;left:720px;top:22px;width:148px;height:200px;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${crest}');"></div>` : ''}
       <div style="position:absolute;left:882px;top:42px;font-size:36px;font-weight:800;color:#fff;${sdTeam.length >= 16 ? 'letter-spacing:-1px;' : ''}">${sdTeam}</div>
       <div style="position:absolute;left:882px;top:92px;display:flex;align-items:center;gap:10px;">
-        <span style="font-size:24px;font-weight:500;color:#d0d8ea;">${LEAGUE_DISPLAY_NAMES[sdLeague] || sdLeague}</span>
-        ${countryToIso2(leagueToCountry(sdLeague)) ? `<div style="width:34px;height:21px;flex-shrink:0;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(leagueToCountry(sdLeague))}.png');border-radius:2px;"></div>` : ''}
+        <span style="font-size:24px;font-weight:500;color:#d0d8ea;white-space:nowrap;">${LEAGUE_DISPLAY_NAMES[sdLeague] || sdLeague}</span>
+        ${countryToIso2(leagueToCountry(sdLeague)) ? `<div style="width:34px;height:21px;flex-shrink:0;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(leagueToCountry(sdLeague))}.png');border-radius:2px;align-self:center;"></div>` : ''}
       </div>
 
-      <div style="position:absolute;left:1110px;top:30px;width:3px;height:210px;background:#737373;"></div>
+      <div style="position:absolute;left:1180px;top:30px;width:3px;height:210px;background:#737373;"></div>
 
       <!-- INFO BOX — bigger -->
       ${[['Height:', cmToFeet(player.height) || '—'], ['Value:', (player.xValue > 0 ? formatMV(player.xValue) : '—')], ['Contract:', (player.contractYear && player.contractYear !== 'nan') ? String(player.contractYear) : '—']].map(([k,v],i) => `
-        <div style="position:absolute;left:1130px;top:${42 + i*64}px;font-size:24px;font-weight:600;color:#9aa3b8;">${k}</div>
-        <div style="position:absolute;left:1280px;top:${42 + i*64}px;font-size:24px;font-weight:700;color:#fff;">${v}</div>`).join('')}
+        <div style="position:absolute;left:1200px;top:${42 + i*64}px;font-size:24px;font-weight:600;color:#9aa3b8;">${k}</div>
+        <div style="position:absolute;left:1360px;top:${42 + i*64}px;font-size:24px;font-weight:700;color:#fff;">${v}</div>`).join('')}
 
-      <!-- GBE — bigger, more presence -->
-      <div style="position:absolute;top:20px;right:28px;width:390px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.10);border-radius:12px;padding:18px 22px;">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
-          <span style="font-size:15px;font-weight:700;color:#9aa3b8;text-transform:uppercase;letter-spacing:.08em;">GBE Calculation</span>
-          <div style="display:flex;align-items:baseline;gap:8px;">
-            <span style="font-size:28px;font-weight:900;color:#fff;">${gbeTotal}</span>
-            <span style="font-size:13px;font-weight:800;color:${gbeColor};background:${gbeColor}22;border:1px solid ${gbeColor};border-radius:6px;padding:2px 9px;">${gbeStatus}</span>
+      <!-- GBE -->
+      <div style="position:absolute;top:18px;right:24px;width:360px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.10);border-radius:12px;padding:14px 18px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+          <span style="font-size:13px;font-weight:700;color:#9aa3b8;text-transform:uppercase;letter-spacing:.08em;">GBE Calculation</span>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:22px;font-weight:900;color:#fff;">${gbeTotal} pts</span>
+            <span style="font-size:12px;font-weight:800;color:${gbeColor};background:${gbeColor}22;border:1px solid ${gbeColor};border-radius:5px;padding:2px 8px;">${gbeStatus}</span>
           </div>
         </div>
         ${gbeThresholdBar('Domestic Apps', domPts, 12)}
         ${gbeThresholdBar('Continental', contPts, 8)}
         ${gbeThresholdBar('League Band', lqPts, 12)}
         ${gbeThresholdBar('Finish/Prog', finishPts + progPts, 10)}
+        ${(player.escEligible || gbeStatus === 'Fail / ESC Eligible') ? `<div style="margin-top:8px;font-size:10px;color:#f97316;border-top:1px solid rgba(249,115,22,0.2);padding-top:6px;">⚡ ESC Eligible — may qualify via exceptional talent panel</div>` : ''}
       </div>
 
       <!-- ============ LEFT COLUMN: bars from bottom of header to bottom of card ============ -->
@@ -576,14 +576,13 @@ function buildQuickCardElement(player, players) {
       </div>
 
       <!-- divider between role scores and team context -->
-      <div style="position:absolute;left:984px;top:540px;width:920px;height:2px;background:rgba(255,255,255,0.06);"></div>
+      <div style="position:absolute;left:984px;top:580px;width:920px;height:2px;background:rgba(255,255,255,0.06);"></div>
 
 
 
-      <!-- TEAM CONTEXT — range bar showing where player sits in squad -->
-      <div style="position:absolute;top:560px;left:984px;width:920px;">
-        <div style="font-size:26.6px;font-weight:700;color:${ACCENT_PINK};margin-bottom:2px;">Team Context</div>
-        <div style="font-size:13px;color:#5e6678;margin-bottom:18px;">${sdTeam} · squad score distribution</div>
+      <!-- TEAM CONTEXT -->
+      <div style="position:absolute;top:600px;left:984px;width:920px;">
+        <div style="font-size:26.6px;font-weight:700;color:${ACCENT_PINK};margin-bottom:14px;">Team Context</div>
         ${teamRangeBarHtml(player.careerScore, teamPlayers.map(p=>p.careerScore), 880)}
       </div>
 
