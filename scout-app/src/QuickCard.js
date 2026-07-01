@@ -1,3 +1,4 @@
+// QuickCard v25 - positions, league names+flags, hexagon style dots, monochrome GBE
 import React, { useState } from 'react';
 import { scoreLabel, formatFoot, formatMV } from './constants';
 
