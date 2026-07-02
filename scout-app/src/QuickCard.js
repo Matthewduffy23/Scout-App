@@ -1,4 +1,4 @@
-// QuickCard v52 - rounded photo corners (right side) since header colors made the plain rectangle more obvious; Career chart now plots single-season players too, with a "Small Sample" label
+// QuickCard v53 - fixed Apps/Goals/Assists/Mins season mismatch for loan players (was blindly using allSeasonsSummary[0] instead of matching sd's chosen season), On Loan label, Team Context extra bottom padding, league name no longer truncated (dynamic flag position via natural flex flow)
 import React, { useState } from 'react';
 import { scoreLabel, formatFoot, formatMV, GBE_LEAGUE_BANDS } from './constants';
 
@@ -669,7 +669,15 @@ function buildQuickCardElement(player, players, manual = {}) {
   const sd = seasonsDetailObj[chosenSeasonKey] || Object.values(seasonsDetailObj)[0] || {};
   const sdTeam = truncateText(sd.team || player.team, 20);
   const sdLeague = sd.league || player.league;
-  const statsRow = (player.allSeasonsSummary && player.allSeasonsSummary[0]) || {};
+  // allSeasonsSummary[0] is NOT guaranteed to be the same season+club as `sd` above —
+  // for loan players with two entries sharing a season string (e.g. parent club U21s
+  // and the loan club), index 0 can silently pick the wrong one while sd correctly
+  // resolves to the loan club via chosenSeasonKey. Match on season+league explicitly.
+  const allSummary = player.allSeasonsSummary || [];
+  const statsRow = allSummary.find(row => row.s === chosenSeasonKey && row.l === sdLeague)
+    || allSummary.find(row => row.s === chosenSeasonKey)
+    || allSummary[0]
+    || {};
   const crest = player.teamFotmobId ? `${CREST_BASE}${player.teamFotmobId}.png` : '';
   const photo = photoUrl(player.name, player.team);
   const groups = sd.g || {};
@@ -761,7 +769,7 @@ function buildQuickCardElement(player, players, manual = {}) {
 
   const isGK = rawPosToken === 'GK' || (player.roleKey || '').startsWith('GK');
 
-  const leagueDisplayName = truncateText(LEAGUE_DISPLAY_NAMES[sdLeague] || sdLeague, 15);
+  const leagueDisplayName = LEAGUE_DISPLAY_NAMES[sdLeague] || sdLeague;
 
   const container = document.createElement('div');
   container.style.position = 'fixed';
@@ -791,7 +799,7 @@ function buildQuickCardElement(player, players, manual = {}) {
   const ROW1_PANEL_H = PANEL_PAD * 2 + STYLE_HEADER_H + rolesSvgHeight;
   const ROW2_TOP = STYLE_TOP + ROW1_PANEL_H + PANEL_GAP_V;
 
-  const TEAM_CONTEXT_CONTENT_H = STYLE_HEADER_H + 5 * 52; // header + 5 metric rows
+  const TEAM_CONTEXT_CONTENT_H = STYLE_HEADER_H + 5 * 52 + 16; // header + 5 metric rows + extra bottom breathing room
   const ROW2_PANEL_H = PANEL_PAD * 2 + TEAM_CONTEXT_CONTENT_H;
 
   const teamContextPanelW = manual.halfTeamContext ? STYLE_PANEL_W : 920;
@@ -845,6 +853,7 @@ function buildQuickCardElement(player, players, manual = {}) {
         <span style="font-size:21px;font-weight:500;color:#d0d8ea;white-space:nowrap;">${leagueDisplayName}</span>
         ${countryToIso2(leagueToCountry(sdLeague)) ? `<div style="width:32px;height:20px;flex-shrink:0;margin-left:30px;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(leagueToCountry(sdLeague))}.png');border-radius:2px;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15);"></div>` : ''}
       </div>
+      ${player.onLoan ? `<div style="position:absolute;left:902px;top:174px;font-size:21.3px;color:#d9d9d9;">On Loan</div>` : ''}
 
       <div style="position:absolute;left:1180px;top:30px;width:2px;height:210px;background:rgba(255,255,255,0.14);"></div>
 
