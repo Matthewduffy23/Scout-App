@@ -1,6 +1,6 @@
-// QuickCard v38 - orange FAIL badge in Exceptions Panel range, league flag via margin instead of flex gap, Scout Status pill anchored to panel bottom, Biography character limit (350/248) with live counter
+// QuickCard v39 - ESC eligible reasons (mirrors PlayerCard.js), Career band labels moved to left (fix collision with final point), percentile chart bigger + starts higher, left column decoupled from right panel top
 import React, { useState } from 'react';
-import { scoreLabel, formatFoot, formatMV } from './constants';
+import { scoreLabel, formatFoot, formatMV, GBE_LEAGUE_BANDS } from './constants';
 
 // ─── Shared constants ──────────────────────────────────────────────────────
 const PHOTO_BASE = 'https://raw.githubusercontent.com/Matthewduffy23/scouting-photos/main/photos/';
@@ -144,6 +144,31 @@ function leagueToCountry(leagueName) {
 function truncateText(str, maxChars) {
   const s = String(str == null ? '' : str);
   return s.length > maxChars ? s.slice(0, maxChars - 1).trimEnd() + '…' : s;
+}
+
+// Mirrors the ESC-reason logic in PlayerCard.js exactly (same constants, same
+// criteria) so QuickCard can say *why* a player is ESC eligible, not just that
+// they are. Falls back gracefully to an empty list if allSeasonsSummary isn't present.
+function computeEscReasons(player) {
+  const ESC_SEASONS = new Set(['2025-26','2026','2025','2024-25','2024']);
+  const HOME_NATIONS = new Set(['england','scotland','wales','ireland','northern ireland','republic of ireland']);
+  const YOUTH_LEAGUES_GBE = new Set(['Sweden 4.','Switzerland 3.','Ukraine 3.','Brazil 4.','Czech 3.','Denmark 4.','Germany 5.','Germany 6.','Italy 5.','Portugal 4.','Serbia 3.','England 7.','England 8.','England 9.','England 10.']);
+  const INTL_LEAGUES_GBE = new Set(['UEFA WC Qualifiers.','UEFA U21 Euros.','UEFA U19 Euros.','Asia WC Qualifiers.','AFCON.','AFCON U20.','AFCON U17.','AFCON Qualifiers.','S.America Qualifiers.','U20 World Cup.','U17 World Cup.']);
+  const CONT_BAND = {'Champions League.':1,'Europa League.':2,'Conference League.':2,'Copa Libertadores.':2,'Club World Cup.':2,'Asia Champions League.':3,'Africa Champions League.':3,'CAF Champions League.':3};
+  const CONT_ESC_ONLY = new Set(['Champions League Qualifiers.','Europa League Qualifiers.','Conference League Qualifiers.','UEFA Youth League.','U20 Copa.']);
+
+  const birth = (player.birthCountry || '').toLowerCase();
+  const passport = (player.passportCountries || '').toLowerCase();
+  const homeNation = [...HOME_NATIONS].some(n => birth.includes(n) || passport.includes(n));
+  const allS = player.allSeasonsSummary || [];
+
+  return [
+    homeNation && 'Home nation',
+    allS.some(s => (CONT_BAND[s.l] || CONT_ESC_ONLY.has(s.l)) && (s.mins || 0) >= 1) && 'Continental history',
+    allS.some(s => INTL_LEAGUES_GBE.has(s.l) && (s.mins || 0) >= 1) && 'International history',
+    allS.some(s => YOUTH_LEAGUES_GBE.has(s.l) && (s.m || 0) >= 5) && 'Youth league (5+ games)',
+    allS.filter(s => ESC_SEASONS.has(s.s) && (GBE_LEAGUE_BANDS[s.l] || 6) <= 5).reduce((sum, s) => sum + (s.m || 0), 0) >= 5 && '5+ games Band 1-5',
+  ].filter(Boolean);
 }
 
 function slugN(s) {
@@ -404,7 +429,7 @@ function careerTrajectorySvg(player, w = 420, h = 284, showForecast = false) {
       const y = yS(val);
       return `
         <line x1="${pad.l}" y1="${y.toFixed(1)}" x2="${pad.l + pw}" y2="${y.toFixed(1)}" stroke="rgba(255,255,255,0.15)" stroke-width="1" stroke-dasharray="3,3"/>
-        <text x="${(pad.l + pw - 3).toFixed(1)}" y="${(y - 3).toFixed(1)}" font-family="Montserrat,sans-serif" font-size="9" font-weight="700" fill="rgba(255,255,255,0.4)" text-anchor="end">${label}</text>`;
+        <text x="${(pad.l + 3).toFixed(1)}" y="${(y - 3).toFixed(1)}" font-family="Montserrat,sans-serif" font-size="9" font-weight="700" fill="rgba(255,255,255,0.4)" text-anchor="start">${label}</text>`;
     }).join('');
 
   const dots = history.map(p => {
@@ -559,6 +584,7 @@ function buildQuickCardElement(player, players, manual = {}) {
   // Players who pass, or who fail with no route in, get no extra note.
   const gbePanelEligible = !gbePass && gbeTotal >= 10;
   const gbeEscEligible   = !gbePass && gbeTotal < 10 && !!player.escEligible;
+  const escReasons = gbeEscEligible ? computeEscReasons(player) : [];
   // FAIL badge is orange when the player is in the Exceptions Panel range —
   // a distinct "not dead, needs review" signal vs a hard red no-route fail.
   const gbeColor   = gbePass ? '#3da65b' : gbePanelEligible ? '#f0a637' : '#c7363c';
@@ -570,7 +596,11 @@ function buildQuickCardElement(player, players, manual = {}) {
   const groupKeys = ['A', 'D', 'P'];
   const totalRows = groupKeys.reduce((s, k) => s + (groups[k] ? groups[k].length : 0), 0);
   const activeSections = groupKeys.filter(k => groups[k] && groups[k].length > 0).length;
-  const CHART_HEIGHT = 760;
+  // Left column starts closer to the header than the right panels do, and always
+  // extends to the card's bottom edge — moving this up grows CHART_HEIGHT (bigger
+  // rows) without moving the bottom of the chart.
+  const LEFT_TOP = 296;
+  const CHART_HEIGHT = 1080 - LEFT_TOP;
   const FULL_OVERHEAD = 193;
   const SECTION_TITLE_H = 48;
   const FIXED_OVERHEAD = FULL_OVERHEAD - (3 - activeSections) * SECTION_TITLE_H;
@@ -694,12 +724,12 @@ function buildQuickCardElement(player, players, manual = {}) {
           ${gbeThresholdBar('Finish/Prog', finishPts + progPts, 10)}
         </div>
         ${gbePanelEligible ? `<div style="margin-top:14px;font-size:12px;font-weight:600;color:#f0c56a;border-top:1px solid rgba(240,197,106,0.2);padding-top:10px;">Eligible for GBE Exceptions Panel review</div>` : ''}
-        ${gbeEscEligible ? `<div style="margin-top:14px;font-size:12px;font-weight:600;color:#f97316;border-top:1px solid rgba(249,115,22,0.2);padding-top:10px;">⚡ ESC Eligible — may qualify via exceptional talent panel</div>` : ''}
+        ${gbeEscEligible ? `<div style="margin-top:14px;font-size:12px;font-weight:600;color:#f97316;border-top:1px solid rgba(249,115,22,0.2);padding-top:10px;">⚡ ESC Eligible${escReasons.length ? ` — ${escReasons.join(' · ')}` : ' — may qualify via exceptional talent panel'}</div>` : ''}
       </div>
 
       <!-- ============ LEFT COLUMN: bars from bottom of header to bottom of card ============ -->
 
-      <div style="position:absolute;top:${STYLE_TOP}px;left:0px;width:920px;height:${1080-STYLE_TOP}px;overflow:hidden;box-sizing:border-box;padding-left:24px;padding-top:12px;">
+      <div style="position:absolute;top:${LEFT_TOP}px;left:0px;width:920px;height:${1080-LEFT_TOP}px;overflow:hidden;box-sizing:border-box;padding-left:24px;padding-top:12px;">
         ${groups.A && groups.A.length ? `<div style="font-size:24px;font-weight:800;color:#f3f5f7;margin:0 0 6px;">${isGK ? 'Goalkeeping' : 'Attacking'}</div>${buildGroupBars('A')}` : ''}
         ${groups.D && groups.D.length ? `<div style="font-size:24px;font-weight:800;color:#f3f5f7;margin:8px 0 6px;">Defensive</div>${buildGroupBars('D')}` : ''}
         ${groups.P && groups.P.length ? `<div style="font-size:24px;font-weight:800;color:#f3f5f7;margin:8px 0 6px;">Possession</div>${buildGroupBars('P')}` : ''}
@@ -716,7 +746,7 @@ function buildQuickCardElement(player, players, manual = {}) {
       </div>
 
       <!-- vertical divider between bars and right column -->
-      <div style="position:absolute;left:944px;top:${STYLE_TOP}px;width:2px;height:${1080-STYLE_TOP}px;background:rgba(255,255,255,0.06);"></div>
+      <div style="position:absolute;left:944px;top:${LEFT_TOP}px;width:2px;height:${1080-LEFT_TOP}px;background:rgba(255,255,255,0.06);"></div>
 
       <!-- ============ RIGHT COLUMN: STYLE + CAREER panels (row 1), TEAM CONTEXT + BIOGRAPHY panels (row 2) ============ -->
 
