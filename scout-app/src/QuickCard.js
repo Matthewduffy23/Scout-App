@@ -1,4 +1,4 @@
-// QuickCard v47 - score pill color system updated, header now colored by position (GK/CB/FB/CM/ATT/CF) with quick manual override swatches
+// QuickCard v48 - removed photo ring (was showing as a visible square), added Purple/Orange/Pink header overrides, pills forced to black text + precise centering
 import React, { useState } from 'react';
 import { scoreLabel, formatFoot, formatMV, GBE_LEAGUE_BANDS } from './constants';
 
@@ -16,6 +16,7 @@ const POSITION_HEADER_COLORS = {
 // Quick manual override — a plain color name instead of the position default.
 const OVERRIDE_HEADER_COLORS = {
   Red: '#ef4444', Green: '#22c55e', Yellow: '#fbc701', White: '#e5e7eb', Black: '#0a0a0a', Blue: '#3b82f6',
+  Purple: '#1800ad', Orange: '#ff914d', Pink: '#ff66c4',
 };
 function hexToRgb(hex) {
   const h = hex.replace('#', '');
@@ -728,7 +729,7 @@ function buildQuickCardElement(player, players, manual = {}) {
       <div style="position:absolute;top:0;left:0;width:1920px;height:292px;background:radial-gradient(ellipse 900px 500px at 12% 15%, rgba(120,140,255,0.16), transparent 60%), linear-gradient(to right, ${headerBgL} 0%, ${headerBgR} 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,0.08);"></div>
 
       <!-- PHOTO -->
-      <div style="position:absolute;left:-12px;top:16px;width:261px;height:261px;background-color:transparent;background-image:url('${photo}');background-size:cover;background-position:center top;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.09);"></div>
+      <div style="position:absolute;left:-12px;top:16px;width:261px;height:261px;background-color:transparent;background-image:url('${photo}');background-size:cover;background-position:center top;"></div>
       <div style="position:absolute;left:-12px;top:16px;width:261px;height:261px;background:linear-gradient(to bottom, transparent 65%, rgba(0,0,0,0.28) 100%);"></div>
 
       <!-- NAME / POSITION / FOOT / FLAG / AGE -->
@@ -740,8 +741,8 @@ function buildQuickCardElement(player, players, manual = {}) {
       <div style="position:absolute;left:248px;top:148px;display:flex;align-items:center;gap:10px;">
         ${countryToIso2(player.birthCountry) ? `<div style="width:36px;height:22px;flex-shrink:0;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(player.birthCountry)}.png');border-radius:2px;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15);"></div>` : ''}
         <span style="font-size:26.6px;font-weight:600;color:#fff;white-space:nowrap;">${player.age} years old</span>
-        ${(manual.showScorePills !== false && player.careerScore != null) ? `<span style="display:inline-block;margin-left:8px;font-size:19px;font-weight:800;padding:6px 13px;border-radius:7px;background:${pillColor(player.careerScore).bg};color:${pillColor(player.careerScore).fg};">${Math.round(player.careerScore)}</span>` : ''}
-        ${(manual.showScorePills !== false && player.potentialScore != null) ? `<span style="display:inline-block;font-size:19px;font-weight:800;padding:6px 13px;border-radius:7px;background:${pillColor(player.potentialScore).bg};color:${pillColor(player.potentialScore).fg};">${Math.round(player.potentialScore)}</span>` : ''}
+        ${(manual.showScorePills !== false && player.careerScore != null) ? `<span style="display:inline-flex;align-items:center;justify-content:center;line-height:1;margin-left:8px;min-width:18px;font-size:19px;font-weight:800;padding:7px 13px;border-radius:7px;background:${pillColor(player.careerScore).bg};color:#07090f;">${Math.round(player.careerScore)}</span>` : ''}
+        ${(manual.showScorePills !== false && player.potentialScore != null) ? `<span style="display:inline-flex;align-items:center;justify-content:center;line-height:1;min-width:18px;font-size:19px;font-weight:800;padding:7px 13px;border-radius:7px;background:${pillColor(player.potentialScore).bg};color:#07090f;">${Math.round(player.potentialScore)}</span>` : ''}
       </div>
 
       <!-- APPS / GOALS / ASSISTS / MINS row (replaces nav links) -->
@@ -916,9 +917,9 @@ export default function QuickCardModal({ player, players, onClose }) {
 
         <div style={{marginBottom:12}}>
           <label style={qcLabelStyle}>Header Color (default: by position)</label>
-          <div style={{display:'flex',gap:6}}>
-            {['Red','Green','Yellow','White','Black','Blue'].map(name => {
-              const swatch = {Red:'#ef4444',Green:'#22c55e',Yellow:'#fbc701',White:'#e5e7eb',Black:'#0a0a0a',Blue:'#3b82f6'}[name];
+          <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+            {['Red','Green','Yellow','White','Black','Blue','Purple','Orange','Pink'].map(name => {
+              const swatch = {Red:'#ef4444',Green:'#22c55e',Yellow:'#fbc701',White:'#e5e7eb',Black:'#0a0a0a',Blue:'#3b82f6',Purple:'#1800ad',Orange:'#ff914d',Pink:'#ff66c4'}[name];
               const active = headerColorOverride === name;
               return (
                 <button key={name} type="button" title={name}
