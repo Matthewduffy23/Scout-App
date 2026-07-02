@@ -1,4 +1,4 @@
-// QuickCard v48 - removed photo ring (was showing as a visible square), added Purple/Orange/Pink header overrides, pills forced to black text + precise centering
+// QuickCard v49 - manual overrides for Player Name and Value fields, Style role names bumped +100 bold (600 -> 700)
 import React, { useState } from 'react';
 import { scoreLabel, formatFoot, formatMV, GBE_LEAGUE_BANDS } from './constants';
 
@@ -542,7 +542,7 @@ function rolesRankedSvgHtml(maxWidth = 408) {
       return hex(cx, y, opacity, isFilled ? col : '#dbe1ee');
     }).join('');
     return `
-      <text x="0" y="${y+5}" font-family="Montserrat,sans-serif" font-size="13" font-weight="600" fill="#c8d2e0">${disp}</text>
+      <text x="0" y="${y+5}" font-family="Montserrat,sans-serif" font-size="13" font-weight="700" fill="#c8d2e0">${disp}</text>
       ${hexes}`;
   }).join('');
 
@@ -733,7 +733,7 @@ function buildQuickCardElement(player, players, manual = {}) {
       <div style="position:absolute;left:-12px;top:16px;width:261px;height:261px;background:linear-gradient(to bottom, transparent 65%, rgba(0,0,0,0.28) 100%);"></div>
 
       <!-- NAME / POSITION / FOOT / FLAG / AGE -->
-      <div style="position:absolute;left:248px;top:24px;width:560px;font-size:53.2px;font-weight:700;line-height:1.05;letter-spacing:-0.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${player.name}</div>
+      <div style="position:absolute;left:248px;top:24px;width:560px;font-size:53.2px;font-weight:700;line-height:1.05;letter-spacing:-0.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${manual.nameOverride || player.name}</div>
       <div style="position:absolute;left:248px;top:90px;display:flex;align-items:center;gap:12px;">
         <span style="font-size:26.6px;font-weight:600;color:#fff;white-space:nowrap;">${POSITION_LABELS[rawPosToken] || rawPosToken}</span>
         ${(player.foot && player.foot !== 'unknown' && player.foot !== 'nan') ? `<span style="font-size:21.3px;color:#c0c0c0;white-space:nowrap;padding-left:6px;">· ${formatFoot(player.foot)}</span>` : ''}
@@ -770,7 +770,7 @@ function buildQuickCardElement(player, players, manual = {}) {
       <div style="position:absolute;left:1180px;top:30px;width:2px;height:210px;background:rgba(255,255,255,0.14);"></div>
 
       <!-- INFO BOX -->
-      ${[['Height:', cmToFeet(player.height) || '—'], ['Value:', (player.xValue > 0 ? formatMV(player.xValue) : '—')], ['Contract:', (player.contractYear && player.contractYear !== 'nan') ? String(player.contractYear) : '—'], ['Agent:', manual.agentOverride || '—']].map(([k,v],i) => `
+      ${[['Height:', cmToFeet(player.height) || '—'], ['Value:', manual.valueOverride || (player.xValue > 0 ? formatMV(player.xValue) : '—')], ['Contract:', (player.contractYear && player.contractYear !== 'nan') ? String(player.contractYear) : '—'], ['Agent:', manual.agentOverride || '—']].map(([k,v],i) => `
         <div style="position:absolute;left:1200px;top:${44 + i*48}px;font-size:18px;font-weight:500;color:#9aa3b8;white-space:nowrap;">${k}</div>
         <div style="position:absolute;left:1345px;top:${44 + i*48}px;font-size:18px;font-weight:600;color:#fff;white-space:nowrap;">${truncateText(v, 20)}</div>`).join('')}
 
@@ -859,6 +859,8 @@ const qcLabelStyle = { fontSize: 10, color: '#9ca3af', textTransform: 'uppercase
 export default function QuickCardModal({ player, players, onClose }) {
   const [downloading, setDownloading] = useState(false);
   const [agentOverride, setAgentOverride] = useState('');
+  const [nameOverride, setNameOverride] = useState('');
+  const [valueOverride, setValueOverride] = useState('');
   const [biography, setBiography] = useState('');
   const [halfTeamContext, setHalfTeamContext] = useState(false);
   const [showForecast, setShowForecast] = useState(false);
@@ -870,7 +872,7 @@ export default function QuickCardModal({ player, players, onClose }) {
   const handleDownload = async () => {
     setDownloading(true);
     const { toPng } = await import('html-to-image');
-    const el = buildQuickCardElement(player, players, { agentOverride, biography, halfTeamContext, showForecast, scoutStatus, showScorePills, headerColorOverride });
+    const el = buildQuickCardElement(player, players, { agentOverride, nameOverride, valueOverride, biography, halfTeamContext, showForecast, scoutStatus, showScorePills, headerColorOverride });
     try {
       const cardNode = el.querySelector('#qc-card-root') || el;
       const opts = {
@@ -894,6 +896,16 @@ export default function QuickCardModal({ player, players, onClose }) {
       <div style={{background:'#09111e',border:'1px solid #1e2d45',borderRadius:12,padding:32,textAlign:'center',boxShadow:'0 8px 40px rgba(0,0,0,.7)',minWidth:320,maxWidth:360}}>
         <div style={{fontSize:15,fontWeight:700,color:'#e2e8f4',marginBottom:8}}>⚡ Quick Card</div>
         <div style={{fontSize:12,color:'#64748b',marginBottom:20}}>{player.name} · {player.team}</div>
+
+        <div style={{marginBottom:12}}>
+          <label style={qcLabelStyle}>Player Name</label>
+          <input style={qcInputStyle} value={nameOverride} onChange={e=>setNameOverride(e.target.value)} placeholder={player.name} />
+        </div>
+
+        <div style={{marginBottom:12}}>
+          <label style={qcLabelStyle}>Value</label>
+          <input style={qcInputStyle} value={valueOverride} onChange={e=>setValueOverride(e.target.value)} placeholder={player.xValue > 0 ? formatMV(player.xValue) : '—'} />
+        </div>
 
         <div style={{marginBottom:12}}>
           <label style={qcLabelStyle}>Agent</label>
