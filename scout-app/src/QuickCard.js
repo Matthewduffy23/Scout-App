@@ -1,4 +1,4 @@
-// QuickCard v42 - percentile gap distribution spread across all rows (not 3 lumps), team badge/name/league shifted right, larger flag clearance + tighter league truncation
+// QuickCard v44 - thicker percentile bars, flag nudged right more, Career bands now dynamic to player's actual score range + added T5L (estimated threshold, needs real data)
 import React, { useState } from 'react';
 import { scoreLabel, formatFoot, formatMV, GBE_LEAGUE_BANDS } from './constants';
 
@@ -215,7 +215,7 @@ function cmToFeet(cm) {
 function barRow(label, pct, rawVal, rowH = 18, extraGap = 0) {
   const p = Math.max(0, Math.min(100, pct || 0));
   const bc = barColor(p);
-  const barH = Math.max(10, Math.round(rowH * 0.85));
+  const barH = Math.max(12, Math.round(rowH * 0.92));
   return `
     <div style="display:flex;align-items:center;height:${rowH}px;margin-bottom:${1+extraGap}px;">
       <div style="width:188px;flex-shrink:0;font-size:12px;font-weight:600;color:${LABEL_COL};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${label}</div>
@@ -395,16 +395,22 @@ function careerTrajectorySvg(player, w = 420, h = 284, showForecast = false) {
   // NOTE: assumed "L2" for the fifth band (League Two) since that's the tier
   // constants.js actually defines between League One and National League —
   // flag if "Ligue 1" was meant literally, that's a different scale entirely.
+  // T5L (Spain 1 / Italy 1 / France 1 average) has no defined threshold anywhere
+  // in constants.js or the pipeline data I have access to — 66.5 is an estimated
+  // midpoint between Champ (61) and PL (72), not a real computed average. Flag
+  // this if you have the actual per-league anchor scores to plug in instead.
   const LEAGUE_BANDS = [
-    ['PL', 72], ['Champ', 61], ['L1', 57], ['L2', 54], ['NL', 50],
+    ['PL', 72], ['T5L', 66.5], ['Champ', 61], ['L1', 57], ['L2', 54], ['NL', 50],
   ];
 
   const scores = history.map(p => p.sc);
-  // Always include every band threshold in the visible range — otherwise a player
-  // who's spent their whole career above/below a given tier never shows it, which
-  // defeats the point of using them as career-long reference lines.
-  const minS = Math.min(...scores, ...LEAGUE_BANDS.map(b => b[1])) - 3;
-  const maxS = Math.max(...scores, ...LEAGUE_BANDS.map(b => b[1]), ...(hasForecast ? [player.potentialScore] : [])) + 3;
+  // Axis range is driven by the player's actual scores only (not forced to include
+  // every band) — a player like Saka who's never below 72 has no business showing
+  // L1/L2/NL lines. Bands are then filtered to whichever fall inside that range,
+  // so only the tiers actually relevant to this player's career show up.
+  const minS = Math.min(...scores) - 4;
+  const maxS = Math.max(...scores, ...(hasForecast ? [player.potentialScore] : [])) + 4;
+  const relevantBands = LEAGUE_BANDS.filter(([, v]) => v >= minS && v <= maxS);
   const ages = history.map(p => p.age);
   const minA = Math.min(...ages);
   const maxA = Math.max(...ages, ...(hasForecast ? [peakAge] : []));
@@ -429,7 +435,7 @@ function careerTrajectorySvg(player, w = 420, h = 284, showForecast = false) {
       <text x="${fx.toFixed(1)}" y="${(pad.t + ph + 17).toFixed(1)}" font-family="Montserrat,sans-serif" font-size="10" font-weight="600" fill="#22c55e" text-anchor="middle">${Math.round(peakAge)}</text>`;
   })() : '';
 
-  const bandLines = LEAGUE_BANDS
+  const bandLines = relevantBands
     .map(([label, val]) => {
       const y = yS(val);
       return `
@@ -630,7 +636,10 @@ function buildQuickCardElement(player, players, manual = {}) {
     return rows.map(([label, pct, val]) => {
       const displayLabel = METRIC_LABEL_MAP[label] || label;
       const isPercentMetric = /%/.test(displayLabel);
-      const formattedVal = typeof val === 'number' ? val.toFixed(isPercentMetric ? 1 : 2) : val;
+      // val sometimes arrives as a pre-formatted string from the pipeline (e.g. "42.35")
+      // rather than a number — coerce first so the 1dp/2dp rule actually applies either way.
+      const numVal = typeof val === 'number' ? val : parseFloat(val);
+      const formattedVal = !isNaN(numVal) ? numVal.toFixed(isPercentMetric ? 1 : 2) : val;
       return barRow(displayLabel, pct, formattedVal, rowH, PER_ROW_EXTRA);
     }).join('');
   };
@@ -717,7 +726,7 @@ function buildQuickCardElement(player, players, manual = {}) {
       <div style="position:absolute;left:902px;top:90px;font-size:36px;font-weight:800;color:#fff;${sdTeam.length >= 16 ? 'letter-spacing:-1px;' : ''}">${sdTeam}</div>
       <div style="position:absolute;left:902px;top:142px;display:flex;align-items:center;">
         <span style="font-size:21px;font-weight:500;color:#d0d8ea;white-space:nowrap;">${leagueDisplayName}</span>
-        ${countryToIso2(leagueToCountry(sdLeague)) ? `<div style="width:32px;height:20px;flex-shrink:0;margin-left:24px;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(leagueToCountry(sdLeague))}.png');border-radius:2px;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15);"></div>` : ''}
+        ${countryToIso2(leagueToCountry(sdLeague)) ? `<div style="width:32px;height:20px;flex-shrink:0;margin-left:30px;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(leagueToCountry(sdLeague))}.png');border-radius:2px;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15);"></div>` : ''}
       </div>
 
       <div style="position:absolute;left:1180px;top:30px;width:2px;height:210px;background:rgba(255,255,255,0.14);"></div>
