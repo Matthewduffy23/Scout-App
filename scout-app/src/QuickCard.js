@@ -1,4 +1,4 @@
-// QuickCard v39 - ESC eligible reasons (mirrors PlayerCard.js), Career band labels moved to left (fix collision with final point), percentile chart bigger + starts higher, left column decoupled from right panel top
+// QuickCard v40 - polish pass (header/panel lighting, photo/crest/flag treatment, divider consistency, Avg label, % formatting); percentile bar spacing reverted to PlayerScoutingCard.js original; ESC single reason; Career bands back on right with reserved no-crossover zone
 import React, { useState } from 'react';
 import { scoreLabel, formatFoot, formatMV, GBE_LEAGUE_BANDS } from './constants';
 
@@ -215,9 +215,9 @@ function cmToFeet(cm) {
 function barRow(label, pct, rawVal, rowH = 18) {
   const p = Math.max(0, Math.min(100, pct || 0));
   const bc = barColor(p);
-  const barH = Math.max(8, Math.min(rowH - 4, 14));
+  const barH = Math.max(10, Math.round(rowH * 0.85));
   return `
-    <div style="display:flex;align-items:center;height:${rowH}px;">
+    <div style="display:flex;align-items:center;height:${rowH}px;margin-bottom:1px;">
       <div style="width:188px;flex-shrink:0;font-size:12px;font-weight:600;color:${LABEL_COL};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${label}</div>
       <div style="flex:1;position:relative;height:${barH}px;background:#1b2636;border-radius:2px;">
         <div style="position:relative;height:100%;width:${p}%;background:${bc};border-radius:2px;">
@@ -408,7 +408,12 @@ function careerTrajectorySvg(player, w = 420, h = 284, showForecast = false) {
   const ages = history.map(p => p.age);
   const minA = Math.min(...ages);
   const maxA = Math.max(...ages, ...(hasForecast ? [peakAge] : []));
-  const xS = a => pad.l + (maxA === minA ? pw / 2 : ((a - minA) / (maxA - minA)) * pw);
+  // Band labels sit at the right edge (x = pad.l+pw) — reserve that rightmost slice
+  // exclusively for label text so plotted points/dots never physically overlap them,
+  // no matter what score or age they land on.
+  const DATA_X_FRACTION = 0.82;
+  const dataW = pw * DATA_X_FRACTION;
+  const xS = a => pad.l + (maxA === minA ? dataW / 2 : ((a - minA) / (maxA - minA)) * dataW);
   const yS = v => pad.t + ph - ((v - minS) / (maxS - minS || 1)) * ph;
 
   const linePts = history.map(p => `${xS(p.age).toFixed(1)},${yS(p.sc).toFixed(1)}`).join(' ');
@@ -416,7 +421,7 @@ function careerTrajectorySvg(player, w = 420, h = 284, showForecast = false) {
   const forecastHtml = hasForecast ? (() => {
     const fScore = Math.min(player.potentialScore, maxS - 1);
     const lx = xS(last.age), ly = yS(last.sc);
-    const fx = Math.min(xS(peakAge), pad.l + pw - 6), fy = yS(fScore);
+    const fx = Math.min(xS(peakAge), pad.l + dataW - 6), fy = yS(fScore);
     return `
       <line x1="${lx.toFixed(1)}" y1="${ly.toFixed(1)}" x2="${fx.toFixed(1)}" y2="${fy.toFixed(1)}" stroke="#22c55e" stroke-width="2" stroke-dasharray="6,4" stroke-linecap="round"/>
       <circle cx="${fx.toFixed(1)}" cy="${fy.toFixed(1)}" r="5" fill="#22c55e" stroke="#07090f" stroke-width="1.5"/>
@@ -429,7 +434,7 @@ function careerTrajectorySvg(player, w = 420, h = 284, showForecast = false) {
       const y = yS(val);
       return `
         <line x1="${pad.l}" y1="${y.toFixed(1)}" x2="${pad.l + pw}" y2="${y.toFixed(1)}" stroke="rgba(255,255,255,0.15)" stroke-width="1" stroke-dasharray="3,3"/>
-        <text x="${(pad.l + 3).toFixed(1)}" y="${(y - 3).toFixed(1)}" font-family="Montserrat,sans-serif" font-size="9" font-weight="700" fill="rgba(255,255,255,0.4)" text-anchor="start">${label}</text>`;
+        <text x="${(pad.l + pw - 3).toFixed(1)}" y="${(y - 3).toFixed(1)}" font-family="Montserrat,sans-serif" font-size="9" font-weight="700" fill="rgba(255,255,255,0.4)" text-anchor="end">${label}</text>`;
     }).join('');
 
   const dots = history.map(p => {
@@ -597,23 +602,27 @@ function buildQuickCardElement(player, players, manual = {}) {
   const totalRows = groupKeys.reduce((s, k) => s + (groups[k] ? groups[k].length : 0), 0);
   const activeSections = groupKeys.filter(k => groups[k] && groups[k].length > 0).length;
   // Left column starts closer to the header than the right panels do, and always
-  // extends to the card's bottom edge — moving this up grows CHART_HEIGHT (bigger
-  // rows) without moving the bottom of the chart.
+  // extends to the card's bottom edge — the container itself is taller now, but
+  // CHART_HEIGHT below is intentionally fixed (matches PlayerScoutingCard.js exactly)
+  // so bar-to-bar spacing stays at the original rhythm instead of stretching to fill
+  // the extra room; the extra space just becomes breathing margin instead.
   const LEFT_TOP = 296;
-  const CHART_HEIGHT = 1080 - LEFT_TOP;
+  const CHART_HEIGHT = 671;
   const FULL_OVERHEAD = 193;
   const SECTION_TITLE_H = 48;
   const FIXED_OVERHEAD = FULL_OVERHEAD - (3 - activeSections) * SECTION_TITLE_H;
-  const MIN_ROW_H = 14, MAX_ROW_H = 60;
+  const MIN_ROW_H = 8, MAX_ROW_H = 55;
   let rowH = totalRows > 0
-    ? Math.max(MIN_ROW_H, Math.min(MAX_ROW_H, Math.floor((CHART_HEIGHT - FIXED_OVERHEAD) / totalRows)))
+    ? Math.max(MIN_ROW_H, Math.min(MAX_ROW_H, Math.floor((CHART_HEIGHT - FIXED_OVERHEAD) / totalRows) - 1))
     : MAX_ROW_H;
 
   const buildGroupBars = (grpKey) => {
     const rows = groups[grpKey] || [];
     return rows.map(([label, pct, val]) => {
       const displayLabel = METRIC_LABEL_MAP[label] || label;
-      return barRow(displayLabel, pct, typeof val === 'number' ? val.toFixed(2) : val, rowH);
+      const isPercentMetric = /%/.test(displayLabel);
+      const formattedVal = typeof val === 'number' ? val.toFixed(isPercentMetric ? 1 : 2) : val;
+      return barRow(displayLabel, pct, formattedVal, rowH);
     }).join('');
   };
 
@@ -663,10 +672,11 @@ function buildQuickCardElement(player, players, manual = {}) {
     <div id="qc-card-root" style="width:1920px;height:1080px;overflow:hidden;background:${BG};font-family:'Montserrat',sans-serif;color:#fff;position:relative;box-sizing:border-box;">
 
       <!-- HEADER GRADIENT BAND — FULL WIDTH -->
-      <div style="position:absolute;top:0;left:0;width:1920px;height:292px;background:linear-gradient(to right, ${HEADER_L} 0%, ${HEADER_R} 100%);"></div>
+      <div style="position:absolute;top:0;left:0;width:1920px;height:292px;background:linear-gradient(to right, ${HEADER_L} 0%, ${HEADER_R} 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,0.08);"></div>
 
       <!-- PHOTO -->
-      <div style="position:absolute;left:-12px;top:16px;width:261px;height:261px;background-color:transparent;background-image:url('${photo}');background-size:cover;background-position:center top;"></div>
+      <div style="position:absolute;left:-12px;top:16px;width:261px;height:261px;background-color:transparent;background-image:url('${photo}');background-size:cover;background-position:center top;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.09);"></div>
+      <div style="position:absolute;left:-12px;top:16px;width:261px;height:261px;background:linear-gradient(to bottom, transparent 65%, rgba(0,0,0,0.28) 100%);"></div>
 
       <!-- NAME / POSITION / FOOT / FLAG / AGE -->
       <div style="position:absolute;left:248px;top:24px;width:560px;font-size:53.2px;font-weight:700;line-height:1.05;letter-spacing:-0.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${player.name}</div>
@@ -675,7 +685,7 @@ function buildQuickCardElement(player, players, manual = {}) {
         ${(player.foot && player.foot !== 'unknown' && player.foot !== 'nan') ? `<span style="font-size:21.3px;color:#c0c0c0;white-space:nowrap;padding-left:6px;">· ${formatFoot(player.foot)}</span>` : ''}
       </div>
       <div style="position:absolute;left:248px;top:148px;display:flex;align-items:center;gap:10px;">
-        ${countryToIso2(player.birthCountry) ? `<div style="width:36px;height:22px;flex-shrink:0;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(player.birthCountry)}.png');border-radius:2px;"></div>` : ''}
+        ${countryToIso2(player.birthCountry) ? `<div style="width:36px;height:22px;flex-shrink:0;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(player.birthCountry)}.png');border-radius:2px;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15);"></div>` : ''}
         <span style="font-size:26.6px;font-weight:600;color:#fff;white-space:nowrap;">${player.age} years old</span>
       </div>
 
@@ -694,14 +704,14 @@ function buildQuickCardElement(player, players, manual = {}) {
       </div>
 
       <!-- CREST / TEAM / LEAGUE -->
-      ${crest ? `<div style="position:absolute;left:720px;top:22px;width:148px;height:200px;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${crest}');"></div>` : ''}
+      ${crest ? `<div style="position:absolute;left:720px;top:22px;width:148px;height:200px;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${crest}');filter:drop-shadow(0 1px 2px rgba(0,0,0,0.3));"></div>` : ''}
       <div style="position:absolute;left:882px;top:42px;font-size:36px;font-weight:800;color:#fff;${sdTeam.length >= 16 ? 'letter-spacing:-1px;' : ''}">${sdTeam}</div>
       <div style="position:absolute;left:882px;top:94px;display:flex;align-items:center;">
         <span style="font-size:21px;font-weight:500;color:#d0d8ea;white-space:nowrap;">${leagueDisplayName}</span>
-        ${countryToIso2(leagueToCountry(sdLeague)) ? `<div style="width:32px;height:20px;flex-shrink:0;margin-left:18px;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(leagueToCountry(sdLeague))}.png');border-radius:2px;"></div>` : ''}
+        ${countryToIso2(leagueToCountry(sdLeague)) ? `<div style="width:32px;height:20px;flex-shrink:0;margin-left:18px;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(leagueToCountry(sdLeague))}.png');border-radius:2px;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15);"></div>` : ''}
       </div>
 
-      <div style="position:absolute;left:1180px;top:30px;width:3px;height:210px;background:#737373;"></div>
+      <div style="position:absolute;left:1180px;top:30px;width:2px;height:210px;background:rgba(255,255,255,0.14);"></div>
 
       <!-- INFO BOX -->
       ${[['Height:', cmToFeet(player.height) || '—'], ['Value:', (player.xValue > 0 ? formatMV(player.xValue) : '—')], ['Contract:', (player.contractYear && player.contractYear !== 'nan') ? String(player.contractYear) : '—'], ['Agent:', manual.agentOverride || '—']].map(([k,v],i) => `
@@ -724,7 +734,7 @@ function buildQuickCardElement(player, players, manual = {}) {
           ${gbeThresholdBar('Finish/Prog', finishPts + progPts, 10)}
         </div>
         ${gbePanelEligible ? `<div style="margin-top:14px;font-size:12px;font-weight:600;color:#f0c56a;border-top:1px solid rgba(240,197,106,0.2);padding-top:10px;">Eligible for GBE Exceptions Panel review</div>` : ''}
-        ${gbeEscEligible ? `<div style="margin-top:14px;font-size:12px;font-weight:600;color:#f97316;border-top:1px solid rgba(249,115,22,0.2);padding-top:10px;">⚡ ESC Eligible${escReasons.length ? ` — ${escReasons.join(' · ')}` : ' — may qualify via exceptional talent panel'}</div>` : ''}
+        ${gbeEscEligible ? `<div style="margin-top:14px;font-size:12px;font-weight:600;color:#f97316;border-top:1px solid rgba(249,115,22,0.2);padding-top:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">⚡ ESC Eligible${escReasons.length ? ` — ${escReasons[0]}` : ' — may qualify via exceptional talent panel'}</div>` : ''}
       </div>
 
       <!-- ============ LEFT COLUMN: bars from bottom of header to bottom of card ============ -->
@@ -735,8 +745,9 @@ function buildQuickCardElement(player, players, manual = {}) {
         ${groups.P && groups.P.length ? `<div style="font-size:24px;font-weight:800;color:#f3f5f7;margin:8px 0 6px;">Possession</div>${buildGroupBars('P')}` : ''}
         <div style="display:flex;align-items:center;margin-top:6px;">
           <div style="width:188px;flex-shrink:0;"></div>
-          <div style="flex:1;position:relative;height:22px;">
+          <div style="flex:1;position:relative;height:26px;">
             ${[0,10,20,30,40,50,60,70,80,90,100].map(p=>`<span style="position:absolute;left:${p}%;top:0;transform:translateX(${p===0?'0':p===100?'-100%':'-50%'});font-size:12px;font-weight:600;color:#c4cbd9;">${p}%</span>`).join('')}
+            <span style="position:absolute;left:50%;top:14px;transform:translateX(-50%);font-size:9px;font-weight:600;color:#5e6678;text-transform:uppercase;letter-spacing:.05em;">Avg</span>
           </div>
         </div>
         <div style="display:flex;">
@@ -746,7 +757,7 @@ function buildQuickCardElement(player, players, manual = {}) {
       </div>
 
       <!-- vertical divider between bars and right column -->
-      <div style="position:absolute;left:944px;top:${LEFT_TOP}px;width:2px;height:${1080-LEFT_TOP}px;background:rgba(255,255,255,0.06);"></div>
+      <div style="position:absolute;left:944px;top:${LEFT_TOP}px;width:2px;height:${1080-LEFT_TOP}px;background:rgba(255,255,255,0.14);"></div>
 
       <!-- ============ RIGHT COLUMN: STYLE + CAREER panels (row 1), TEAM CONTEXT + BIOGRAPHY panels (row 2) ============ -->
 
