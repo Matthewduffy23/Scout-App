@@ -1,4 +1,4 @@
-// QuickCard v51 - removed header glow (clashed with position colors), pitch panel outer container removed (pitch SVG has its own), Career chart now uses cumulative minutes-weighted scoring matching PlayerCard.js
+// QuickCard v52 - rounded photo corners (right side) since header colors made the plain rectangle more obvious; Career chart now plots single-season players too, with a "Small Sample" label
 import React, { useState } from 'react';
 import { scoreLabel, formatFoot, formatMV, GBE_LEAGUE_BANDS } from './constants';
 
@@ -492,9 +492,10 @@ function careerTrajectorySvg(player, w = 420, h = 284, showForecast = false) {
     return { ...h, sc: Math.round(cumScore * 10) / 10 };
   });
 
-  if (history.length < 2) {
+  if (history.length < 1) {
     return `<div style="font-size:13px;color:#5e6678;padding:6px 0;">Not enough season history.</div>`;
   }
+  const isSmallSample = history.length === 1;
 
   const pad = { t: 18, r: 16, b: 26, l: 16 };
   const pw = w - pad.l - pad.r, ph = h - pad.t - pad.b;
@@ -566,6 +567,7 @@ function careerTrajectorySvg(player, w = 420, h = 284, showForecast = false) {
     <polyline points="${linePts}" fill="none" stroke="#a78bfa" stroke-width="2.5"/>
     ${dots}
     ${forecastHtml}
+    ${isSmallSample ? `<text x="${pad.l}" y="${pad.t - 6}" font-family="Montserrat,sans-serif" font-size="10" font-weight="600" fill="#5e6678" text-anchor="start">Small Sample</text>` : ''}
   </svg>`;
 }
 
@@ -806,8 +808,8 @@ function buildQuickCardElement(player, players, manual = {}) {
       <div style="position:absolute;top:0;left:0;width:1920px;height:292px;background:linear-gradient(to right, ${headerBgL} 0%, ${headerBgR} 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,0.08);"></div>
 
       <!-- PHOTO -->
-      <div style="position:absolute;left:-12px;top:16px;width:261px;height:261px;background-color:transparent;background-image:url('${photo}');background-size:cover;background-position:center top;"></div>
-      <div style="position:absolute;left:-12px;top:16px;width:261px;height:261px;background:linear-gradient(to bottom, transparent 65%, rgba(0,0,0,0.28) 100%);"></div>
+      <div style="position:absolute;left:-12px;top:16px;width:261px;height:261px;background-color:transparent;background-image:url('${photo}');background-size:cover;background-position:center top;border-radius:0 14px 14px 0;"></div>
+      <div style="position:absolute;left:-12px;top:16px;width:261px;height:261px;background:linear-gradient(to bottom, transparent 65%, rgba(0,0,0,0.28) 100%);border-radius:0 14px 14px 0;"></div>
 
       <!-- NAME / POSITION / FOOT / FLAG / AGE -->
       <div style="position:absolute;left:248px;top:24px;width:560px;font-size:53.2px;font-weight:700;line-height:1.05;letter-spacing:-0.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${manual.nameOverride || player.name}</div>
