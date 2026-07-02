@@ -1,4 +1,4 @@
-// QuickCard v44 - thicker percentile bars, flag nudged right more, Career bands now dynamic to player's actual score range + added T5L (estimated threshold, needs real data)
+// QuickCard v45 - T5L set to 68, current/potential score pills (red-yellow-green, gold at 82+) next to age, bars a touch thicker again
 import React, { useState } from 'react';
 import { scoreLabel, formatFoot, formatMV, GBE_LEAGUE_BANDS } from './constants';
 
@@ -205,6 +205,18 @@ function scoreTierColor(score) {
   if (v >= 25) return '#ff914d';
   return '#ff3131';
 }
+function pillColor(score) {
+  const v = Number(score);
+  if (isNaN(v)) return { bg: '#3a4458', fg: '#dbe1ee' };
+  if (v >= 82) return { bg: '#eab308', fg: '#07090f' }; // gold
+  if (v >= 79) return { bg: '#00bf63', fg: '#07090f' };
+  if (v >= 67) return { bg: '#7ed957', fg: '#07090f' };
+  if (v >= 55) return { bg: '#c1ff72', fg: '#07090f' };
+  if (v >= 43) return { bg: '#ffde59', fg: '#07090f' };
+  if (v >= 34) return { bg: '#ffbd59', fg: '#07090f' };
+  if (v >= 25) return { bg: '#ff914d', fg: '#07090f' };
+  return { bg: '#ff3131', fg: '#07090f' };
+}
 function cmToFeet(cm) {
   if (!cm || isNaN(cm)) return null;
   const totalInches = Math.round(Number(cm) / 2.54);
@@ -215,7 +227,7 @@ function cmToFeet(cm) {
 function barRow(label, pct, rawVal, rowH = 18, extraGap = 0) {
   const p = Math.max(0, Math.min(100, pct || 0));
   const bc = barColor(p);
-  const barH = Math.max(12, Math.round(rowH * 0.92));
+  const barH = Math.max(13, Math.round(rowH * 0.95));
   return `
     <div style="display:flex;align-items:center;height:${rowH}px;margin-bottom:${1+extraGap}px;">
       <div style="width:188px;flex-shrink:0;font-size:12px;font-weight:600;color:${LABEL_COL};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${label}</div>
@@ -395,12 +407,8 @@ function careerTrajectorySvg(player, w = 420, h = 284, showForecast = false) {
   // NOTE: assumed "L2" for the fifth band (League Two) since that's the tier
   // constants.js actually defines between League One and National League —
   // flag if "Ligue 1" was meant literally, that's a different scale entirely.
-  // T5L (Spain 1 / Italy 1 / France 1 average) has no defined threshold anywhere
-  // in constants.js or the pipeline data I have access to — 66.5 is an estimated
-  // midpoint between Champ (61) and PL (72), not a real computed average. Flag
-  // this if you have the actual per-league anchor scores to plug in instead.
   const LEAGUE_BANDS = [
-    ['PL', 72], ['T5L', 66.5], ['Champ', 61], ['L1', 57], ['L2', 54], ['NL', 50],
+    ['PL', 72], ['T5L', 68], ['Champ', 61], ['L1', 57], ['L2', 54], ['NL', 50],
   ];
 
   const scores = history.map(p => p.sc);
@@ -705,6 +713,8 @@ function buildQuickCardElement(player, players, manual = {}) {
       <div style="position:absolute;left:248px;top:148px;display:flex;align-items:center;gap:10px;">
         ${countryToIso2(player.birthCountry) ? `<div style="width:36px;height:22px;flex-shrink:0;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(player.birthCountry)}.png');border-radius:2px;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15);"></div>` : ''}
         <span style="font-size:26.6px;font-weight:600;color:#fff;white-space:nowrap;">${player.age} years old</span>
+        ${player.careerScore != null ? `<span style="display:inline-block;font-size:16px;font-weight:800;padding:4px 10px;border-radius:6px;background:${pillColor(player.careerScore).bg};color:${pillColor(player.careerScore).fg};">${Math.round(player.careerScore)}</span>` : ''}
+        ${player.potentialScore != null ? `<span style="display:inline-block;font-size:16px;font-weight:800;padding:4px 10px;border-radius:6px;background:${pillColor(player.potentialScore).bg};color:${pillColor(player.potentialScore).fg};">${Math.round(player.potentialScore)}</span>` : ''}
       </div>
 
       <!-- APPS / GOALS / ASSISTS / MINS row (replaces nav links) -->
