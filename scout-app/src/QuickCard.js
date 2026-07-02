@@ -1,4 +1,4 @@
-// QuickCard v53 - fixed Apps/Goals/Assists/Mins season mismatch for loan players (was blindly using allSeasonsSummary[0] instead of matching sd's chosen season), On Loan label, Team Context extra bottom padding, league name no longer truncated (dynamic flag position via natural flex flow)
+// QuickCard v54 - GBE home-nation auto-pass, more flag/team-name spacing, On Loan forced single-line, divider/info box shifted right+down slightly
 import React, { useState } from 'react';
 import { scoreLabel, formatFoot, formatMV, GBE_LEAGUE_BANDS } from './constants';
 
@@ -707,10 +707,16 @@ function buildQuickCardElement(player, players, manual = {}) {
   const finishPts = player.gbeFinishPts ?? 0;
   const progPts   = player.gbeProgPts   ?? 0;
   const gbeTotal  = player.gbeTotal     ?? (domPts+contPts+lqPts+finishPts+progPts);
+  // Home nation players get an automatic pass regardless of points total —
+  // mirrors PlayerCard.js's exact HOME_NATIONS check.
+  const HOME_NATIONS = new Set(['england','scotland','wales','ireland','northern ireland','republic of ireland']);
+  const birthLower = (player.birthCountry || '').toLowerCase();
+  const passportLower = (player.passportCountries || '').toLowerCase();
+  const isHomeNation = [...HOME_NATIONS].some(n => birthLower.includes(n) || passportLower.includes(n));
   // Badge is a straight PASS/FAIL. Anything short of a pass is a fail — the
   // exceptions-panel / ESC messaging is a separate note shown only when it
   // actually applies, not a third badge state.
-  const gbePass    = gbeTotal >= 15;
+  const gbePass    = isHomeNation || gbeTotal >= 15;
   const gbeStatus  = gbePass ? 'PASS' : 'FAIL';
   // Note shown under the bars for players who fail outright but still have a route in:
   //  - 10–14 pts: eligible for GBE Exceptions Panel review
@@ -849,18 +855,18 @@ function buildQuickCardElement(player, players, manual = {}) {
       <!-- CREST / TEAM / LEAGUE -->
       ${crest ? `<div style="position:absolute;left:740px;top:22px;width:155px;height:210px;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${crest}');filter:drop-shadow(0 1px 2px rgba(0,0,0,0.3));"></div>` : ''}
       <div style="position:absolute;left:902px;top:90px;font-size:36px;font-weight:800;color:#fff;${sdTeam.length >= 16 ? 'letter-spacing:-1px;' : ''}">${sdTeam}</div>
-      <div style="position:absolute;left:902px;top:142px;display:flex;align-items:center;">
+      <div style="position:absolute;left:902px;top:150px;display:flex;align-items:center;">
         <span style="font-size:21px;font-weight:500;color:#d0d8ea;white-space:nowrap;">${leagueDisplayName}</span>
-        ${countryToIso2(leagueToCountry(sdLeague)) ? `<div style="width:32px;height:20px;flex-shrink:0;margin-left:30px;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(leagueToCountry(sdLeague))}.png');border-radius:2px;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15);"></div>` : ''}
+        ${countryToIso2(leagueToCountry(sdLeague)) ? `<div style="width:32px;height:20px;flex-shrink:0;margin-left:34px;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(leagueToCountry(sdLeague))}.png');border-radius:2px;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15);"></div>` : ''}
       </div>
-      ${player.onLoan ? `<div style="position:absolute;left:902px;top:174px;font-size:21.3px;color:#d9d9d9;">On Loan</div>` : ''}
+      ${player.onLoan ? `<div style="position:absolute;left:902px;top:182px;font-size:21.3px;color:#d9d9d9;white-space:nowrap;">On Loan</div>` : ''}
 
-      <div style="position:absolute;left:1180px;top:30px;width:2px;height:210px;background:rgba(255,255,255,0.14);"></div>
+      <div style="position:absolute;left:1188px;top:36px;width:2px;height:210px;background:rgba(255,255,255,0.14);"></div>
 
       <!-- INFO BOX -->
       ${[['Height:', cmToFeet(player.height) || '—'], ['Value:', manual.valueOverride || (player.xValue > 0 ? formatMV(player.xValue) : '—')], ['Contract:', (player.contractYear && player.contractYear !== 'nan') ? String(player.contractYear) : '—'], ['Agent:', manual.agentOverride || '—']].map(([k,v],i) => `
-        <div style="position:absolute;left:1200px;top:${44 + i*48}px;font-size:18px;font-weight:500;color:#9aa3b8;white-space:nowrap;">${k}</div>
-        <div style="position:absolute;left:1345px;top:${44 + i*48}px;font-size:18px;font-weight:600;color:#fff;white-space:nowrap;">${truncateText(v, 20)}</div>`).join('')}
+        <div style="position:absolute;left:1208px;top:${50 + i*48}px;font-size:18px;font-weight:500;color:#9aa3b8;white-space:nowrap;">${k}</div>
+        <div style="position:absolute;left:1353px;top:${50 + i*48}px;font-size:18px;font-weight:600;color:#fff;white-space:nowrap;">${truncateText(v, 20)}</div>`).join('')}
 
       ${manual.showPitchPosition ? `
       <!-- PITCH POSITION (replaces GBE) -->
@@ -882,6 +888,7 @@ function buildQuickCardElement(player, players, manual = {}) {
           ${gbeThresholdBar('League Band', lqPts, 12)}
           ${gbeThresholdBar('Finish/Prog', finishPts + progPts, 10)}
         </div>
+        ${isHomeNation ? `<div style="margin-top:14px;font-size:12px;font-weight:600;color:#3da65b;border-top:1px solid rgba(61,166,91,0.2);padding-top:10px;">✓ Auto Pass — Home Nation</div>` : ''}
         ${gbePanelEligible ? `<div style="margin-top:14px;font-size:12px;font-weight:600;color:#f0c56a;border-top:1px solid rgba(240,197,106,0.2);padding-top:10px;">Eligible for GBE Exceptions Panel review</div>` : ''}
         ${gbeEscEligible ? `<div style="margin-top:14px;font-size:12px;font-weight:600;color:#f97316;border-top:1px solid rgba(249,115,22,0.2);padding-top:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">⚡ ESC Eligible${escReasons.length ? ` — ${escReasons[0]}` : ' — may qualify via exceptional talent panel'}</div>` : ''}
       </div>`}
