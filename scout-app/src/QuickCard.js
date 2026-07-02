@@ -1,4 +1,4 @@
-// QuickCard v45 - T5L set to 68, current/potential score pills (red-yellow-green, gold at 82+) next to age, bars a touch thicker again
+// QuickCard v47 - score pill color system updated, header now colored by position (GK/CB/FB/CM/ATT/CF) with quick manual override swatches
 import React, { useState } from 'react';
 import { scoreLabel, formatFoot, formatMV, GBE_LEAGUE_BANDS } from './constants';
 
@@ -8,6 +8,30 @@ const CREST_BASE = 'https://raw.githubusercontent.com/Matthewduffy23/scouting-ph
 const BG          = '#0a0f1c';
 const HEADER_L    = 'rgb(23,26,77)';
 const HEADER_R    = 'rgb(17,22,42)';
+
+// Default header accent by position (posKey: GK/CB/FB/CM/ATT/CF).
+const POSITION_HEADER_COLORS = {
+  GK: '#ef4444', CB: '#f97316', FB: '#fbc701', CM: '#14532d', ATT: '#22c55e', CF: '#3b82f6',
+};
+// Quick manual override — a plain color name instead of the position default.
+const OVERRIDE_HEADER_COLORS = {
+  Red: '#ef4444', Green: '#22c55e', Yellow: '#fbc701', White: '#e5e7eb', Black: '#0a0a0a', Blue: '#3b82f6',
+};
+function hexToRgb(hex) {
+  const h = hex.replace('#', '');
+  const n = parseInt(h.length === 3 ? h.split('').map(c => c + c).join('') : h, 16);
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+}
+// Blend a bright accent color toward black so it stays dark/moody enough for
+// white text and matches the card's existing visual weight, instead of using
+// the raw saturated color as a full-width header background.
+function darkenHex(hex, blackAmt) {
+  const { r, g, b } = hexToRgb(hex);
+  const nr = Math.round(r * (1 - blackAmt));
+  const ng = Math.round(g * (1 - blackAmt));
+  const nb = Math.round(b * (1 - blackAmt));
+  return `rgb(${nr},${ng},${nb})`;
+}
 const ACCENT_PINK = '#ff66c4';
 const LABEL_COL   = '#e8eef8';
 const BAR_RED     = 'rgb(199,54,60)';
@@ -208,14 +232,12 @@ function scoreTierColor(score) {
 function pillColor(score) {
   const v = Number(score);
   if (isNaN(v)) return { bg: '#3a4458', fg: '#dbe1ee' };
-  if (v >= 82) return { bg: '#eab308', fg: '#07090f' }; // gold
-  if (v >= 79) return { bg: '#00bf63', fg: '#07090f' };
-  if (v >= 67) return { bg: '#7ed957', fg: '#07090f' };
-  if (v >= 55) return { bg: '#c1ff72', fg: '#07090f' };
-  if (v >= 43) return { bg: '#ffde59', fg: '#07090f' };
-  if (v >= 34) return { bg: '#ffbd59', fg: '#07090f' };
-  if (v >= 25) return { bg: '#ff914d', fg: '#07090f' };
-  return { bg: '#ff3131', fg: '#07090f' };
+  if (v >= 83) return { bg: '#fbc701', fg: '#07090f' }; // gold
+  if (v >= 76) return { bg: '#004aad', fg: '#ffffff' };
+  if (v >= 70) return { bg: '#d9d9d9', fg: '#07090f' };
+  if (v >= 60) return { bg: '#a3a3a3', fg: '#07090f' };
+  if (v >= 54) return { bg: '#f18c31', fg: '#07090f' };
+  return { bg: '#bd6742', fg: '#ffffff' };
 }
 function cmToFeet(cm) {
   if (!cm || isNaN(cm)) return null;
@@ -565,7 +587,7 @@ function buildQuickCardElement(player, players, manual = {}) {
   const chosenSeasonKey = (player.allSeasonsSummary && player.allSeasonsSummary[0] && player.allSeasonsSummary[0].s)
     || Object.keys(seasonsDetailObj).sort().reverse()[0];
   const sd = seasonsDetailObj[chosenSeasonKey] || Object.values(seasonsDetailObj)[0] || {};
-  const sdTeam = sd.team || player.team;
+  const sdTeam = truncateText(sd.team || player.team, 20);
   const sdLeague = sd.league || player.league;
   const statsRow = (player.allSeasonsSummary && player.allSeasonsSummary[0]) || {};
   const crest = player.teamFotmobId ? `${CREST_BASE}${player.teamFotmobId}.png` : '';
@@ -574,6 +596,11 @@ function buildQuickCardElement(player, players, manual = {}) {
 
   const rawPosToken = (player.position || '').split(',')[0].trim();
   const posKey = TOKEN_TO_POS_KEY[rawPosToken] || player.roleKey || 'CF';
+  const headerAccent = (manual.headerColorOverride && OVERRIDE_HEADER_COLORS[manual.headerColorOverride])
+    || POSITION_HEADER_COLORS[posKey]
+    || null;
+  const headerBgL = headerAccent ? darkenHex(headerAccent, 0.72) : HEADER_L;
+  const headerBgR = headerAccent ? darkenHex(headerAccent, 0.85) : HEADER_R;
   const validRoles = APP_ROLES[posKey] || [];
   const rcs = player.roleCareerScores || {};
   const seasonRoles = sd.roles || {};
@@ -698,7 +725,7 @@ function buildQuickCardElement(player, players, manual = {}) {
     <div id="qc-card-root" style="width:1920px;height:1080px;overflow:hidden;background:${BG};font-family:'Montserrat',sans-serif;color:#fff;position:relative;box-sizing:border-box;">
 
       <!-- HEADER GRADIENT BAND — FULL WIDTH -->
-      <div style="position:absolute;top:0;left:0;width:1920px;height:292px;background:radial-gradient(ellipse 900px 500px at 12% 15%, rgba(120,140,255,0.16), transparent 60%), linear-gradient(to right, ${HEADER_L} 0%, ${HEADER_R} 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,0.08);"></div>
+      <div style="position:absolute;top:0;left:0;width:1920px;height:292px;background:radial-gradient(ellipse 900px 500px at 12% 15%, rgba(120,140,255,0.16), transparent 60%), linear-gradient(to right, ${headerBgL} 0%, ${headerBgR} 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,0.08);"></div>
 
       <!-- PHOTO -->
       <div style="position:absolute;left:-12px;top:16px;width:261px;height:261px;background-color:transparent;background-image:url('${photo}');background-size:cover;background-position:center top;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.09);"></div>
@@ -713,8 +740,8 @@ function buildQuickCardElement(player, players, manual = {}) {
       <div style="position:absolute;left:248px;top:148px;display:flex;align-items:center;gap:10px;">
         ${countryToIso2(player.birthCountry) ? `<div style="width:36px;height:22px;flex-shrink:0;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(player.birthCountry)}.png');border-radius:2px;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15);"></div>` : ''}
         <span style="font-size:26.6px;font-weight:600;color:#fff;white-space:nowrap;">${player.age} years old</span>
-        ${player.careerScore != null ? `<span style="display:inline-block;font-size:16px;font-weight:800;padding:4px 10px;border-radius:6px;background:${pillColor(player.careerScore).bg};color:${pillColor(player.careerScore).fg};">${Math.round(player.careerScore)}</span>` : ''}
-        ${player.potentialScore != null ? `<span style="display:inline-block;font-size:16px;font-weight:800;padding:4px 10px;border-radius:6px;background:${pillColor(player.potentialScore).bg};color:${pillColor(player.potentialScore).fg};">${Math.round(player.potentialScore)}</span>` : ''}
+        ${(manual.showScorePills !== false && player.careerScore != null) ? `<span style="display:inline-block;margin-left:8px;font-size:19px;font-weight:800;padding:6px 13px;border-radius:7px;background:${pillColor(player.careerScore).bg};color:${pillColor(player.careerScore).fg};">${Math.round(player.careerScore)}</span>` : ''}
+        ${(manual.showScorePills !== false && player.potentialScore != null) ? `<span style="display:inline-block;font-size:19px;font-weight:800;padding:6px 13px;border-radius:7px;background:${pillColor(player.potentialScore).bg};color:${pillColor(player.potentialScore).fg};">${Math.round(player.potentialScore)}</span>` : ''}
       </div>
 
       <!-- APPS / GOALS / ASSISTS / MINS row (replaces nav links) -->
@@ -835,12 +862,14 @@ export default function QuickCardModal({ player, players, onClose }) {
   const [halfTeamContext, setHalfTeamContext] = useState(false);
   const [showForecast, setShowForecast] = useState(false);
   const [scoutStatus, setScoutStatus] = useState('');
+  const [showScorePills, setShowScorePills] = useState(true);
+  const [headerColorOverride, setHeaderColorOverride] = useState('');
   const BIO_MAX_LENGTH = scoutStatus ? 248 : 350;
 
   const handleDownload = async () => {
     setDownloading(true);
     const { toPng } = await import('html-to-image');
-    const el = buildQuickCardElement(player, players, { agentOverride, biography, halfTeamContext, showForecast, scoutStatus });
+    const el = buildQuickCardElement(player, players, { agentOverride, biography, halfTeamContext, showForecast, scoutStatus, showScorePills, headerColorOverride });
     try {
       const cardNode = el.querySelector('#qc-card-root') || el;
       const opts = {
@@ -878,6 +907,29 @@ export default function QuickCardModal({ player, players, onClose }) {
         <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12,textAlign:'left'}}>
           <input type="checkbox" id="qc-forecast" checked={showForecast} onChange={e=>setShowForecast(e.target.checked)} style={{cursor:'pointer'}} />
           <label htmlFor="qc-forecast" style={{fontSize:11.5,color:'#cbd5e1',cursor:'pointer'}}>Show Career forecast (dashed line to potential)</label>
+        </div>
+
+        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12,textAlign:'left'}}>
+          <input type="checkbox" id="qc-score-pills" checked={showScorePills} onChange={e=>setShowScorePills(e.target.checked)} style={{cursor:'pointer'}} />
+          <label htmlFor="qc-score-pills" style={{fontSize:11.5,color:'#cbd5e1',cursor:'pointer'}}>Show current/potential score pills</label>
+        </div>
+
+        <div style={{marginBottom:12}}>
+          <label style={qcLabelStyle}>Header Color (default: by position)</label>
+          <div style={{display:'flex',gap:6}}>
+            {['Red','Green','Yellow','White','Black','Blue'].map(name => {
+              const swatch = {Red:'#ef4444',Green:'#22c55e',Yellow:'#fbc701',White:'#e5e7eb',Black:'#0a0a0a',Blue:'#3b82f6'}[name];
+              const active = headerColorOverride === name;
+              return (
+                <button key={name} type="button" title={name}
+                  onClick={() => setHeaderColorOverride(active ? '' : name)}
+                  style={{
+                    width: 26, height: 26, borderRadius: 6, cursor: 'pointer', background: swatch,
+                    border: active ? '2px solid #fff' : '1px solid rgba(255,255,255,0.2)',
+                  }} />
+              );
+            })}
+          </div>
         </div>
 
         {halfTeamContext && (
