@@ -1,4 +1,4 @@
-// QuickCard v50 - pitch position diagram toggle (replaces GBE card), auto-tiered dark green/light green/yellow-green by position order, ported from PlayerScoutingCard.js
+// QuickCard v51 - removed header glow (clashed with position colors), pitch panel outer container removed (pitch SVG has its own), Career chart now uses cumulative minutes-weighted scoring matching PlayerCard.js
 import React, { useState } from 'react';
 import { scoreLabel, formatFoot, formatMV, GBE_LEAGUE_BANDS } from './constants';
 
@@ -462,7 +462,7 @@ function careerTrajectorySvg(player, w = 420, h = 284, showForecast = false) {
     if (hEntry.sc == null) return;
     if (!byS[hEntry.s] || hEntry.sc > byS[hEntry.s].sc) byS[hEntry.s] = hEntry;
   });
-  const history = Object.values(byS)
+  const rawHistory = Object.values(byS)
     .filter(hEntry => hEntry.sc != null && !hEntry.displayOnly)
     .sort((a, b) => {
       const ai = SEASON_ORDER.indexOf(a.s), bi = SEASON_ORDER.indexOf(b.s);
@@ -473,6 +473,24 @@ function careerTrajectorySvg(player, w = 420, h = 284, showForecast = false) {
       const offset = idx === -1 ? 0 : idx - currentSeasonIdx;
       return { ...hEntry, age: currentAge + offset };
     });
+
+  // Cumulative (minutes-weighted running average) scoring, matching PlayerCard.js's
+  // CareerTab exactly — each point is the weighted average of every season up to and
+  // including it, not the raw isolated season score. Final point pins to player.careerScore.
+  const sd = player.seasonsDetail || {};
+  const history = rawHistory.map((h, idx) => {
+    const isLast = idx === rawHistory.length - 1;
+    if (isLast && player.careerScore != null) return { ...h, sc: player.careerScore };
+    const subset = rawHistory.slice(0, idx + 1);
+    let totalMins = 0, weightedSum = 0;
+    subset.forEach(hh => {
+      const mins = (sd[hh.s] && sd[hh.s].minutes) ? sd[hh.s].minutes : 500;
+      weightedSum += hh.sc * mins;
+      totalMins += mins;
+    });
+    const cumScore = totalMins > 0 ? weightedSum / totalMins : h.sc;
+    return { ...h, sc: Math.round(cumScore * 10) / 10 };
+  });
 
   if (history.length < 2) {
     return `<div style="font-size:13px;color:#5e6678;padding:6px 0;">Not enough season history.</div>`;
@@ -785,7 +803,7 @@ function buildQuickCardElement(player, players, manual = {}) {
     <div id="qc-card-root" style="width:1920px;height:1080px;overflow:hidden;background:${BG};font-family:'Montserrat',sans-serif;color:#fff;position:relative;box-sizing:border-box;">
 
       <!-- HEADER GRADIENT BAND — FULL WIDTH -->
-      <div style="position:absolute;top:0;left:0;width:1920px;height:292px;background:radial-gradient(ellipse 900px 500px at 12% 15%, rgba(120,140,255,0.16), transparent 60%), linear-gradient(to right, ${headerBgL} 0%, ${headerBgR} 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,0.08);"></div>
+      <div style="position:absolute;top:0;left:0;width:1920px;height:292px;background:linear-gradient(to right, ${headerBgL} 0%, ${headerBgR} 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,0.08);"></div>
 
       <!-- PHOTO -->
       <div style="position:absolute;left:-12px;top:16px;width:261px;height:261px;background-color:transparent;background-image:url('${photo}');background-size:cover;background-position:center top;"></div>
@@ -835,8 +853,8 @@ function buildQuickCardElement(player, players, manual = {}) {
 
       ${manual.showPitchPosition ? `
       <!-- PITCH POSITION (replaces GBE) -->
-      <div style="position:absolute;top:24px;left:1510px;width:390px;height:260px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.10);border-radius:12px;padding:20px 24px;box-sizing:border-box;display:flex;align-items:center;justify-content:center;">
-        <div style="width:100%;max-width:346px;">${pitchDiagramSvg(player)}</div>
+      <div style="position:absolute;top:24px;left:1510px;width:390px;height:260px;display:flex;align-items:center;justify-content:center;">
+        <div style="width:100%;max-width:390px;">${pitchDiagramSvg(player)}</div>
       </div>` : `
       <!-- GBE -->
       <div style="position:absolute;top:24px;left:1510px;width:390px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.10);border-radius:12px;padding:20px 24px;">
