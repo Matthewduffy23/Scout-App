@@ -1,4 +1,4 @@
-// QuickCard v49 - manual overrides for Player Name and Value fields, Style role names bumped +100 bold (600 -> 700)
+// QuickCard v50 - pitch position diagram toggle (replaces GBE card), auto-tiered dark green/light green/yellow-green by position order, ported from PlayerScoutingCard.js
 import React, { useState } from 'react';
 import { scoreLabel, formatFoot, formatMV, GBE_LEAGUE_BANDS } from './constants';
 
@@ -18,6 +18,65 @@ const OVERRIDE_HEADER_COLORS = {
   Red: '#ef4444', Green: '#22c55e', Yellow: '#fbc701', White: '#e5e7eb', Black: '#0a0a0a', Blue: '#3b82f6',
   Purple: '#1800ad', Orange: '#ff914d', Pink: '#ff66c4',
 };
+
+// Pitch position diagram — ported from PlayerScoutingCard.js's pitchDiagramSvg.
+// 13 fixed slots; player's listed positions (in order) get Primary (dark green),
+// Secondary (light green), Third (yellow-green) — everything else stays default grey.
+const PITCH_SLOTS = {
+  LB:  [98.6, 31.5],  LWB: [165, 31.5],   LW:  [260.7, 31.5],
+  LCB: [83.6, 76.4],  GK:  [33, 110],     DM:  [113.5, 110],
+  CM:  [165, 110.0],  AM:  [230.3, 110.0], ST: [287.9, 110.6],
+  RCB: [83.4, 138.5], RB:  [98.6, 190.1], RWB: [165, 190.1], RW: [260.7, 189.9],
+};
+const PITCH_TOKEN_TO_SLOT = {
+  GK:'GK', RB:'RB', RWB:'RWB', LCB:'LCB', CB:'LCB', RCB:'RCB', LB:'LB', LWB:'LWB',
+  DMF:'DM', LDMF:'DM', RDMF:'DM', LCMF:'CM', RCMF:'CM', AMF:'AM',
+  RAMF:'RW', RWF:'RW', RW:'RW', LAMF:'LW', LWF:'LW', LW:'LW', CF:'ST',
+};
+const POSITION_COLOR_TIERS = {
+  Primary: '#00bf63', Secondary: '#7ed957', Third: '#c1ff72',
+  Fourth: '#ffde59', Fifth: '#ffbd59', Sixth: '#ff914d', Seventh: '#ff3131',
+};
+const PITCH_DOT_DEFAULT = '#a3a3a3';
+
+function pitchDiagramSvg(player) {
+  const posTokens = (player.position || '').split(',').map(t => t.trim()).filter(Boolean);
+  const tierOrder = ['Primary', 'Secondary', 'Third', 'Fourth', 'Fifth', 'Sixth', 'Seventh'];
+  const dotColors = {};
+  Object.keys(PITCH_SLOTS).forEach(slot => { dotColors[slot] = PITCH_DOT_DEFAULT; });
+  const usedSlots = new Set();
+  let tierIdx = 0;
+  for (const tok of posTokens) {
+    const slot = PITCH_TOKEN_TO_SLOT[tok];
+    if (!slot || usedSlots.has(slot) || tierIdx >= tierOrder.length) continue;
+    usedSlots.add(slot);
+    dotColors[slot] = POSITION_COLOR_TIERS[tierOrder[tierIdx]];
+    tierIdx++;
+  }
+  const dots = Object.entries(PITCH_SLOTS).map(([slot, [x, y]]) =>
+    `<circle cx="${x}" cy="${y}" r="14" fill="${dotColors[slot]}" filter="url(#dotShadow)"/>`
+  ).join('');
+  return `<svg viewBox="0 0 330 220" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;">
+    <defs>
+      <filter id="dotShadow" x="-50%" y="-50%" width="200%" height="200%">
+        <feDropShadow dx="0" dy="1" stdDeviation="1" flood-color="#000000" flood-opacity="0.4"/>
+      </filter>
+    </defs>
+    <rect x="0" y="0" width="330" height="220" fill="#0d1117" rx="6"/>
+    <rect x="10" y="10" width="310" height="200" fill="none" stroke="#5a6478" stroke-width="2" rx="3"/>
+    <line x1="165" y1="10" x2="165" y2="210" stroke="#5a6478" stroke-width="2"/>
+    <circle cx="165" cy="110" r="28" fill="none" stroke="#5a6478" stroke-width="2"/>
+    <circle cx="165" cy="110" r="1.5" fill="#5a6478"/>
+    <rect x="10" y="65" width="35" height="90" fill="none" stroke="#5a6478" stroke-width="2"/>
+    <rect x="10" y="85" width="14" height="50" fill="none" stroke="#5a6478" stroke-width="2"/>
+    <path d="M 45 92 A 18 18 0 0 1 45 128" fill="none" stroke="#5a6478" stroke-width="2"/>
+    <rect x="285" y="65" width="35" height="90" fill="none" stroke="#5a6478" stroke-width="2"/>
+    <rect x="306" y="85" width="14" height="50" fill="none" stroke="#5a6478" stroke-width="2"/>
+    <path d="M 285 92 A 18 18 0 0 0 285 128" fill="none" stroke="#5a6478" stroke-width="2"/>
+    <circle cx="320" cy="110" r="1.5" fill="#5a6478"/>
+    ${dots}
+  </svg>`;
+}
 function hexToRgb(hex) {
   const h = hex.replace('#', '');
   const n = parseInt(h.length === 3 ? h.split('').map(c => c + c).join('') : h, 16);
@@ -774,6 +833,11 @@ function buildQuickCardElement(player, players, manual = {}) {
         <div style="position:absolute;left:1200px;top:${44 + i*48}px;font-size:18px;font-weight:500;color:#9aa3b8;white-space:nowrap;">${k}</div>
         <div style="position:absolute;left:1345px;top:${44 + i*48}px;font-size:18px;font-weight:600;color:#fff;white-space:nowrap;">${truncateText(v, 20)}</div>`).join('')}
 
+      ${manual.showPitchPosition ? `
+      <!-- PITCH POSITION (replaces GBE) -->
+      <div style="position:absolute;top:24px;left:1510px;width:390px;height:260px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.10);border-radius:12px;padding:20px 24px;box-sizing:border-box;display:flex;align-items:center;justify-content:center;">
+        <div style="width:100%;max-width:346px;">${pitchDiagramSvg(player)}</div>
+      </div>` : `
       <!-- GBE -->
       <div style="position:absolute;top:24px;left:1510px;width:390px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.10);border-radius:12px;padding:20px 24px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
@@ -791,7 +855,7 @@ function buildQuickCardElement(player, players, manual = {}) {
         </div>
         ${gbePanelEligible ? `<div style="margin-top:14px;font-size:12px;font-weight:600;color:#f0c56a;border-top:1px solid rgba(240,197,106,0.2);padding-top:10px;">Eligible for GBE Exceptions Panel review</div>` : ''}
         ${gbeEscEligible ? `<div style="margin-top:14px;font-size:12px;font-weight:600;color:#f97316;border-top:1px solid rgba(249,115,22,0.2);padding-top:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">⚡ ESC Eligible${escReasons.length ? ` — ${escReasons[0]}` : ' — may qualify via exceptional talent panel'}</div>` : ''}
-      </div>
+      </div>`}
 
       <!-- ============ LEFT COLUMN: bars from bottom of header to bottom of card ============ -->
 
@@ -867,12 +931,13 @@ export default function QuickCardModal({ player, players, onClose }) {
   const [scoutStatus, setScoutStatus] = useState('');
   const [showScorePills, setShowScorePills] = useState(true);
   const [headerColorOverride, setHeaderColorOverride] = useState('');
+  const [showPitchPosition, setShowPitchPosition] = useState(false);
   const BIO_MAX_LENGTH = scoutStatus ? 248 : 350;
 
   const handleDownload = async () => {
     setDownloading(true);
     const { toPng } = await import('html-to-image');
-    const el = buildQuickCardElement(player, players, { agentOverride, nameOverride, valueOverride, biography, halfTeamContext, showForecast, scoutStatus, showScorePills, headerColorOverride });
+    const el = buildQuickCardElement(player, players, { agentOverride, nameOverride, valueOverride, biography, halfTeamContext, showForecast, scoutStatus, showScorePills, headerColorOverride, showPitchPosition });
     try {
       const cardNode = el.querySelector('#qc-card-root') || el;
       const opts = {
@@ -943,6 +1008,11 @@ export default function QuickCardModal({ player, players, onClose }) {
               );
             })}
           </div>
+        </div>
+
+        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12,textAlign:'left'}}>
+          <input type="checkbox" id="qc-pitch" checked={showPitchPosition} onChange={e=>setShowPitchPosition(e.target.checked)} style={{cursor:'pointer'}} />
+          <label htmlFor="qc-pitch" style={{fontSize:11.5,color:'#cbd5e1',cursor:'pointer'}}>Replace GBE card with pitch position diagram</label>
         </div>
 
         {halfTeamContext && (
