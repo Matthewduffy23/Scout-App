@@ -1,4 +1,4 @@
-// QuickCard v40 - polish pass (header/panel lighting, photo/crest/flag treatment, divider consistency, Avg label, % formatting); percentile bar spacing reverted to PlayerScoutingCard.js original; ESC single reason; Career bands back on right with reserved no-crossover zone
+// QuickCard v41 - percentile block stretches to bottom (rowH unchanged), GBE card moved up, header radial glow, crest 5% bigger + team/league centered to it
 import React, { useState } from 'react';
 import { scoreLabel, formatFoot, formatMV, GBE_LEAGUE_BANDS } from './constants';
 
@@ -615,6 +615,12 @@ function buildQuickCardElement(player, players, manual = {}) {
   let rowH = totalRows > 0
     ? Math.max(MIN_ROW_H, Math.min(MAX_ROW_H, Math.floor((CHART_HEIGHT - FIXED_OVERHEAD) / totalRows) - 1))
     : MAX_ROW_H;
+  // The container is taller than the fixed 671px budget above (LEFT_TOP starts higher
+  // than the original card did), which left dead space at the bottom. Distribute that
+  // slack across the gaps *between* sections instead of changing rowH, so bar-to-bar
+  // spacing stays identical and the block just stretches to reach the bottom of the card.
+  const leftoverSlack = Math.max(0, (1080 - LEFT_TOP) - CHART_HEIGHT);
+  const EXTRA_GAP = Math.round(leftoverSlack / 3);
 
   const buildGroupBars = (grpKey) => {
     const rows = groups[grpKey] || [];
@@ -672,7 +678,7 @@ function buildQuickCardElement(player, players, manual = {}) {
     <div id="qc-card-root" style="width:1920px;height:1080px;overflow:hidden;background:${BG};font-family:'Montserrat',sans-serif;color:#fff;position:relative;box-sizing:border-box;">
 
       <!-- HEADER GRADIENT BAND — FULL WIDTH -->
-      <div style="position:absolute;top:0;left:0;width:1920px;height:292px;background:linear-gradient(to right, ${HEADER_L} 0%, ${HEADER_R} 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,0.08);"></div>
+      <div style="position:absolute;top:0;left:0;width:1920px;height:292px;background:radial-gradient(ellipse 900px 500px at 12% 15%, rgba(120,140,255,0.16), transparent 60%), linear-gradient(to right, ${HEADER_L} 0%, ${HEADER_R} 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,0.08);"></div>
 
       <!-- PHOTO -->
       <div style="position:absolute;left:-12px;top:16px;width:261px;height:261px;background-color:transparent;background-image:url('${photo}');background-size:cover;background-position:center top;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.09);"></div>
@@ -704,9 +710,9 @@ function buildQuickCardElement(player, players, manual = {}) {
       </div>
 
       <!-- CREST / TEAM / LEAGUE -->
-      ${crest ? `<div style="position:absolute;left:720px;top:22px;width:148px;height:200px;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${crest}');filter:drop-shadow(0 1px 2px rgba(0,0,0,0.3));"></div>` : ''}
-      <div style="position:absolute;left:882px;top:42px;font-size:36px;font-weight:800;color:#fff;${sdTeam.length >= 16 ? 'letter-spacing:-1px;' : ''}">${sdTeam}</div>
-      <div style="position:absolute;left:882px;top:94px;display:flex;align-items:center;">
+      ${crest ? `<div style="position:absolute;left:720px;top:22px;width:155px;height:210px;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${crest}');filter:drop-shadow(0 1px 2px rgba(0,0,0,0.3));"></div>` : ''}
+      <div style="position:absolute;left:882px;top:90px;font-size:36px;font-weight:800;color:#fff;${sdTeam.length >= 16 ? 'letter-spacing:-1px;' : ''}">${sdTeam}</div>
+      <div style="position:absolute;left:882px;top:142px;display:flex;align-items:center;">
         <span style="font-size:21px;font-weight:500;color:#d0d8ea;white-space:nowrap;">${leagueDisplayName}</span>
         ${countryToIso2(leagueToCountry(sdLeague)) ? `<div style="width:32px;height:20px;flex-shrink:0;margin-left:18px;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(leagueToCountry(sdLeague))}.png');border-radius:2px;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15);"></div>` : ''}
       </div>
@@ -719,7 +725,7 @@ function buildQuickCardElement(player, players, manual = {}) {
         <div style="position:absolute;left:1345px;top:${44 + i*48}px;font-size:18px;font-weight:600;color:#fff;white-space:nowrap;">${truncateText(v, 20)}</div>`).join('')}
 
       <!-- GBE -->
-      <div style="position:absolute;top:34px;left:1510px;width:390px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.10);border-radius:12px;padding:20px 24px;">
+      <div style="position:absolute;top:24px;left:1510px;width:390px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.10);border-radius:12px;padding:20px 24px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
           <span style="font-size:15px;font-weight:700;color:#9aa3b8;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;">GBE Calculation</span>
           <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;">
@@ -741,9 +747,9 @@ function buildQuickCardElement(player, players, manual = {}) {
 
       <div style="position:absolute;top:${LEFT_TOP}px;left:0px;width:920px;height:${1080-LEFT_TOP}px;overflow:hidden;box-sizing:border-box;padding-left:24px;padding-top:12px;">
         ${groups.A && groups.A.length ? `<div style="font-size:24px;font-weight:800;color:#f3f5f7;margin:0 0 6px;">${isGK ? 'Goalkeeping' : 'Attacking'}</div>${buildGroupBars('A')}` : ''}
-        ${groups.D && groups.D.length ? `<div style="font-size:24px;font-weight:800;color:#f3f5f7;margin:8px 0 6px;">Defensive</div>${buildGroupBars('D')}` : ''}
-        ${groups.P && groups.P.length ? `<div style="font-size:24px;font-weight:800;color:#f3f5f7;margin:8px 0 6px;">Possession</div>${buildGroupBars('P')}` : ''}
-        <div style="display:flex;align-items:center;margin-top:6px;">
+        ${groups.D && groups.D.length ? `<div style="font-size:24px;font-weight:800;color:#f3f5f7;margin:${8+EXTRA_GAP}px 0 6px;">Defensive</div>${buildGroupBars('D')}` : ''}
+        ${groups.P && groups.P.length ? `<div style="font-size:24px;font-weight:800;color:#f3f5f7;margin:${8+EXTRA_GAP}px 0 6px;">Possession</div>${buildGroupBars('P')}` : ''}
+        <div style="display:flex;align-items:center;margin-top:${6+EXTRA_GAP}px;">
           <div style="width:188px;flex-shrink:0;"></div>
           <div style="flex:1;position:relative;height:26px;">
             ${[0,10,20,30,40,50,60,70,80,90,100].map(p=>`<span style="position:absolute;left:${p}%;top:0;transform:translateX(${p===0?'0':p===100?'-100%':'-50%'});font-size:12px;font-weight:600;color:#c4cbd9;">${p}%</span>`).join('')}
