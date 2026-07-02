@@ -1,4 +1,4 @@
-// QuickCard v41 - percentile block stretches to bottom (rowH unchanged), GBE card moved up, header radial glow, crest 5% bigger + team/league centered to it
+// QuickCard v42 - percentile gap distribution spread across all rows (not 3 lumps), team badge/name/league shifted right, larger flag clearance + tighter league truncation
 import React, { useState } from 'react';
 import { scoreLabel, formatFoot, formatMV, GBE_LEAGUE_BANDS } from './constants';
 
@@ -212,12 +212,12 @@ function cmToFeet(cm) {
   const inches = totalInches % 12;
   return `${feet}'${inches}"`;
 }
-function barRow(label, pct, rawVal, rowH = 18) {
+function barRow(label, pct, rawVal, rowH = 18, extraGap = 0) {
   const p = Math.max(0, Math.min(100, pct || 0));
   const bc = barColor(p);
   const barH = Math.max(10, Math.round(rowH * 0.85));
   return `
-    <div style="display:flex;align-items:center;height:${rowH}px;margin-bottom:1px;">
+    <div style="display:flex;align-items:center;height:${rowH}px;margin-bottom:${1+extraGap}px;">
       <div style="width:188px;flex-shrink:0;font-size:12px;font-weight:600;color:${LABEL_COL};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${label}</div>
       <div style="flex:1;position:relative;height:${barH}px;background:#1b2636;border-radius:2px;">
         <div style="position:relative;height:100%;width:${p}%;background:${bc};border-radius:2px;">
@@ -616,11 +616,14 @@ function buildQuickCardElement(player, players, manual = {}) {
     ? Math.max(MIN_ROW_H, Math.min(MAX_ROW_H, Math.floor((CHART_HEIGHT - FIXED_OVERHEAD) / totalRows) - 1))
     : MAX_ROW_H;
   // The container is taller than the fixed 671px budget above (LEFT_TOP starts higher
-  // than the original card did), which left dead space at the bottom. Distribute that
-  // slack across the gaps *between* sections instead of changing rowH, so bar-to-bar
-  // spacing stays identical and the block just stretches to reach the bottom of the card.
+  // than the original card did), which left dead space at the bottom. Spread that slack
+  // across EVERY row plus the section/axis gaps (not just 3 big lumps at the section
+  // boundaries) so the block stretches to the bottom without looking like clustered
+  // groups separated by obviously oversized gaps.
   const leftoverSlack = Math.max(0, (1080 - LEFT_TOP) - CHART_HEIGHT);
-  const EXTRA_GAP = Math.round(leftoverSlack / 3);
+  const totalSlots = totalRows + 4; // top-of-Attacking + before-Defensive + before-Possession + before-axis
+  const PER_ROW_EXTRA = totalSlots > 0 ? leftoverSlack / totalSlots : 0;
+  const EXTRA_GAP = Math.round(PER_ROW_EXTRA);
 
   const buildGroupBars = (grpKey) => {
     const rows = groups[grpKey] || [];
@@ -628,13 +631,13 @@ function buildQuickCardElement(player, players, manual = {}) {
       const displayLabel = METRIC_LABEL_MAP[label] || label;
       const isPercentMetric = /%/.test(displayLabel);
       const formattedVal = typeof val === 'number' ? val.toFixed(isPercentMetric ? 1 : 2) : val;
-      return barRow(displayLabel, pct, formattedVal, rowH);
+      return barRow(displayLabel, pct, formattedVal, rowH, PER_ROW_EXTRA);
     }).join('');
   };
 
   const isGK = rawPosToken === 'GK' || (player.roleKey || '').startsWith('GK');
 
-  const leagueDisplayName = truncateText(LEAGUE_DISPLAY_NAMES[sdLeague] || sdLeague, 17);
+  const leagueDisplayName = truncateText(LEAGUE_DISPLAY_NAMES[sdLeague] || sdLeague, 15);
 
   const container = document.createElement('div');
   container.style.position = 'fixed';
@@ -710,11 +713,11 @@ function buildQuickCardElement(player, players, manual = {}) {
       </div>
 
       <!-- CREST / TEAM / LEAGUE -->
-      ${crest ? `<div style="position:absolute;left:720px;top:22px;width:155px;height:210px;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${crest}');filter:drop-shadow(0 1px 2px rgba(0,0,0,0.3));"></div>` : ''}
-      <div style="position:absolute;left:882px;top:90px;font-size:36px;font-weight:800;color:#fff;${sdTeam.length >= 16 ? 'letter-spacing:-1px;' : ''}">${sdTeam}</div>
-      <div style="position:absolute;left:882px;top:142px;display:flex;align-items:center;">
+      ${crest ? `<div style="position:absolute;left:740px;top:22px;width:155px;height:210px;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${crest}');filter:drop-shadow(0 1px 2px rgba(0,0,0,0.3));"></div>` : ''}
+      <div style="position:absolute;left:902px;top:90px;font-size:36px;font-weight:800;color:#fff;${sdTeam.length >= 16 ? 'letter-spacing:-1px;' : ''}">${sdTeam}</div>
+      <div style="position:absolute;left:902px;top:142px;display:flex;align-items:center;">
         <span style="font-size:21px;font-weight:500;color:#d0d8ea;white-space:nowrap;">${leagueDisplayName}</span>
-        ${countryToIso2(leagueToCountry(sdLeague)) ? `<div style="width:32px;height:20px;flex-shrink:0;margin-left:18px;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(leagueToCountry(sdLeague))}.png');border-radius:2px;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15);"></div>` : ''}
+        ${countryToIso2(leagueToCountry(sdLeague)) ? `<div style="width:32px;height:20px;flex-shrink:0;margin-left:24px;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(leagueToCountry(sdLeague))}.png');border-radius:2px;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15);"></div>` : ''}
       </div>
 
       <div style="position:absolute;left:1180px;top:30px;width:2px;height:210px;background:rgba(255,255,255,0.14);"></div>
@@ -746,7 +749,7 @@ function buildQuickCardElement(player, players, manual = {}) {
       <!-- ============ LEFT COLUMN: bars from bottom of header to bottom of card ============ -->
 
       <div style="position:absolute;top:${LEFT_TOP}px;left:0px;width:920px;height:${1080-LEFT_TOP}px;overflow:hidden;box-sizing:border-box;padding-left:24px;padding-top:12px;">
-        ${groups.A && groups.A.length ? `<div style="font-size:24px;font-weight:800;color:#f3f5f7;margin:0 0 6px;">${isGK ? 'Goalkeeping' : 'Attacking'}</div>${buildGroupBars('A')}` : ''}
+        ${groups.A && groups.A.length ? `<div style="font-size:24px;font-weight:800;color:#f3f5f7;margin:${EXTRA_GAP}px 0 6px;">${isGK ? 'Goalkeeping' : 'Attacking'}</div>${buildGroupBars('A')}` : ''}
         ${groups.D && groups.D.length ? `<div style="font-size:24px;font-weight:800;color:#f3f5f7;margin:${8+EXTRA_GAP}px 0 6px;">Defensive</div>${buildGroupBars('D')}` : ''}
         ${groups.P && groups.P.length ? `<div style="font-size:24px;font-weight:800;color:#f3f5f7;margin:${8+EXTRA_GAP}px 0 6px;">Possession</div>${buildGroupBars('P')}` : ''}
         <div style="display:flex;align-items:center;margin-top:${6+EXTRA_GAP}px;">
