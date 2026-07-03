@@ -1,4 +1,4 @@
-// QuickCard v57 - hex chart label column widened (no more label/hex overlap), team name wrapping fixed (nowrap + ellipsis safety net), crest shifts left for long names, more crest-to-text gap
+// QuickCard v58 - Style panel now reads real qcRoleCareerScores (top 6, descending), Team Context wired to real 6-category data with position-specific 4-category mapping (Verticality dropped, no placeholder)
 import React, { useState } from 'react';
 import { scoreLabel, formatFoot, formatMV, GBE_LEAGUE_BANDS } from './constants';
 
@@ -587,8 +587,33 @@ const PLACEHOLDER_ROLES = [
   ['Retention', 55],
 ];
 
-function rolesRankedSvgHtml(maxWidth = 408) {
-  const roles = PLACEHOLDER_ROLES;
+// Team Context — 4 categories shown per position, drawn from the real 6-category
+// system (Possession/Pressing/Attack/Defence/Passing/Quality) computed in
+// build_players.py's compute_team_context(). Verticality intentionally dropped —
+// it was placeholder-only and has no real backing metric.
+const POSITION_TEAM_CONTEXT_CATS = {
+  GK:  ['Possession','Defence','Passing','Quality'],
+  CB:  ['Possession','Defence','Passing','Quality'],
+  FB:  ['Possession','Pressing','Attack','Quality'],
+  CM:  ['Possession','Pressing','Passing','Quality'],
+  ATT: ['Possession','Pressing','Attack','Quality'],
+  CF:  ['Possession','Pressing','Attack','Quality'],
+};
+// Global Low/Avg/High calibration bands — 10th/50th/90th percentile of each
+// composite score across all 10,660 team-seasons, from team_context_bands.json.
+// Hardcoded rather than fetched at card-build time since these only change on a
+// full pipeline rebuild — update this constant if build_players.py's printed
+// bands ever change.
+const TEAM_CONTEXT_BANDS = {
+  Possession: [12, 52, 93],
+  Pressing:   [12, 52, 93],
+  Attack:     [18, 52, 89],
+  Defence:    [16, 52, 90],
+  Passing:    [17, 52, 90],
+  Quality:    [16, 52, 92],
+};
+
+function rolesRankedSvgHtml(maxWidth = 408, roles = PLACEHOLDER_ROLES) {
   // Compact hexagons, closely packed, sized to sit inside a padded panel
   // alongside a career trajectory chart panel of the same width.
   const R = 11;
@@ -629,14 +654,17 @@ function rolesRankedSvgHtml(maxWidth = 408) {
   return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">${rows}</svg>`;
 }
 
-function teamRangeBarHtml(playerScore, teamScores, w = 560) {
-  const TEAM_METRICS = [
-    ['Possession',  68, 38, 80, 52],
-    ['Passing',     74, 42, 88, 61],
-    ['Verticality', 58, 30, 82, 54],
-    ['Attack',      71, 35, 91, 58],
-    ['Intensity',   63, 28, 85, 56],
-  ];
+function teamRangeBarHtml(player, posKey, w = 560) {
+  const cats = POSITION_TEAM_CONTEXT_CATS[posKey] || POSITION_TEAM_CONTEXT_CATS.CM;
+  const tc = player.teamContext || {};
+  // Skip any category the player's team data doesn't cover, rather than
+  // fabricating a fallback number — cleaner than showing a fake "average" value.
+  const TEAM_METRICS = cats
+    .filter(cat => tc[cat] != null && TEAM_CONTEXT_BANDS[cat])
+    .map(cat => {
+      const [mn, av, mx] = TEAM_CONTEXT_BANDS[cat];
+      return [cat, Math.round(tc[cat]), mn, mx, av];
+    });
   const metricBars = TEAM_METRICS.map(([label, val, mn, mx, av]) => {
     const range = Math.max(1, mx - mn);
     const pVal = Math.max(2, Math.min(96, ((val - mn) / range) * 100));
@@ -660,7 +688,7 @@ function teamRangeBarHtml(playerScore, teamScores, w = 560) {
         </div>
       </div>`;
   }).join('');
-  return metricBars;
+  return metricBars || `<div style="font-size:13px;color:#5e6678;">No team data available.</div>`;
 }
 
 function buildQuickCardElement(player, players, manual = {}) {
@@ -809,7 +837,11 @@ function buildQuickCardElement(player, players, manual = {}) {
 
   const STYLE_PANEL_W = Math.floor((920 - PANEL_GAP_H) / 2); // 448
   const CAREER_PANEL_W = 920 - PANEL_GAP_H - STYLE_PANEL_W;  // 448
-  const rolesRankedHtml = rolesRankedSvgHtml(STYLE_PANEL_W - PANEL_PAD * 2);
+  const qcRoles = player.qcRoleCareerScores || player.qcLatestRoles;
+  const realRoles = qcRoles && Object.keys(qcRoles).length
+    ? Object.entries(qcRoles).sort((a, b) => b[1] - a[1]).slice(0, 6)
+    : PLACEHOLDER_ROLES;
+  const rolesRankedHtml = rolesRankedSvgHtml(STYLE_PANEL_W - PANEL_PAD * 2, realRoles);
 
   const STYLE_TOP = 322;
   const STYLE_HEADER_H = 40;
@@ -948,7 +980,7 @@ function buildQuickCardElement(player, players, manual = {}) {
       <!-- TEAM CONTEXT panel — half width (aligned with Style) when toggled, full width otherwise -->
       <div style="position:absolute;top:${ROW2_TOP}px;left:984px;width:${teamContextPanelW}px;height:${ROW2_PANEL_H}px;background:${PANEL_BG};border:1px solid ${PANEL_BORDER};border-radius:${PANEL_RADIUS}px;padding:${PANEL_PAD}px;box-sizing:border-box;overflow:hidden;box-shadow:${PANEL_SHADOW};">
         <div style="font-size:22px;font-weight:700;color:${ACCENT_PINK};margin-bottom:14px;">Team Context</div>
-        ${teamRangeBarHtml(player.careerScore, teamPlayers.map(p=>p.careerScore), teamContextBarW)}
+        ${teamRangeBarHtml(player, posKey, teamContextBarW)}
       </div>
 
       ${(manual.halfTeamContext && (manual.biography || manual.scoutStatus)) ? `
