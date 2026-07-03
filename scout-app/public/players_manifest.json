@@ -1,0 +1,33 @@
+{
+  "GK": [
+    "players_gk.json"
+  ],
+  "CB": [
+    "players_cb_1.json",
+    "players_cb_2.json",
+    "players_cb_3.json"
+  ],
+  "FB": [
+    "players_fb_1.json",
+    "players_fb_2.json",
+    "players_fb_3.json",
+    "players_fb_4.json"
+  ],
+  "CM": [
+    "players_cm_1.json",
+    "players_cm_2.json",
+    "players_cm_3.json",
+    "players_cm_4.json"
+  ],
+  "ATT": [
+    "players_att_1.json",
+    "players_att_2.json",
+    "players_att_3.json",
+    "players_att_4.json"
+  ],
+  "CF": [
+    "players_cf_1.json",
+    "players_cf_2.json",
+    "players_cf_3.json"
+  ]
+}

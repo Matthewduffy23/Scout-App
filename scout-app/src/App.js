@@ -239,8 +239,13 @@ export default function App(){
   const [showColPicker,setShowColPicker]=useState(false); // default: only show players active 2022-23+
 
   useEffect(()=>{
-    const files=['gk','cb','fb','cm','att','cf'];
-    Promise.all(files.map(f=>fetch(`/players_${f}.json`).then(r=>r.json()).catch(()=>[])))
+    fetch('/players_manifest.json').then(r=>r.ok?r.json():null).catch(()=>null)
+      .then(manifest=>{
+        const fileList = manifest
+          ? Object.values(manifest).flat()                                    // chunked files, e.g. players_cm_1.json, players_cm_2.json...
+          : ['gk','cb','fb','cm','att','cf'].map(f=>`players_${f}.json`);      // fallback: old un-chunked deploy, no manifest yet
+        return Promise.all(fileList.map(fname=>fetch(`/${fname}`).then(r=>r.json()).catch(()=>[])));
+      })
       .then(results=>{setAll(results.flat());setLoading(false);})
       .catch(()=>setLoading(false));
   },[]);
