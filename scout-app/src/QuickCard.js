@@ -1,4 +1,4 @@
-// QuickCard v55 - removed photo vignette overlay entirely (was the actual "square"), league name white font, more flag/On-Loan spacing
+// QuickCard v56 - xG/xA added to stat row (excluded for GK), Style labels +2 size +100 bold, hexagons slightly bigger, updated pill color thresholds
 import React, { useState } from 'react';
 import { scoreLabel, formatFoot, formatMV, GBE_LEAGUE_BANDS } from './constants';
 
@@ -292,9 +292,10 @@ function scoreTierColor(score) {
 function pillColor(score) {
   const v = Number(score);
   if (isNaN(v)) return { bg: '#3a4458', fg: '#dbe1ee' };
-  if (v >= 83) return { bg: '#fbc701', fg: '#07090f' }; // gold
-  if (v >= 76) return { bg: '#004aad', fg: '#ffffff' };
-  if (v >= 70) return { bg: '#d9d9d9', fg: '#07090f' };
+  if (v >= 85) return { bg: '#fbc701', fg: '#07090f' }; // gold
+  if (v >= 77) return { bg: '#004aad', fg: '#ffffff' };
+  if (v >= 72) return { bg: '#00bf63', fg: '#ffffff' };
+  if (v >= 66) return { bg: '#d9d9d9', fg: '#07090f' };
   if (v >= 60) return { bg: '#a3a3a3', fg: '#07090f' };
   if (v >= 54) return { bg: '#f18c31', fg: '#07090f' };
   return { bg: '#bd6742', fg: '#ffffff' };
@@ -590,7 +591,7 @@ function rolesRankedSvgHtml(maxWidth = 408) {
   const roles = PLACEHOLDER_ROLES;
   // Compact hexagons, closely packed, sized to sit inside a padded panel
   // alongside a career trajectory chart panel of the same width.
-  const R = 10;
+  const R = 11;
   const hex = (cx, cy, opacity, col) => {
     const pts = Array.from({length:6}, (_,i) => {
       const a = Math.PI/180 * (60*i - 30);
@@ -621,7 +622,7 @@ function rolesRankedSvgHtml(maxWidth = 408) {
       return hex(cx, y, opacity, isFilled ? col : '#dbe1ee');
     }).join('');
     return `
-      <text x="0" y="${y+5}" font-family="Montserrat,sans-serif" font-size="13" font-weight="700" fill="#c8d2e0">${disp}</text>
+      <text x="0" y="${y+5}" font-family="Montserrat,sans-serif" font-size="15" font-weight="800" fill="#c8d2e0">${disp}</text>
       ${hexes}`;
   }).join('');
 
@@ -681,6 +682,20 @@ function buildQuickCardElement(player, players, manual = {}) {
   const crest = player.teamFotmobId ? `${CREST_BASE}${player.teamFotmobId}.png` : '';
   const photo = photoUrl(player.name, player.team);
   const groups = sd.g || {};
+
+  // xG/xA aren't stored as season totals — bar-chart group A carries the per-90
+  // raw value (e.g. ['xG', pct, 0.42]). Season total = per90 × (mins/90). Same
+  // derivation as PlayerScoutingCard.js so the numbers match across cards.
+  const minsNum = statsRow.mins || sd.mins || 0;
+  const findRawA = (...labels) => {
+    const arr = groups.A || [];
+    const hit = arr.find(r => labels.includes(String(r[0]).toLowerCase().trim()));
+    return hit && typeof hit[2] === 'number' ? hit[2] : null;
+  };
+  const per90ToSeason = (v) => (v != null && minsNum) ? (v * minsNum / 90) : null;
+  const xgSeason = player.xgSeason != null ? player.xgSeason : per90ToSeason(findRawA('xg'));
+  const xaSeason = player.xaSeason != null ? player.xaSeason : per90ToSeason(findRawA('xa', 'expected assists'));
+  const fmt1 = (v) => (v == null ? '—' : v.toFixed(1));
 
   const rawPosToken = (player.position || '').split(',')[0].trim();
   const posKey = TOKEN_TO_POS_KEY[rawPosToken] || player.roleKey || 'CF';
@@ -837,12 +852,14 @@ function buildQuickCardElement(player, players, manual = {}) {
         ${(manual.showScorePills !== false && player.potentialScore != null) ? `<span style="display:inline-flex;align-items:center;justify-content:center;line-height:1;min-width:18px;font-size:19px;font-weight:800;padding:7px 13px;border-radius:7px;background:${pillColor(player.potentialScore).bg};color:#07090f;">${Math.round(player.potentialScore)}</span>` : ''}
       </div>
 
-      <!-- APPS / GOALS / ASSISTS / MINS row (replaces nav links) -->
+      <!-- APPS / GOALS / xG / ASSISTS / xA / MINS row (replaces nav links) -->
       <div style="position:absolute;left:248px;top:227px;display:flex;align-items:baseline;gap:32px;">
         ${[
           ['Apps', statsRow.m != null ? String(statsRow.m) : '—'],
           ['Goals', statsRow.g != null ? String(statsRow.g) : '—'],
+          ...(isGK ? [] : [['xG', fmt1(xgSeason)]]),
           ['Assists', statsRow.a != null ? String(statsRow.a) : '—'],
+          ...(isGK ? [] : [['xA', fmt1(xaSeason)]]),
           ['Mins', statsRow.mins ? statsRow.mins.toLocaleString() : '—'],
         ].map(([lab,val]) => `
           <div style="display:flex;align-items:baseline;gap:6px;">
