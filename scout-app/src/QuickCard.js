@@ -1,4 +1,4 @@
-// QuickCard v56 - xG/xA added to stat row (excluded for GK), Style labels +2 size +100 bold, hexagons slightly bigger, updated pill color thresholds
+// QuickCard v57 - hex chart label column widened (no more label/hex overlap), team name wrapping fixed (nowrap + ellipsis safety net), crest shifts left for long names, more crest-to-text gap
 import React, { useState } from 'react';
 import { scoreLabel, formatFoot, formatMV, GBE_LEAGUE_BANDS } from './constants';
 
@@ -601,12 +601,12 @@ function rolesRankedSvgHtml(maxWidth = 408) {
   };
 
   const rowH = 46;
-  const labelW = 150;
+  const labelW = 172;
   const numHex = 10;
   const W = R * 2;
-  const hexGap = 2;
+  const hexGap = 1;
   const totalHexW = numHex * W + (numHex - 1) * hexGap;
-  const rightPad = 10;
+  const rightPad = 6;
   const w = Math.min(maxWidth, labelW + totalHexW + rightPad);
   const h = roles.length * rowH + 8;
 
@@ -668,7 +668,7 @@ function buildQuickCardElement(player, players, manual = {}) {
   const chosenSeasonKey = (player.allSeasonsSummary && player.allSeasonsSummary[0] && player.allSeasonsSummary[0].s)
     || Object.keys(seasonsDetailObj).sort().reverse()[0];
   const sd = seasonsDetailObj[chosenSeasonKey] || Object.values(seasonsDetailObj)[0] || {};
-  const sdTeam = truncateText(sd.team || player.team, 20);
+  const sdTeam = truncateText(sd.team || player.team, 16);
   const sdLeague = sd.league || player.league;
   // allSeasonsSummary[0] is NOT guaranteed to be the same season+club as `sd` above —
   // for loan players with two entries sharing a season string (e.g. parent club U21s
@@ -869,13 +869,13 @@ function buildQuickCardElement(player, players, manual = {}) {
       </div>
 
       <!-- CREST / TEAM / LEAGUE -->
-      ${crest ? `<div style="position:absolute;left:740px;top:22px;width:155px;height:210px;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${crest}');filter:drop-shadow(0 1px 2px rgba(0,0,0,0.3));"></div>` : ''}
-      <div style="position:absolute;left:902px;top:90px;font-size:36px;font-weight:800;color:#fff;${sdTeam.length >= 16 ? 'letter-spacing:-1px;' : ''}">${sdTeam}</div>
-      <div style="position:absolute;left:902px;top:150px;display:flex;align-items:center;">
+      ${crest ? `<div style="position:absolute;left:${sdTeam.length >= 12 ? 720 : 740}px;top:22px;width:155px;height:210px;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${crest}');filter:drop-shadow(0 1px 2px rgba(0,0,0,0.3));"></div>` : ''}
+      <div style="position:absolute;left:912px;top:90px;width:266px;font-size:36px;font-weight:800;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${sdTeam.length >= 16 ? 'letter-spacing:-1px;' : ''}">${sdTeam}</div>
+      <div style="position:absolute;left:912px;top:150px;display:flex;align-items:center;">
         <span style="font-size:21px;font-weight:500;color:#fff;white-space:nowrap;">${leagueDisplayName}</span>
         ${countryToIso2(leagueToCountry(sdLeague)) ? `<div style="width:32px;height:20px;flex-shrink:0;margin-left:38px;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(leagueToCountry(sdLeague))}.png');border-radius:2px;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15);"></div>` : ''}
       </div>
-      ${player.onLoan ? `<div style="position:absolute;left:902px;top:194px;font-size:21.3px;color:#d9d9d9;white-space:nowrap;">On Loan</div>` : ''}
+      ${player.onLoan ? `<div style="position:absolute;left:912px;top:194px;font-size:21.3px;color:#d9d9d9;white-space:nowrap;">On Loan</div>` : ''}
 
       <div style="position:absolute;left:1188px;top:36px;width:2px;height:210px;background:rgba(255,255,255,0.14);"></div>
 
