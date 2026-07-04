@@ -1002,7 +1002,14 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
   const [showScoutingCard,setShowScoutingCard]=useState(false);
   const [showQuickCard,setShowQuickCard]=useState(false);
   const rawMode = rawModeProp || rawModeLocal; // external prop takes precedence
-  const sd=(player.seasonsDetail||{})[selSKey]||{};
+  // sd must resolve the SAME season+league entry the user actually selected via
+  // the tabs — seasonsDetail[season] alone only ever holds one club per season
+  // (breaks for players with two entries in the same season, e.g. a January
+  // transfer). seasonsDetailAll holds every season+club row undeduped; match on
+  // both season and league, same as selectedRow below. Falls back to the old
+  // singular lookup for data built before seasonsDetailAll existed.
+  const sdAllMatch=(player.seasonsDetailAll||[]).find(r=>r.season===selSKey&&r.league===selSLeague);
+  const sd=sdAllMatch||(player.seasonsDetail||{})[selSKey]||{};
   // Find the matching allSeasonsSummary row for accurate team/league/score display
   const selectedRow=allStdRows.find(r=>r.s===selSKey&&r.l===selSLeague)||allStdRows.find(r=>r.s===selSKey)||{};
   // Raw scores: simple average of sh season scores (no ls weighting)
