@@ -1,4 +1,4 @@
-// QuickCard v58 - Style panel now reads real qcRoleCareerScores (top 6, descending), Team Context wired to real 6-category data with position-specific 4-category mapping (Verticality dropped, no placeholder)
+// QuickCard v59 - foot dot removed + tighter Position/Foot spacing, flag closer to league name, Career "best role score" toggle (exact TREND_ROLES logic from PlayerScoutingCard.js, e.g. Target Man excluded for CF), default stays cumulative
 import React, { useState } from 'react';
 import { scoreLabel, formatFoot, formatMV, GBE_LEAGUE_BANDS } from './constants';
 
@@ -105,6 +105,14 @@ const APP_ROLES = {
   CM:  ['Deep Playmaker CM','Advanced Playmaker CM','Defensive CM','Defensive','Defensive DM','Ball Carrying CM','Box to Box CM','Goal Threat CM'],
   ATT: ['Playmaker ATT','Goal Threat ATT','Ball Carrier ATT','Wide Creator ATT'],
   CF:  ['Target Man CF','Goal Threat CF','Link Up CF','False 9 CF'],
+};
+// Matches PlayerScoutingCard.js's TREND_ROLES exactly — same whitelist as
+// APP_ROLES for every position EXCEPT CF, which is deliberately narrowed so
+// Target Man / False-9 roles can never be picked as a CF's "best role" (a
+// target man's aerial score topping out a trend line would be misleading).
+const TREND_ROLES = {
+  ...APP_ROLES,
+  CF: ['Goal Threat CF', 'Link Up CF'],
 };
 const TOKEN_TO_POS_KEY = {
   GK:'GK', CB:'CB', LCB:'CB', RCB:'CB',
@@ -454,7 +462,7 @@ function gbeThresholdBar(label, val, max, w = 220) {
 // offsets from player.sh (season history) the same way the full career chart does.
 const SEASON_ORDER = ['2018-19','2019-20','2020-21','2021-22','2022-23','2023-24','2024-25','2025-26'];
 
-function careerTrajectorySvg(player, w = 420, h = 284, showForecast = false) {
+function careerTrajectorySvg(player, w = 420, h = 284, showForecast = false, posKey = 'CF', useBestRole = false) {
   const currentAge = Number(player.age) || 25;
   const currentSeasonIdx = SEASON_ORDER.indexOf('2025-26');
 
@@ -475,23 +483,44 @@ function careerTrajectorySvg(player, w = 420, h = 284, showForecast = false) {
       return { ...hEntry, age: currentAge + offset };
     });
 
-  // Cumulative (minutes-weighted running average) scoring, matching PlayerCard.js's
-  // CareerTab exactly — each point is the weighted average of every season up to and
-  // including it, not the raw isolated season score. Final point pins to player.careerScore.
   const sd = player.seasonsDetail || {};
-  const history = rawHistory.map((h, idx) => {
-    const isLast = idx === rawHistory.length - 1;
-    if (isLast && player.careerScore != null) return { ...h, sc: player.careerScore };
-    const subset = rawHistory.slice(0, idx + 1);
-    let totalMins = 0, weightedSum = 0;
-    subset.forEach(hh => {
-      const mins = (sd[hh.s] && sd[hh.s].minutes) ? sd[hh.s].minutes : 500;
-      weightedSum += hh.sc * mins;
-      totalMins += mins;
+  let history;
+  if (useBestRole) {
+    // Best-role-per-season — exact same logic as PlayerScoutingCard.js's trend
+    // chart: for each season, take the highest role score among TREND_ROLES-
+    // whitelisted roles for this position (e.g. CF excludes Target Man/False-9
+    // so a target man's aerial score can't misleadingly drive the trend line).
+    // Falls back to the season's own raw score if no role data exists for it.
+    // Unlike the cumulative mode, this is NOT minutes-weighted and the final
+    // point isn't pinned to careerScore — each point is just that season's own
+    // best-role figure, matching the scoutcard's per-season (not running-average) approach.
+    const validRoles = TREND_ROLES[posKey] || [];
+    history = rawHistory.map(h => {
+      const seasonRoles = (sd[h.s] || {}).roles || {};
+      const bestRoleEntry = Object.entries(seasonRoles)
+        .filter(([role]) => validRoles.length === 0 || validRoles.includes(role))
+        .sort((a, b) => b[1] - a[1])[0];
+      const sc = bestRoleEntry ? Math.round(bestRoleEntry[1]) : Math.round(h.sc);
+      return { ...h, sc };
     });
-    const cumScore = totalMins > 0 ? weightedSum / totalMins : h.sc;
-    return { ...h, sc: Math.round(cumScore * 10) / 10 };
-  });
+  } else {
+    // Cumulative (minutes-weighted running average) scoring, matching PlayerCard.js's
+    // CareerTab exactly — each point is the weighted average of every season up to and
+    // including it, not the raw isolated season score. Final point pins to player.careerScore.
+    history = rawHistory.map((h, idx) => {
+      const isLast = idx === rawHistory.length - 1;
+      if (isLast && player.careerScore != null) return { ...h, sc: player.careerScore };
+      const subset = rawHistory.slice(0, idx + 1);
+      let totalMins = 0, weightedSum = 0;
+      subset.forEach(hh => {
+        const mins = (sd[hh.s] && sd[hh.s].minutes) ? sd[hh.s].minutes : 500;
+        weightedSum += hh.sc * mins;
+        totalMins += mins;
+      });
+      const cumScore = totalMins > 0 ? weightedSum / totalMins : h.sc;
+      return { ...h, sc: Math.round(cumScore * 10) / 10 };
+    });
+  }
 
   if (history.length < 1) {
     return `<div style="font-size:13px;color:#5e6678;padding:6px 0;">Not enough season history.</div>`;
@@ -847,7 +876,7 @@ function buildQuickCardElement(player, players, manual = {}) {
   const STYLE_HEADER_H = 40;
   const ROLES_ROW_H = 46;
   const rolesSvgHeight = PLACEHOLDER_ROLES.length * ROLES_ROW_H + 8;
-  const careerChartHtml = careerTrajectorySvg(player, CAREER_PANEL_W - PANEL_PAD * 2, rolesSvgHeight, !!manual.showForecast);
+  const careerChartHtml = careerTrajectorySvg(player, CAREER_PANEL_W - PANEL_PAD * 2, rolesSvgHeight, !!manual.showForecast, posKey, !!manual.useBestRoleCareer);
 
   const ROW1_PANEL_H = PANEL_PAD * 2 + STYLE_HEADER_H + rolesSvgHeight;
   const ROW2_TOP = STYLE_TOP + ROW1_PANEL_H + PANEL_GAP_V;
@@ -873,9 +902,9 @@ function buildQuickCardElement(player, players, manual = {}) {
 
       <!-- NAME / POSITION / FOOT / FLAG / AGE -->
       <div style="position:absolute;left:248px;top:24px;width:560px;font-size:53.2px;font-weight:700;line-height:1.05;letter-spacing:-0.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${manual.nameOverride || player.name}</div>
-      <div style="position:absolute;left:248px;top:90px;display:flex;align-items:center;gap:12px;">
+      <div style="position:absolute;left:248px;top:90px;display:flex;align-items:center;gap:8px;">
         <span style="font-size:26.6px;font-weight:600;color:#fff;white-space:nowrap;">${POSITION_LABELS[rawPosToken] || rawPosToken}</span>
-        ${(player.foot && player.foot !== 'unknown' && player.foot !== 'nan') ? `<span style="font-size:21.3px;color:#c0c0c0;white-space:nowrap;padding-left:6px;">· ${formatFoot(player.foot)}</span>` : ''}
+        ${(player.foot && player.foot !== 'unknown' && player.foot !== 'nan') ? `<span style="font-size:21.3px;color:#c0c0c0;white-space:nowrap;">${formatFoot(player.foot)}</span>` : ''}
       </div>
       <div style="position:absolute;left:248px;top:148px;display:flex;align-items:center;gap:10px;">
         ${countryToIso2(player.birthCountry) ? `<div style="width:36px;height:22px;flex-shrink:0;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(player.birthCountry)}.png');border-radius:2px;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15);"></div>` : ''}
@@ -905,7 +934,7 @@ function buildQuickCardElement(player, players, manual = {}) {
       <div style="position:absolute;left:912px;top:90px;width:266px;font-size:36px;font-weight:800;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${sdTeam.length >= 16 ? 'letter-spacing:-1px;' : ''}">${sdTeam}</div>
       <div style="position:absolute;left:912px;top:150px;display:flex;align-items:center;">
         <span style="font-size:21px;font-weight:500;color:#fff;white-space:nowrap;">${leagueDisplayName}</span>
-        ${countryToIso2(leagueToCountry(sdLeague)) ? `<div style="width:32px;height:20px;flex-shrink:0;margin-left:38px;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(leagueToCountry(sdLeague))}.png');border-radius:2px;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15);"></div>` : ''}
+        ${countryToIso2(leagueToCountry(sdLeague)) ? `<div style="width:32px;height:20px;flex-shrink:0;margin-left:22px;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(leagueToCountry(sdLeague))}.png');border-radius:2px;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15);"></div>` : ''}
       </div>
       ${player.onLoan ? `<div style="position:absolute;left:912px;top:194px;font-size:21.3px;color:#d9d9d9;white-space:nowrap;">On Loan</div>` : ''}
 
@@ -1012,6 +1041,7 @@ export default function QuickCardModal({ player, players, onClose }) {
   const [biography, setBiography] = useState('');
   const [halfTeamContext, setHalfTeamContext] = useState(false);
   const [showForecast, setShowForecast] = useState(false);
+  const [useBestRoleCareer, setUseBestRoleCareer] = useState(false);
   const [scoutStatus, setScoutStatus] = useState('');
   const [showScorePills, setShowScorePills] = useState(true);
   const [headerColorOverride, setHeaderColorOverride] = useState('');
@@ -1021,7 +1051,7 @@ export default function QuickCardModal({ player, players, onClose }) {
   const handleDownload = async () => {
     setDownloading(true);
     const { toPng } = await import('html-to-image');
-    const el = buildQuickCardElement(player, players, { agentOverride, nameOverride, valueOverride, biography, halfTeamContext, showForecast, scoutStatus, showScorePills, headerColorOverride, showPitchPosition });
+    const el = buildQuickCardElement(player, players, { agentOverride, nameOverride, valueOverride, biography, halfTeamContext, showForecast, scoutStatus, showScorePills, headerColorOverride, showPitchPosition, useBestRoleCareer });
     try {
       const cardNode = el.querySelector('#qc-card-root') || el;
       const opts = {
@@ -1069,6 +1099,11 @@ export default function QuickCardModal({ player, players, onClose }) {
         <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12,textAlign:'left'}}>
           <input type="checkbox" id="qc-forecast" checked={showForecast} onChange={e=>setShowForecast(e.target.checked)} style={{cursor:'pointer'}} />
           <label htmlFor="qc-forecast" style={{fontSize:11.5,color:'#cbd5e1',cursor:'pointer'}}>Show Career forecast (dashed line to potential)</label>
+        </div>
+
+        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12,textAlign:'left'}}>
+          <input type="checkbox" id="qc-best-role" checked={useBestRoleCareer} onChange={e=>setUseBestRoleCareer(e.target.checked)} style={{cursor:'pointer'}} />
+          <label htmlFor="qc-best-role" style={{fontSize:11.5,color:'#cbd5e1',cursor:'pointer'}}>Career: best role score (scoutcard logic) instead of career score</label>
         </div>
 
         <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12,textAlign:'left'}}>
