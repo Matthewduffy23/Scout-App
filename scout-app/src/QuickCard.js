@@ -1,4 +1,4 @@
-// QuickCard v60 - split-the-difference spacing for foot/flag, best-role Career mode shows whole numbers + no league band axis, constants.js scoreLabel simplified to generic quality tiers
+// QuickCard v61 - CORRECTED: quality-tier bands (Elite/Excellent/etc) replace PL/Champ/L1 on Career axis in best-role mode only, constants.js fully reverted (was never meant to change app-wide labels), Position/Foot spacing fixed via margin instead of unreliable flex gap
 import React, { useState } from 'react';
 import { scoreLabel, formatFoot, formatMV, GBE_LEAGUE_BANDS } from './constants';
 
@@ -541,6 +541,13 @@ function careerTrajectorySvg(player, w = 420, h = 284, showForecast = false, pos
   const LEAGUE_BANDS = [
     ['PL', 72], ['T5L', 68], ['Champ', 61], ['L1', 57], ['L2', 54], ['NL', 50],
   ];
+  // Quality-tier bands — used INSTEAD of LEAGUE_BANDS when in best-role mode.
+  // Role scores aren't calibrated against league-tier thresholds the same way
+  // cumulative career scores are, so PL/Champ/L1 labels would be a category
+  // mismatch there; generic quality tiers are the right reference instead.
+  const QUALITY_BANDS = [
+    ['Elite', 90], ['Excellent', 80], ['Very Good', 70], ['Good', 60], ['Average', 46], ['Poor', 38],
+  ];
 
   const scores = history.map(p => p.sc);
   // Axis range is driven by the player's actual scores only (not forced to include
@@ -549,14 +556,16 @@ function careerTrajectorySvg(player, w = 420, h = 284, showForecast = false, pos
   // so only the tiers actually relevant to this player's career show up.
   const minS = Math.min(...scores) - 4;
   const maxS = Math.max(...scores, ...(hasForecast ? [player.potentialScore] : [])) + 4;
-  const relevantBands = LEAGUE_BANDS.filter(([, v]) => v >= minS && v <= maxS);
+  const activeBands = useBestRole ? QUALITY_BANDS : LEAGUE_BANDS;
+  const relevantBands = activeBands.filter(([, v]) => v >= minS && v <= maxS);
   const ages = history.map(p => p.age);
   const minA = Math.min(...ages);
   const maxA = Math.max(...ages, ...(hasForecast ? [peakAge] : []));
   // Band labels sit at the right edge (x = pad.l+pw) — reserve that rightmost slice
   // exclusively for label text so plotted points/dots never physically overlap them,
-  // no matter what score or age they land on.
-  const DATA_X_FRACTION = 0.82;
+  // no matter what score or age they land on. Quality labels ("Very Good",
+  // "Excellent") are longer than league codes ("PL","L1"), so reserve more room.
+  const DATA_X_FRACTION = useBestRole ? 0.72 : 0.82;
   const dataW = pw * DATA_X_FRACTION;
   const xS = a => pad.l + (maxA === minA ? dataW / 2 : ((a - minA) / (maxA - minA)) * dataW);
   const yS = v => pad.t + ph - ((v - minS) / (maxS - minS || 1)) * ph;
@@ -574,12 +583,12 @@ function careerTrajectorySvg(player, w = 420, h = 284, showForecast = false, pos
       <text x="${fx.toFixed(1)}" y="${(pad.t + ph + 17).toFixed(1)}" font-family="Montserrat,sans-serif" font-size="10" font-weight="600" fill="#22c55e" text-anchor="middle">${Math.round(peakAge)}</text>`;
   })() : '';
 
-  const bandLines = useBestRole ? '' : relevantBands
+  const bandLines = relevantBands
     .map(([label, val]) => {
       const y = yS(val);
       return `
         <line x1="${pad.l}" y1="${y.toFixed(1)}" x2="${pad.l + pw}" y2="${y.toFixed(1)}" stroke="rgba(255,255,255,0.15)" stroke-width="1" stroke-dasharray="3,3"/>
-        <text x="${(pad.l + pw - 3).toFixed(1)}" y="${(y - 3).toFixed(1)}" font-family="Montserrat,sans-serif" font-size="9" font-weight="700" fill="rgba(255,255,255,0.4)" text-anchor="end">${label}</text>`;
+        <text x="${(pad.l + pw - 3).toFixed(1)}" y="${(y - 3).toFixed(1)}" font-family="Montserrat,sans-serif" font-size="${useBestRole ? 8 : 9}" font-weight="700" fill="rgba(255,255,255,0.4)" text-anchor="end">${label}</text>`;
     }).join('');
 
   const dots = history.map(p => {
@@ -902,9 +911,9 @@ function buildQuickCardElement(player, players, manual = {}) {
 
       <!-- NAME / POSITION / FOOT / FLAG / AGE -->
       <div style="position:absolute;left:248px;top:24px;width:560px;font-size:53.2px;font-weight:700;line-height:1.05;letter-spacing:-0.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${manual.nameOverride || player.name}</div>
-      <div style="position:absolute;left:248px;top:90px;display:flex;align-items:center;gap:10px;">
+      <div style="position:absolute;left:248px;top:90px;display:flex;align-items:center;">
         <span style="font-size:26.6px;font-weight:600;color:#fff;white-space:nowrap;">${POSITION_LABELS[rawPosToken] || rawPosToken}</span>
-        ${(player.foot && player.foot !== 'unknown' && player.foot !== 'nan') ? `<span style="font-size:21.3px;color:#c0c0c0;white-space:nowrap;">${formatFoot(player.foot)}</span>` : ''}
+        ${(player.foot && player.foot !== 'unknown' && player.foot !== 'nan') ? `<span style="font-size:21.3px;color:#c0c0c0;white-space:nowrap;margin-left:14px;">${formatFoot(player.foot)}</span>` : ''}
       </div>
       <div style="position:absolute;left:248px;top:148px;display:flex;align-items:center;gap:10px;">
         ${countryToIso2(player.birthCountry) ? `<div style="width:36px;height:22px;flex-shrink:0;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(player.birthCountry)}.png');border-radius:2px;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15);"></div>` : ''}
