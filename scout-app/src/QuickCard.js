@@ -731,7 +731,14 @@ function teamRangeBarHtml(player, posKey, w = 560) {
 
 function buildQuickCardElement(player, players, manual = {}) {
   const seasonsDetailObj = player.seasonsDetail || {};
-  const chosenSeasonKey = (player.allSeasonsSummary && player.allSeasonsSummary[0] && player.allSeasonsSummary[0].s)
+  const seasonsDetailAllArr = player.seasonsDetailAll || [];
+  // manual.seasonOverride lets the modal pick a specific season instead of the
+  // default (most recent). Only honored if the player actually has data for it.
+  const seasonOverrideValid = manual.seasonOverride
+    && (seasonsDetailObj[manual.seasonOverride] !== undefined
+      || seasonsDetailAllArr.some(r => r.season === manual.seasonOverride));
+  const chosenSeasonKey = (seasonOverrideValid ? manual.seasonOverride : null)
+    || (player.allSeasonsSummary && player.allSeasonsSummary[0] && player.allSeasonsSummary[0].s)
     || Object.keys(seasonsDetailObj).sort().reverse()[0];
   // seasonsDetail[season] can only ever hold ONE club's data per season — duplicate
   // JSON keys for a player with two entries in the same season (e.g. a January
@@ -740,7 +747,7 @@ function buildQuickCardElement(player, players, manual = {}) {
   // season+club row undeduped with the higher-league-band entry first (deterministic
   // default), so QuickCard's zero-input export resolves sd from there first. Falls
   // back to the old singular lookup for data built before the field existed.
-  const sdAllMatch = (player.seasonsDetailAll || []).find(r => r.season === chosenSeasonKey);
+  const sdAllMatch = seasonsDetailAllArr.find(r => r.season === chosenSeasonKey);
   const sd = sdAllMatch || seasonsDetailObj[chosenSeasonKey] || Object.values(seasonsDetailObj)[0] || {};
   const sdTeam = truncateText(sd.team || player.team, 16);
   const sdLeague = sd.league || player.league;
@@ -1063,12 +1070,17 @@ export default function QuickCardModal({ player, players, onClose }) {
   const [showScorePills, setShowScorePills] = useState(true);
   const [headerColorOverride, setHeaderColorOverride] = useState('');
   const [showPitchPosition, setShowPitchPosition] = useState(false);
+  const [seasonOverride, setSeasonOverride] = useState('');
   const BIO_MAX_LENGTH = scoutStatus ? 248 : 350;
+
+  // Distinct seasons this player has data for, newest first, for the season-override dropdown.
+  const availableSeasons = Array.from(new Set((player.allSeasonsSummary || []).map(row => row.s)))
+    .sort((a, b) => SEASON_ORDER.indexOf(b) - SEASON_ORDER.indexOf(a));
 
   const handleDownload = async () => {
     setDownloading(true);
     const { toPng } = await import('html-to-image');
-    const el = buildQuickCardElement(player, players, { agentOverride, nameOverride, valueOverride, biography, halfTeamContext, showForecast, scoutStatus, showScorePills, headerColorOverride, showPitchPosition, useBestRoleCareer });
+    const el = buildQuickCardElement(player, players, { agentOverride, nameOverride, valueOverride, biography, halfTeamContext, showForecast, scoutStatus, showScorePills, headerColorOverride, showPitchPosition, useBestRoleCareer, seasonOverride });
     try {
       const cardNode = el.querySelector('#qc-card-root') || el;
       const opts = {
@@ -1097,6 +1109,16 @@ export default function QuickCardModal({ player, players, onClose }) {
           <label style={qcLabelStyle}>Player Name</label>
           <input style={qcInputStyle} value={nameOverride} onChange={e=>setNameOverride(e.target.value)} placeholder={player.name} />
         </div>
+
+        {availableSeasons.length > 1 && (
+          <div style={{marginBottom:12}}>
+            <label style={qcLabelStyle}>Season</label>
+            <select style={qcInputStyle} value={seasonOverride} onChange={e=>setSeasonOverride(e.target.value)}>
+              <option value="">Default (most recent)</option>
+              {availableSeasons.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+        )}
 
         <div style={{marginBottom:12}}>
           <label style={qcLabelStyle}>Value</label>

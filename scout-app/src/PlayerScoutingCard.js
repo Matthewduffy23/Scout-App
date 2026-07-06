@@ -830,9 +830,16 @@ export function buildCardElement(player, manual = {}) {
     return hit && typeof hit[2] === 'number' ? hit[2] : null;
   };
   const per90ToSeason = (v) => (v != null && minsNum) ? (v * minsNum / 90) : null;
-  // Use direct season totals from CSV if available, fall back to per-90 derivation
-  const xgSeason = player.xgSeason != null ? player.xgSeason : per90ToSeason(findRawA('xg'));
-  const xaSeason = player.xaSeason != null ? player.xaSeason : per90ToSeason(findRawA('xa', 'expected assists'));
+  // Use direct season totals from CSV if available, fall back to per-90 derivation.
+  // player.xgSeason/xaSeason are static top-level pipeline fields for the player's
+  // LATEST season only — they don't move when the user switches to a different
+  // season/club tab (e.g. a January transfer's other club, or a past season).
+  // Only trust them when we're actually viewing that default/latest view; otherwise
+  // always derive from the correctly season-resolved groups data (via sd/statsRow),
+  // which already tracks tab switching correctly.
+  const viewingDefaultLatest = !manual.selectedSeasonKey && !manual.selectedLeague;
+  const xgSeason = (viewingDefaultLatest && player.xgSeason != null) ? player.xgSeason : per90ToSeason(findRawA('xg'));
+  const xaSeason = (viewingDefaultLatest && player.xaSeason != null) ? player.xaSeason : per90ToSeason(findRawA('xa', 'expected assists'));
   // GK-specific: Save Rate is a % value stored directly (not per-90), Goals Conceded is per-90
   const gkSaveRate = findRawA('save rate');
   const gkGoalsConceded = per90ToSeason(findRawA('goals conceded'));
