@@ -727,11 +727,23 @@ export function buildCardElement(player, manual = {}) {
   // Man City). Pick explicitly using the most recent season key from allSeasonsSummary,
   // falling back to sorting seasonsDetail's own keys descending if that's unavailable.
   const seasonsDetailObj = player.seasonsDetail || {};
+  const allSeasons = player.allSeasonsSummary || [];
+  const latestSeason = allSeasons[0] || {};
   // manual.selectedSeasonKey: season string (e.g. "2025-26") chosen by user in modal
   // manual.selectedLeague: league string to pair with it (for mid-season transfers)
   const chosenSeasonKey = manual.selectedSeasonKey
-    || (player.allSeasonsSummary && player.allSeasonsSummary[0] && player.allSeasonsSummary[0].s)
+    || latestSeason.s
     || Object.keys(seasonsDetailObj).sort().reverse()[0];
+  // Default league for chosenSeasonKey when the user hasn't explicitly picked a club.
+  // This MUST match whichever club statsRow (mins/apps/gls/asts below) resolves to,
+  // or a two-club season silently shows one club's bars/xG next to a different
+  // club's mins/apps — the actual bug behind "xG/xA broken for two-input players,
+  // fine for one-club players" (single-club seasons have only one possible match,
+  // so this divergence can never surface for them). allSeasonsSummary is built with
+  // the higher-league-band entry first per season, so its first row for this
+  // season is the deterministic default club — used as the shared anchor below.
+  const defaultLeagueForSeason = (allSeasons.find(s => s.s === chosenSeasonKey) || {}).l;
+  const targetLeague = manual.selectedLeague || defaultLeagueForSeason;
   // seasonsDetail[season] can only ever hold ONE club's data per season — duplicate
   // JSON keys for a player with two entries in the same season (e.g. a January
   // transfer) collapse to whichever was written last. Previously, selecting a
@@ -739,18 +751,20 @@ export function buildCardElement(player, manual = {}) {
   // LABELS below — the actual stats object (sd.roles, sd.g, sd.mins) still came
   // from this single collapsed entry, so switching tabs could show the right
   // team name with the wrong (or blank) underlying numbers. seasonsDetailAll
-  // preserves every season+club row undeduped; resolve sd from there first,
-  // matched on season+league when a club is explicitly selected, so the actual
-  // stats always follow the selection.
+  // preserves every season+club row undeduped; resolve sd matched on season+league
+  // using targetLeague (same default-club logic as statsRow below), so the actual
+  // stats always match the club actually shown — whether explicitly selected or
+  // defaulted. Falls back to the old singular lookup for data built before the
+  // field existed.
   const seasonsDetailAllArr = player.seasonsDetailAll || [];
-  const sdAllMatch = manual.selectedLeague
-    ? seasonsDetailAllArr.find(r => r.season === chosenSeasonKey && r.league === manual.selectedLeague)
+  const sdAllMatch = targetLeague
+    ? seasonsDetailAllArr.find(r => r.season === chosenSeasonKey && r.league === targetLeague)
     : seasonsDetailAllArr.find(r => r.season === chosenSeasonKey);
   const sd = sdAllMatch || seasonsDetailObj[chosenSeasonKey] || Object.values(seasonsDetailObj)[0] || {};
-  // If user selected a specific team/league row from allSeasonsSummary, override sd fields
-  const selectedSummaryRow = manual.selectedLeague
-    ? (player.allSeasonsSummary || []).find(s => s.s === chosenSeasonKey && s.l === manual.selectedLeague)
-    : null;
+  // Matching allSeasonsSummary row for the resolved season+league — used for
+  // team/league display AND as statsRow below, so sd/groups and mins/apps/gls/asts
+  // always describe the SAME club, never two different ones for a multi-club season.
+  const selectedSummaryRow = allSeasons.find(s => s.s === chosenSeasonKey && s.l === targetLeague) || null;
   const sdTeam = selectedSummaryRow ? selectedSummaryRow.team : (sd.team || player.team);
   const sdLeague = selectedSummaryRow ? selectedSummaryRow.l : (sd.league || player.league);
   // Resolve crest: use player.teamFotmobId for current team, else look up TEAM_FOTMOB_MAP
@@ -773,8 +787,6 @@ export function buildCardElement(player, manual = {}) {
     .sort((a, b) => b[1] - a[1])
     .slice(0, 3);
   const groups = sd.g || {};
-  const allSeasons = player.allSeasonsSummary || [];
-  const latestSeason = allSeasons[0] || {};
   const isGK = (player.position || '').split(',')[0].trim() === 'GK' || (player.roleKey || '').startsWith('GK');
   const photo = manual.playerPhotoUrl || photoUrl(player.name, player.team);
   const crest = crestId ? `${CREST_BASE}${crestId}.png` : '';
