@@ -141,28 +141,22 @@ export function scoreBandColor(s){
 }
 
 export function scoreLabel(score){
-  if(score>=82) return 'Elite Premier League';
-  if(score>=78) return 'Excellent Premier League';
-  if(score>=72) return 'Premier League Level';
-  if(score>=67) return 'Very Good Championship';
-  if(score>=61) return 'Championship Level';
-  if(score>=57) return 'League One Level';
-  if(score>=54) return 'League Two Level';
-  if(score>=50) return 'National League Level';
-  if(score>=44) return 'Non-League';
-  return 'Development';
+  if(score>=90) return 'Elite';
+  if(score>=80) return 'Excellent';
+  if(score>=70) return 'Very Good';
+  if(score>=60) return 'Good';
+  if(score>=46) return 'Average';
+  if(score>=38) return 'Poor';
+  return 'Bad';
 }
 export function scoreLabelShort(score){
-  if(score>=82) return 'Elite PL';
-  if(score>=78) return 'Excellent PL';
-  if(score>=72) return 'PL Level';
-  if(score>=67) return 'Top Champ';
-  if(score>=61) return 'Championship';
-  if(score>=57) return 'League One';
-  if(score>=54) return 'League Two';
-  if(score>=50) return 'Non-League';
-  if(score>=44) return 'Semi-Pro';
-  return 'Dev';
+  if(score>=90) return 'Elite';
+  if(score>=80) return 'Excellent';
+  if(score>=70) return 'Very Good';
+  if(score>=60) return 'Good';
+  if(score>=46) return 'Average';
+  if(score>=38) return 'Poor';
+  return 'Bad';
 }
 
 export function promotionBadge(score,league){

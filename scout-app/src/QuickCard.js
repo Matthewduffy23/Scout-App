@@ -1,4 +1,4 @@
-// QuickCard v59 - foot dot removed + tighter Position/Foot spacing, flag closer to league name, Career "best role score" toggle (exact TREND_ROLES logic from PlayerScoutingCard.js, e.g. Target Man excluded for CF), default stays cumulative
+// QuickCard v60 - split-the-difference spacing for foot/flag, best-role Career mode shows whole numbers + no league band axis, constants.js scoreLabel simplified to generic quality tiers
 import React, { useState } from 'react';
 import { scoreLabel, formatFoot, formatMV, GBE_LEAGUE_BANDS } from './constants';
 
@@ -574,7 +574,7 @@ function careerTrajectorySvg(player, w = 420, h = 284, showForecast = false, pos
       <text x="${fx.toFixed(1)}" y="${(pad.t + ph + 17).toFixed(1)}" font-family="Montserrat,sans-serif" font-size="10" font-weight="600" fill="#22c55e" text-anchor="middle">${Math.round(peakAge)}</text>`;
   })() : '';
 
-  const bandLines = relevantBands
+  const bandLines = useBestRole ? '' : relevantBands
     .map(([label, val]) => {
       const y = yS(val);
       return `
@@ -587,7 +587,7 @@ function careerTrajectorySvg(player, w = 420, h = 284, showForecast = false, pos
     const col = scoreTierColor(p.sc);
     return `
       <circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="5" fill="${col}" stroke="#07090f" stroke-width="1.5"/>
-      <text x="${cx.toFixed(1)}" y="${(cy - 11).toFixed(1)}" font-family="Montserrat,sans-serif" font-size="11" font-weight="700" fill="${col}" text-anchor="middle">${p.sc.toFixed(1)}</text>
+      <text x="${cx.toFixed(1)}" y="${(cy - 11).toFixed(1)}" font-family="Montserrat,sans-serif" font-size="11" font-weight="700" fill="${col}" text-anchor="middle">${p.sc.toFixed(useBestRole ? 0 : 1)}</text>
       <text x="${cx.toFixed(1)}" y="${(pad.t + ph + 17).toFixed(1)}" font-family="Montserrat,sans-serif" font-size="10" font-weight="600" fill="#5e6678" text-anchor="middle">${Math.round(p.age)}</text>`;
   }).join('');
 
@@ -902,7 +902,7 @@ function buildQuickCardElement(player, players, manual = {}) {
 
       <!-- NAME / POSITION / FOOT / FLAG / AGE -->
       <div style="position:absolute;left:248px;top:24px;width:560px;font-size:53.2px;font-weight:700;line-height:1.05;letter-spacing:-0.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${manual.nameOverride || player.name}</div>
-      <div style="position:absolute;left:248px;top:90px;display:flex;align-items:center;gap:8px;">
+      <div style="position:absolute;left:248px;top:90px;display:flex;align-items:center;gap:10px;">
         <span style="font-size:26.6px;font-weight:600;color:#fff;white-space:nowrap;">${POSITION_LABELS[rawPosToken] || rawPosToken}</span>
         ${(player.foot && player.foot !== 'unknown' && player.foot !== 'nan') ? `<span style="font-size:21.3px;color:#c0c0c0;white-space:nowrap;">${formatFoot(player.foot)}</span>` : ''}
       </div>
@@ -934,7 +934,7 @@ function buildQuickCardElement(player, players, manual = {}) {
       <div style="position:absolute;left:912px;top:90px;width:266px;font-size:36px;font-weight:800;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${sdTeam.length >= 16 ? 'letter-spacing:-1px;' : ''}">${sdTeam}</div>
       <div style="position:absolute;left:912px;top:150px;display:flex;align-items:center;">
         <span style="font-size:21px;font-weight:500;color:#fff;white-space:nowrap;">${leagueDisplayName}</span>
-        ${countryToIso2(leagueToCountry(sdLeague)) ? `<div style="width:32px;height:20px;flex-shrink:0;margin-left:22px;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(leagueToCountry(sdLeague))}.png');border-radius:2px;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15);"></div>` : ''}
+        ${countryToIso2(leagueToCountry(sdLeague)) ? `<div style="width:32px;height:20px;flex-shrink:0;margin-left:30px;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(leagueToCountry(sdLeague))}.png');border-radius:2px;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15);"></div>` : ''}
       </div>
       ${player.onLoan ? `<div style="position:absolute;left:912px;top:194px;font-size:21.3px;color:#d9d9d9;white-space:nowrap;">On Loan</div>` : ''}
 
