@@ -732,7 +732,21 @@ export function buildCardElement(player, manual = {}) {
   const chosenSeasonKey = manual.selectedSeasonKey
     || (player.allSeasonsSummary && player.allSeasonsSummary[0] && player.allSeasonsSummary[0].s)
     || Object.keys(seasonsDetailObj).sort().reverse()[0];
-  const sd = seasonsDetailObj[chosenSeasonKey] || Object.values(seasonsDetailObj)[0] || {};
+  // seasonsDetail[season] can only ever hold ONE club's data per season — duplicate
+  // JSON keys for a player with two entries in the same season (e.g. a January
+  // transfer) collapse to whichever was written last. Previously, selecting a
+  // specific club via manual.selectedLeague only overrode the sdTeam/sdLeague
+  // LABELS below — the actual stats object (sd.roles, sd.g, sd.mins) still came
+  // from this single collapsed entry, so switching tabs could show the right
+  // team name with the wrong (or blank) underlying numbers. seasonsDetailAll
+  // preserves every season+club row undeduped; resolve sd from there first,
+  // matched on season+league when a club is explicitly selected, so the actual
+  // stats always follow the selection.
+  const seasonsDetailAllArr = player.seasonsDetailAll || [];
+  const sdAllMatch = manual.selectedLeague
+    ? seasonsDetailAllArr.find(r => r.season === chosenSeasonKey && r.league === manual.selectedLeague)
+    : seasonsDetailAllArr.find(r => r.season === chosenSeasonKey);
+  const sd = sdAllMatch || seasonsDetailObj[chosenSeasonKey] || Object.values(seasonsDetailObj)[0] || {};
   // If user selected a specific team/league row from allSeasonsSummary, override sd fields
   const selectedSummaryRow = manual.selectedLeague
     ? (player.allSeasonsSummary || []).find(s => s.s === chosenSeasonKey && s.l === manual.selectedLeague)
@@ -783,8 +797,13 @@ export function buildCardElement(player, manual = {}) {
   const shBySeason = {};
   (player.sh || []).forEach(h => { if (h.sc != null) shBySeason[h.s] = h; });
   const trendData = trendSeasonKeys.map(sk => {
-    // Get per-season role scores from seasonsDetail
-    const sdEntry = (player.seasonsDetail || {})[sk] || {};
+    // Get per-season role scores from seasonsDetail — must match the SAME club
+    // bestStandardBySeason picked (by minutes) for this season, not just the
+    // season string, since seasonsDetail[season] can only hold one club's data
+    // and may silently be a different club for a player with two entries here.
+    const skLeague = bestStandardBySeason[sk] && bestStandardBySeason[sk].l;
+    const sdEntry = seasonsDetailAllArr.find(r => r.season === sk && r.league === skLeague)
+      || (player.seasonsDetail || {})[sk] || {};
     const seasonRoles = sdEntry.roles || {};
     const bestRoleScore = Object.entries(seasonRoles)
       .filter(([role]) => trendValidRoles.length === 0 || trendValidRoles.includes(role))

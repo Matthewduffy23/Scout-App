@@ -733,7 +733,15 @@ function buildQuickCardElement(player, players, manual = {}) {
   const seasonsDetailObj = player.seasonsDetail || {};
   const chosenSeasonKey = (player.allSeasonsSummary && player.allSeasonsSummary[0] && player.allSeasonsSummary[0].s)
     || Object.keys(seasonsDetailObj).sort().reverse()[0];
-  const sd = seasonsDetailObj[chosenSeasonKey] || Object.values(seasonsDetailObj)[0] || {};
+  // seasonsDetail[season] can only ever hold ONE club's data per season — duplicate
+  // JSON keys for a player with two entries in the same season (e.g. a January
+  // transfer) collapse to whichever was written last, which can silently show the
+  // wrong club's stats or leave the card blank. seasonsDetailAll preserves every
+  // season+club row undeduped with the higher-league-band entry first (deterministic
+  // default), so QuickCard's zero-input export resolves sd from there first. Falls
+  // back to the old singular lookup for data built before the field existed.
+  const sdAllMatch = (player.seasonsDetailAll || []).find(r => r.season === chosenSeasonKey);
+  const sd = sdAllMatch || seasonsDetailObj[chosenSeasonKey] || Object.values(seasonsDetailObj)[0] || {};
   const sdTeam = truncateText(sd.team || player.team, 16);
   const sdLeague = sd.league || player.league;
   // allSeasonsSummary[0] is NOT guaranteed to be the same season+club as `sd` above —
