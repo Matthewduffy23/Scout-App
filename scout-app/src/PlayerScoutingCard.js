@@ -838,8 +838,8 @@ export function buildCardElement(player, manual = {}) {
   // always derive from the correctly season-resolved groups data (via sd/statsRow),
   // which already tracks tab switching correctly.
   const viewingDefaultLatest = !manual.selectedSeasonKey && !manual.selectedLeague;
-  const xgSeason = (viewingDefaultLatest && player.xgSeason != null) ? player.xgSeason : per90ToSeason(findRawA('xg'));
-  const xaSeason = (viewingDefaultLatest && player.xaSeason != null) ? player.xaSeason : per90ToSeason(findRawA('xa', 'expected assists'));
+  const xgSeason = (viewingDefaultLatest && player.xgSeason != null) ? player.xgSeason : per90ToSeason(findRawA('xg', 'xg per 90'));
+  const xaSeason = (viewingDefaultLatest && player.xaSeason != null) ? player.xaSeason : per90ToSeason(findRawA('xa', 'xa per 90', 'expected assists'));
   // GK-specific: Save Rate is a % value stored directly (not per-90), Goals Conceded is per-90
   const gkSaveRate = findRawA('save rate');
   const gkGoalsConceded = per90ToSeason(findRawA('goals conceded'));

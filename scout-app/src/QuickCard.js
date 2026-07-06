@@ -732,22 +732,29 @@ function teamRangeBarHtml(player, posKey, w = 560) {
 function buildQuickCardElement(player, players, manual = {}) {
   const seasonsDetailObj = player.seasonsDetail || {};
   const seasonsDetailAllArr = player.seasonsDetailAll || [];
-  // manual.seasonOverride lets the modal pick a specific season instead of the
-  // default (most recent). Only honored if the player actually has data for it.
-  const seasonOverrideValid = manual.seasonOverride
-    && (seasonsDetailObj[manual.seasonOverride] !== undefined
-      || seasonsDetailAllArr.some(r => r.season === manual.seasonOverride));
-  const chosenSeasonKey = (seasonOverrideValid ? manual.seasonOverride : null)
-    || (player.allSeasonsSummary && player.allSeasonsSummary[0] && player.allSeasonsSummary[0].s)
+  const allSummary = player.allSeasonsSummary || [];
+  // manual.seasonOverride is a "season||league" composite key (matching PlayerCard's
+  // tab-selection pattern) so a player with two entries in the same season (e.g. a
+  // January transfer, 25-26 at both Plzen and Pisa) can be resolved to the SPECIFIC
+  // club selected, not just "whichever season string matches first". Falls back to
+  // a plain season string for backwards compatibility if no "||" is present.
+  const [ovSeason, ovLeague] = manual.seasonOverride ? manual.seasonOverride.split('||') : [null, null];
+  const seasonOverrideValid = ovSeason
+    && (seasonsDetailObj[ovSeason] !== undefined || seasonsDetailAllArr.some(r => r.season === ovSeason));
+  const chosenSeasonKey = (seasonOverrideValid ? ovSeason : null)
+    || (allSummary[0] && allSummary[0].s)
     || Object.keys(seasonsDetailObj).sort().reverse()[0];
+  const chosenLeagueKey = seasonOverrideValid ? (ovLeague || null) : null;
   // seasonsDetail[season] can only ever hold ONE club's data per season — duplicate
   // JSON keys for a player with two entries in the same season (e.g. a January
   // transfer) collapse to whichever was written last, which can silently show the
   // wrong club's stats or leave the card blank. seasonsDetailAll preserves every
-  // season+club row undeduped with the higher-league-band entry first (deterministic
-  // default), so QuickCard's zero-input export resolves sd from there first. Falls
-  // back to the old singular lookup for data built before the field existed.
-  const sdAllMatch = seasonsDetailAllArr.find(r => r.season === chosenSeasonKey);
+  // season+club row undeduped; when a specific club was chosen via the season
+  // override dropdown, match on season+league exactly. Otherwise fall back to the
+  // first (deterministic higher-league-band) entry for that season as the default.
+  const sdAllMatch = chosenLeagueKey
+    ? seasonsDetailAllArr.find(r => r.season === chosenSeasonKey && r.league === chosenLeagueKey)
+    : seasonsDetailAllArr.find(r => r.season === chosenSeasonKey);
   const sd = sdAllMatch || seasonsDetailObj[chosenSeasonKey] || Object.values(seasonsDetailObj)[0] || {};
   const sdTeam = truncateText(sd.team || player.team, 16);
   const sdLeague = sd.league || player.league;
@@ -755,7 +762,6 @@ function buildQuickCardElement(player, players, manual = {}) {
   // for loan players with two entries sharing a season string (e.g. parent club U21s
   // and the loan club), index 0 can silently pick the wrong one while sd correctly
   // resolves to the loan club via chosenSeasonKey. Match on season+league explicitly.
-  const allSummary = player.allSeasonsSummary || [];
   const statsRow = allSummary.find(row => row.s === chosenSeasonKey && row.l === sdLeague)
     || allSummary.find(row => row.s === chosenSeasonKey)
     || allSummary[0]
@@ -1073,9 +1079,22 @@ export default function QuickCardModal({ player, players, onClose }) {
   const [seasonOverride, setSeasonOverride] = useState('');
   const BIO_MAX_LENGTH = scoutStatus ? 248 : 350;
 
-  // Distinct seasons this player has data for, newest first, for the season-override dropdown.
-  const availableSeasons = Array.from(new Set((player.allSeasonsSummary || []).map(row => row.s)))
-    .sort((a, b) => SEASON_ORDER.indexOf(b) - SEASON_ORDER.indexOf(a));
+  // Distinct season+club rows this player has data for, newest first, for the
+  // season-override dropdown. Deduped by season+league (matching PlayerCard's tab
+  // pattern) so a player with two entries in one season (e.g. a January transfer,
+  // 25-26 at both club A and club B) shows as two separate, labeled options —
+  // not one generic "25-26" that silently resolves to whichever club comes first.
+  const availableSeasons = (() => {
+    const seen = new Set();
+    return (player.allSeasonsSummary || [])
+      .filter(row => row && row.s)
+      .filter(row => { const k = `${row.s}||${row.l}`; if (seen.has(k)) return false; seen.add(k); return true; })
+      .sort((a, b) => SEASON_ORDER.indexOf(b.s) - SEASON_ORDER.indexOf(a.s))
+      .map(row => ({
+        key: `${row.s}||${row.l || ''}`,
+        label: row.team ? `${row.s} — ${row.team}` : row.s,
+      }));
+  })();
 
   const handleDownload = async () => {
     setDownloading(true);
@@ -1115,7 +1134,7 @@ export default function QuickCardModal({ player, players, onClose }) {
             <label style={qcLabelStyle}>Season</label>
             <select style={qcInputStyle} value={seasonOverride} onChange={e=>setSeasonOverride(e.target.value)}>
               <option value="">Default (most recent)</option>
-              {availableSeasons.map(s => <option key={s} value={s}>{s}</option>)}
+              {availableSeasons.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
             </select>
           </div>
         )}
