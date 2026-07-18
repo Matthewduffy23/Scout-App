@@ -1,3 +1,4 @@
+// App.js v2 - Added shortlist export/import (backup against localStorage domain/device loss)
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import PlayerCard from './PlayerCard';
 import ClubTool from './ClubTool';
@@ -220,12 +221,44 @@ export default function App(){
   const [showShortlist,setShowShortlist]=React.useState(false);
   const [notPlayingOnly,setNotPlayingOnly]=React.useState(false);
   const [softMode,setSoftMode]=React.useState(false);
+  const shortlistFileInputRef=React.useRef(null);
   const toggleShortlist=(id)=>{
     setShortlist(prev=>{
       const next=prev.includes(id)?prev.filter(x=>x!==id):[...prev,id];
       try{localStorage.setItem('scout_shortlist',JSON.stringify(next))}catch{}
       return next;
     });
+  };
+  const exportShortlist=()=>{
+    const payload={ids:shortlist,exportedAt:new Date().toISOString()};
+    const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url;
+    a.download=`shortlist_backup_${new Date().toISOString().slice(0,10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+  const importShortlistFile=(file)=>{
+    if(!file) return;
+    const reader=new FileReader();
+    reader.onload=(e)=>{
+      try{
+        const parsed=JSON.parse(e.target.result);
+        const importedIds=Array.isArray(parsed)?parsed:(Array.isArray(parsed.ids)?parsed.ids:null);
+        if(!importedIds) throw new Error('Invalid shortlist file');
+        setShortlist(prev=>{
+          const merged=[...new Set([...prev,...importedIds])];
+          try{localStorage.setItem('scout_shortlist',JSON.stringify(merged))}catch{}
+          return merged;
+        });
+      }catch(err){
+        alert('Could not read that file — make sure it\'s a shortlist backup exported from this app.');
+      }
+    };
+    reader.readAsText(file);
   };
   const [rawMode,setRawMode]=useState(false); // no league weight
   const [onlyElite,setOnlyElite]=useState(false); // only elite in their division
@@ -661,6 +694,11 @@ export default function App(){
               <div style={T.cb(showShortlist)}>{showShortlist&&<span style={{color:'#fff',fontSize:8,lineHeight:1}}>✓</span>}</div>
               <span style={T.cl(showShortlist)}>★ Shortlist ({shortlist.length})</span>
             </label>
+            <div style={{display:'flex',gap:6,marginTop:6}}>
+              <button onClick={exportShortlist} title="Download a backup of your shortlist" style={{padding:'3px 8px',borderRadius:6,border:'1px solid #1e2d45',background:'transparent',color:'#64748b',fontSize:9.5,cursor:'pointer'}}>📥 Export</button>
+              <button onClick={()=>shortlistFileInputRef.current&&shortlistFileInputRef.current.click()} title="Restore shortlist from a backup file" style={{padding:'3px 8px',borderRadius:6,border:'1px solid #1e2d45',background:'transparent',color:'#64748b',fontSize:9.5,cursor:'pointer'}}>📤 Import</button>
+              <input ref={shortlistFileInputRef} type="file" accept="application/json" style={{display:'none'}} onChange={e=>{importShortlistFile(e.target.files[0]);e.target.value='';}}/>
+            </div>
             <div style={{fontSize:9,color:'#475569',marginTop:2,lineHeight:1.4}}>Home nations · Continental/Intl history · Youth league · 5+ games Band 1-5 (24-25/25-26)</div>
           </div>
           <div style={T.fg}>
