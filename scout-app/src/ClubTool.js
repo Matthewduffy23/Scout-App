@@ -1,3 +1,4 @@
+// ClubTool.js v4 - Height filter now displays/selects in feet'inches (e.g. 5'11") to match player card convention, while still filtering against cm data underneath. Height filter itself added in v3. Nationality/Min Role Score/Scoring Mode kept from v2.
 import React, { useState, useMemo } from 'react';
 import PlayerCard from './PlayerCard';
 import { scoreBandColor, scoreLabel, formatMV, ROLE_KEY_LABELS, ROLES_BY_KEY,
@@ -7,6 +8,17 @@ import { scoreBandColor, scoreLabel, formatMV, ROLE_KEY_LABELS, ROLES_BY_KEY,
 import { Photo, Crest } from './utils';
 
 const ALL_SEASONS = ['2025-26','2024-25','2023-24','2022-23','2021-22','2020-21','2019-20','2018-19'];
+
+// Height filter: data is stored in cm, but displayed as feet'inches (matches player card
+// convention). Options generated in whole inches (58"-83" ≈ 4'10"-6'11"), each mapped to
+// its cm equivalent (rounded, same rounding as the player card's own cm->feet display) so
+// the filter boundary always lines up with what's actually shown for a given player.
+const HEIGHT_OPTIONS = Array.from({length: 83-58+1}, (_, i) => {
+  const totalInches = 58 + i;
+  const feet = Math.floor(totalInches / 12);
+  const inches = totalInches % 12;
+  return { cm: Math.round(totalInches * 2.54), label: `${feet}'${inches}"` };
+});
 
 const METRIC_OPTIONS=[
   {label:'xG per 90',key:'xG'},{label:'xA per 90',key:'xA'},
@@ -150,7 +162,8 @@ function CandidateCard({player, tmplMetrics, rk, onUseAsTemplate, onOpenCard}){
   const g=sd.g||{};
   const allM=matchMets?.length?matchMets:[...(g.A||[]),...(g.D||[]),...(g.P||[])];
   const mKeys=ROLE_METRICS[rk]||[];
-  const promo=promotionBadge(player.careerScore,player.league);
+  const dScore=player._displayScore??player.careerScore;
+  const promo=promotionBadge(dScore,player.league);
   const ms=player._matchScore;
 
   return(
@@ -168,8 +181,8 @@ function CandidateCard({player, tmplMetrics, rk, onUseAsTemplate, onOpenCard}){
         </div>
         <div style={{textAlign:'right',flexShrink:0}}>
           {ms!=null&&<div style={{fontSize:16,fontWeight:800,color:ms>=70?'#22c55e':ms>=50?'#f59e0b':'#64748b'}}>{Math.round(ms)}%</div>}
-          <div style={{fontSize:11,fontWeight:700,color:scoreBandColor(player.careerScore)}}>{player.careerScore.toFixed(1)}</div>
-          <div style={{fontSize:8,color:'#64748b'}}>{scoreLabel(player.careerScore)}</div>
+          <div style={{fontSize:11,fontWeight:700,color:scoreBandColor(dScore)}}>{dScore.toFixed(1)}</div>
+          <div style={{fontSize:8,color:'#64748b'}}>{scoreLabel(dScore)}</div>
         </div>
         <Crest id={player.teamFotmobId} name={player.team} size={20}/>
       </div>
@@ -271,6 +284,8 @@ export default function ClubTool({players}){
   const [metricFilters,setMetricFilters]=useState([]);
   const [bestSeasonMode,setBestSeasonMode]=useState(false);
   const [ageMin,setAgeMin]=useState(15);
+  const [heightMin,setHeightMin]=useState(152); // 5'0"
+  const [heightMax,setHeightMax]=useState(211); // 6'11"
   const [minMins,setMinMins]=useState(0);
   const [minSeas,setMinSeas]=useState(1);
   const [showMvFilter,setShowMvFilter]=useState(false);
@@ -282,6 +297,10 @@ export default function ClubTool({players}){
   const [escOnly,setEscOnly]=useState(false);
   const [gbeMin,setGbeMin]=useState(0);
   const [currentLeagueOnly,setCurrentLeagueOnly]=useState(false);
+  const [natFilter,setNatFilter]=useState('');
+  const [roleScoreFilter,setRoleScoreFilter]=useState(''); // role to require a min score in (independent of `role`, which weights template similarity)
+  const [roleScoreMin,setRoleScoreMin]=useState(50);
+  const [scoreMode,setScoreMode]=useState('complete'); // 'complete' or a specific role name — swaps the score shown/filtered on candidate cards
   const addMetricFilter=()=>{if(metricFilters.length<10)setMetricFilters(f=>[...f,{key:'',label:'',min:0,max:100}]);};
 
   // Teams for selected league - from players who played in that season
@@ -386,12 +405,17 @@ export default function ClubTool({players}){
       ? new Set([...searchLeagues].filter(l=>smartLeagues.has(l)))
       : searchLeagues;
 
+    const getDisplayScore=(p)=>scoreMode!=='complete' ? ((p.roleCareerScores||{})[scoreMode]??null) : p.careerScore;
+
     const cands=players.filter(p=>{
       if(p.roleKey!==pos) return false;
       if(p.team===tmplTeam&&p.league===tmplLeague) return false;
       if(!(smartFilter?effectiveLeagues:searchLeagues).has(p.league)) return false;
       if(p.age<ageMin||p.age>ageMax) return false;
-      if(minScore>0&&p.careerScore<minScore) return false;
+      if(p.height&&(p.height<heightMin||p.height>heightMax)) return false;
+      const ds=getDisplayScore(p);
+      if(scoreMode!=='complete'&&ds==null) return false;
+      if(minScore>0&&(ds??p.careerScore)<minScore) return false;
       if(minSeas>1&&(p.seasons||1)<minSeas) return false;
       if(minMins>0&&(p.minutesLatest||0)<minMins) return false;
       if(potentialMin>40&&(p.potentialScore||p.careerScore)<potentialMin) return false;
@@ -402,6 +426,12 @@ export default function ClubTool({players}){
       if(pls<lsMin||pls>lsMax) return false;
       if(escOnly&&!p.escEligible) return false;
       if(gbeMin>0&&(p.gbeTotal||0)<gbeMin) return false;
+      if(natFilter&&!(p.passportCountries||'').toLowerCase().includes(natFilter.toLowerCase())&&!(p.birthCountry||'').toLowerCase().includes(natFilter.toLowerCase())) return false;
+      if(roleScoreFilter){
+        const rs=(p.roleCareerScores||{})[roleScoreFilter]||0;
+        if(roleScoreMin>0&&rs<roleScoreMin) return false;
+        if(!roleScoreMin&&!rs) return false;
+      }
       if(role&&!(p.roleCareerScores||{})[role]) return false;
       if(sideFilter!=='Any'&&p.side&&p.side!=='C'&&p.side!==sideFilter) return false;
       if(footFilter!=='Any'&&p.foot&&p.foot!=='unknown'&&p.foot!=='nan'&&p.foot!==footFilter) return false;
@@ -451,7 +481,7 @@ export default function ClubTool({players}){
         bestMets=getMetrics(p);
         bestMatch=computeMatch(bestMets,tmplMets,p.league);
       }
-      return{...p,_matchScore:bestMatch,_matchRole:role||'_default',_matchSeason:bestSeason,_matchMets:bestMets};
+      return{...p,_matchScore:bestMatch,_matchRole:role||'_default',_matchSeason:bestSeason,_matchMets:bestMets,_displayScore:getDisplayScore(p)??p.careerScore};
     }).filter(p=>p._matchScore!=null&&p._matchScore>0)
       .sort((a,b)=>b._matchScore-a._matchScore)
       .slice(0,60);
@@ -501,7 +531,7 @@ export default function ClubTool({players}){
 
         <div style={T.fg}>
           <span style={T.fl}>Position</span>
-          <select style={T.sel} value={pos} onChange={e=>{setPos(e.target.value);setRole('');setTmplPlayer('');setRan(false);}}>
+          <select style={T.sel} value={pos} onChange={e=>{setPos(e.target.value);setRole('');setTmplPlayer('');setRan(false);setScoreMode('complete');setRoleScoreFilter('');}}>
             {Object.entries(ROLE_KEY_LABELS).map(([k,v])=><option key={k} value={k}>{v}</option>)}
           </select>
         </div>
@@ -513,8 +543,33 @@ export default function ClubTool({players}){
               <option value="">Any role</option>
               {(ROLES_BY_KEY[pos]||[]).map(r=><option key={r}>{r}</option>)}
             </select>
+            <div style={{fontSize:9,color:'#475569',marginTop:2}}>Weights which stats matter most for similarity matching.</div>
           </div>
         )}
+
+        {(ROLES_BY_KEY[pos]||[]).length>0&&(<>
+          <div style={T.fg}>
+            <span style={T.fl}>Scoring Mode</span>
+            <select style={T.sel} value={scoreMode} onChange={e=>setScoreMode(e.target.value)}>
+              <option value="complete">Complete Score</option>
+              {(ROLES_BY_KEY[pos]||[]).map(r=><option key={r} value={r}>{r}</option>)}
+            </select>
+            {scoreMode!=='complete'&&<div style={{fontSize:9,color:'#60a5fa',marginTop:3}}>Candidate cards show {scoreMode} score instead of complete score.</div>}
+          </div>
+          <div style={T.fg}>
+            <span style={T.fl}>Filter by Role Score</span>
+            <select style={T.sel} value={roleScoreFilter} onChange={e=>setRoleScoreFilter(e.target.value)}>
+              <option value="">Any role</option>
+              {(ROLES_BY_KEY[pos]||[]).map(r=><option key={r}>{r}</option>)}
+            </select>
+          </div>
+          {roleScoreFilter&&(
+            <div style={T.fg}>
+              <span style={T.fl}>Min {roleScoreFilter}: <strong style={{color:'#60a5fa'}}>{roleScoreMin}</strong></span>
+              <input type="range" min={40} max={95} step={1} value={roleScoreMin} onChange={e=>setRoleScoreMin(Number(e.target.value))} style={{width:'100%',accentColor:'#3b7de8'}}/>
+            </div>
+          )}
+        </>)}
 
         {/* Side filter for FB and ATT */}
         {(pos==='FB'||pos==='ATT'||pos==='CF')&&(
@@ -535,6 +590,19 @@ export default function ClubTool({players}){
           <select style={T.sel} value={footFilter} onChange={e=>setFootFilter(e.target.value)}>
             {['Any','left','right','both'].map(f=><option key={f} value={f}>{f.charAt(0).toUpperCase()+f.slice(1)}</option>)}
           </select>
+        </div>
+
+        <div style={T.fg}>
+          <span style={T.fl}>Height</span>
+          <div style={{display:'flex',gap:6,alignItems:'center'}}>
+            <select style={{...T.sel,flex:1,width:0}} value={heightMin} onChange={e=>setHeightMin(Number(e.target.value))}>
+              {HEIGHT_OPTIONS.map(o=><option key={o.cm} value={o.cm}>{o.label}</option>)}
+            </select>
+            <span style={{color:'#475569',fontSize:10}}></span>
+            <select style={{...T.sel,flex:1,width:0}} value={heightMax} onChange={e=>setHeightMax(Number(e.target.value))}>
+              {HEIGHT_OPTIONS.map(o=><option key={o.cm} value={o.cm}>{o.label}</option>)}
+            </select>
+          </div>
         </div>
 
         {(POSITION_ATTRIBUTES[pos]||[]).length>0&&(
@@ -702,6 +770,10 @@ export default function ClubTool({players}){
                 <span key={v} onClick={()=>setGbeMin(v)} style={{padding:'2px 7px',borderRadius:4,fontSize:10,cursor:'pointer',background:gbeMin===v?'#3b82f6':'#1e293b',color:gbeMin===v?'#fff':'#94a3b8',border:`1px solid ${gbeMin===v?'#3b82f6':'#334155'}`}}>{v===0?'Any':v+'+'}</span>
               ))}
             </div>
+          </div>
+          <div style={{marginTop:6}}>
+            <div style={{fontSize:10,color:'#94a3b8',marginBottom:3}}>NATIONALITY</div>
+            <input value={natFilter} onChange={e=>setNatFilter(e.target.value)} placeholder="e.g. France, Brazil" style={{width:'100%',background:'#1e293b',border:'1px solid #334155',borderRadius:4,padding:'4px 7px',fontSize:10,color:'#e2e8f4',outline:'none'}}/>
           </div>
         </div>
 

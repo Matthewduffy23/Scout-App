@@ -1,9 +1,20 @@
-// App.js v4 - Fixed mobile lazy-load: manifest keys are uppercase (GK/CB/FB/CM/ATT/CF), was incorrectly lowercased causing 0-player bug. Shortlist export/import kept from v2.
+// App.js v6 - Height filter now displays/selects in feet'inches (e.g. 5'11") to match player card convention, while still filtering against cm data underneath. Height filter itself added in v5. Mobile lazy-load fix (v4) and shortlist export/import (v2) kept.
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import PlayerCard from './PlayerCard';
 import ClubTool from './ClubTool';
 import { Photo as PhotoUtil, Crest as CrestUtil, photoUrl as photoUrlUtil } from './utils';
 import { scoreBandColor, formatMV, formatFoot, ROLE_KEY_LABELS, ROLES_BY_KEY, POSITION_ATTRIBUTES, playerHasAttribute, ALL_LEAGUES, DEFAULT_LEAGUES, HIDDEN_LEAGUES, YOUTH_LEAGUES, PRESET_LEAGUES, COUNTRY_TO_REGION, GBE_LEAGUE_BANDS, leagueToRegion, leagueToBand, scoreLabel, scoreToStars, promotionBadge, ALL_SEASONS, LEAGUE_STRENGTHS } from './constants';
+
+// Height filter: data is stored in cm, but displayed as feet'inches (matches player card
+// convention). Options generated in whole inches (58"-83" ≈ 4'10"-6'11"), each mapped to
+// its cm equivalent (rounded, same rounding as the player card's own cm->feet display) so
+// the filter boundary always lines up with what's actually shown for a given player.
+const HEIGHT_OPTIONS = Array.from({length: 83-58+1}, (_, i) => {
+  const totalInches = 58 + i;
+  const feet = Math.floor(totalInches / 12);
+  const inches = totalInches % 12;
+  return { cm: Math.round(totalInches * 2.54), label: `${feet}'${inches}"` };
+});
 const PHOTO_BASE = 'https://raw.githubusercontent.com/Matthewduffy23/scouting-photos/main/photos/';
 const CREST_BASE = 'https://images.fotmob.com/image_resources/logo/teamlogo/';
 const PAGE = 50;
@@ -200,6 +211,8 @@ export default function App(){
   },[activePresetLeagues,activeBands,activeRegions,showHidden,showYouth]);
   const [ageMin,setAgeMin]=useState(16);
   const [ageMax,setAgeMax]=useState(38);
+  const [heightMin,setHeightMin]=useState(152); // 5'0"
+  const [heightMax,setHeightMax]=useState(211); // 6'11"
   const [foot,setFoot]=useState('Any');
   const [minScore,setMinScore]=useState(40);
   const [minSeas,setMinSeas]=useState(1);
@@ -355,6 +368,7 @@ export default function App(){
       const pls=LEAGUE_STRENGTHS[p.league]||0;
       if(pls<lsMin||pls>lsMax) return false;
       if(p.age<ageMin||p.age>ageMax) return false;
+      if(p.height&&(p.height<heightMin||p.height>heightMax)) return false;
       if(foot!=='Any'&&p.foot!==foot) return false;
       const ds=getDisplayScore(p);
       if(ds===null) return false; // no data for that season
@@ -415,7 +429,7 @@ export default function App(){
       }
       return true;
     });
-  },[all,search,pos,leagues,ageMin,ageMax,foot,minScore,minSeas,showMvFilter,mvMax,showContractFilter,contractBefore,roleFilter,roleScoreMin,seasonFilter,metricFilters,xValueFilter,onlyElite,getDisplayScore,recentOnly,showXValueFilter,xValueMin,xValueMax,attrFilters,minMins,currentLeagueOnly,played2526,potentialMin,lsMin,lsMax,escOnly,gbeMin,natFilter,softMode,roleFilters,shortlist,showShortlist,notPlayingOnly]);
+  },[all,search,pos,leagues,ageMin,ageMax,heightMin,heightMax,foot,minScore,minSeas,showMvFilter,mvMax,showContractFilter,contractBefore,roleFilter,roleScoreMin,seasonFilter,metricFilters,xValueFilter,onlyElite,getDisplayScore,recentOnly,showXValueFilter,xValueMin,xValueMax,attrFilters,minMins,currentLeagueOnly,played2526,potentialMin,lsMin,lsMax,escOnly,gbeMin,natFilter,softMode,roleFilters,shortlist,showShortlist,notPlayingOnly]);
 
   const sorted=useMemo(()=>{
     const a=[...filtered];
@@ -447,7 +461,7 @@ export default function App(){
     avgAge:filtered.length?filtered.reduce((s,p)=>s+p.age,0)/filtered.length:0,
   }),[filtered,getDisplayScore]);
 
-  const reset=()=>{setSearch('');setPos('All');setRoleFilter('');setRoleFilters(new Set());setSoftMode(false);setRoleFilters(new Set());setSoftMode(false);setRoleScoreMin(50);setActivePreset('');setActivePresetLeagues(null);setShowHidden(false);setShowYouth(false);setActiveBands(new Set());setActiveRegions(new Set());setLsMin(0);setLsMax(101);setAgeMin(16);setAgeMax(38);setFoot('Any');setMinScore(40);setMinSeas(1);setShowMvFilter(false);setMvMax(50);setShowContractFilter(false);setContractBefore(2028);setSeasonFilter('all');setScoreMode('complete');setMetricFilters([]);setXValueFilter('');setRawMode(false);setOnlyElite(false);setRecentOnly(true);setShowXValueFilter(false);setXValueMin(0);setXValueMax(50);setAttrFilters(new Set());setMinMins(500);setCurrentLeagueOnly(false);setPotentialMin(40);setPlayed2526(false);setEscOnly(false);setGbeMin(0);setNatFilter('');setNotPlayingOnly(false);setShowShortlist(false);setSoftMode(false);setRoleFilters(new Set());setPage(0);};
+  const reset=()=>{setSearch('');setPos('All');setRoleFilter('');setRoleFilters(new Set());setSoftMode(false);setRoleFilters(new Set());setSoftMode(false);setRoleScoreMin(50);setActivePreset('');setActivePresetLeagues(null);setShowHidden(false);setShowYouth(false);setActiveBands(new Set());setActiveRegions(new Set());setLsMin(0);setLsMax(101);setAgeMin(16);setAgeMax(38);setHeightMin(152);setHeightMax(211);setFoot('Any');setMinScore(40);setMinSeas(1);setShowMvFilter(false);setMvMax(50);setShowContractFilter(false);setContractBefore(2028);setSeasonFilter('all');setScoreMode('complete');setMetricFilters([]);setXValueFilter('');setRawMode(false);setOnlyElite(false);setRecentOnly(true);setShowXValueFilter(false);setXValueMin(0);setXValueMax(50);setAttrFilters(new Set());setMinMins(500);setCurrentLeagueOnly(false);setPotentialMin(40);setPlayed2526(false);setEscOnly(false);setGbeMin(0);setNatFilter('');setNotPlayingOnly(false);setShowShortlist(false);setSoftMode(false);setRoleFilters(new Set());setPage(0);};
 
   if(loading) return <div style={{...T.app,alignItems:'center',justifyContent:'center'}}><style>{'@keyframes spin{to{transform:rotate(360deg)}}'}</style><div style={{width:24,height:24,border:'2px solid #1e2d45',borderTop:'2px solid #3b7de8',borderRadius:'50%',animation:'spin 0.8s linear infinite'}}/><div style={{color:'#94a3b8',fontSize:11,marginTop:8}}>Loading…</div></div>;
 
@@ -684,6 +698,18 @@ export default function App(){
             <select style={T.sel} value={foot} onChange={e=>{setFoot(e.target.value);setPage(0);}}>
               {['Any','left','right','both'].map(f=><option key={f}>{f}</option>)}
             </select>
+          </div>
+          <div style={T.fg}>
+            <span style={T.fl}>Height</span>
+            <div style={T.rr}>
+              <select style={{...T.sel,flex:1,width:0}} value={heightMin} onChange={e=>{setHeightMin(Number(e.target.value));setPage(0);}}>
+                {HEIGHT_OPTIONS.map(o=><option key={o.cm} value={o.cm}>{o.label}</option>)}
+              </select>
+              <span style={T.rs}>–</span>
+              <select style={{...T.sel,flex:1,width:0}} value={heightMax} onChange={e=>{setHeightMax(Number(e.target.value));setPage(0);}}>
+                {HEIGHT_OPTIONS.map(o=><option key={o.cm} value={o.cm}>{o.label}</option>)}
+              </select>
+            </div>
           </div>
           <div style={T.fg}>
             <span style={T.fl}>Min Score: <strong style={{color:'#60a5fa'}}>{minScore}</strong></span>
