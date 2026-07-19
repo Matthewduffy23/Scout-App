@@ -1,4 +1,4 @@
-// App.js v2 - Added shortlist export/import (backup against localStorage domain/device loss)
+// App.js v3 - Mobile: lazy-load one position group at a time (default Striker), desktop unchanged. Shortlist export/import kept from v2.
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import PlayerCard from './PlayerCard';
 import ClubTool from './ClubTool';
@@ -160,13 +160,14 @@ function Th({col,label,sort,onSort}){
 }
 
 export default function App(){
+  const isMobile=useMemo(()=>typeof window!=='undefined'&&window.matchMedia('(max-width: 768px)').matches,[]);
   const [all,setAll]=useState([]);
   const [loading,setLoading]=useState(true);
   const [sel,setSel]=useState(null);
   const [page,setPage]=useState(0);
 
   const [search,setSearch]=useState('');
-  const [pos,setPos]=useState('All');
+  const [pos,setPos]=useState(isMobile?'Striker':'All');
   const [roleFilters,setRoleFilters]=useState(new Set());
   const [roleFilter,setRoleFilter]=useState('');
   const [roleScoreMin,setRoleScoreMin]=useState(50);
@@ -271,7 +272,13 @@ export default function App(){
   const [attrFilters,setAttrFilters]=useState(new Set()); // active attribute keys // hide MV by default, show xValue
   const [showColPicker,setShowColPicker]=useState(false); // default: only show players active 2022-23+
 
+  const groupCacheRef=React.useRef({}); // mobile only: {gk:[...players], cf:[...players], ...}
+  const manifestRef=React.useRef(null);
+  const rk=useMemo(()=>Object.entries(ROLE_KEY_LABELS).find(([,v])=>v===pos)?.[0]||'',[pos]);
+
+  // Desktop: unchanged — load every position group upfront.
   useEffect(()=>{
+    if(isMobile) return;
     fetch('/players_manifest.json').then(r=>r.ok?r.json():null).catch(()=>null)
       .then(manifest=>{
         const fileList = manifest
@@ -281,11 +288,34 @@ export default function App(){
       })
       .then(results=>{setAll(results.flat());setLoading(false);})
       .catch(()=>setLoading(false));
-  },[]);
+  },[isMobile]);
+
+  // Mobile: load one position group at a time, cached per session, refetched only when switching to an uncached group.
+  useEffect(()=>{
+    if(!isMobile) return;
+    const groupKey = rk ? rk.toLowerCase() : null; // 'gk'|'cb'|'fb'|'cm'|'att'|'cf', or null for "All"
+    let cancelled=false;
+    setLoading(true);
+    const loadGroup=(manifest)=>{
+      if(!groupKey){
+        // "All" selected on mobile — user explicitly chose this, load everything like desktop (same tradeoff as before).
+        const fileList = manifest ? Object.values(manifest).flat() : ['gk','cb','fb','cm','att','cf'].map(f=>`players_${f}.json`);
+        return Promise.all(fileList.map(fname=>fetch(`/${fname}`).then(r=>r.json()).catch(()=>[]))).then(results=>results.flat());
+      }
+      if(groupCacheRef.current[groupKey]) return Promise.resolve(groupCacheRef.current[groupKey]);
+      const fileList = manifest && manifest[groupKey] ? manifest[groupKey] : [`players_${groupKey}.json`];
+      return Promise.all(fileList.map(fname=>fetch(`/${fname}`).then(r=>r.json()).catch(()=>[])))
+        .then(results=>{const flat=results.flat();groupCacheRef.current[groupKey]=flat;return flat;});
+    };
+    (manifestRef.current?Promise.resolve(manifestRef.current):fetch('/players_manifest.json').then(r=>r.ok?r.json():null).catch(()=>null))
+      .then(manifest=>{manifestRef.current=manifest;return loadGroup(manifest);})
+      .then(data=>{if(!cancelled){setAll(data);setLoading(false);}})
+      .catch(()=>{if(!cancelled)setLoading(false);});
+    return ()=>{cancelled=true;};
+  },[isMobile,rk]);
   useEffect(()=>{setRoleFilter('');setRoleScoreMin(50);setScoreMode('complete');},[pos]);
   useEffect(()=>{if(activePreset&&PRESET_LEAGUES[activePreset]){setActivePresetLeagues([...PRESET_LEAGUES[activePreset]]);}  },[activePreset]);
 
-  const rk=useMemo(()=>Object.entries(ROLE_KEY_LABELS).find(([,v])=>v===pos)?.[0]||'',[pos]);
   const onSort=useCallback(col=>{setSort(p=>p.col===col?{col,asc:!p.asc}:{col,asc:false});setPage(0);},[]);
 
   // Get display score based on all mode toggles
