@@ -1,4 +1,4 @@
-// App.js v3 - Mobile: lazy-load one position group at a time (default Striker), desktop unchanged. Shortlist export/import kept from v2.
+// App.js v4 - Fixed mobile lazy-load: manifest keys are uppercase (GK/CB/FB/CM/ATT/CF), was incorrectly lowercased causing 0-player bug. Shortlist export/import kept from v2.
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import PlayerCard from './PlayerCard';
 import ClubTool from './ClubTool';
@@ -293,7 +293,7 @@ export default function App(){
   // Mobile: load one position group at a time, cached per session, refetched only when switching to an uncached group.
   useEffect(()=>{
     if(!isMobile) return;
-    const groupKey = rk ? rk.toLowerCase() : null; // 'gk'|'cb'|'fb'|'cm'|'att'|'cf', or null for "All"
+    const groupKey = rk || null; // 'GK'|'CB'|'FB'|'CM'|'ATT'|'CF' — matches manifest keys exactly (uppercase, = roleKey), or null for "All"
     let cancelled=false;
     setLoading(true);
     const loadGroup=(manifest)=>{
@@ -303,7 +303,7 @@ export default function App(){
         return Promise.all(fileList.map(fname=>fetch(`/${fname}`).then(r=>r.json()).catch(()=>[]))).then(results=>results.flat());
       }
       if(groupCacheRef.current[groupKey]) return Promise.resolve(groupCacheRef.current[groupKey]);
-      const fileList = manifest && manifest[groupKey] ? manifest[groupKey] : [`players_${groupKey}.json`];
+      const fileList = manifest && manifest[groupKey] ? manifest[groupKey] : [`players_${groupKey.toLowerCase()}.json`];
       return Promise.all(fileList.map(fname=>fetch(`/${fname}`).then(r=>r.json()).catch(()=>[])))
         .then(results=>{const flat=results.flat();groupCacheRef.current[groupKey]=flat;return flat;});
     };
