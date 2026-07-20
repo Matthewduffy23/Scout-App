@@ -1,4 +1,4 @@
-// App.js v13 - International label shortened to just "International" (was "International (everyone else)"), matching Domestic's plain style.
+// App.js v14 - Fixed L2 tier: xValue now < £900k (was incorrectly > £900k), score < 60, excludes players with no xValue data. Matches L1's pattern.
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import PlayerCard from './PlayerCard';
 import ClubTool from './ClubTool';
@@ -471,7 +471,7 @@ export default function App(){
           if(t==='PL') return ds>=68;
           if(t==='Champ') return ds>=62&&ds<68;
           if(t==='L1') return ds<65&&(p.xValue||0)<2000000&&(p.xValue||0)>0;
-          if(t==='L2') return ds<60&&(p.xValue||0)>900000;
+          if(t==='L2') return ds<60&&(p.xValue||0)<900000&&(p.xValue||0)>0;
           return false;
         });
         if(!matchesTier) return false;
@@ -863,7 +863,7 @@ export default function App(){
                 </label>
                 <div style={{fontSize:10,color:'#94a3b8',marginTop:6,marginBottom:3}}>TIER (by score & xValue — select multiple)</div>
                 <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
-                  {[['PL','68+ score'],['Champ','62–68 score'],['L1','u65 score, u£2m xValue'],['L2','u60 score, £900k+ xValue']].map(([key,label])=>{
+                  {[['PL','68+ score'],['Champ','62–68 score'],['L1','u65 score, u£2m xValue'],['L2','u60 score, u£900k xValue']].map(([key,label])=>{
                     const active=tierFilters.has(key);
                     return (
                       <button key={key} title={label} onClick={()=>{
