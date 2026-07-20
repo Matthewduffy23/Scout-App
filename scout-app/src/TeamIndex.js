@@ -1,6 +1,8 @@
-// TeamIndex.js v6 - Wired up TeamCard.js: click any row to open the team detail modal.
-// Passes crest + avgXValue onto the clicked row, and computes that team's full season
-// history from the already-loaded data (no extra fetch needed).
+// TeamIndex.js v7 - Fixed real bug: "Latest season" and "weighted" grouping were keyed on
+// team+league, so a promoted/relegated team (different league across seasons) showed up as
+// TWO separate rows instead of one (e.g. Leeds United in both England 1 and England 2). Now
+// keyed on team name alone. Also fixed allTeamSeasons being filtered to only the clicked row's
+// league, which hid a promoted/relegated team's history in the other league entirely.
 // v1 - New tab: searchable/sortable/filterable team database, using teams_final.json
 // (built by build_teams.py). Team detail/click-through page deliberately deferred per Matty —
 // this is list/scoring/filtering only for now.
@@ -152,7 +154,7 @@ export default function TeamIndex({ players = [] }) {
       if (season === 'latest') {
         const byTeam = {};
         for (const t of all) {
-          const key = t.team + '|' + t.league;
+          const key = t.team; // team name only — a promoted/relegated team (different league across seasons) should collapse to one row, not one per league
           if (!byTeam[key] || t.season > byTeam[key].season) byTeam[key] = t;
         }
         return Object.values(byTeam);
@@ -162,14 +164,15 @@ export default function TeamIndex({ players = [] }) {
     // weighted mode
     const byTeam = {};
     for (const t of all) {
-      const key = t.team + '|' + t.league;
+      const key = t.team; // team name only — same fix as latest mode above
       (byTeam[key] = byTeam[key] || []).push(t);
     }
     const NUMERIC = ['completeScore', 'overall', 'attack', 'defence', 'possession', 'pressing', 'points', 'expectedPoints', 'goalsFor', 'goalsAgainst', 'avgAge', 'wins', 'draws', 'losses', 'matches'];
     const out = [];
     for (const key in byTeam) {
       const rows = byTeam[key].sort((a, b) => a.season < b.season ? -1 : 1); // oldest -> newest
-      const merged = { team: rows[0].team, league: rows[0].league, season: 'All (weighted)', attributes: rows[rows.length - 1].attributes };
+      const latest = rows[rows.length - 1];
+      const merged = { team: rows[0].team, league: latest.league, season: 'All (weighted)', attributes: latest.attributes, style: latest.style, similarTeams: latest.similarTeams };
       for (const field of NUMERIC) {
         let wsum = 0, vsum = 0;
         rows.forEach((r, i) => {
@@ -495,7 +498,7 @@ export default function TeamIndex({ players = [] }) {
       {selTeam && (
         <TeamCard
           team={selTeam}
-          allTeamSeasons={all.filter(t => t.team === selTeam.team && normLeague(t.league) === normLeague(selTeam.league)).map(t => ({ ...t, crest: undefined }))}
+          allTeamSeasons={all.filter(t => t.team === selTeam.team).map(t => ({ ...t, crest: undefined }))}
           onClose={() => setSelTeam(null)}
         />
       )}

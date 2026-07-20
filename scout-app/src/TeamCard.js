@@ -1,8 +1,9 @@
-// TeamCard.js v3 - Fixed misunderstanding: "Style Scores" is just Overall/Attack/Defence/
-// Possession/Pressing (the 5 scores already computed), not an invented 7-metric breakdown.
-// Consolidated into one "Style Scores" section with Overall added alongside the other 4.
-// Similar Teams (v2) kept as-is.
-import React, { useRef, useEffect, useMemo } from 'react';
+// TeamCard.js v4 - Added season selector (click any season, in the History table or the
+// button row, to switch which season's percentiles/style/similar teams are shown — all now
+// driven by activeTeam, not the originally-clicked row). Added Metric Percentiles (grouped
+// tabs, individual stats behind each category score, same pattern as PlayerCard.js). Added
+// League Rank (Points/Expected Points) columns to Season History.
+import React, { useRef, useEffect, useMemo, useState } from 'react';
 import { scoreBandColor, scoreLabel, divColor } from './constants';
 
 const CREST_BASE = 'https://raw.githubusercontent.com/Matthewduffy23/scouting-photos/main/crests/';
@@ -99,6 +100,16 @@ const CATEGORY_BARS = [
 ];
 
 export default function TeamCard({ team, allTeamSeasons = [], onClose }) {
+  // Season selector — defaults to whichever row was clicked, but the user can switch
+  // to any season on file for this team (same pattern as PlayerCard.js's Season
+  // buttons). activeTeam is whichever row is currently selected; falls back to the
+  // `team` prop (the clicked row) if for some reason it's not found in the list.
+  const [selSeasonKey, setSelSeasonKey] = useState(`${team.season}||${team.league}`);
+  const activeTeam = useMemo(() => {
+    const found = allTeamSeasons.find(t => `${t.season}||${t.league}` === selSeasonKey);
+    return found ? { ...found, crest: team.crest, avgXValue: team.avgXValue } : team;
+  }, [allTeamSeasons, selSeasonKey, team]);
+
   // Sorted season history for this team (oldest -> newest, for the trend chart and table).
   const history = useMemo(() => {
     return [...allTeamSeasons]
@@ -107,8 +118,8 @@ export default function TeamCard({ team, allTeamSeasons = [], onClose }) {
       .map(t => ({ season: t.season, score: t.completeScore }));
   }, [allTeamSeasons]);
 
-  const crestId = null; // TeamIndex passes crest url directly since it already resolves TEAM_FOTMOB_MAP
-  const record = team.wins != null ? `${team.wins}W ${team.draws}D ${team.losses}L` : null;
+  const record = activeTeam.wins != null ? `${activeTeam.wins}W ${activeTeam.draws}D ${activeTeam.losses}L` : null;
+  const [grpTab, setGrpTab] = useState('Attack');
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(2,4,10,0.94)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, backdropFilter: 'blur(8px)' }}
@@ -122,18 +133,18 @@ export default function TeamCard({ team, allTeamSeasons = [], onClose }) {
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3, flexWrap: 'wrap' }}>
-              <div style={{ fontSize: 21, fontWeight: 800, color: '#f1f5f9', letterSpacing: '-0.02em' }}>{team.team}</div>
-              <div style={{ padding: '3px 10px', borderRadius: 6, background: scoreBandColor(team.completeScore), color: '#fff', fontSize: 14, fontWeight: 900 }}>{team.completeScore != null ? team.completeScore.toFixed(1) : '—'}</div>
+              <div style={{ fontSize: 21, fontWeight: 800, color: '#f1f5f9', letterSpacing: '-0.02em' }}>{activeTeam.team}</div>
+              <div style={{ padding: '3px 10px', borderRadius: 6, background: scoreBandColor(activeTeam.completeScore), color: '#fff', fontSize: 14, fontWeight: 900 }}>{activeTeam.completeScore != null ? activeTeam.completeScore.toFixed(1) : '—'}</div>
             </div>
-            <div style={{ fontSize: 11, color: '#64748b', marginBottom: 8 }}>{team.league} · {team.season}</div>
+            <div style={{ fontSize: 11, color: '#64748b', marginBottom: 8 }}>{activeTeam.league} · {activeTeam.season}{activeTeam.pointsRank != null && activeTeam.leagueSize != null && ` · ${activeTeam.pointsRank}${activeTeam.pointsRank === 1 ? 'st' : activeTeam.pointsRank === 2 ? 'nd' : activeTeam.pointsRank === 3 ? 'rd' : 'th'} of ${activeTeam.leagueSize}`}</div>
             <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-              {team.style && <Tag label={team.style} bg="#0e1e38" color="#93c5fd" />}
+              {activeTeam.style && <Tag label={activeTeam.style} bg="#0e1e38" color="#93c5fd" />}
               {record && <Tag label={record} bg="#0d1220" color="#94a3b8" />}
-              {team.points != null && <Tag label={`${team.points} pts`} bg="#0d1220" color="#94a3b8" />}
-              {team.goalsFor != null && team.goalsAgainst != null && <Tag label={`${team.goalsFor}-${team.goalsAgainst} GD`} bg="#0d1220" color="#94a3b8" />}
-              {team.avgAge != null && <Tag label={`Avg Age ${team.avgAge}`} bg="#0d1220" color="#94a3b8" />}
-              {team.avgXValue != null && <Tag label={`Avg xValue £${(team.avgXValue / 1000000).toFixed(1)}m`} bg="#0d1220" color="#94a3b8" />}
-              {(team.attributes || []).map(a => <Tag key={a} label={a} bg="#0a1a30" color="#7eb3f8" />)}
+              {activeTeam.points != null && <Tag label={`${activeTeam.points} pts`} bg="#0d1220" color="#94a3b8" />}
+              {activeTeam.goalsFor != null && activeTeam.goalsAgainst != null && <Tag label={`${activeTeam.goalsFor}-${activeTeam.goalsAgainst} GD`} bg="#0d1220" color="#94a3b8" />}
+              {activeTeam.avgAge != null && <Tag label={`Avg Age ${activeTeam.avgAge}`} bg="#0d1220" color="#94a3b8" />}
+              {activeTeam.avgXValue != null && <Tag label={`Avg xValue £${(activeTeam.avgXValue / 1000000).toFixed(1)}m`} bg="#0d1220" color="#94a3b8" />}
+              {(activeTeam.attributes || []).map(a => <Tag key={a} label={a} bg="#0a1a30" color="#7eb3f8" />)}
             </div>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: '1px solid #1e2d45', color: '#94a3b8', borderRadius: 6, width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, cursor: 'pointer', flexShrink: 0 }}>×</button>
@@ -141,18 +152,35 @@ export default function TeamCard({ team, allTeamSeasons = [], onClose }) {
 
         <div style={{ padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: 18 }}>
 
+          {/* Season selector — same pattern as PlayerCard.js's Season buttons */}
+          {allTeamSeasons.length > 1 && (
+            <div>
+              <div style={{ fontSize: 9, fontWeight: 700, color: '#c8d4e8', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 8 }}>Season</div>
+              <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                {[...allTeamSeasons].sort((a, b) => a.season < b.season ? 1 : -1).map(s => {
+                  const key = `${s.season}||${s.league}`;
+                  return (
+                    <button key={key} onClick={() => setSelSeasonKey(key)} style={{ padding: '4px 10px', borderRadius: 6, border: `1px solid ${selSeasonKey === key ? '#3b7de8' : '#1e2d45'}`, background: selSeasonKey === key ? '#0e2040' : 'transparent', color: selSeasonKey === key ? '#60a5fa' : '#64748b', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
+                      {s.season} <span style={{ opacity: .5, fontSize: 9 }}>{s.league}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Score cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8 }}>
-            <ScoreCard label="Overall (Weighted)" score={team.completeScore} />
-            <ScoreCard label="Overall (Raw)" score={team.overall} showBand={false} sub="unweighted percentile" />
+            <ScoreCard label="Overall (Weighted)" score={activeTeam.completeScore} />
+            <ScoreCard label="Overall (Raw)" score={activeTeam.overall} showBand={false} sub="unweighted percentile" />
             <div style={{ background: '#0d1624', border: '1px solid #1e2d45', borderRadius: 9, padding: '12px', textAlign: 'center' }}>
               <div style={{ fontSize: 8, fontWeight: 700, color: '#475569', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 5 }}>League</div>
-              <div style={{ fontSize: 16, fontWeight: 800, color: '#94a3b8', lineHeight: 1.3 }}>{team.league}</div>
-              <div style={{ fontSize: 10, color: '#475569', marginTop: 3 }}>{team.season}</div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: '#94a3b8', lineHeight: 1.3 }}>{activeTeam.league}</div>
+              <div style={{ fontSize: 10, color: '#475569', marginTop: 3 }}>{activeTeam.season}</div>
             </div>
             <div style={{ background: '#0d1624', border: '1px solid #1e2d45', borderRadius: 9, padding: '12px', textAlign: 'center' }}>
               <div style={{ fontSize: 8, fontWeight: 700, color: '#475569', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 5 }}>Style</div>
-              <div style={{ fontSize: 13, fontWeight: 800, color: '#93c5fd', lineHeight: 1.3, marginTop: 4 }}>{team.style || '—'}</div>
+              <div style={{ fontSize: 13, fontWeight: 800, color: '#93c5fd', lineHeight: 1.3, marginTop: 4 }}>{activeTeam.style || '—'}</div>
             </div>
           </div>
 
@@ -173,48 +201,75 @@ export default function TeamCard({ team, allTeamSeasons = [], onClose }) {
               <div style={{ background: '#07090f', border: '1px solid #131c2e', borderRadius: 7, overflow: 'hidden' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead><tr style={{ background: '#0d1220' }}>
-                    {['Season', 'League', 'Overall', 'Attack', 'Defence', 'Possession', 'Pressing', 'Pts', 'GF', 'GA'].map(h => (
+                    {['Season', 'League', 'Overall', 'Attack', 'Defence', 'Possession', 'Pressing', 'Pts', 'Pts Rank', 'xPts Rank', 'GF', 'GA'].map(h => (
                       <th key={h} style={{ padding: '5px 8px', textAlign: 'left', fontSize: 9, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.08em', textTransform: 'uppercase', borderBottom: '1px solid #131c2e' }}>{h}</th>
                     ))}
                   </tr></thead>
                   <tbody>
-                    {[...allTeamSeasons].sort((a, b) => a.season < b.season ? 1 : -1).map((s, i) => (
-                      <tr key={s.season + i} style={{ background: s.season === team.season ? '#0e2040' : i % 2 === 0 ? 'transparent' : '#07090f' }}>
-                        <td style={{ padding: '5px 8px', fontSize: 11, color: '#e2e8f4', fontWeight: s.season === team.season ? 700 : 400, borderBottom: '1px solid #0d1525' }}>{s.season}</td>
-                        <td style={{ padding: '5px 8px', fontSize: 10, color: '#64748b', borderBottom: '1px solid #0d1525' }}>{s.league}</td>
-                        <td style={{ padding: '5px 8px', fontSize: 11, fontWeight: 700, color: scoreBandColor(s.completeScore), borderBottom: '1px solid #0d1525' }}>{s.completeScore != null ? s.completeScore.toFixed(1) : '—'}</td>
-                        <td style={{ padding: '5px 8px', fontSize: 11, color: '#94a3b8', borderBottom: '1px solid #0d1525' }}>{s.attack != null ? s.attack.toFixed(1) : '—'}</td>
-                        <td style={{ padding: '5px 8px', fontSize: 11, color: '#94a3b8', borderBottom: '1px solid #0d1525' }}>{s.defence != null ? s.defence.toFixed(1) : '—'}</td>
-                        <td style={{ padding: '5px 8px', fontSize: 11, color: '#94a3b8', borderBottom: '1px solid #0d1525' }}>{s.possession != null ? s.possession.toFixed(1) : '—'}</td>
-                        <td style={{ padding: '5px 8px', fontSize: 11, color: '#94a3b8', borderBottom: '1px solid #0d1525' }}>{s.pressing != null ? s.pressing.toFixed(1) : '—'}</td>
-                        <td style={{ padding: '5px 8px', fontSize: 11, color: '#e2e8f4', borderBottom: '1px solid #0d1525' }}>{s.points ?? '—'}</td>
-                        <td style={{ padding: '5px 8px', fontSize: 11, color: '#4ade80', borderBottom: '1px solid #0d1525' }}>{s.goalsFor ?? '—'}</td>
-                        <td style={{ padding: '5px 8px', fontSize: 11, color: '#f87171', borderBottom: '1px solid #0d1525' }}>{s.goalsAgainst ?? '—'}</td>
-                      </tr>
-                    ))}
+                    {[...allTeamSeasons].sort((a, b) => a.season < b.season ? 1 : -1).map((s, i) => {
+                      const key = `${s.season}||${s.league}`;
+                      const active = key === selSeasonKey;
+                      return (
+                        <tr key={s.season + s.league + i} onClick={() => setSelSeasonKey(key)} style={{ cursor: 'pointer', background: active ? '#0e2040' : i % 2 === 0 ? 'transparent' : '#07090f' }}>
+                          <td style={{ padding: '5px 8px', fontSize: 11, color: '#e2e8f4', fontWeight: active ? 700 : 400, borderBottom: '1px solid #0d1525' }}>{s.season}</td>
+                          <td style={{ padding: '5px 8px', fontSize: 10, color: '#64748b', borderBottom: '1px solid #0d1525' }}>{s.league}</td>
+                          <td style={{ padding: '5px 8px', fontSize: 11, fontWeight: 700, color: scoreBandColor(s.completeScore), borderBottom: '1px solid #0d1525' }}>{s.completeScore != null ? s.completeScore.toFixed(1) : '—'}</td>
+                          <td style={{ padding: '5px 8px', fontSize: 11, color: '#94a3b8', borderBottom: '1px solid #0d1525' }}>{s.attack != null ? s.attack.toFixed(1) : '—'}</td>
+                          <td style={{ padding: '5px 8px', fontSize: 11, color: '#94a3b8', borderBottom: '1px solid #0d1525' }}>{s.defence != null ? s.defence.toFixed(1) : '—'}</td>
+                          <td style={{ padding: '5px 8px', fontSize: 11, color: '#94a3b8', borderBottom: '1px solid #0d1525' }}>{s.possession != null ? s.possession.toFixed(1) : '—'}</td>
+                          <td style={{ padding: '5px 8px', fontSize: 11, color: '#94a3b8', borderBottom: '1px solid #0d1525' }}>{s.pressing != null ? s.pressing.toFixed(1) : '—'}</td>
+                          <td style={{ padding: '5px 8px', fontSize: 11, color: '#e2e8f4', borderBottom: '1px solid #0d1525' }}>{s.points ?? '—'}</td>
+                          <td style={{ padding: '5px 8px', fontSize: 11, color: '#e2e8f4', borderBottom: '1px solid #0d1525' }}>{s.pointsRank != null ? `${s.pointsRank}/${s.leagueSize}` : '—'}</td>
+                          <td style={{ padding: '5px 8px', fontSize: 11, color: '#94a3b8', borderBottom: '1px solid #0d1525' }}>{s.xPointsRank != null ? `${s.xPointsRank}/${s.leagueSize}` : '—'}</td>
+                          <td style={{ padding: '5px 8px', fontSize: 11, color: '#4ade80', borderBottom: '1px solid #0d1525' }}>{s.goalsFor ?? '—'}</td>
+                          <td style={{ padding: '5px 8px', fontSize: 11, color: '#f87171', borderBottom: '1px solid #0d1525' }}>{s.goalsAgainst ?? '—'}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
+              <div style={{ marginTop: 6, fontSize: 9.5, color: '#334155' }}>Click any row to view that season's percentiles and similar teams above/below.</div>
             </div>
           )}
 
           {/* Style Scores — Overall/Attack/Defence/Possession/Pressing, down the bottom, as requested */}
           <div>
-            <div style={{ fontSize: 9, fontWeight: 700, color: '#c8d4e8', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 10 }}>Style Scores — {team.season} · vs {team.league}</div>
+            <div style={{ fontSize: 9, fontWeight: 700, color: '#c8d4e8', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 10 }}>Style Scores — {activeTeam.season} · vs {activeTeam.league}</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
               {CATEGORY_BARS.map(([key, label]) => (
-                <Bar key={key} label={label} pct={team[key]} val={team[key] != null ? `${team[key].toFixed(1)} pct` : null} />
+                <Bar key={key} label={label} pct={activeTeam[key]} val={activeTeam[key] != null ? `${activeTeam[key].toFixed(1)} pct` : null} />
               ))}
             </div>
             <div style={{ marginTop: 6, fontSize: 9.5, color: '#334155' }}>Midline = league average (50th pct) · Overall is league-weighted; Attack/Defence/Possession/Pressing are raw percentiles within league.</div>
           </div>
 
-          {/* Similar Teams — same pattern as PlayerCard.js's Similar Players */}
-          {team.similarTeams && team.similarTeams.length > 0 && (
+          {/* Metric Percentiles — the individual stats behind each category score, same grouped-tabs pattern as PlayerCard.js */}
+          {activeTeam.metricGroups && Object.values(activeTeam.metricGroups).some(g => g.length > 0) && (
             <div>
-              <div style={{ fontSize: 9, fontWeight: 700, color: '#c8d4e8', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 10 }}>Similar Teams — {team.season}</div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                <div style={{ fontSize: 9, fontWeight: 700, color: '#c8d4e8', letterSpacing: '0.12em', textTransform: 'uppercase' }}>Metric Percentiles — {activeTeam.season} · vs {activeTeam.league}</div>
+                <div style={{ display: 'flex', gap: 4 }}>
+                  {Object.keys(activeTeam.metricGroups).filter(k => activeTeam.metricGroups[k]?.length > 0).map(k => (
+                    <button key={k} onClick={() => setGrpTab(k)} style={{ padding: '3px 9px', borderRadius: 5, border: `1px solid ${grpTab === k ? '#3b7de8' : '#1e2d45'}`, background: grpTab === k ? '#0e2040' : 'transparent', color: grpTab === k ? '#60a5fa' : '#64748b', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>
+                      {k}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                {(activeTeam.metricGroups[grpTab] || []).map(([label, pct, val]) => (<Bar key={label} label={label} pct={pct} val={val} />))}
+              </div>
+              <div style={{ marginTop: 6, fontSize: 9.5, color: '#334155' }}>Midline = league average (50th pct) · Right value = raw per 90 (or raw %).</div>
+            </div>
+          )}
+
+          {/* Similar Teams — same pattern as PlayerCard.js's Similar Players */}
+          {activeTeam.similarTeams && activeTeam.similarTeams.length > 0 && (
+            <div>
+              <div style={{ fontSize: 9, fontWeight: 700, color: '#c8d4e8', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 10 }}>Similar Teams — {activeTeam.season}</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {team.similarTeams.map((s, i) => (
+                {activeTeam.similarTeams.map((s, i) => (
                   <div key={s.team + s.league + i} style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#07090f', border: '1px solid #131c2e', borderRadius: 8, padding: '8px 12px' }}>
                     <div style={{ width: 18, fontSize: 10, fontWeight: 700, color: '#475569', textAlign: 'center', flexShrink: 0 }}>#{i + 1}</div>
                     {getCrest(s.team) ? <img src={getCrest(s.team)} alt="" style={{ width: 24, height: 24, objectFit: 'contain', flexShrink: 0 }} onError={e => { e.target.style.display = 'none'; }} /> : <div style={{ width: 24, height: 24, flexShrink: 0 }} />}
