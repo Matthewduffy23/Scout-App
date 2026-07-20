@@ -1,4 +1,4 @@
-// App.js v11 - Tier button tooltips cleaned up (no redundant key prefix, just threshold text). Buttons themselves already showed just PL/Champ/L1/L2.
+// App.js v13 - International label shortened to just "International" (was "International (everyone else)"), matching Domestic's plain style.
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import PlayerCard from './PlayerCard';
 import ClubTool from './ClubTool';
@@ -309,6 +309,7 @@ export default function App(){
   const [showShortlist,setShowShortlist]=React.useState(false);
   const [notPlayingOnly,setNotPlayingOnly]=React.useState(false);
   const [domesticOnly,setDomesticOnly]=React.useState(false);
+  const [internationalOnly,setInternationalOnly]=React.useState(false);
   const [tierFilters,setTierFilters]=React.useState(new Set());
   const [softMode,setSoftMode]=React.useState(false);
   const shortlistFileInputRef=React.useRef(null);
@@ -456,11 +457,13 @@ export default function App(){
       if(gbeMin>0&&(p.gbeTotal||0)<gbeMin) return false;
       if(natFilter&&!(p.passportCountries||'').toLowerCase().includes(natFilter.toLowerCase())&&!(p.birthCountry||'').toLowerCase().includes(natFilter.toLowerCase())) return false;
       if(showShortlist&&!shortlist.includes(p.id)) return false;
-      if(showShortlist&&domesticOnly){
+      if(showShortlist&&(domesticOnly||internationalOnly)&&!(domesticOnly&&internationalOnly)){
         const isDomesticLeague=/^(England|Scotland|Wales|Ireland|Northern Ireland) /.test(p.league||'');
         const natStr=((p.passportCountries||'')+' '+(p.birthCountry||'')).toLowerCase();
         const isDomesticNat=['england','scotland','wales','northern ireland','republic of ireland'].some(c=>natStr.includes(c));
-        if(!isDomesticLeague&&!isDomesticNat) return false;
+        const isDomestic=isDomesticLeague||isDomesticNat;
+        if(domesticOnly&&!isDomestic) return false;
+        if(internationalOnly&&isDomestic) return false;
       }
       if(showShortlist&&tierFilters.size>0){
         const matchesTier=[...tierFilters].some(t=>{
@@ -522,7 +525,7 @@ export default function App(){
       }
       return true;
     });
-  },[all,search,pos,leagues,ageMin,ageMax,heightMin,heightMax,foot,minScore,minSeas,showMvFilter,mvMax,showContractFilter,contractBefore,roleFilter,roleScoreMin,seasonFilter,metricFilters,xValueFilter,onlyElite,getDisplayScore,recentOnly,showXValueFilter,xValueMin,xValueMax,attrFilters,minMins,currentLeagueOnly,played2526,potentialMin,lsMin,lsMax,escOnly,gbeMin,natFilter,softMode,roleFilters,shortlist,showShortlist,notPlayingOnly,domesticOnly,tierFilters]);
+  },[all,search,pos,leagues,ageMin,ageMax,heightMin,heightMax,foot,minScore,minSeas,showMvFilter,mvMax,showContractFilter,contractBefore,roleFilter,roleScoreMin,seasonFilter,metricFilters,xValueFilter,onlyElite,getDisplayScore,recentOnly,showXValueFilter,xValueMin,xValueMax,attrFilters,minMins,currentLeagueOnly,played2526,potentialMin,lsMin,lsMax,escOnly,gbeMin,natFilter,softMode,roleFilters,shortlist,showShortlist,notPlayingOnly,domesticOnly,internationalOnly,tierFilters]);
 
   const sorted=useMemo(()=>{
     const a=[...filtered];
@@ -554,7 +557,7 @@ export default function App(){
     avgAge:filtered.length?filtered.reduce((s,p)=>s+p.age,0)/filtered.length:0,
   }),[filtered,getDisplayScore]);
 
-  const reset=()=>{setSearch('');setPos('All');setRoleFilter('');setRoleFilters(new Set());setSoftMode(false);setRoleFilters(new Set());setSoftMode(false);setRoleScoreMin(50);setActivePreset('');setActivePresetLeagues(null);setShowHidden(false);setShowYouth(false);setActiveBands(new Set());setActiveRegions(new Set());setLsMin(0);setLsMax(101);setAgeMin(16);setAgeMax(38);setHeightMin(152);setHeightMax(211);setFoot('Any');setMinScore(40);setMinSeas(1);setShowMvFilter(false);setMvMax(50);setShowContractFilter(false);setContractBefore(2028);setSeasonFilter('all');setScoreMode('complete');setMetricFilters([]);setXValueFilter('');setRawMode(false);setOnlyElite(false);setRecentOnly(true);setShowXValueFilter(false);setXValueMin(0);setXValueMax(50);setAttrFilters(new Set());setMinMins(500);setCurrentLeagueOnly(false);setPotentialMin(40);setPlayed2526(false);setEscOnly(false);setGbeMin(0);setNatFilter('');setNotPlayingOnly(false);setDomesticOnly(false);setTierFilters(new Set());setShowShortlist(false);setSoftMode(false);setRoleFilters(new Set());setPage(0);};
+  const reset=()=>{setSearch('');setPos('All');setRoleFilter('');setRoleFilters(new Set());setSoftMode(false);setRoleFilters(new Set());setSoftMode(false);setRoleScoreMin(50);setActivePreset('');setActivePresetLeagues(null);setShowHidden(false);setShowYouth(false);setActiveBands(new Set());setActiveRegions(new Set());setLsMin(0);setLsMax(101);setAgeMin(16);setAgeMax(38);setHeightMin(152);setHeightMax(211);setFoot('Any');setMinScore(40);setMinSeas(1);setShowMvFilter(false);setMvMax(50);setShowContractFilter(false);setContractBefore(2028);setSeasonFilter('all');setScoreMode('complete');setMetricFilters([]);setXValueFilter('');setRawMode(false);setOnlyElite(false);setRecentOnly(true);setShowXValueFilter(false);setXValueMin(0);setXValueMax(50);setAttrFilters(new Set());setMinMins(500);setCurrentLeagueOnly(false);setPotentialMin(40);setPlayed2526(false);setEscOnly(false);setGbeMin(0);setNatFilter('');setNotPlayingOnly(false);setDomesticOnly(false);setInternationalOnly(false);setTierFilters(new Set());setShowShortlist(false);setSoftMode(false);setRoleFilters(new Set());setPage(0);};
 
   if(loading) return <div style={{...T.app,alignItems:'center',justifyContent:'center'}}><style>{'@keyframes spin{to{transform:rotate(360deg)}}'}</style><div style={{width:24,height:24,border:'2px solid #1e2d45',borderTop:'2px solid #3b7de8',borderRadius:'50%',animation:'spin 0.8s linear infinite'}}/><div style={{color:'#94a3b8',fontSize:11,marginTop:8}}>Loading…</div></div>;
 
@@ -852,7 +855,11 @@ export default function App(){
               <div style={{marginTop:8,paddingTop:8,borderTop:'1px solid #1e2d45'}}>
                 <label style={T.cr} onClick={()=>{setDomesticOnly(p=>!p);setPage(0);}}>
                   <div style={T.cb(domesticOnly)}>{domesticOnly&&<span style={{color:'#fff',fontSize:8,lineHeight:1}}>✓</span>}</div>
-                  <span style={T.cl(domesticOnly)}>Domestic (Eng/Sco/Wal/NI/Ire — league or nationality)</span>
+                  <span style={T.cl(domesticOnly)}>Domestic</span>
+                </label>
+                <label style={T.cr} onClick={()=>{setInternationalOnly(p=>!p);setPage(0);}}>
+                  <div style={T.cb(internationalOnly)}>{internationalOnly&&<span style={{color:'#fff',fontSize:8,lineHeight:1}}>✓</span>}</div>
+                  <span style={T.cl(internationalOnly)}>International</span>
                 </label>
                 <div style={{fontSize:10,color:'#94a3b8',marginTop:6,marginBottom:3}}>TIER (by score & xValue — select multiple)</div>
                 <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
