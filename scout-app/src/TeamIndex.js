@@ -1,10 +1,10 @@
-// TeamIndex.js v3 - Full visual rebuild to match Scout Index exactly: same stats bar (Found/Avg
-// Score/Avg Age/Score 80+), numbered rows, sortable column headers with ↑/↓ arrows, same Th
-// component/table styles. Columns now: Club (crest+name), League, Style, Overall, Attack,
-// Defence, Possession, Pressing, Avg Age, Avg xValue (all 5 scores shown as separate columns
-// simultaneously, not toggled — matches how player table shows Career/Peak/Potential together).
-// Avg xValue computed client-side from the players prop (grouped by team+league) since it's not
-// in teams_final.json — App.js now passes players={all} into <TeamIndex/>.
+// TeamIndex.js v4 - Fixed real bug: Overall column/sort was reading raw t.overall (percentile
+// within league, unweighted) instead of getDisplayScore() (league-weighted completeScore by
+// default) — caused small-league teams dominating a weak cohort to outrank genuinely elite teams
+// (e.g. Maccabi Petah Tikva 99.7 raw vs Arsenal 93.5 raw, but properly weighted: Arsenal 90.8 vs
+// Maccabi 51.4). Style column now shows ONE label (Team HQ's one-pager classification — Low
+// Block/Possession-Pressing Based/etc, computed in build_teams.py) instead of wrapping multiple
+// Attribute tags — also fixes the row-height/line-separation issue from multi-line wrapping.
 // v1 - New tab: searchable/sortable/filterable team database, using teams_final.json
 // (built by build_teams.py). Team detail/click-through page deliberately deferred per Matty —
 // this is list/scoring/filtering only for now.
@@ -229,7 +229,7 @@ export default function TeamIndex({ players = [] }) {
     const arr = [...filtered];
     arr.sort((a, b) => {
       let av, bv;
-      if (sort.col === 'score') { av = getDisplayScore(a); bv = getDisplayScore(b); }
+      if (sort.col === 'score' || sort.col === 'overall') { av = getDisplayScore(a); bv = getDisplayScore(b); }
       else if (sort.col === 'avgXValue') { av = getAvgXValue(a.team, a.league); bv = getAvgXValue(b.team, b.league); }
       else { av = a[sort.col]; bv = b[sort.col]; }
       av = av ?? (sort.asc ? Infinity : -Infinity);
@@ -471,12 +471,10 @@ export default function TeamIndex({ players = [] }) {
                         </td>
                         <td style={{ ...T.td, fontWeight: 700 }}>{t.team}</td>
                         <td style={T.td}>{t.league}</td>
-                        <td style={{ ...T.td, whiteSpace: 'normal' }}>
-                          {(t.attributes || []).map(a => (
-                            <span key={a} style={{ display: 'inline-block', fontSize: 8.5, padding: '1px 5px', borderRadius: 4, background: '#1e2d45', color: '#93c5fd', marginRight: 3, marginBottom: 2 }}>{a}</span>
-                          ))}
+                        <td style={T.td}>
+                          <span style={{ display: 'inline-block', padding: '2px 6px', borderRadius: 8, background: '#0e1e38', color: '#93c5fd', fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap' }}>{t.style || '—'}</span>
                         </td>
-                        <td style={{ ...T.td, fontWeight: 700, color: scoreColor(t.overall) }}>{t.overall != null ? t.overall.toFixed(1) : '—'}</td>
+                        <td style={{ ...T.td, fontWeight: 700, color: scoreColor(getDisplayScore(t)) }}>{getDisplayScore(t) != null ? getDisplayScore(t).toFixed(1) : '—'}</td>
                         <td style={{ ...T.td, color: scoreColor(t.attack) }}>{t.attack != null ? t.attack.toFixed(1) : '—'}</td>
                         <td style={{ ...T.td, color: scoreColor(t.defence) }}>{t.defence != null ? t.defence.toFixed(1) : '—'}</td>
                         <td style={{ ...T.td, color: scoreColor(t.possession) }}>{t.possession != null ? t.possession.toFixed(1) : '—'}</td>
