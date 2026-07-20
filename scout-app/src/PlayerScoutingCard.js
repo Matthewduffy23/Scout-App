@@ -1,4 +1,4 @@
-// PlayerScoutingCard.js
+// PlayerScoutingCard.js v2 - Complete country flag map (all 227 Wyscout countries, incl. mojibake variants Côte d'Ivoire/Réunion/Türkiye/São Tomé e Príncipe/Curaçao), replacing prior partial map.
 // Generates a 1920x1080 scouting card PNG matching the Canva template exactly.
 // Rebuilt against a pixel-accurate 1920x1080 export of the real Canva design.
 // Uses html2canvas to screenshot an offscreen DOM node and trigger a PNG download.
@@ -343,27 +343,71 @@ const POSITION_LABELS = {
   'CF':'Striker (CF)',
 };
 const COUNTRY_TO_ISO2 = {
-  'England': 'gb-eng', 'Scotland': 'gb-sct', 'Wales': 'gb-wls', 'Northern Ireland': 'gb-nir',
-  'Spain': 'es', 'Germany': 'de', 'Italy': 'it', 'France': 'fr', 'Belgium': 'be',
-  'Portugal': 'pt', 'Netherlands': 'nl', 'Croatia': 'hr', 'Switzerland': 'ch', 'Norway': 'no',
-  'Sweden': 'se', 'Cyprus': 'cy', 'Czech': 'cz', 'Czech Republic': 'cz', 'Greece': 'gr',
-  'Austria': 'at', 'Hungary': 'hu', 'Romania': 'ro', 'Slovenia': 'si', 'Slovakia': 'sk',
-  'Ukraine': 'ua', 'Bulgaria': 'bg', 'Serbia': 'rs', 'Albania': 'al', 'Bosnia': 'ba',
-  'Bosnia and Herzegovina': 'ba', 'Kosovo': 'xk', 'Ireland': 'ie', 'Republic of Ireland': 'ie',
-  'Finland': 'fi', 'Armenia': 'am', 'Georgia': 'ge', 'Poland': 'pl', 'Iceland': 'is',
-  'North Macedonia': 'mk', 'Latvia': 'lv', 'Montenegro': 'me', 'Denmark': 'dk', 'Estonia': 'ee',
-  'Russia': 'ru', 'Kazakhstan': 'kz', 'Lithuania': 'lt', 'Malta': 'mt', 'Moldova': 'md',
-  'Israel': 'il', 'Andorra': 'ad', 'Faroe Islands': 'fo',
-  'Brazil': 'br', 'Argentina': 'ar', 'Colombia': 'co', 'Ecuador': 'ec', 'Paraguay': 'py',
-  'Uruguay': 'uy', 'Chile': 'cl', 'Bolivia': 'bo', 'Peru': 'pe', 'Venezuela': 've', 'Panama': 'pa',
-  'USA': 'us', 'United States': 'us', 'Mexico': 'mx', 'Costa Rica': 'cr', 'Canada': 'ca',
-  'Morocco': 'ma', 'Algeria': 'dz', 'Egypt': 'eg', 'Nigeria': 'ng', 'Tunisia': 'tn',
-  'South Africa': 'za', 'Zambia': 'zm', 'Ghana': 'gh', 'Senegal': 'sn', 'Cameroon': 'cm',
-  'Ivory Coast': 'ci', "Côte d'Ivoire": 'ci', 'Mali': 'ml', 'DR Congo': 'cd', 'Guinea': 'gn',
-  'Japan': 'jp', 'Korea': 'kr', 'South Korea': 'kr', 'Saudi': 'sa', 'Saudi Arabia': 'sa',
-  'UAE': 'ae', 'Qatar': 'qa', 'Uzbekistan': 'uz', 'China': 'cn', 'Turkey': 'tr',
-  'Azerbaijan': 'az', 'Kyrgyzstan': 'kg', 'Australia': 'au', 'Iran': 'ir', 'Iraq': 'iq',
-  'Jordan': 'jo', 'Syria': 'sy', 'India': 'in',
+  // Home nations / GB
+  'England':'gb-eng','Scotland':'gb-sct','Wales':'gb-wls','Northern Ireland':'gb-nir',
+  'Republic of Ireland':'ie','Ireland':'ie','Great Britain':'gb',
+  // Western/Southern Europe
+  'Spain':'es','Germany':'de','Italy':'it','France':'fr','Belgium':'be','Portugal':'pt','Greece':'gr',
+  'Netherlands':'nl','Switzerland':'ch','Austria':'at','Luxembourg':'lu','Andorra':'ad',
+  'Monaco':'mc','San Marino':'sm','Liechtenstein':'li','Malta':'mt','Cyprus':'cy','Gibraltar':'gi',
+  // Nordics
+  'Norway':'no','Sweden':'se','Denmark':'dk','Finland':'fi','Iceland':'is','Faroe Islands':'fo',
+  // Central/Eastern Europe
+  'Poland':'pl','Czech Republic':'cz','Czech':'cz','Slovakia':'sk','Hungary':'hu','Romania':'ro',
+  'Bulgaria':'bg','Croatia':'hr','Serbia':'rs','Slovenia':'si','Bosnia and Herzegovina':'ba','Bosnia':'ba',
+  'North Macedonia':'mk','Montenegro':'me','Albania':'al','Kosovo':'xk','Moldova':'md',
+  'Ukraine':'ua','Belarus':'by','Russia':'ru','Latvia':'lv','Lithuania':'lt','Estonia':'ee',
+  // Caucasus / Central Asia
+  'Armenia':'am','Georgia':'ge','Azerbaijan':'az','Kazakhstan':'kz','Uzbekistan':'uz',
+  'Kyrgyzstan':'kg','Tajikistan':'tj','Turkmenistan':'tm',
+  // Turkey
+  'Turkey':'tr','Türkiye':'tr','TÃ¼rkiye':'tr',
+  // North America
+  'United States':'us','USA':'us','Canada':'ca','Mexico':'mx',
+  // Central America / Caribbean
+  'Costa Rica':'cr','Panama':'pa','Honduras':'hn','Guatemala':'gt','El Salvador':'sv','Nicaragua':'ni',
+  'Belize':'bz','Cuba':'cu','Haiti':'ht','Dominican Republic':'do','Jamaica':'jm','Bahamas':'bs',
+  'Barbados':'bb','Trinidad and Tobago':'tt','Dominica':'dm','Grenada':'gd','St. Lucia':'lc',
+  'St. Vincent and the Grenadines':'vc','St. Kitts and Nevis':'kn','Antigua and Barbuda':'ag',
+  'Puerto Rico':'pr','Aruba':'aw','Curaçao':'cw','CuraÃ§ao':'cw','Sint Maarten':'sx','Saint Martin':'mf',
+  'Bonaire':'bq','Guadeloupe':'gp','Martinique':'mq','Cayman Islands':'ky','Turks and Caicos Islands':'tc',
+  'British Virgin Islands':'vg','US Virgin Islands':'vi','Montserrat':'ms',
+  // South America
+  'Brazil':'br','Argentina':'ar','Colombia':'co','Ecuador':'ec','Paraguay':'py','Uruguay':'uy',
+  'Chile':'cl','Bolivia':'bo','Peru':'pe','Venezuela':'ve','Guyana':'gy','Suriname':'sr',
+  'French Guiana':'gf',
+  // North Africa / Middle East
+  'Morocco':'ma','Algeria':'dz','Egypt':'eg','Tunisia':'tn','Libya':'ly','Sudan':'sd','South Sudan':'ss',
+  'Israel':'il','Palestine':'ps','Jordan':'jo','Lebanon':'lb','Syria':'sy','Iraq':'iq','Iran':'ir',
+  'Saudi Arabia':'sa','United Arab Emirates':'ae','UAE':'ae','Qatar':'qa','Bahrain':'bh','Kuwait':'kw',
+  'Oman':'om','Yemen':'ye',
+  // Sub-Saharan Africa
+  'Nigeria':'ng','Cameroon':'cm','Senegal':'sn','Mali':'ml','Ghana':'gh',"Côte d'Ivoire":'ci',
+  "CÃ´te d'Ivoire":'ci','Ivory Coast':'ci','Guinea-Bissau':'gw','Equatorial Guinea':'gq',
+  'Congo':'cg','Congo DR':'cd','DR Congo':'cd','Gambia':'gm','Togo':'tg','Gabon':'ga',
+  'Mauritania':'mr','Guinea':'gn','South Africa':'za','Zambia':'zm','Angola':'ao','Ethiopia':'et',
+  'Comoros':'km','Kenya':'ke','Benin':'bj','Rwanda':'rw','Burundi':'bi','Botswana':'bw',
+  'Central African Republic':'cf','Chad':'td','Uganda':'ug','Madagascar':'mg','Zimbabwe':'zw',
+  'Lesotho':'ls','Eritrea':'er','Malawi':'mw','Sierra Leone':'sl','Liberia':'lr','Somalia':'so',
+  'Djibouti':'dj','Mozambique':'mz','Namibia':'na','Tanzania':'tz','Zanzibar':'tz','Niger':'ne',
+  'Burkina Faso':'bf','Seychelles':'sc','Mauritius':'mu','Cape Verde Islands':'cv','Cape Verde':'cv',
+  'Eswatini':'sz',
+  'São Tomé e Príncipe':'st','SÃ£o TomÃ© e PrÃ­ncipe':'st',
+  // South/Central/East Asia
+  'India':'in','Pakistan':'pk','Bangladesh':'bd','Sri Lanka':'lk','Nepal':'np','Bhutan':'bt',
+  'Maldives':'mv','Afghanistan':'af','Myanmar':'mm','Cambodia':'kh','Laos':'la','Thailand':'th',
+  'Vietnam':'vn','Philippines':'ph','Malaysia':'my','Singapore':'sg','Indonesia':'id','Mongolia':'mn',
+  'Timor-Leste':'tl','Brunei Darussalam':'bn',
+  // East Asia
+  'Japan':'jp','Korea Republic':'kr','Korea':'kr','South Korea':'kr','Korea DPR':'kp','North Korea':'kp',
+  'China':'cn','China PR':'cn','Chinese Taipei':'tw','Hong Kong':'hk','Macao':'mo',
+  // Oceania / Pacific
+  'Australia':'au','New Zealand':'nz','Fiji':'fj','Vanuatu':'vu','Papua New Guinea':'pg',
+  'New Caledonia':'nc','Solomon Islands':'sb','Samoa':'ws','Tahiti':'pf','Guam':'gu',
+  // Europe channel islands / small states
+  'Isle of Man':'im','Jersey':'je','Guernsey':'gg','Réunion':'re','RÃ©union':'re','Bermuda':'bm',
+  // Generic regions — intentionally no flag
+  'Africa':'','Europe':'','Asia':'','World':'','N/C America':'','South America':'',
 };
 function countryToIso2(name) {
   if (!name) return '';

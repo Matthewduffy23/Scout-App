@@ -1,4 +1,4 @@
-// App.js v6 - Height filter now displays/selects in feet'inches (e.g. 5'11") to match player card convention, while still filtering against cm data underneath. Height filter itself added in v5. Mobile lazy-load fix (v4) and shortlist export/import (v2) kept.
+// App.js v7 - Complete country flag map (all 227 Wyscout countries, incl. mojibake variants) shared via top-level COUNTRY_TO_ISO2, replacing incomplete inline CC map. Height filter (v5/v6), mobile lazy-load fix (v4), shortlist export/import (v2) kept.
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import PlayerCard from './PlayerCard';
 import ClubTool from './ClubTool';
@@ -15,6 +15,80 @@ const HEIGHT_OPTIONS = Array.from({length: 83-58+1}, (_, i) => {
   const inches = totalInches % 12;
   return { cm: Math.round(totalInches * 2.54), label: `${feet}'${inches}"` };
 });
+
+const COUNTRY_TO_ISO2 = {
+  // Home nations / GB
+  'England':'gb-eng','Scotland':'gb-sct','Wales':'gb-wls','Northern Ireland':'gb-nir',
+  'Republic of Ireland':'ie','Ireland':'ie','Great Britain':'gb',
+  // Western/Southern Europe
+  'Spain':'es','Germany':'de','Italy':'it','France':'fr','Belgium':'be','Portugal':'pt','Greece':'gr',
+  'Netherlands':'nl','Switzerland':'ch','Austria':'at','Luxembourg':'lu','Andorra':'ad',
+  'Monaco':'mc','San Marino':'sm','Liechtenstein':'li','Malta':'mt','Cyprus':'cy','Gibraltar':'gi',
+  // Nordics
+  'Norway':'no','Sweden':'se','Denmark':'dk','Finland':'fi','Iceland':'is','Faroe Islands':'fo',
+  // Central/Eastern Europe
+  'Poland':'pl','Czech Republic':'cz','Czech':'cz','Slovakia':'sk','Hungary':'hu','Romania':'ro',
+  'Bulgaria':'bg','Croatia':'hr','Serbia':'rs','Slovenia':'si','Bosnia and Herzegovina':'ba','Bosnia':'ba',
+  'North Macedonia':'mk','Montenegro':'me','Albania':'al','Kosovo':'xk','Moldova':'md',
+  'Ukraine':'ua','Belarus':'by','Russia':'ru','Latvia':'lv','Lithuania':'lt','Estonia':'ee',
+  // Caucasus / Central Asia
+  'Armenia':'am','Georgia':'ge','Azerbaijan':'az','Kazakhstan':'kz','Uzbekistan':'uz',
+  'Kyrgyzstan':'kg','Tajikistan':'tj','Turkmenistan':'tm',
+  // Turkey
+  'Turkey':'tr','Türkiye':'tr','TÃ¼rkiye':'tr',
+  // North America
+  'United States':'us','USA':'us','Canada':'ca','Mexico':'mx',
+  // Central America / Caribbean
+  'Costa Rica':'cr','Panama':'pa','Honduras':'hn','Guatemala':'gt','El Salvador':'sv','Nicaragua':'ni',
+  'Belize':'bz','Cuba':'cu','Haiti':'ht','Dominican Republic':'do','Jamaica':'jm','Bahamas':'bs',
+  'Barbados':'bb','Trinidad and Tobago':'tt','Dominica':'dm','Grenada':'gd','St. Lucia':'lc',
+  'St. Vincent and the Grenadines':'vc','St. Kitts and Nevis':'kn','Antigua and Barbuda':'ag',
+  'Puerto Rico':'pr','Aruba':'aw','Curaçao':'cw','CuraÃ§ao':'cw','Sint Maarten':'sx','Saint Martin':'mf',
+  'Bonaire':'bq','Guadeloupe':'gp','Martinique':'mq','Cayman Islands':'ky','Turks and Caicos Islands':'tc',
+  'British Virgin Islands':'vg','US Virgin Islands':'vi','Montserrat':'ms',
+  // South America
+  'Brazil':'br','Argentina':'ar','Colombia':'co','Ecuador':'ec','Paraguay':'py','Uruguay':'uy',
+  'Chile':'cl','Bolivia':'bo','Peru':'pe','Venezuela':'ve','Guyana':'gy','Suriname':'sr',
+  'French Guiana':'gf',
+  // North Africa / Middle East
+  'Morocco':'ma','Algeria':'dz','Egypt':'eg','Tunisia':'tn','Libya':'ly','Sudan':'sd','South Sudan':'ss',
+  'Israel':'il','Palestine':'ps','Jordan':'jo','Lebanon':'lb','Syria':'sy','Iraq':'iq','Iran':'ir',
+  'Saudi Arabia':'sa','United Arab Emirates':'ae','UAE':'ae','Qatar':'qa','Bahrain':'bh','Kuwait':'kw',
+  'Oman':'om','Yemen':'ye',
+  // Sub-Saharan Africa
+  'Nigeria':'ng','Cameroon':'cm','Senegal':'sn','Mali':'ml','Ghana':'gh',"Côte d'Ivoire":'ci',
+  "CÃ´te d'Ivoire":'ci','Ivory Coast':'ci','Guinea-Bissau':'gw','Equatorial Guinea':'gq',
+  'Congo':'cg','Congo DR':'cd','DR Congo':'cd','Gambia':'gm','Togo':'tg','Gabon':'ga',
+  'Mauritania':'mr','Guinea':'gn','South Africa':'za','Zambia':'zm','Angola':'ao','Ethiopia':'et',
+  'Comoros':'km','Kenya':'ke','Benin':'bj','Rwanda':'rw','Burundi':'bi','Botswana':'bw',
+  'Central African Republic':'cf','Chad':'td','Uganda':'ug','Madagascar':'mg','Zimbabwe':'zw',
+  'Lesotho':'ls','Eritrea':'er','Malawi':'mw','Sierra Leone':'sl','Liberia':'lr','Somalia':'so',
+  'Djibouti':'dj','Mozambique':'mz','Namibia':'na','Tanzania':'tz','Zanzibar':'tz','Niger':'ne',
+  'Burkina Faso':'bf','Seychelles':'sc','Mauritius':'mu','Cape Verde Islands':'cv','Cape Verde':'cv',
+  'Eswatini':'sz',
+  'São Tomé e Príncipe':'st','SÃ£o TomÃ© e PrÃ­ncipe':'st',
+  // South/Central/East Asia
+  'India':'in','Pakistan':'pk','Bangladesh':'bd','Sri Lanka':'lk','Nepal':'np','Bhutan':'bt',
+  'Maldives':'mv','Afghanistan':'af','Myanmar':'mm','Cambodia':'kh','Laos':'la','Thailand':'th',
+  'Vietnam':'vn','Philippines':'ph','Malaysia':'my','Singapore':'sg','Indonesia':'id','Mongolia':'mn',
+  'Timor-Leste':'tl','Brunei Darussalam':'bn',
+  // East Asia
+  'Japan':'jp','Korea Republic':'kr','Korea':'kr','South Korea':'kr','Korea DPR':'kp','North Korea':'kp',
+  'China':'cn','China PR':'cn','Chinese Taipei':'tw','Hong Kong':'hk','Macao':'mo',
+  // Oceania / Pacific
+  'Australia':'au','New Zealand':'nz','Fiji':'fj','Vanuatu':'vu','Papua New Guinea':'pg',
+  'New Caledonia':'nc','Solomon Islands':'sb','Samoa':'ws','Tahiti':'pf','Guam':'gu',
+  // Europe channel islands / small states
+  'Isle of Man':'im','Jersey':'je','Guernsey':'gg','Réunion':'re','RÃ©union':'re','Bermuda':'bm',
+  // Generic regions — intentionally no flag
+  'Africa':'','Europe':'','Asia':'','World':'','N/C America':'','South America':'',
+};
+function countryToIso2(name) {
+  if (!name) return '';
+  return COUNTRY_TO_ISO2[String(name).trim()] || '';
+}
+
+
 const PHOTO_BASE = 'https://raw.githubusercontent.com/Matthewduffy23/scouting-photos/main/photos/';
 const CREST_BASE = 'https://images.fotmob.com/image_resources/logo/teamlogo/';
 const PAGE = 50;
@@ -903,7 +977,7 @@ export default function App(){
                           <td style={T.td}>
                             <span style={{display:'flex',alignItems:'center',gap:4}}>
                               <span onClick={e=>{e.stopPropagation();toggleShortlist(p.id);}} style={{cursor:'pointer',fontSize:14,opacity:shortlist.includes(p.id)?1:0.3}} title={shortlist.includes(p.id)?'Remove from shortlist':'Add to shortlist'}>{shortlist.includes(p.id)?'★':'☆'}</span>
-                              {(()=>{const CC={'England':'gb-eng','Scotland':'gb-sct','Wales':'gb-wls','Northern Ireland':'gb-nir','Ireland':'ie','Republic of Ireland':'ie','France':'fr','Germany':'de','Spain':'es','Italy':'it','Portugal':'pt','Netherlands':'nl','Belgium':'be','Brazil':'br','Argentina':'ar','USA':'us','Mexico':'mx','Colombia':'co','Uruguay':'uy','Chile':'cl','Paraguay':'py','Ecuador':'ec','Peru':'pe','Venezuela':'ve','Morocco':'ma','Algeria':'dz','Egypt':'eg','Nigeria':'ng','Tunisia':'tn','South Africa':'za','Senegal':'sn','Ghana':'gh','Ivory Coast':'ci','Cameroon':'cm','Japan':'jp','Korea':'kr','Saudi Arabia':'sa','Australia':'au','China':'cn','Turkey':'tr','Ukraine':'ua','Russia':'ru','Poland':'pl','Czech Republic':'cz','Hungary':'hu','Romania':'ro','Serbia':'rs','Croatia':'hr','Slovakia':'sk','Slovenia':'si','Bulgaria':'bg','Greece':'gr','Austria':'at','Switzerland':'ch','Denmark':'dk','Sweden':'se','Norway':'no','Finland':'fi','Iceland':'is','Albania':'al','Bosnia':'ba','Kosovo':'xk','Montenegro':'me','Armenia':'am','Georgia':'ge','Azerbaijan':'az','Kazakhstan':'kz','Israel':'il','Canada':'ca','Angola':'ao','Zambia':'zm','DR Congo':'cd','Cape Verde':'cv','Mali':'ml','Guinea':'gn','Burkina Faso':'bf','Bolivia':'bo'};const passRaw=p.passportCountries&&p.passportCountries!=='nan'?p.passportCountries:'';const birthRaw=p.birthCountry&&p.birthCountry!=='nan'?p.birthCountry:'';const p1=(passRaw||birthRaw).split(',')[0].trim();const code=CC[p1];return code?<img src={'https://flagcdn.com/w20/'+code+'.png'} alt="" style={{width:16,height:12,objectFit:'cover',borderRadius:1,flexShrink:0}}/>:null;})()}
+                              {(()=>{const passRaw=p.passportCountries&&p.passportCountries!=='nan'?p.passportCountries:'';const birthRaw=p.birthCountry&&p.birthCountry!=='nan'?p.birthCountry:'';const p1=(passRaw||birthRaw).split(',')[0].trim();const code=countryToIso2(p1);return code?<img src={'https://flagcdn.com/w20/'+code+'.png'} alt="" style={{width:16,height:12,objectFit:'cover',borderRadius:1,flexShrink:0}}/>:null;})()}
                               <span style={{fontWeight:600}}>{p.name}</span>
                             </span>
                           </td>

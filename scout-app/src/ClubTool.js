@@ -1,4 +1,4 @@
-// ClubTool.js v4 - Height filter now displays/selects in feet'inches (e.g. 5'11") to match player card convention, while still filtering against cm data underneath. Height filter itself added in v3. Nationality/Min Role Score/Scoring Mode kept from v2.
+// ClubTool.js v5 - Template League dropdown sorted alphabetically. Height filter (v4), Nationality/Min Role Score/Scoring Mode (v2-3) kept.
 import React, { useState, useMemo } from 'react';
 import PlayerCard from './PlayerCard';
 import { scoreBandColor, scoreLabel, formatMV, ROLE_KEY_LABELS, ROLES_BY_KEY,
@@ -509,7 +509,7 @@ export default function ClubTool({players}){
         <div style={T.fg}>
           <span style={T.fl}>Template League</span>
           <select style={T.sel} value={tmplLeague} onChange={e=>{setTmplLeague(e.target.value);setTmplTeam('');setRan(false);}}>
-            {ALL_LEAGUES.map(l=><option key={l}>{l}</option>)}
+            {[...ALL_LEAGUES].sort((a,b)=>a.localeCompare(b)).map(l=><option key={l}>{l}</option>)}
           </select>
         </div>
 

@@ -1,4 +1,4 @@
-// QuickCard v63 - Fixed crest bug for two-club seasons (e.g. January transfer): now resolves the badge to the actual displayed club via TEAM_FOTMOB_MAP instead of always using player.teamFotmobId (current/default club only). Matches PlayerScoutingCard.js's existing fix. sdTeam kept truncated for display; sdTeamFull added for exact matching.
+// QuickCard v66 - "Shift team/league/flag right" toggle amount changed to 20px (was 30px).
 import React, { useState } from 'react';
 import { scoreLabel, formatFoot, formatMV, GBE_LEAGUE_BANDS } from './constants';
 
@@ -206,24 +206,71 @@ const MONTSERRAT_EMBED_CSS = '@font-face{font-family:\'Montserrat\';font-style:n
 
 
 const COUNTRY_TO_ISO2 = {
+  // Home nations / GB
   'England':'gb-eng','Scotland':'gb-sct','Wales':'gb-wls','Northern Ireland':'gb-nir',
-  'Spain':'es','Germany':'de','Italy':'it','France':'fr','Belgium':'be',
-  'Portugal':'pt','Netherlands':'nl','Croatia':'hr','Switzerland':'ch','Norway':'no',
-  'Sweden':'se','Cyprus':'cy','Czech':'cz','Czech Republic':'cz','Greece':'gr',
-  'Austria':'at','Hungary':'hu','Romania':'ro','Slovenia':'si','Slovakia':'sk',
-  'Ukraine':'ua','Bulgaria':'bg','Serbia':'rs','Albania':'al','Bosnia':'ba',
-  'Bosnia and Herzegovina':'ba','Kosovo':'xk','Ireland':'ie','Finland':'fi',
-  'Armenia':'am','Georgia':'ge','Poland':'pl','Iceland':'is','North Macedonia':'mk',
-  'Latvia':'lv','Montenegro':'me','Denmark':'dk','Estonia':'ee','Russia':'ru',
-  'Kazakhstan':'kz','Lithuania':'lt','Malta':'mt','Israel':'il','Turkey':'tr',
-  'Brazil':'br','Argentina':'ar','Colombia':'co','Ecuador':'ec','Paraguay':'py',
-  'Uruguay':'uy','Chile':'cl','Bolivia':'bo','Peru':'pe','Venezuela':'ve',
-  'USA':'us','United States':'us','Mexico':'mx','Costa Rica':'cr','Canada':'ca',
-  'Morocco':'ma','Algeria':'dz','Egypt':'eg','Nigeria':'ng','Tunisia':'tn',
-  'South Africa':'za','Ghana':'gh','Senegal':'sn','Cameroon':'cm','Ivory Coast':'ci',
-  'Mali':'ml','DR Congo':'cd','Guinea':'gn','Japan':'jp','Korea':'kr','South Korea':'kr',
-  'Saudi Arabia':'sa','Saudi':'sa','UAE':'ae','Qatar':'qa','Uzbekistan':'uz',
-  'China':'cn','Australia':'au','Iran':'ir','Iraq':'iq','India':'in',
+  'Republic of Ireland':'ie','Ireland':'ie','Great Britain':'gb',
+  // Western/Southern Europe
+  'Spain':'es','Germany':'de','Italy':'it','France':'fr','Belgium':'be','Portugal':'pt','Greece':'gr',
+  'Netherlands':'nl','Switzerland':'ch','Austria':'at','Luxembourg':'lu','Andorra':'ad',
+  'Monaco':'mc','San Marino':'sm','Liechtenstein':'li','Malta':'mt','Cyprus':'cy','Gibraltar':'gi',
+  // Nordics
+  'Norway':'no','Sweden':'se','Denmark':'dk','Finland':'fi','Iceland':'is','Faroe Islands':'fo',
+  // Central/Eastern Europe
+  'Poland':'pl','Czech Republic':'cz','Czech':'cz','Slovakia':'sk','Hungary':'hu','Romania':'ro',
+  'Bulgaria':'bg','Croatia':'hr','Serbia':'rs','Slovenia':'si','Bosnia and Herzegovina':'ba','Bosnia':'ba',
+  'North Macedonia':'mk','Montenegro':'me','Albania':'al','Kosovo':'xk','Moldova':'md',
+  'Ukraine':'ua','Belarus':'by','Russia':'ru','Latvia':'lv','Lithuania':'lt','Estonia':'ee',
+  // Caucasus / Central Asia
+  'Armenia':'am','Georgia':'ge','Azerbaijan':'az','Kazakhstan':'kz','Uzbekistan':'uz',
+  'Kyrgyzstan':'kg','Tajikistan':'tj','Turkmenistan':'tm',
+  // Turkey
+  'Turkey':'tr','Türkiye':'tr','TÃ¼rkiye':'tr',
+  // North America
+  'United States':'us','USA':'us','Canada':'ca','Mexico':'mx',
+  // Central America / Caribbean
+  'Costa Rica':'cr','Panama':'pa','Honduras':'hn','Guatemala':'gt','El Salvador':'sv','Nicaragua':'ni',
+  'Belize':'bz','Cuba':'cu','Haiti':'ht','Dominican Republic':'do','Jamaica':'jm','Bahamas':'bs',
+  'Barbados':'bb','Trinidad and Tobago':'tt','Dominica':'dm','Grenada':'gd','St. Lucia':'lc',
+  'St. Vincent and the Grenadines':'vc','St. Kitts and Nevis':'kn','Antigua and Barbuda':'ag',
+  'Puerto Rico':'pr','Aruba':'aw','Curaçao':'cw','CuraÃ§ao':'cw','Sint Maarten':'sx','Saint Martin':'mf',
+  'Bonaire':'bq','Guadeloupe':'gp','Martinique':'mq','Cayman Islands':'ky','Turks and Caicos Islands':'tc',
+  'British Virgin Islands':'vg','US Virgin Islands':'vi','Montserrat':'ms',
+  // South America
+  'Brazil':'br','Argentina':'ar','Colombia':'co','Ecuador':'ec','Paraguay':'py','Uruguay':'uy',
+  'Chile':'cl','Bolivia':'bo','Peru':'pe','Venezuela':'ve','Guyana':'gy','Suriname':'sr',
+  'French Guiana':'gf',
+  // North Africa / Middle East
+  'Morocco':'ma','Algeria':'dz','Egypt':'eg','Tunisia':'tn','Libya':'ly','Sudan':'sd','South Sudan':'ss',
+  'Israel':'il','Palestine':'ps','Jordan':'jo','Lebanon':'lb','Syria':'sy','Iraq':'iq','Iran':'ir',
+  'Saudi Arabia':'sa','United Arab Emirates':'ae','UAE':'ae','Qatar':'qa','Bahrain':'bh','Kuwait':'kw',
+  'Oman':'om','Yemen':'ye',
+  // Sub-Saharan Africa
+  'Nigeria':'ng','Cameroon':'cm','Senegal':'sn','Mali':'ml','Ghana':'gh',"Côte d'Ivoire":'ci',
+  "CÃ´te d'Ivoire":'ci','Ivory Coast':'ci','Guinea-Bissau':'gw','Equatorial Guinea':'gq',
+  'Congo':'cg','Congo DR':'cd','DR Congo':'cd','Gambia':'gm','Togo':'tg','Gabon':'ga',
+  'Mauritania':'mr','Guinea':'gn','South Africa':'za','Zambia':'zm','Angola':'ao','Ethiopia':'et',
+  'Comoros':'km','Kenya':'ke','Benin':'bj','Rwanda':'rw','Burundi':'bi','Botswana':'bw',
+  'Central African Republic':'cf','Chad':'td','Uganda':'ug','Madagascar':'mg','Zimbabwe':'zw',
+  'Lesotho':'ls','Eritrea':'er','Malawi':'mw','Sierra Leone':'sl','Liberia':'lr','Somalia':'so',
+  'Djibouti':'dj','Mozambique':'mz','Namibia':'na','Tanzania':'tz','Zanzibar':'tz','Niger':'ne',
+  'Burkina Faso':'bf','Seychelles':'sc','Mauritius':'mu','Cape Verde Islands':'cv','Cape Verde':'cv',
+  'Eswatini':'sz',
+  'São Tomé e Príncipe':'st','SÃ£o TomÃ© e PrÃ­ncipe':'st',
+  // South/Central/East Asia
+  'India':'in','Pakistan':'pk','Bangladesh':'bd','Sri Lanka':'lk','Nepal':'np','Bhutan':'bt',
+  'Maldives':'mv','Afghanistan':'af','Myanmar':'mm','Cambodia':'kh','Laos':'la','Thailand':'th',
+  'Vietnam':'vn','Philippines':'ph','Malaysia':'my','Singapore':'sg','Indonesia':'id','Mongolia':'mn',
+  'Timor-Leste':'tl','Brunei Darussalam':'bn',
+  // East Asia
+  'Japan':'jp','Korea Republic':'kr','Korea':'kr','South Korea':'kr','Korea DPR':'kp','North Korea':'kp',
+  'China':'cn','China PR':'cn','Chinese Taipei':'tw','Hong Kong':'hk','Macao':'mo',
+  // Oceania / Pacific
+  'Australia':'au','New Zealand':'nz','Fiji':'fj','Vanuatu':'vu','Papua New Guinea':'pg',
+  'New Caledonia':'nc','Solomon Islands':'sb','Samoa':'ws','Tahiti':'pf','Guam':'gu',
+  // Europe channel islands / small states
+  'Isle of Man':'im','Jersey':'je','Guernsey':'gg','Réunion':'re','RÃ©union':'re','Bermuda':'bm',
+  // Generic regions — intentionally no flag
+  'Africa':'','Europe':'','Asia':'','World':'','N/C America':'','South America':'',
 };
 function countryToIso2(name) {
   if (!name) return '';
@@ -778,6 +825,7 @@ function buildQuickCardElement(player, players, manual = {}) {
     ? player.teamFotmobId
     : (TEAM_FOTMOB_MAP[sdTeamFull] || TEAM_FOTMOB_MAP[_normTeam(sdTeamFull)] || '');
   const crest = crestId ? `${CREST_BASE}${crestId}.png` : '';
+  const teamTextLeft = manual.shiftTeamText ? 912 : 892; // manual toggle for badges with unusual/wide shapes that overlap the text; default off
   const photo = photoUrl(player.name, player.team);
   const groups = sd.g || {};
 
@@ -970,14 +1018,15 @@ function buildQuickCardElement(player, players, manual = {}) {
           </div>`).join('')}
       </div>
 
-      <!-- CREST / TEAM / LEAGUE -->
+  <!-- CREST / TEAM / LEAGUE -->
       ${crest ? `<div style="position:absolute;left:${sdTeam.length >= 12 ? 720 : 740}px;top:22px;width:155px;height:210px;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${crest}');filter:drop-shadow(0 1px 2px rgba(0,0,0,0.3));"></div>` : ''}
-      <div style="position:absolute;left:892px;top:90px;width:266px;font-size:32px;font-weight:800;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${sdTeam.length >= 16 ? 'letter-spacing:-1px;' : ''}">${sdTeam}</div>
-      <div style="position:absolute;left:892px;top:150px;display:flex;align-items:center;">
+      <div style="position:absolute;left:${teamTextLeft}px;top:90px;width:266px;font-size:32px;font-weight:800;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${sdTeam.length >= 16 ? 'letter-spacing:-1px;' : ''}">${sdTeam}</div>
+      <div style="position:absolute;left:${teamTextLeft}px;top:150px;display:flex;align-items:center;">
         <span style="font-size:21px;font-weight:500;color:#fff;white-space:nowrap;">${leagueDisplayName}</span>
         ${countryToIso2(leagueToCountry(sdLeague)) ? `<div style="width:32px;height:20px;flex-shrink:0;margin-left:30px;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(leagueToCountry(sdLeague))}.png');border-radius:2px;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15);"></div>` : ''}
       </div>
-      ${player.onLoan ? `<div style="position:absolute;left:892px;top:194px;font-size:21.3px;color:#d9d9d9;white-space:nowrap;">On Loan</div>` : ''}
+      ${player.onLoan ? `<div style="position:absolute;left:${teamTextLeft}px;top:194px;font-size:21.3px;color:#d9d9d9;white-space:nowrap;">On Loan</div>` : ''}
+
 
       <div style="position:absolute;left:1188px;top:36px;width:2px;height:210px;background:rgba(255,255,255,0.14);"></div>
 
@@ -1083,6 +1132,7 @@ export default function QuickCardModal({ player, players, onClose }) {
   const [halfTeamContext, setHalfTeamContext] = useState(false);
   const [showForecast, setShowForecast] = useState(false);
   const [useBestRoleCareer, setUseBestRoleCareer] = useState(false);
+  const [shiftTeamText, setShiftTeamText] = useState(false);
   const [scoutStatus, setScoutStatus] = useState('');
   const [showScorePills, setShowScorePills] = useState(true);
   const [headerColorOverride, setHeaderColorOverride] = useState('');
@@ -1110,7 +1160,7 @@ export default function QuickCardModal({ player, players, onClose }) {
   const handleDownload = async () => {
     setDownloading(true);
     const { toPng } = await import('html-to-image');
-    const el = buildQuickCardElement(player, players, { agentOverride, nameOverride, valueOverride, biography, halfTeamContext, showForecast, scoutStatus, showScorePills, headerColorOverride, showPitchPosition, useBestRoleCareer, seasonOverride });
+    const el = buildQuickCardElement(player, players, { agentOverride, nameOverride, valueOverride, biography, halfTeamContext, showForecast, scoutStatus, showScorePills, headerColorOverride, showPitchPosition, useBestRoleCareer, seasonOverride, shiftTeamText });
     try {
       const cardNode = el.querySelector('#qc-card-root') || el;
       const opts = {
@@ -1173,6 +1223,11 @@ export default function QuickCardModal({ player, players, onClose }) {
         <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12,textAlign:'left'}}>
           <input type="checkbox" id="qc-best-role" checked={useBestRoleCareer} onChange={e=>setUseBestRoleCareer(e.target.checked)} style={{cursor:'pointer'}} />
           <label htmlFor="qc-best-role" style={{fontSize:11.5,color:'#cbd5e1',cursor:'pointer'}}>Career: best role score (scoutcard logic) instead of career score</label>
+        </div>
+
+        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12,textAlign:'left'}}>
+          <input type="checkbox" id="qc-shift-team" checked={shiftTeamText} onChange={e=>setShiftTeamText(e.target.checked)} style={{cursor:'pointer'}} />
+          <label htmlFor="qc-shift-team" style={{fontSize:11.5,color:'#cbd5e1',cursor:'pointer'}}>Shift team/league/flag right (for wide or unusually shaped badges)</label>
         </div>
 
         <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12,textAlign:'left'}}>
