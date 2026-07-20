@@ -1,7 +1,8 @@
-// App.js v15 - Added Side filter (Fullback/Attacker only), matching Club Tool: FB gets Left Back/Right Back (centre-sided FBs, if any, always pass through — matches Club Tool's leniency). ATT gets Left Wing/Attacking Mid/Right Wing as a strict 3-way split (dedicated AM button, unlike Club Tool's 2-way L/R). Resets on Position Group change.
+// App.js v16 - Added Team Index tab (TeamIndex.js) next to Club Tool. Team detail/click-through deliberately deferred — this wires up the browse/search/rank list only.
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import PlayerCard from './PlayerCard';
 import ClubTool from './ClubTool';
+import TeamIndex from './TeamIndex';
 import { Photo as PhotoUtil, Crest as CrestUtil, photoUrl as photoUrlUtil } from './utils';
 import { scoreBandColor, formatMV, formatFoot, ROLE_KEY_LABELS, ROLES_BY_KEY, POSITION_ATTRIBUTES, playerHasAttribute, ALL_LEAGUES, DEFAULT_LEAGUES, HIDDEN_LEAGUES, YOUTH_LEAGUES, PRESET_LEAGUES, COUNTRY_TO_REGION, GBE_LEAGUE_BANDS, leagueToRegion, leagueToBand, scoreLabel, scoreToStars, promotionBadge, ALL_SEASONS, LEAGUE_STRENGTHS } from './constants';
 
@@ -358,7 +359,7 @@ export default function App(){
   const [recentOnly,setRecentOnly]=useState(true);
   const [minMins,setMinMins]=useState(500);
   const [currentLeagueOnly,setCurrentLeagueOnly]=useState(false);
-  const [activeTab,setActiveTab]=useState('scout'); // 'scout' | 'club'
+  const [activeTab,setActiveTab]=useState('scout'); // 'scout' | 'club' | 'team'
   const [hiddenCols,setHiddenCols]=useState(new Set(['marketValue']));
   const [attrFilters,setAttrFilters]=useState(new Set()); // active attribute keys // hide MV by default, show xValue
   const [showColPicker,setShowColPicker]=useState(false); // default: only show players active 2022-23+
@@ -580,12 +581,13 @@ export default function App(){
         <div style={{display:'flex',gap:2}}>
           <button onClick={()=>setActiveTab('scout')} style={{padding:'4px 10px',borderRadius:5,border:`1px solid ${activeTab==='scout'?'#3b7de8':'transparent'}`,background:activeTab==='scout'?'#0e2040':'transparent',color:activeTab==='scout'?'#60a5fa':'#94a3b8',fontSize:10,fontWeight:600,cursor:'pointer'}}>Scout Index</button>
           <button onClick={()=>setActiveTab('club')} style={{padding:'4px 10px',borderRadius:5,border:`1px solid ${activeTab==='club'?'#3b7de8':'transparent'}`,background:activeTab==='club'?'#0e2040':'transparent',color:activeTab==='club'?'#60a5fa':'#94a3b8',fontSize:10,fontWeight:600,cursor:'pointer'}}>Club Tool</button>
+          <button onClick={()=>setActiveTab('team')} style={{padding:'4px 10px',borderRadius:5,border:`1px solid ${activeTab==='team'?'#3b7de8':'transparent'}`,background:activeTab==='team'?'#0e2040':'transparent',color:activeTab==='team'?'#60a5fa':'#94a3b8',fontSize:10,fontWeight:600,cursor:'pointer'}}>Team Index</button>
         </div>
         {rawMode&&<div style={{padding:'2px 8px',borderRadius:4,background:'#1e3a5f',color:'#60a5fa',fontSize:10,fontWeight:700}}>RAW MODE — no league weighting</div>}
         <div style={{marginLeft:'auto',fontSize:9,color:'#94a3b8',background:'#0d1220',border:'1px solid #1e2d45',borderRadius:4,padding:'2px 6px'}}>{all.length.toLocaleString()} players</div>
       </div>
 
-      {activeTab==='club'?<ClubTool players={all}/>:(<div style={T.layout}>
+      {activeTab==='team'?<TeamIndex/>:activeTab==='club'?<ClubTool players={all}/>:(<div style={T.layout}>
         <aside style={T.sb}>
           <div style={T.fg}>
             <div style={T.sw}><span style={T.si3}>⌕</span><input style={T.si2} placeholder="Player or team…" value={search} onChange={e=>{setSearch(e.target.value);setPage(0);}}/></div>
