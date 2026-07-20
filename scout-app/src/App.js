@@ -1,4 +1,4 @@
-// App.js v14 - Fixed L2 tier: xValue now < £900k (was incorrectly > £900k), score < 60, excludes players with no xValue data. Matches L1's pattern.
+// App.js v15 - Added Side filter (Fullback/Attacker only), matching Club Tool: FB gets Left Back/Right Back (centre-sided FBs, if any, always pass through — matches Club Tool's leniency). ATT gets Left Wing/Attacking Mid/Right Wing as a strict 3-way split (dedicated AM button, unlike Club Tool's 2-way L/R). Resets on Position Group change.
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import PlayerCard from './PlayerCard';
 import ClubTool from './ClubTool';
@@ -309,6 +309,7 @@ export default function App(){
   const [showShortlist,setShowShortlist]=React.useState(false);
   const [notPlayingOnly,setNotPlayingOnly]=React.useState(false);
   const [domesticOnly,setDomesticOnly]=React.useState(false);
+  const [sideFilter,setSideFilter]=React.useState('Any'); // 'Any'|'L'|'R'|'C' — only relevant for FB/ATT
   const [internationalOnly,setInternationalOnly]=React.useState(false);
   const [tierFilters,setTierFilters]=React.useState(new Set());
   const [softMode,setSoftMode]=React.useState(false);
@@ -441,6 +442,13 @@ export default function App(){
       // When specific season selected, player must have data for that season
       if(seasonFilter!=='all'&&!p.sh?.find(x=>x.s===seasonFilter)) return false;
       if(pos!=='All'&&ROLE_KEY_LABELS[p.roleKey]!==pos) return false;
+      if(sideFilter!=='Any'){
+        if(rk==='FB'){
+          if(p.side&&p.side!=='C'&&p.side!==sideFilter) return false;
+        } else if(rk==='ATT'){
+          if(p.side!==sideFilter) return false;
+        }
+      }
       if(!leagues.has(p.league)) return false;
       const pls=LEAGUE_STRENGTHS[p.league]||0;
       if(pls<lsMin||pls>lsMax) return false;
@@ -525,7 +533,7 @@ export default function App(){
       }
       return true;
     });
-  },[all,search,pos,leagues,ageMin,ageMax,heightMin,heightMax,foot,minScore,minSeas,showMvFilter,mvMax,showContractFilter,contractBefore,roleFilter,roleScoreMin,seasonFilter,metricFilters,xValueFilter,onlyElite,getDisplayScore,recentOnly,showXValueFilter,xValueMin,xValueMax,attrFilters,minMins,currentLeagueOnly,played2526,potentialMin,lsMin,lsMax,escOnly,gbeMin,natFilter,softMode,roleFilters,shortlist,showShortlist,notPlayingOnly,domesticOnly,internationalOnly,tierFilters]);
+  },[all,search,pos,leagues,ageMin,ageMax,heightMin,heightMax,foot,minScore,minSeas,showMvFilter,mvMax,showContractFilter,contractBefore,roleFilter,roleScoreMin,seasonFilter,metricFilters,xValueFilter,onlyElite,getDisplayScore,recentOnly,showXValueFilter,xValueMin,xValueMax,attrFilters,minMins,currentLeagueOnly,played2526,potentialMin,lsMin,lsMax,escOnly,gbeMin,natFilter,softMode,roleFilters,shortlist,showShortlist,notPlayingOnly,domesticOnly,internationalOnly,tierFilters,sideFilter,rk]);
 
   const sorted=useMemo(()=>{
     const a=[...filtered];
@@ -557,7 +565,7 @@ export default function App(){
     avgAge:filtered.length?filtered.reduce((s,p)=>s+p.age,0)/filtered.length:0,
   }),[filtered,getDisplayScore]);
 
-  const reset=()=>{setSearch('');setPos('All');setRoleFilter('');setRoleFilters(new Set());setSoftMode(false);setRoleFilters(new Set());setSoftMode(false);setRoleScoreMin(50);setActivePreset('');setActivePresetLeagues(null);setShowHidden(false);setShowYouth(false);setActiveBands(new Set());setActiveRegions(new Set());setLsMin(0);setLsMax(101);setAgeMin(16);setAgeMax(38);setHeightMin(152);setHeightMax(211);setFoot('Any');setMinScore(40);setMinSeas(1);setShowMvFilter(false);setMvMax(50);setShowContractFilter(false);setContractBefore(2028);setSeasonFilter('all');setScoreMode('complete');setMetricFilters([]);setXValueFilter('');setRawMode(false);setOnlyElite(false);setRecentOnly(true);setShowXValueFilter(false);setXValueMin(0);setXValueMax(50);setAttrFilters(new Set());setMinMins(500);setCurrentLeagueOnly(false);setPotentialMin(40);setPlayed2526(false);setEscOnly(false);setGbeMin(0);setNatFilter('');setNotPlayingOnly(false);setDomesticOnly(false);setInternationalOnly(false);setTierFilters(new Set());setShowShortlist(false);setSoftMode(false);setRoleFilters(new Set());setPage(0);};
+  const reset=()=>{setSearch('');setPos('All');setSideFilter('Any');setRoleFilter('');setRoleFilters(new Set());setSoftMode(false);setRoleFilters(new Set());setSoftMode(false);setRoleScoreMin(50);setActivePreset('');setActivePresetLeagues(null);setShowHidden(false);setShowYouth(false);setActiveBands(new Set());setActiveRegions(new Set());setLsMin(0);setLsMax(101);setAgeMin(16);setAgeMax(38);setHeightMin(152);setHeightMax(211);setFoot('Any');setMinScore(40);setMinSeas(1);setShowMvFilter(false);setMvMax(50);setShowContractFilter(false);setContractBefore(2028);setSeasonFilter('all');setScoreMode('complete');setMetricFilters([]);setXValueFilter('');setRawMode(false);setOnlyElite(false);setRecentOnly(true);setShowXValueFilter(false);setXValueMin(0);setXValueMax(50);setAttrFilters(new Set());setMinMins(500);setCurrentLeagueOnly(false);setPotentialMin(40);setPlayed2526(false);setEscOnly(false);setGbeMin(0);setNatFilter('');setNotPlayingOnly(false);setDomesticOnly(false);setInternationalOnly(false);setTierFilters(new Set());setShowShortlist(false);setSoftMode(false);setRoleFilters(new Set());setPage(0);};
 
   if(loading) return <div style={{...T.app,alignItems:'center',justifyContent:'center'}}><style>{'@keyframes spin{to{transform:rotate(360deg)}}'}</style><div style={{width:24,height:24,border:'2px solid #1e2d45',borderTop:'2px solid #3b7de8',borderRadius:'50%',animation:'spin 0.8s linear infinite'}}/><div style={{color:'#94a3b8',fontSize:11,marginTop:8}}>Loading…</div></div>;
 
@@ -587,11 +595,24 @@ export default function App(){
           {/* Scoring modes */}
           <div style={T.fg}>
             <span style={T.fl}>Position Group</span>
-            <select style={T.sel} value={pos} onChange={e=>{setPos(e.target.value);setAttrFilters(new Set());setMinMins(0);setCurrentLeagueOnly(false);setPage(0);}}>
+            <select style={T.sel} value={pos} onChange={e=>{setPos(e.target.value);setAttrFilters(new Set());setMinMins(0);setCurrentLeagueOnly(false);setSideFilter('Any');setPage(0);}}>
               <option>All</option>
               {Object.values(ROLE_KEY_LABELS).map(v=><option key={v}>{v}</option>)}
             </select>
           </div>
+
+          {(rk==='FB'||rk==='ATT')&&(
+            <div style={T.fg}>
+              <span style={T.fl}>{rk==='FB'?'Side (LB/RB)':'Side (LW/AM/RW)'}</span>
+              <div style={{display:'flex',gap:4}}>
+                {(rk==='FB'?['Any','L','R']:['Any','L','C','R']).map(s=>(
+                  <button key={s} onClick={()=>{setSideFilter(s);setPage(0);}} style={{flex:1,padding:'5px',borderRadius:5,border:`1px solid ${sideFilter===s?'#3b7de8':'#1e2d45'}`,background:sideFilter===s?'#0e2040':'transparent',color:sideFilter===s?'#60a5fa':'#94a3b8',fontSize:11,fontWeight:600,cursor:'pointer'}}>
+                    {s==='Any'?'Any':rk==='FB'?(s==='L'?'Left Back':'Right Back'):(s==='L'?'Left Wing':s==='C'?'Attacking Mid':'Right Wing')}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {pos!=='All'&&rk&&(POSITION_ATTRIBUTES[rk]||[]).length>0&&(
             <div style={T.fg}>
