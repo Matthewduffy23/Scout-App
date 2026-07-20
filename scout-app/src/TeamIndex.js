@@ -1,6 +1,10 @@
-// TeamIndex.js v2 - Added crests (TEAM_FOTMOB_MAP, same source as QuickCard/PlayerScoutingCard/ClubTool)
-// and Attributes filter (8 style tags, AND logic — team must match ALL selected, same convention
-// as player Attributes). Team detail/click-through page still deliberately deferred.
+// TeamIndex.js v3 - Full visual rebuild to match Scout Index exactly: same stats bar (Found/Avg
+// Score/Avg Age/Score 80+), numbered rows, sortable column headers with ↑/↓ arrows, same Th
+// component/table styles. Columns now: Club (crest+name), League, Style, Overall, Attack,
+// Defence, Possession, Pressing, Avg Age, Avg xValue (all 5 scores shown as separate columns
+// simultaneously, not toggled — matches how player table shows Career/Peak/Potential together).
+// Avg xValue computed client-side from the players prop (grouped by team+league) since it's not
+// in teams_final.json — App.js now passes players={all} into <TeamIndex/>.
 // v1 - New tab: searchable/sortable/filterable team database, using teams_final.json
 // (built by build_teams.py). Team detail/click-through page deliberately deferred per Matty —
 // this is list/scoring/filtering only for now.
@@ -48,10 +52,24 @@ const T = {
   cb: (on) => ({ width: 14, height: 14, borderRadius: 3, border: `1px solid ${on ? '#3b7de8' : '#334155'}`, background: on ? '#3b7de8' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }),
   cl: (on) => ({ fontSize: 11, color: on ? '#e2e8f4' : '#94a3b8' }),
   dv: { height: 1, background: '#1e2d45', margin: '10px 0' },
-  table: { width: '100%', borderCollapse: 'collapse', fontSize: 12 },
-  th: { textAlign: 'left', padding: '6px 8px', color: '#94a3b8', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.03em', cursor: 'pointer', whiteSpace: 'nowrap', borderBottom: '1px solid #1e2d45' },
-  td: { padding: '6px 8px', borderBottom: '1px solid #131b2e', whiteSpace: 'nowrap' },
+  statsBar: { padding: '10px 16px', background: '#0a0d18', borderBottom: '1px solid #1e2d45', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' },
+  si: { display: 'flex', flexDirection: 'column', gap: 1 },
+  sv: { fontSize: 16, fontWeight: 800, color: '#f1f5f9', lineHeight: 1 },
+  sl2: { fontSize: 8, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.1em' },
+  sdv: { width: 1, height: 22, background: '#1e2d45' },
+  tw: { flex: 1, overflow: 'auto', WebkitOverflowScrolling: 'touch' },
+  tbl: { width: '100%', borderCollapse: 'collapse', minWidth: 960 },
+  th_: { position: 'sticky', top: 0, zIndex: 10, background: '#0a0d18' },
+  th: { padding: '7px 10px', textAlign: 'left', fontSize: 9, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.08em', textTransform: 'uppercase', borderBottom: '1px solid #1e2d45', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' },
+  tha: { color: '#60a5fa' },
+  td: { padding: '8px 10px', borderBottom: '1px solid #0d1525', fontSize: 11.5, color: '#e2e8f4', whiteSpace: 'nowrap', verticalAlign: 'middle' },
+  es: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', color: '#64748b', gap: 8 },
 };
+
+function Th({ col, label, sort, onSort }) {
+  const a = sort.col === col;
+  return <th style={{ ...T.th, ...(a ? T.tha : {}) }} onClick={() => onSort(col)}>{label}{a ? (sort.asc ? ' ↑' : ' ↓') : ''}</th>;
+}
 
 function scoreColor(v) {
   if (v == null) return '#475569';
@@ -62,7 +80,7 @@ function scoreColor(v) {
   return '#ef4444';
 }
 
-export default function TeamIndex() {
+export default function TeamIndex({ players = [] }) {
   const [all, setAll] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -71,6 +89,25 @@ export default function TeamIndex() {
       .then(data => { setAll(data); setLoading(false); })
       .catch(() => setLoading(false));
   }, []);
+
+  // Avg squad xValue per team+league — not in teams_final.json (that's built purely from the
+  // team CSV), so computed here by grouping the already-loaded player data by team+league.
+  // Player leagues use the '.' format ('England 1.'); team rows don't ('England 1') — same
+  // normLeague() mismatch handled everywhere else in this file.
+  const xValueByTeam = useMemo(() => {
+    const sums = {};
+    for (const p of players) {
+      if (!p.xValue) continue;
+      const key = String(p.team).toLowerCase() + '|' + normLeague(p.league);
+      if (!sums[key]) sums[key] = { sum: 0, n: 0 };
+      sums[key].sum += p.xValue;
+      sums[key].n += 1;
+    }
+    const out = {};
+    for (const key in sums) out[key] = sums[key].sum / sums[key].n;
+    return out;
+  }, [players]);
+  const getAvgXValue = (team, league) => xValueByTeam[String(team).toLowerCase() + '|' + normLeague(league)] ?? null;
 
   const [search, setSearch] = useState('');
   const [scoreMode, setScoreMode] = useState('Overall');
@@ -193,6 +230,7 @@ export default function TeamIndex() {
     arr.sort((a, b) => {
       let av, bv;
       if (sort.col === 'score') { av = getDisplayScore(a); bv = getDisplayScore(b); }
+      else if (sort.col === 'avgXValue') { av = getAvgXValue(a.team, a.league); bv = getAvgXValue(b.team, b.league); }
       else { av = a[sort.col]; bv = b[sort.col]; }
       av = av ?? (sort.asc ? Infinity : -Infinity);
       bv = bv ?? (sort.asc ? Infinity : -Infinity);
@@ -200,7 +238,7 @@ export default function TeamIndex() {
       return sort.asc ? av - bv : bv - av;
     });
     return arr;
-  }, [filtered, sort, scoreMode, rawMode]);
+  }, [filtered, sort, scoreMode, rawMode, xValueByTeam]);
 
   const onSort = (col) => setSort(p => p.col === col ? { col, asc: !p.asc } : { col, asc: false });
   const paged = sorted.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
@@ -386,50 +424,73 @@ export default function TeamIndex() {
       </aside>
 
       <main style={T.main}>
-        <div style={{ marginBottom: 10, color: '#94a3b8', fontSize: 12 }}>{sorted.length} teams found</div>
-        <table style={T.table}>
-          <thead>
-            <tr>
-              <th style={T.th} onClick={() => onSort('team')}>Team</th>
-              <th style={T.th} onClick={() => onSort('league')}>League</th>
-              <th style={T.th} onClick={() => onSort('season')}>Season</th>
-              <th style={T.th} onClick={() => onSort('score')}>{scoreMode}{scoreMode === 'Overall' && !rawMode ? ' (wtd)' : ''}</th>
-              <th style={T.th}>Attributes</th>
-              <th style={T.th} onClick={() => onSort('points')}>Pts</th>
-              <th style={T.th} onClick={() => onSort('goalsFor')}>GF</th>
-              <th style={T.th} onClick={() => onSort('goalsAgainst')}>GA</th>
-              <th style={T.th} onClick={() => onSort('avgAge')}>Avg Age</th>
-            </tr>
-          </thead>
-          <tbody>
-            {paged.map((t, i) => {
-              const ds = getDisplayScore(t);
-              return (
-                <tr key={t.team + t.league + t.season + i}>
-                  <td style={{ ...T.td, fontWeight: 700 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                      {teamCrest(t.team) && <img src={teamCrest(t.team)} alt="" style={{ width: 16, height: 16, objectFit: 'contain', flexShrink: 0 }} onError={e => { e.target.style.display = 'none'; }} />}
-                      <span>{t.team}</span>
-                    </div>
-                  </td>
-                  <td style={T.td}>{t.league}</td>
-                  <td style={T.td}>{t.season}</td>
-                  <td style={{ ...T.td, fontWeight: 700, color: scoreColor(ds) }}>{ds != null ? ds.toFixed(1) : '—'}</td>
-                  <td style={{ ...T.td, whiteSpace: 'normal' }}>
-                    {(t.attributes || []).map(a => (
-                      <span key={a} style={{ display: 'inline-block', fontSize: 8.5, padding: '1px 5px', borderRadius: 4, background: '#1e2d45', color: '#93c5fd', marginRight: 3, marginBottom: 2 }}>{a}</span>
-                    ))}
-                  </td>
-                  <td style={T.td}>{t.points ?? '—'}</td>
-                  <td style={T.td}>{t.goalsFor ?? '—'}</td>
-                  <td style={T.td}>{t.goalsAgainst ?? '—'}</td>
-                  <td style={T.td}>{t.avgAge ?? '—'}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-        <div style={{ display: 'flex', gap: 8, marginTop: 12, alignItems: 'center' }}>
+        <div style={T.statsBar}>
+          <div style={T.si}><div style={T.sv}>{sorted.length.toLocaleString()}</div><div style={T.sl2}>Found</div></div>
+          <div style={T.sdv} />
+          <div style={T.si}><div style={T.sv}>{(sorted.reduce((s, t) => s + (getDisplayScore(t) || 0), 0) / (sorted.length || 1)).toFixed(1)}</div><div style={T.sl2}>Avg Score</div></div>
+          <div style={T.sdv} />
+          <div style={T.si}><div style={T.sv}>{(sorted.reduce((s, t) => s + (t.avgAge || 0), 0) / (sorted.length || 1)).toFixed(1)}</div><div style={T.sl2}>Avg Age</div></div>
+          <div style={T.sdv} />
+          <div style={T.si}><div style={T.sv}>{sorted.filter(t => (getDisplayScore(t) || 0) >= 80).length}</div><div style={T.sl2}>Score 80+</div></div>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 3, flexWrap: 'wrap', alignItems: 'center' }}>
+            {['overall', 'attack', 'defence', 'possession', 'pressing', 'avgAge', 'avgXValue'].map(col => (
+              <button key={col} onClick={() => onSort(col)} style={{ padding: '4px 9px', borderRadius: 4, border: `1px solid ${sort.col === col ? '#3b7de8' : '#1e2d45'}`, background: sort.col === col ? '#0e2040' : 'transparent', color: sort.col === col ? '#93c5fd' : '#94a3b8', fontSize: 10, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                {col === 'overall' ? 'Overall' : col === 'attack' ? 'Attack' : col === 'defence' ? 'Defence' : col === 'possession' ? 'Possession' : col === 'pressing' ? 'Pressing' : col === 'avgAge' ? 'Avg Age' : 'Avg xValue'}{sort.col === col ? (sort.asc ? ' ↑' : ' ↓') : ''}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div style={T.tw}>
+          {sorted.length === 0
+            ? <div style={T.es}><div style={{ fontSize: 26 }}>⚽</div><div style={{ fontSize: 12, color: '#94a3b8' }}>No teams match filters</div></div>
+            : (
+              <table style={T.tbl}>
+                <thead style={T.th_}><tr>
+                  <th style={{ ...T.th, width: 30, textAlign: 'center' }}>#</th>
+                  <th style={{ ...T.th, width: 30 }} />
+                  <Th col="team" label="Club" sort={sort} onSort={onSort} />
+                  <th style={T.th}>League</th>
+                  <th style={T.th}>Style</th>
+                  <Th col="overall" label="Overall" sort={sort} onSort={onSort} />
+                  <Th col="attack" label="Attack" sort={sort} onSort={onSort} />
+                  <Th col="defence" label="Defence" sort={sort} onSort={onSort} />
+                  <Th col="possession" label="Possession" sort={sort} onSort={onSort} />
+                  <Th col="pressing" label="Pressing" sort={sort} onSort={onSort} />
+                  <Th col="avgAge" label="Avg Age" sort={sort} onSort={onSort} />
+                  <Th col="avgXValue" label="Avg xValue" sort={sort} onSort={onSort} />
+                </tr></thead>
+                <tbody>
+                  {paged.map((t, i) => {
+                    const avgXV = getAvgXValue(t.team, t.league);
+                    return (
+                      <tr key={t.team + t.league + t.season + i} className="rh">
+                        <td style={{ ...T.td, textAlign: 'center', color: '#64748b', fontSize: 10 }}>{page * PAGE_SIZE + i + 1}</td>
+                        <td style={T.td}>
+                          {teamCrest(t.team) && <img src={teamCrest(t.team)} alt="" style={{ width: 20, height: 20, objectFit: 'contain' }} onError={e => { e.target.style.display = 'none'; }} />}
+                        </td>
+                        <td style={{ ...T.td, fontWeight: 700 }}>{t.team}</td>
+                        <td style={T.td}>{t.league}</td>
+                        <td style={{ ...T.td, whiteSpace: 'normal' }}>
+                          {(t.attributes || []).map(a => (
+                            <span key={a} style={{ display: 'inline-block', fontSize: 8.5, padding: '1px 5px', borderRadius: 4, background: '#1e2d45', color: '#93c5fd', marginRight: 3, marginBottom: 2 }}>{a}</span>
+                          ))}
+                        </td>
+                        <td style={{ ...T.td, fontWeight: 700, color: scoreColor(t.overall) }}>{t.overall != null ? t.overall.toFixed(1) : '—'}</td>
+                        <td style={{ ...T.td, color: scoreColor(t.attack) }}>{t.attack != null ? t.attack.toFixed(1) : '—'}</td>
+                        <td style={{ ...T.td, color: scoreColor(t.defence) }}>{t.defence != null ? t.defence.toFixed(1) : '—'}</td>
+                        <td style={{ ...T.td, color: scoreColor(t.possession) }}>{t.possession != null ? t.possession.toFixed(1) : '—'}</td>
+                        <td style={{ ...T.td, color: scoreColor(t.pressing) }}>{t.pressing != null ? t.pressing.toFixed(1) : '—'}</td>
+                        <td style={T.td}>{t.avgAge ?? '—'}</td>
+                        <td style={{ ...T.td, color: '#93c5fd', fontWeight: 700 }}>{avgXV != null ? `£${(avgXV / 1000000).toFixed(1)}m` : '—'}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+        </div>
+        <div style={{ display: 'flex', gap: 8, margin: '12px 16px', alignItems: 'center' }}>
           <button disabled={page === 0} onClick={() => setPage(p => p - 1)} style={{ padding: '4px 10px', borderRadius: 5, border: '1px solid #1e2d45', background: 'transparent', color: page === 0 ? '#475569' : '#e2e8f4', cursor: page === 0 ? 'default' : 'pointer' }}>Prev</button>
           <span style={{ fontSize: 11, color: '#94a3b8' }}>Page {page + 1} of {Math.max(1, Math.ceil(sorted.length / PAGE_SIZE))}</span>
           <button disabled={(page + 1) * PAGE_SIZE >= sorted.length} onClick={() => setPage(p => p + 1)} style={{ padding: '4px 10px', borderRadius: 5, border: '1px solid #1e2d45', background: 'transparent', color: (page + 1) * PAGE_SIZE >= sorted.length ? '#475569' : '#e2e8f4', cursor: (page + 1) * PAGE_SIZE >= sorted.length ? 'default' : 'pointer' }}>Next</button>

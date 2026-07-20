@@ -1,4 +1,4 @@
-// App.js v16 - Added Team Index tab (TeamIndex.js) next to Club Tool. Team detail/click-through deliberately deferred — this wires up the browse/search/rank list only.
+// App.js v17 - Pass players={all} into TeamIndex so it can compute Avg xValue per squad.
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import PlayerCard from './PlayerCard';
 import ClubTool from './ClubTool';
@@ -587,7 +587,7 @@ export default function App(){
         <div style={{marginLeft:'auto',fontSize:9,color:'#94a3b8',background:'#0d1220',border:'1px solid #1e2d45',borderRadius:4,padding:'2px 6px'}}>{all.length.toLocaleString()} players</div>
       </div>
 
-      {activeTab==='team'?<TeamIndex/>:activeTab==='club'?<ClubTool players={all}/>:(<div style={T.layout}>
+      {activeTab==='team'?<TeamIndex players={all}/>:activeTab==='club'?<ClubTool players={all}/>:(<div style={T.layout}>
         <aside style={T.sb}>
           <div style={T.fg}>
             <div style={T.sw}><span style={T.si3}>⌕</span><input style={T.si2} placeholder="Player or team…" value={search} onChange={e=>{setSearch(e.target.value);setPage(0);}}/></div>
