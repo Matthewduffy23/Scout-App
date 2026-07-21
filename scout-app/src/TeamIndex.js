@@ -159,12 +159,68 @@ export default function TeamIndex({ players = [] }) {
   const [lsMin, setLsMin] = useState(0);
   const [lsMax, setLsMax] = useState(101);
 
-  const [metricFilters, setMetricFilters] = useState([]); // [{key,label,min,max}] — "Metric Value"
+  const [metricFilters, setMetricFilters] = useState([]); // [{key,label,min,max,mode}] — mode: 'pct'|'raw'; key prefix 'mg:Group:Name' for metricGroups
   const METRIC_OPTIONS = [
-    { key: 'points', label: 'Points' }, { key: 'expectedPoints', label: 'Expected Points' },
-    { key: 'goalsFor', label: 'Goals For' }, { key: 'goalsAgainst', label: 'Goals Against' },
-    { key: 'avgAge', label: 'Avg Age' }, { key: 'wins', label: 'Wins' }, { key: 'draws', label: 'Draws' }, { key: 'losses', label: 'Losses' },
+    { key: 'completeScore', label: 'Overall Score', group: 'Scores', isPct: true },
+    { key: 'attack',        label: 'Attack',        group: 'Scores', isPct: true },
+    { key: 'defence',       label: 'Defence',       group: 'Scores', isPct: true },
+    { key: 'possession',    label: 'Possession',    group: 'Scores', isPct: true },
+    { key: 'pressing',      label: 'Pressing',      group: 'Scores', isPct: true },
+    // Attack metrics — stored in metricGroups.Attack as [name, pct, raw]
+    { key: 'mg:Attack:Crosses',       label: 'Crosses',       group: 'Attack',     isPct: true },
+    { key: 'mg:Attack:Goals Scored',  label: 'Goals Scored',  group: 'Attack',     isPct: true },
+    { key: 'mg:Attack:xG',            label: 'xG',            group: 'Attack',     isPct: true },
+    { key: 'mg:Attack:Shots',         label: 'Shots',         group: 'Attack',     isPct: true },
+    { key: 'mg:Attack:Shooting %',    label: 'Shooting %',    group: 'Attack',     isPct: true },
+    { key: 'mg:Attack:Touches in Box',label: 'Touches in Box',group: 'Attack',     isPct: true },
+    // Defence metrics
+    { key: 'mg:Defence:Goals Against',        label: 'Goals Against',        group: 'Defence', isPct: true },
+    { key: 'mg:Defence:xG Against',           label: 'xG Against',           group: 'Defence', isPct: true },
+    { key: 'mg:Defence:Aerial Duels',         label: 'Aerial Duels',         group: 'Defence', isPct: true },
+    { key: 'mg:Defence:Aerial Duel Success %',label: 'Aerial Duel Success %', group: 'Defence', isPct: true },
+    { key: 'mg:Defence:Defensive Duels',      label: 'Defensive Duels',      group: 'Defence', isPct: true },
+    { key: 'mg:Defence:Defensive Duel Win %', label: 'Defensive Duel Win %', group: 'Defence', isPct: true },
+    { key: 'mg:Defence:Shots Against',        label: 'Shots Against',        group: 'Defence', isPct: true },
+    { key: 'mg:Defence:PPDA',                 label: 'PPDA (def)',            group: 'Defence', isPct: true },
+    // Possession metrics
+    { key: 'mg:Possession:Possession',         label: 'Possession %',         group: 'Possession', isPct: true },
+    { key: 'mg:Possession:Passes',             label: 'Passes',               group: 'Possession', isPct: true },
+    { key: 'mg:Possession:Passing Accuracy %', label: 'Passing Accuracy %',   group: 'Possession', isPct: true },
+    { key: 'mg:Possession:Long Passes',        label: 'Long Passes',          group: 'Possession', isPct: true },
+    { key: 'mg:Possession:Long Passing %',     label: 'Long Passing %',       group: 'Possession', isPct: true },
+    { key: 'mg:Possession:Passes to Final 3rd',label: 'Passes to Final 3rd',  group: 'Possession', isPct: true },
+    { key: 'mg:Possession:Progressive Passes', label: 'Progressive Passes',   group: 'Possession', isPct: true },
+    { key: 'mg:Possession:Progressive Runs',   label: 'Progressive Runs',     group: 'Possession', isPct: true },
+    { key: 'mg:Possession:Dribbles',           label: 'Dribbles',             group: 'Possession', isPct: true },
+    // Pressing
+    { key: 'mg:Pressing:PPDA',  label: 'PPDA (pressing)', group: 'Pressing', isPct: true },
+    // Raw stats
+    { key: 'points',         label: 'Points',          group: 'Stats' },
+    { key: 'expectedPoints', label: 'Expected Points', group: 'Stats' },
+    { key: 'goalsFor',       label: 'Goals For',       group: 'Stats' },
+    { key: 'goalsAgainst',   label: 'Goals Against',   group: 'Stats' },
+    { key: 'avgAge',         label: 'Avg Age',         group: 'Stats' },
+    { key: 'wins',           label: 'Wins',            group: 'Stats' },
+    { key: 'draws',          label: 'Draws',           group: 'Stats' },
+    { key: 'losses',         label: 'Losses',          group: 'Stats' },
   ];
+  // Helper: resolve a metric filter value from a team row
+  const resolveMetricVal = (t, mf) => {
+    if (!mf.key) return null;
+    if (mf.key.startsWith('mg:')) {
+      const [, grp, name] = mf.key.split(':').map((s, i) => i === 0 ? s : s); // 'mg', group, name
+      // key is 'mg:Group:Metric Name' — split carefully (name may contain colons never, but be safe)
+      const parts = mf.key.slice(3).split(':'); // ['Attack', 'xG'] or ['Possession', 'Passes to Final 3rd']
+      const group = parts[0];
+      const metricName = parts.slice(1).join(':');
+      const metrics = t.metricGroups?.[group];
+      if (!metrics) return null;
+      const row = metrics.find(m => m[0] === metricName);
+      if (!row) return null;
+      return mf.mode === 'raw' ? row[2] : row[1]; // [name, pct, rawVal]
+    }
+    return t[mf.key];
+  };
 
   const [mostImproved, setMostImproved] = useState(false);
   const [improvedMode, setImprovedMode] = useState('Overall');
@@ -316,7 +372,7 @@ export default function TeamIndex({ players = [] }) {
       }
       for (const mf of metricFilters) {
         if (!mf.key) continue;
-        const v = t[mf.key];
+        const v = resolveMetricVal(t, mf);
         if (v == null || v < mf.min || v > mf.max) return false;
       }
       // Same division filter — only show teams that stayed in the same league as last season
@@ -545,23 +601,50 @@ export default function TeamIndex({ players = [] }) {
 
         <div style={T.fg}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
-            <span style={T.fl}>Metric Value ({metricFilters.length}/10)</span>
-            {metricFilters.length < 10 && <button onClick={() => setMetricFilters(f => [...f, { key: '', label: '', min: 0, max: 100 }])} style={{ fontSize: 9, padding: '1px 6px', borderRadius: 4, border: '1px solid #1e2d45', background: 'transparent', color: '#60a5fa', cursor: 'pointer' }}>+ Add</button>}
+            <span style={T.fl}>Metric Filter ({metricFilters.length}/10)</span>
+            {metricFilters.length < 10 && <button onClick={() => setMetricFilters(f => [...f, { key: '', label: '', min: 0, max: 100, mode: 'pct' }])} style={{ fontSize: 9, padding: '1px 6px', borderRadius: 4, border: '1px solid #1e2d45', background: 'transparent', color: '#60a5fa', cursor: 'pointer' }}>+ Add</button>}
           </div>
-          {metricFilters.map((mf, i) => (
-            <div key={i} style={{ display: 'flex', gap: 4, marginBottom: 4, alignItems: 'center' }}>
-              <select style={{ ...T.sel, flex: 2 }} value={mf.key} onChange={e => {
-                const opt = METRIC_OPTIONS.find(o => o.key === e.target.value);
-                setMetricFilters(f => f.map((x, j) => j === i ? { ...x, key: e.target.value, label: opt?.label || '' } : x));
-              }}>
-                <option value="">Metric…</option>
-                {METRIC_OPTIONS.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
-              </select>
-              <input type="number" value={mf.min} onChange={e => setMetricFilters(f => f.map((x, j) => j === i ? { ...x, min: Number(e.target.value) } : x))} style={{ width: 44, background: '#0d1220', border: '1px solid #1e2d45', borderRadius: 4, color: '#e2e8f4', fontSize: 10, padding: '4px' }} />
-              <input type="number" value={mf.max} onChange={e => setMetricFilters(f => f.map((x, j) => j === i ? { ...x, max: Number(e.target.value) } : x))} style={{ width: 44, background: '#0d1220', border: '1px solid #1e2d45', borderRadius: 4, color: '#e2e8f4', fontSize: 10, padding: '4px' }} />
-              <button onClick={() => setMetricFilters(f => f.filter((_, j) => j !== i))} style={{ color: '#f87171', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12 }}>×</button>
-            </div>
-          ))}
+          {metricFilters.map((mf, i) => {
+            const opt = METRIC_OPTIONS.find(o => o.key === mf.key);
+            const isPct = opt?.isPct;
+            return (
+              <div key={i} style={{ marginBottom: 6, background: '#080f1c', border: '1px solid #1e2d45', borderRadius: 5, padding: '5px 6px' }}>
+                <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginBottom: isPct ? 4 : 0 }}>
+                  <select style={{ ...T.sel, flex: 2 }} value={mf.key} onChange={e => {
+                    const o = METRIC_OPTIONS.find(x => x.key === e.target.value);
+                    setMetricFilters(f => f.map((x, j) => j === i ? { ...x, key: e.target.value, label: o?.label || '', min: 0, max: o?.isPct ? 100 : 999, mode: o?.isPct ? 'pct' : 'raw' } : x));
+                  }}>
+                    <option value="">Metric…</option>
+                    {['Scores', 'Attack', 'Defence', 'Possession', 'Pressing', 'Stats'].map(grp => (
+                      <optgroup key={grp} label={grp}>
+                        {METRIC_OPTIONS.filter(o => o.group === grp).map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
+                      </optgroup>
+                    ))}
+                  </select>
+                  <button onClick={() => setMetricFilters(f => f.filter((_, j) => j !== i))} style={{ color: '#f87171', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, flexShrink: 0 }}>×</button>
+                </div>
+                {mf.key && (
+                  <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                    {isPct && (
+                      <div style={{ display: 'flex', borderRadius: 4, overflow: 'hidden', border: '1px solid #1e2d45', flexShrink: 0 }}>
+                        {['pct', 'raw'].map(m => (
+                          <button key={m} onClick={() => setMetricFilters(f => f.map((x, j) => j === i ? { ...x, mode: m } : x))}
+                            style={{ fontSize: 9, padding: '2px 6px', background: mf.mode === m ? '#0e2040' : 'transparent', color: mf.mode === m ? '#60a5fa' : '#475569', border: 'none', cursor: 'pointer', fontWeight: mf.mode === m ? 700 : 400 }}>
+                            {m === 'pct' ? 'Pct' : 'Score'}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    <span style={{ fontSize: 9, color: '#475569', flexShrink: 0 }}>min</span>
+                    <input type="number" value={mf.min} onChange={e => setMetricFilters(f => f.map((x, j) => j === i ? { ...x, min: Number(e.target.value) } : x))} style={{ width: 40, background: '#0d1220', border: '1px solid #1e2d45', borderRadius: 4, color: '#e2e8f4', fontSize: 10, padding: '3px' }} />
+                    <span style={{ fontSize: 9, color: '#475569', flexShrink: 0 }}>max</span>
+                    <input type="number" value={mf.max} onChange={e => setMetricFilters(f => f.map((x, j) => j === i ? { ...x, max: Number(e.target.value) } : x))} style={{ width: 40, background: '#0d1220', border: '1px solid #1e2d45', borderRadius: 4, color: '#e2e8f4', fontSize: 10, padding: '3px' }} />
+                    {isPct && <span style={{ fontSize: 9, color: '#334155' }}>{mf.mode === 'pct' ? '0–100 percentile' : 'raw value'}</span>}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </aside>
 

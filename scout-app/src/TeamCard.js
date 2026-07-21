@@ -195,13 +195,18 @@ export default function TeamCard({ team, allTeamSeasons = [], onClose }) {
             </div>
             {activeTeam.completeScore != null && <div style={{ fontSize: 10, color: scoreBandColor(activeTeam.completeScore), fontWeight: 600, marginBottom: 3 }}>{starLabel(scoreToStars(activeTeam.completeScore))}</div>}
             <div style={{ fontSize: 11, color: '#64748b', marginBottom: 8 }}>{activeTeam.league} · {activeTeam.season}{activeTeam.pointsRank != null && activeTeam.leagueSize != null && ` · ${activeTeam.pointsRank}${activeTeam.pointsRank === 1 ? 'st' : activeTeam.pointsRank === 2 ? 'nd' : activeTeam.pointsRank === 3 ? 'rd' : 'th'} of ${activeTeam.leagueSize}`}</div>
-            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center' }}>
               {activeTeam.style && <Tag label={activeTeam.style} bg={styleColor(activeTeam.style).bg} color={styleColor(activeTeam.style).color} />}
-              {record && <Tag label={record} bg="#0d1220" color="#94a3b8" />}
-              {activeTeam.points != null && <Tag label={`${activeTeam.points} pts`} bg="#0d1220" color="#94a3b8" />}
-              {activeTeam.goalsFor != null && activeTeam.goalsAgainst != null && <Tag label={`${activeTeam.goalsFor}-${activeTeam.goalsAgainst} GD`} bg="#0d1220" color="#94a3b8" />}
-              {activeTeam.avgAge != null && <Tag label={`Avg Age ${activeTeam.avgAge}`} bg="#0d1220" color="#94a3b8" />}
-              {activeTeam.avgXValue != null && <Tag label={`Avg xValue £${(activeTeam.avgXValue / 1000000).toFixed(1)}m`} bg="#0d1220" color="#94a3b8" />}
+              {record && <Tag label={record} bg="#0f1f10" color="#4ade80" />}
+              {activeTeam.points != null && <Tag label={`${activeTeam.points} pts`} bg="#1a1205" color="#fbbf24" />}
+              {activeTeam.goalsFor != null && activeTeam.goalsAgainst != null && (() => {
+                const gd = activeTeam.goalsFor - activeTeam.goalsAgainst;
+                const gdColor = gd > 0 ? '#34d399' : gd < 0 ? '#f87171' : '#94a3b8';
+                const gdBg = gd > 0 ? '#052015' : gd < 0 ? '#200505' : '#0d1220';
+                return <Tag label={`${activeTeam.goalsFor}-${activeTeam.goalsAgainst} GD`} bg={gdBg} color={gdColor} />;
+              })()}
+              {activeTeam.avgAge != null && <Tag label={`Avg Age ${activeTeam.avgAge}`} bg="#0e1830" color="#93c5fd" />}
+              {activeTeam.avgXValue != null && <Tag label={`Avg xValue £${(activeTeam.avgXValue / 1000000).toFixed(1)}m`} bg="#1a0a2e" color="#c084fc" />}
               {(activeTeam.attributes || []).map(a => <Tag key={a} label={a} bg="#0a1a30" color="#7eb3f8" />)}
             </div>
           </div>
