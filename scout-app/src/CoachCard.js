@@ -12,6 +12,21 @@ import { computeCoachMetricGroups } from "./coachMetrics";
 const BG = "#0a0f1c";
 const HEADER_L = "rgb(23,26,77)";
 const HEADER_R = "rgb(17,22,42)";
+
+// Fade a club hex colour toward the card background (#0a0f1c) — mirrors the
+// player scouting card so the header gradient tints subtly instead of blaring.
+function fadeHexToBG(hex, amount = 0.82) {
+  if (!hex || typeof hex !== "string") return hex;
+  const m = hex.trim().match(/^#?([0-9a-f]{6})$/i);
+  if (!m) return hex;
+  const num = parseInt(m[1], 16);
+  const r = (num >> 16) & 255, g = (num >> 8) & 255, b = num & 255;
+  const bgR = 10, bgG = 15, bgB = 28;
+  const r2 = Math.round(r + (bgR - r) * amount);
+  const g2 = Math.round(g + (bgG - g) * amount);
+  const b2 = Math.round(b + (bgB - b) * amount);
+  return `rgb(${r2},${g2},${b2})`;
+}
 const ACCENT_PINK = "#ff66c4";
 const TREND_CYAN = "#00cadc";
 const LABEL_COL = "#e8eef8";
@@ -4081,7 +4096,7 @@ export function buildCoachCardElement(coach, tenureRows, traits) {
 
   container.innerHTML = `
     <!-- HEADER GRADIENT BAND -->
-    <div style="position:absolute;top:0;left:0;width:1520px;height:292px;background:linear-gradient(to right, ${HEADER_L} 0%, ${HEADER_R} 100%);"></div>
+    <div style="position:absolute;top:0;left:0;width:1520px;height:292px;background:linear-gradient(to right, ${coach.clubColor ? fadeHexToBG(coach.clubColor, 0.62) : HEADER_L} 0%, ${coach.clubColor ? fadeHexToBG(coach.clubColor, 0.93) : HEADER_R} 100%);"></div>
 
     <!-- PHOTO (bleeds slightly off the left edge, same as the real card) -->
     ${(() => {
@@ -4215,13 +4230,8 @@ export function buildCoachCardElement(coach, tenureRows, traits) {
     <div style="position:absolute;top:292px;left:1535px;width:370px;height:2px;background:rgba(192,192,192,.35);"></div>
     <div style="position:absolute;top:296px;left:1520px;width:400px;text-align:center;font-size:27.9px;font-weight:700;color:#d9d9d9;">COACHING TRAITS</div>
     <!-- Pills in a flex-wrap layout, full-width, tighter spacing -->
-    <div style="position:absolute;top:340px;left:1522px;width:376px;display:grid;grid-template-columns:1fr 1fr;gap:22px 10px;justify-items:start;">
-      ${TRAIT_ORDER.map((key) => {
-        const pill = traitPillHtml(key, getTraitScore(key));
-        return key === "youthDevelopment"
-          ? `<div style="grid-column:1 / -1;text-align:left;">${pill}</div>`
-          : pill;
-      }).join("")}
+    <div style="position:absolute;top:340px;left:1522px;width:376px;display:flex;flex-wrap:wrap;gap:14px 10px;align-content:flex-start;">
+      ${TRAIT_ORDER.map((key) => traitPillHtml(key, getTraitScore(key))).join("")}
     </div>
 
     <div style="position:absolute;top:640px;left:1535px;width:370px;height:2px;background:rgba(192,192,192,.35);"></div>

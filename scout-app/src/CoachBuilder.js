@@ -10,6 +10,7 @@ import { newCoachId, upsertCoach } from './coachStorage';
 
 const FORMATIONS = ['4-3-3', '5-4-1', '4-4-2', '4-2-3-1', '3-5-2', '4-1-4-1'];
 const TRAIT_KEYS = ['possession', 'pressing', 'passing', 'adaptability', 'youthDevelopment', 'attacking', 'setPieces', 'defensive', 'directness'];
+const NARRATIVE_LIMIT = 420; // combined char budget across Play Style + Development + View (matches player card)
 const TRAIT_LABELS = { possession: 'Possession', pressing: 'Pressing', passing: 'Passing', adaptability: 'Adaptability', youthDevelopment: 'Youth Development', attacking: 'Attacking', setPieces: 'Set Pieces', defensive: 'Defensive', directness: 'Directness' };
 
 const inputStyle = { width: '100%', background: '#0d1220', border: '1px solid #1e2d45', borderRadius: 5, padding: '6px 8px', color: '#e2e8f4', fontSize: 12, outline: 'none' };
@@ -26,6 +27,7 @@ export default function CoachBuilder({ allTeams = [], existingCoach = null, onCl
   const [ppg, setPpg] = useState(existingCoach?.ppg ?? '');
   const [contract, setContract] = useState(existingCoach?.contract || '');
   const [tenure, setTenure] = useState(existingCoach?.tenure || '');
+  const [clubColor, setClubColor] = useState(existingCoach?.clubColor || '');
   // formations: array of up to 3, primary first. Migrate from legacy single `formation` field.
   const [formations, setFormations] = useState(
     existingCoach?.formations?.length
@@ -105,6 +107,7 @@ export default function CoachBuilder({ allTeams = [], existingCoach = null, onCl
       ppg: ppg === '' ? null : Number(ppg),
       contract,
       tenure: tenure.trim() || null,   // manual display string e.g. '2024–Present'
+      clubColor: clubColor || null,   // header gradient tint (hex)
       formation: formations[0],   // backward compat — primary formation
       formations,                 // full ordered array for the card
       tenures,
@@ -146,6 +149,15 @@ export default function CoachBuilder({ allTeams = [], existingCoach = null, onCl
             <div><span style={labelStyle}>Clubs</span><input style={inputStyle} type="number" value={clubs} onChange={e => setClubs(e.target.value)} placeholder="2" /></div>
             <div><span style={labelStyle}>Contract</span><input style={inputStyle} value={contract} onChange={e => setContract(e.target.value)} placeholder="2027" /></div>
             <div><span style={labelStyle}>Tenure</span><input style={inputStyle} value={tenure} onChange={e => setTenure(e.target.value)} placeholder="2024–Present" /></div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+            <span style={labelStyle}>Header Colour</span>
+            <input type="color" value={clubColor || '#171a4d'} onChange={e => setClubColor(e.target.value)} style={{ width: 40, height: 28, background: 'none', border: '1px solid #1e2d45', borderRadius: 5, cursor: 'pointer', padding: 0 }} />
+            {['#c8102e','#004170','#1b5e20','#6a1b9a','#f57f17','#000000','#0b1e3f','#7a0026'].map(hex => (
+              <button key={hex} type="button" onClick={() => setClubColor(hex)} title={hex}
+                style={{ width: 22, height: 22, borderRadius: 5, background: hex, border: clubColor === hex ? '2px solid #fff' : '1px solid #1e2d45', cursor: 'pointer', padding: 0 }} />
+            ))}
+            <button type="button" onClick={() => setClubColor('')} style={{ fontSize: 10, color: '#94a3b8', background: 'none', border: '1px solid #1e2d45', borderRadius: 5, padding: '4px 8px', cursor: 'pointer' }}>Default</button>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
             <div><span style={labelStyle}>PPG</span><input style={inputStyle} type="number" step="0.01" value={ppg} onChange={e => setPpg(e.target.value)} placeholder="1.53" /></div>
@@ -233,12 +245,29 @@ export default function CoachBuilder({ allTeams = [], existingCoach = null, onCl
           </div>
         </div>
 
-        {/* Narrative */}
+        {/* Narrative — combined character limit across all three (like player card) */}
         <div style={sectionStyle}>
-          <div style={{ fontSize: 9, fontWeight: 700, color: '#c8d4e8', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 8 }}>Narrative</div>
-          <div style={{ marginBottom: 8 }}><span style={labelStyle}>Play Style</span><textarea style={{ ...inputStyle, minHeight: 44, resize: 'vertical' }} value={playStyle} onChange={e => setPlayStyle(e.target.value)} /></div>
-          <div style={{ marginBottom: 8 }}><span style={labelStyle}>Development</span><textarea style={{ ...inputStyle, minHeight: 44, resize: 'vertical' }} value={development} onChange={e => setDevelopment(e.target.value)} /></div>
-          <div><span style={labelStyle}>View</span><textarea style={{ ...inputStyle, minHeight: 44, resize: 'vertical' }} value={view} onChange={e => setView(e.target.value)} /></div>
+          {(() => {
+            const used = (playStyle.length + development.length + view.length);
+            const remaining = NARRATIVE_LIMIT - used;
+            // Clamp a field's new value so the COMBINED total never exceeds the limit.
+            const capped = (current, next) => {
+              const others = used - current.length;
+              const room = NARRATIVE_LIMIT - others;
+              return next.length <= room ? next : next.slice(0, Math.max(0, room));
+            };
+            return (
+              <>
+                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <span style={{ fontSize: 9, fontWeight: 700, color: '#c8d4e8', letterSpacing: '0.12em', textTransform: 'uppercase' }}>Narrative</span>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: remaining <= 0 ? '#ef4444' : remaining <= 40 ? '#f59e0b' : '#64748b' }}>{used}/{NARRATIVE_LIMIT}</span>
+                </div>
+                <div style={{ marginBottom: 8 }}><span style={labelStyle}>Play Style</span><textarea style={{ ...inputStyle, minHeight: 44, resize: 'vertical' }} value={playStyle} onChange={e => setPlayStyle(capped(playStyle, e.target.value))} /></div>
+                <div style={{ marginBottom: 8 }}><span style={labelStyle}>Development</span><textarea style={{ ...inputStyle, minHeight: 44, resize: 'vertical' }} value={development} onChange={e => setDevelopment(capped(development, e.target.value))} /></div>
+                <div><span style={labelStyle}>View</span><textarea style={{ ...inputStyle, minHeight: 44, resize: 'vertical' }} value={view} onChange={e => setView(capped(view, e.target.value))} /></div>
+              </>
+            );
+          })()}
         </div>
 
         {/* Current / Potential Level */}
