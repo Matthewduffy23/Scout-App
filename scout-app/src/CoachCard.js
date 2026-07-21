@@ -4031,7 +4031,7 @@ function traitPillHtml(key, score) {
   const sc = score != null ? Math.round(score) : null;
   const bc = sc != null ? traitPillBgColor(sc) : "#3a4560";
   const tc = sc != null ? traitTextColor(sc) : "#c0c0c0";
-  return `<span style="background:${bc};border-radius:8px;padding:4px 4px;font-size:17px;color:${tc};font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;text-align:center;width:100%;box-sizing:border-box;">${label}</span>`;
+  return `<span style="background:${bc};border-radius:8px;padding:5px 14px;font-size:17px;color:${tc};font-weight:700;white-space:nowrap;display:inline-block;text-align:center;">${label}</span>`;
 }
 
 // ===== Main export function =====
@@ -4167,7 +4167,7 @@ export function buildCoachCardElement(coach, tenureRows, traits) {
       ];
       const heads = cols.map(([lab, x]) => `<div style="position:absolute;top:319px;left:${x}px;font-size:20px;font-weight:500;color:#d9d9d9;">${lab}</div>`).join("");
       const vals = cols.map(([, x, v]) => `<div style="position:absolute;top:357px;left:${x}px;font-size:20px;font-weight:500;color:#fff;">${v}</div>`).join("");
-      const reHead = `<div style="position:absolute;top:319px;left:722px;font-size:20px;font-weight:500;color:#d9d9d9;">Resource Efficiency</div>`;
+      const reHead = `<div style="position:absolute;top:319px;left:722px;font-size:20px;font-weight:500;color:#d9d9d9;">£ Per</div>`;
       const reVal = `<span style="position:absolute;top:354px;left:722px;font-size:20px;font-weight:700;color:#000;background:${resEffRank != null && resEffRank <= 3 ? "#00bf63" : resEffRank != null && resEffRank <= 8 ? "#7ed957" : "#ffde59"};border-radius:6px;padding:2px 10px;">${resEffRank != null ? ordinal(resEffRank) : "—"}</span>`;
       return heads + vals + reHead + reVal;
     })()}
@@ -4215,11 +4215,11 @@ export function buildCoachCardElement(coach, tenureRows, traits) {
     <div style="position:absolute;top:292px;left:1535px;width:370px;height:2px;background:rgba(192,192,192,.35);"></div>
     <div style="position:absolute;top:296px;left:1520px;width:400px;text-align:center;font-size:27.9px;font-weight:700;color:#d9d9d9;">COACHING TRAITS</div>
     <!-- Pills in a flex-wrap layout, full-width, tighter spacing -->
-    <div style="position:absolute;top:340px;left:1522px;width:376px;display:grid;grid-template-columns:1fr 1fr;gap:22px 10px;">
+    <div style="position:absolute;top:340px;left:1522px;width:376px;display:grid;grid-template-columns:1fr 1fr;gap:22px 10px;justify-items:center;">
       ${TRAIT_ORDER.map((key) => {
         const pill = traitPillHtml(key, getTraitScore(key));
         return key === "youthDevelopment"
-          ? `<div style="grid-column:1 / -1;">${pill}</div>`
+          ? `<div style="grid-column:1 / -1;text-align:center;">${pill}</div>`
           : pill;
       }).join("")}
     </div>
