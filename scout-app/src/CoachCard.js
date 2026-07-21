@@ -1,18 +1,13 @@
-import { traitTierColor, computeCoachMetricGroups } from './coachMetrics';
+import { computeCoachMetricGroups } from './coachMetrics';
 
-// CoachCard.js — generates a Coach Card PNG, same export pattern and visual
-// system as PlayerScoutingCard.js (same fonts, colors, PNG-export mechanism via
-// html-to-image). The shared pieces below (font embedding, color constants) are
-// copied verbatim from PlayerScoutingCard.js for visual consistency; everything
-// from "Coach-specific helpers" onward is new, built for the coach layout
-// (header info, formation pitch diagram, Coaching Traits, League Position trend,
-// Form, Season Stats) as specified.
-//
-// SCOPE NOTE: this is a genuinely new layout, not a pixel-exact clone of the
-// player card's specific Canva-template positioning — the goal was matching
-// system/style (fonts, palette, export mechanism, component patterns), not
-// literally reusing the player template's exact coordinates, since a coach
-// profile has a different information shape than a player's.
+// CoachCard.js — generates a Coach Card PNG using the same export pattern and
+// visual system as PlayerScoutingCard.js. The header, percentile bars (barRow),
+// role-style pills (rolePill pattern), pitch diagram (pitchDiagramSvg), narrative
+// text block, and Current/Potential Level section all reuse the real card's exact
+// pixel positions, font sizes, and colors verbatim — not approximated. The one
+// section with no direct equivalent on the player card is Season Stats, which
+// uses the same font-size/color conventions (20px values, 14px labels) so it
+// reads as part of the same system even without a literal source to copy.
 
 const BG          = '#0a0f1c';
 const HEADER_L     = 'rgb(23,26,77)';
@@ -84,55 +79,88 @@ function starsHtmlSimple(stars, size = 20) {
   return Array(full).fill(s('full')).join('') + (half ? s('half') : '') + Array(empty).fill(s('empty')).join('');
 }
 
+function interp(a, b, t) {
+  return [0, 1, 2].map(i => Math.round(a[i] + (b[i] - a[i]) * t));
+}
+function parseRgb(s) { return s.match(/\d+/g).map(Number); }
+function barColor(pct) {
+  const t = Math.max(0, Math.min(1, pct / 100));
+  const RED = parseRgb(BAR_RED), GOLD = parseRgb(BAR_GOLD), GREEN = parseRgb(BAR_GREEN);
+  const rgb = t <= 0.5 ? interp(RED, GOLD, t / 0.5) : interp(GOLD, GREEN, (t - 0.5) / 0.5);
+  return `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
+}
+// Discrete 7-tier colour for 0-100 rating scores — same as the real card's scoreTierColor,
+// used here for the Coaching Trait score badges (mirrors rolePill's score badge exactly).
+function scoreTierColor(score) {
+  const v = Number(score);
+  if (isNaN(v)) return '#a3a3a3';
+  if (v >= 79) return '#00bf63';
+  if (v >= 67) return '#7ed957';
+  if (v >= 55) return '#c1ff72';
+  if (v >= 43) return '#ffde59';
+  if (v >= 34) return '#ffbd59';
+  if (v >= 25) return '#ff914d';
+  return '#ff3131';
+}
+
+// Ported verbatim from the real card's barRow() — same label width (188px), same
+// textured track (repeating-linear-gradient gridlines), same dashed 50% midline,
+// same raw-value overlay. Previous version reinvented this at the wrong sizes.
 function barRowCoach(label, pct, rawVal, rowH = 18) {
   const p = Math.max(0, Math.min(100, pct || 0));
-  const t = p / 100;
-  const RED = [199, 54, 60], GOLD = [240, 197, 106], GREEN = [61, 166, 91];
-  const interp = (a, b, f) => [0, 1, 2].map(i => Math.round(a[i] + (b[i] - a[i]) * f));
-  const rgb = t <= 0.5 ? interp(RED, GOLD, t / 0.5) : interp(GOLD, GREEN, (t - 0.5) / 0.5);
-  const bc = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
-  const barH = Math.max(9, Math.round(rowH * 0.85));
+  const bc = barColor(p);
+  const barH = Math.max(10, Math.round(rowH * 0.85));
   return `
     <div style="display:flex;align-items:center;height:${rowH}px;margin-bottom:1px;">
-      <div style="font-size:11.5px;font-weight:700;color:${LABEL_COL};width:150px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${label}</div>
+      <div style="font-size:13px;font-weight:700;color:${LABEL_COL};width:188px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${label}</div>
       <div style="flex:1;position:relative;height:${barH}px;">
-        <div style="position:absolute;inset:0;background:${BAR_TRACK};"></div>
+        <div style="position:absolute;inset:0;background:repeating-linear-gradient(to right, rgba(255,255,255,.16) 0 1px, transparent 1px 10%), ${BAR_TRACK};"></div>
         <div style="position:relative;height:100%;width:${p}%;background:${bc};">
-          ${rawVal != null ? `<span style="position:absolute;left:5px;top:50%;transform:translateY(-50%);font-size:9px;font-weight:400;color:#0b0b0b;white-space:nowrap;">${rawVal}</span>` : ''}
+          ${rawVal != null ? `<span style="position:absolute;left:6px;top:50%;transform:translateY(-50%);font-size:10.3px;font-weight:400;color:#0b0b0b;white-space:nowrap;">${rawVal}</span>` : ''}
         </div>
-        <div style="position:absolute;left:50%;top:0;width:1px;height:100%;background:rgba(255,255,255,.4);"></div>
+        <div style="position:absolute;left:50%;top:0;width:2px;height:100%;background:repeating-linear-gradient(to bottom, rgba(255,255,255,.95) 0 4px, transparent 4px 7px);"></div>
       </div>
-      <div style="width:26px;text-align:right;font-size:10.5px;font-weight:700;color:${LABEL_COL};margin-left:5px;">${Math.round(p)}</div>
     </div>`;
 }
 
-// Formation dot layouts — [x%, y%] within a 0-100 pitch box, GK first, oldest
-// (defensive) to newest (attacking). Hand-placed, not pixel-exact to any
-// specific game's formation graphic, just a reasonable visual approximation.
+// Formation dot layouts — horizontal orientation matching the real card's pitch
+// (GK near the left edge, attackers toward the right), [x,y] in the same 330×220
+// coordinate space as pitchDiagramSvg below. Hand-placed, not pixel-exact to any
+// specific game's formation graphic.
 const FORMATIONS = {
-  '4-3-3': [[50, 92], [15, 72], [35, 76], [65, 76], [85, 72], [30, 50], [50, 55], [70, 50], [20, 20], [50, 14], [80, 20]],
-  '5-4-1': [[50, 92], [10, 70], [30, 76], [50, 79], [70, 76], [90, 70], [20, 45], [40, 48], [60, 48], [80, 45], [50, 14]],
-  '4-4-2': [[50, 92], [15, 72], [35, 76], [65, 76], [85, 72], [15, 45], [38, 48], [62, 48], [85, 45], [40, 14], [60, 14]],
-  '4-2-3-1': [[50, 92], [15, 72], [35, 76], [65, 76], [85, 72], [35, 55], [65, 55], [20, 30], [50, 32], [80, 30], [50, 12]],
-  '3-5-2': [[50, 92], [30, 76], [50, 79], [70, 76], [10, 50], [35, 50], [50, 53], [65, 50], [90, 50], [40, 14], [60, 14]],
-  '4-1-4-1': [[50, 92], [15, 72], [35, 76], [65, 76], [85, 72], [50, 58], [15, 35], [38, 38], [62, 38], [85, 35], [50, 14]],
+  '4-3-3': [[25, 110], [75, 50], [75, 85], [75, 135], [75, 170], [165, 70], [165, 110], [165, 150], [270, 50], [285, 110], [270, 170]],
+  '5-4-1': [[25, 110], [70, 35], [75, 75], [78, 110], [75, 145], [70, 185], [165, 55], [160, 90], [160, 130], [165, 165], [285, 110]],
+  '4-4-2': [[25, 110], [75, 50], [75, 85], [75, 135], [75, 170], [165, 50], [160, 85], [160, 135], [165, 170], [280, 90], [280, 130]],
+  '4-2-3-1': [[25, 110], [75, 50], [75, 85], [75, 135], [75, 170], [150, 90], [150, 130], [250, 50], [230, 110], [250, 170], [295, 110]],
+  '3-5-2': [[25, 110], [75, 70], [78, 110], [75, 150], [150, 35], [165, 75], [170, 110], [165, 145], [150, 185], [280, 90], [280, 130]],
+  '4-1-4-1': [[25, 110], [75, 50], [75, 85], [75, 135], [75, 170], [150, 110], [220, 50], [215, 85], [215, 135], [220, 170], [295, 110]],
 };
 
+// Ported verbatim from the real card's pitchDiagramSvg — same 330×220 side-on
+// pitch drawing (colors, box/circle strokes, drop-shadow dot filter). Only the
+// dot positions differ (formation-based here instead of player position slots).
 function pitchDiagramSvg(formation) {
-  const dots = FORMATIONS[formation] || FORMATIONS['4-3-3'];
-  const W = 320, H = 260;
-  const dotsHtml = dots.map(([x, y]) => {
-    const px = x / 100 * W, py = y / 100 * H;
-    return `<circle cx="${px}" cy="${py}" r="7" fill="#ffffff" stroke="#0a0f1c" stroke-width="1.5"/>`;
-  }).join('');
-  return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
-    <rect x="0" y="0" width="${W}" height="${H}" rx="8" fill="#1b2636"/>
-    <rect x="4" y="4" width="${W - 8}" height="${H - 8}" fill="none" stroke="#3a4560" stroke-width="1.5"/>
-    <line x1="4" y1="${H / 2}" x2="${W - 4}" y2="${H / 2}" stroke="#3a4560" stroke-width="1.5"/>
-    <circle cx="${W / 2}" cy="${H / 2}" r="28" fill="none" stroke="#3a4560" stroke-width="1.5"/>
-    <rect x="${W / 2 - 60}" y="${H - 46}" width="120" height="42" fill="none" stroke="#3a4560" stroke-width="1.5"/>
-    <rect x="${W / 2 - 60}" y="4" width="120" height="42" fill="none" stroke="#3a4560" stroke-width="1.5"/>
-    ${dotsHtml}
+  const coords = FORMATIONS[formation] || FORMATIONS['4-3-3'];
+  const dots = coords.map(([x, y]) => `<circle cx="${x}" cy="${y}" r="14" fill="#ffffff" filter="url(#dotShadow)"/>`).join('');
+  return `<svg viewBox="0 0 330 220" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;">
+    <defs>
+      <filter id="dotShadow" x="-50%" y="-50%" width="200%" height="200%">
+        <feDropShadow dx="0" dy="1" stdDeviation="1" flood-color="#000000" flood-opacity="0.4"/>
+      </filter>
+    </defs>
+    <rect x="0" y="0" width="330" height="220" fill="#0d1117" rx="6"/>
+    <rect x="10" y="10" width="310" height="200" fill="none" stroke="#5a6478" stroke-width="2" rx="3"/>
+    <line x1="165" y1="10" x2="165" y2="210" stroke="#5a6478" stroke-width="2"/>
+    <circle cx="165" cy="110" r="28" fill="none" stroke="#5a6478" stroke-width="2"/>
+    <circle cx="165" cy="110" r="1.5" fill="#5a6478"/>
+    <rect x="10" y="65" width="35" height="90" fill="none" stroke="#5a6478" stroke-width="2"/>
+    <rect x="10" y="85" width="14" height="50" fill="none" stroke="#5a6478" stroke-width="2"/>
+    <path d="M 45 92 A 18 18 0 0 1 45 128" fill="none" stroke="#5a6478" stroke-width="2"/>
+    <rect x="285" y="65" width="35" height="90" fill="none" stroke="#5a6478" stroke-width="2"/>
+    <rect x="306" y="85" width="14" height="50" fill="none" stroke="#5a6478" stroke-width="2"/>
+    <path d="M 285 92 A 18 18 0 0 0 285 128" fill="none" stroke="#5a6478" stroke-width="2"/>
+    <circle cx="320" cy="110" r="1.5" fill="#5a6478"/>
+    ${dots}
   </svg>`;
 }
 
@@ -186,10 +214,18 @@ function last5PPG(form) {
 const TRAIT_ORDER = ['possession', 'pressing', 'passing', 'adaptability', 'youthDevelopment', 'attacking', 'setPieces', 'defensive', 'directness'];
 const TRAIT_LABELS = { possession: 'Possession', pressing: 'Pressing', passing: 'Passing', adaptability: 'Adaptability', youthDevelopment: 'Youth Development', attacking: 'Attacking', setPieces: 'Set Pieces', defensive: 'Defensive', directness: 'Directness' };
 
+// Same visual pattern as the real card's rolePill() — gray label badge + a
+// separate colored score badge (scoreTierColor), not a single colored pill.
+// This is what "Attacking LB"-style role pills actually look like.
 function traitPillHtml(key, score) {
-  const color = traitTierColor(score);
   const label = TRAIT_LABELS[key];
-  return `<div style="padding:6px 12px;border-radius:8px;background:${color};color:#0b0b0b;font-size:12px;font-weight:700;text-align:center;white-space:nowrap;">${label}</div>`;
+  const sc = score != null ? Math.round(score) : null;
+  const bc = sc != null ? scoreTierColor(sc) : '#3a4560';
+  return `
+    <div style="display:flex;align-items:center;justify-content:space-between;width:100%;height:32px;">
+      <span style="background:#737373;border-radius:7px;padding:2px 8px;font-size:13px;color:#fff;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${label}</span>
+      <span style="font-size:12.5px;font-weight:700;padding:1px 7px;border-radius:6px;min-width:26px;text-align:center;background:${bc};color:#000000;margin-left:6px;">${sc ?? '—'}</span>
+    </div>`;
 }
 
 // ===== Main export function =====
@@ -205,100 +241,118 @@ export function buildCoachCardElement(coach, tenureRows, traits) {
   const getTraitScore = (key) => traitOverrides[key] != null ? traitOverrides[key] * 10 : traits?.[key];
   const metricGroups = computeCoachMetricGroups(tenureRows) || { Attack: [], Defence: [], Possession: [] };
 
-  const sectionHeader = (text, x, y, w) => `<div style="position:absolute;left:${x}px;top:${y}px;width:${w}px;font-size:15px;font-weight:800;color:${ACCENT_PINK};text-transform:uppercase;letter-spacing:0.06em;">${text}</div>`;
+  // Dynamic row height — same formula as the real card's percentile chart, so a
+  // coach with fewer/more total metrics still fills the fixed 671px chart height
+  // sensibly instead of a hardcoded row size over/under-filling it.
+  const totalRows = metricGroups.Attack.length + metricGroups.Defence.length + metricGroups.Possession.length;
+  const CHART_HEIGHT = 671;
+  const FIXED_OVERHEAD = 193;
+  const rowH = totalRows > 0 ? Math.max(8, Math.min(30, Math.floor((CHART_HEIGHT - FIXED_OVERHEAD) / totalRows) - 1)) : 20;
 
-  const colX = 60, colW = 830;
-  let y = 470; // Attacking starts right below Season Stats
-  const barsHtml = (rows) => rows.map(r => barRowCoach(r.label, r.pct, r.val)).join('');
-  const attackHtml = sectionHeader('Attacking', colX, y, colW) + `<div style="position:absolute;left:${colX}px;top:${y + 24}px;width:${colW}px;">${barsHtml(metricGroups.Attack)}</div>`;
-  y += 24 + metricGroups.Attack.length * 19 + 20;
-  const defenceHtml = sectionHeader('Defensive', colX, y, colW) + `<div style="position:absolute;left:${colX}px;top:${y + 24}px;width:${colW}px;">${barsHtml(metricGroups.Defence)}</div>`;
-  y += 24 + metricGroups.Defence.length * 19 + 20;
-  const possessionHtml = sectionHeader('Possession', colX, y, colW) + `<div style="position:absolute;left:${colX}px;top:${y + 24}px;width:${colW}px;">${barsHtml(metricGroups.Possession)}</div>`;
+  const barsHtml = (rows) => rows.map(r => barRowCoach(r.label, r.pct, r.val, rowH)).join('');
 
   const container = document.createElement('div');
   container.style.cssText = `width:1920px;height:1080px;background:${BG};font-family:'Montserrat',sans-serif;color:${LABEL_COL};position:relative;overflow:hidden;box-sizing:border-box;`;
 
   container.innerHTML = `
     <!-- HEADER GRADIENT BAND -->
-    <div style="position:absolute;top:0;left:0;width:1520px;height:270px;background:linear-gradient(to right, ${HEADER_L} 0%, ${HEADER_R} 100%);"></div>
+    <div style="position:absolute;top:0;left:0;width:1520px;height:292px;background:linear-gradient(to right, ${HEADER_L} 0%, ${HEADER_R} 100%);"></div>
 
-    <!-- PHOTO -->
+    <!-- PHOTO (bleeds slightly off the left edge, same as the real card) -->
     ${coach.photoDataUrl
-      ? `<div style="position:absolute;left:20px;top:20px;width:210px;height:210px;background-size:cover;background-position:center top;background-image:url('${coach.photoDataUrl}');border-radius:8px;"></div>`
-      : `<div style="position:absolute;left:20px;top:20px;width:210px;height:210px;background:#1b2636;border-radius:8px;"></div>`}
+      ? `<div style="position:absolute;left:-12px;top:16px;width:261px;height:261px;background-size:cover;background-position:center top;background-image:url('${coach.photoDataUrl}');"></div>`
+      : `<div style="position:absolute;left:-12px;top:16px;width:261px;height:261px;background:#1b2636;"></div>`}
 
     <!-- NAME / ROLE / NATIONALITY / AGE -->
-    <div style="position:absolute;left:250px;top:22px;width:800px;font-size:46px;font-weight:800;color:#ffffff;line-height:1.05;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${coach.name || ''}</div>
-    <div style="position:absolute;left:250px;top:82px;font-size:22px;font-weight:600;color:#93c5fd;">Head Coach</div>
-    <div style="position:absolute;left:250px;top:128px;display:flex;align-items:baseline;gap:14px;">
-      ${coach.nationality ? `<span style="font-size:18px;font-weight:700;color:#93c5fd;">${coach.nationality}</span>` : ''}
-      <span style="font-size:18px;color:#c0c0c0;">${age != null ? `${age} years old` : ''}</span>
-      ${coach.dob ? `<span style="font-size:15px;color:#8a94a6;">${formatDOB(coach.dob)}</span>` : ''}
+    <div style="position:absolute;left:248px;top:24px;width:880px;font-size:53.2px;font-weight:700;line-height:1.05;letter-spacing:-0.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${coach.name || ''}</div>
+    <div style="position:absolute;left:248px;top:87px;font-size:26.6px;font-weight:600;color:#fff;">Head Coach</div>
+    <div style="position:absolute;left:248px;top:153px;display:flex;align-items:baseline;gap:18px;">
+      ${coach.nationality ? `<span style="font-size:26.6px;font-weight:600;color:#fff;white-space:nowrap;">${coach.nationality}</span>` : ''}
+      <span style="font-size:26.6px;font-weight:600;color:#fff;white-space:nowrap;">${age != null ? `${age} years old` : ''}</span>
+      ${coach.dob ? `<span style="font-size:21.3px;color:#c0c0c0;white-space:nowrap;">${formatDOB(coach.dob)}</span>` : ''}
     </div>
 
     <!-- CREST / TEAM / LEAGUE / TENURE -->
-    ${teamCrestUrl(latest.team) ? `<div style="position:absolute;left:700px;top:30px;width:80px;height:80px;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${teamCrestUrl(latest.team)}');"></div>` : ''}
-    <div style="position:absolute;left:800px;top:36px;font-size:24px;font-weight:800;color:#ffffff;">${latest.team || ''}</div>
-    <div style="position:absolute;left:800px;top:72px;font-size:16px;color:#c0c0c0;">${latest.league || ''}</div>
-    <div style="position:absolute;left:800px;top:100px;font-size:14px;color:#8a94a6;">${latest.season || ''}</div>
+    ${teamCrestUrl(latest.team) ? `<div style="position:absolute;left:756px;top:56px;width:100px;height:100px;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${teamCrestUrl(latest.team)}');"></div>` : ''}
+    <div style="position:absolute;left:874px;top:57px;font-size:26.6px;font-weight:700;color:#fff;">${latest.team || ''}</div>
+    <div style="position:absolute;left:874px;top:97px;font-size:21.3px;font-weight:500;color:#fff;">${latest.league || ''}</div>
+    <div style="position:absolute;left:874px;top:147px;font-size:21.3px;color:#d9d9d9;">${latest.season || ''}</div>
 
-    <!-- SEPARATOR -->
-    <div style="position:absolute;left:1130px;top:30px;width:2px;height:170px;background:rgba(255,255,255,.2);"></div>
+    <!-- HEADER VERTICAL SEPARATOR -->
+    <div style="position:absolute;left:1164px;top:45px;width:3px;height:155px;background:#737373;"></div>
 
     <!-- CLUBS / PPG / CONTRACT INFO BOX -->
-    ${[['Clubs', coach.clubs ?? '—'], ['PPG', coach.ppg ?? '—'], ['Contract', coach.contract || '—']].map(([k, v], i) => `
-      <div style="position:absolute;left:1160px;top:${40 + i * 44}px;font-size:14px;font-weight:600;color:#94a3b8;">${k}</div>
-      <div style="position:absolute;left:1300px;top:${36 + i * 44}px;font-size:20px;font-weight:800;color:#ffffff;">${v}</div>`).join('')}
+    ${[['Clubs:', coach.clubs ?? '—'], ['PPG:', coach.ppg ?? '—'], ['Contract:', coach.contract || '—']].map(([k, v], i) => `
+      <div style="position:absolute;left:1196px;top:${56 + i * 50}px;font-size:20px;font-weight:600;color:#d9d9d9;">${k}</div>
+      <div style="position:absolute;left:1311px;top:${56 + i * 50}px;font-size:20px;font-weight:600;color:#fff;">${v}</div>`).join('')}
 
-    <!-- FULL-HEIGHT VERTICAL SEPARATOR (right panel boundary) -->
-    <div style="position:absolute;left:1520px;top:0;width:2px;height:1080px;background:rgba(255,255,255,.15);"></div>
+    <!-- FULL-HEIGHT SEPARATOR (right panel boundary) -->
+    <div style="position:absolute;left:1520px;top:0;width:3px;height:1080px;background:#737373;"></div>
 
-    <!-- SEASON STATS -->
-    ${sectionHeader('Season Stats', colX, 300, colW)}
-    <div style="position:absolute;left:${colX}px;top:328px;width:${colW}px;display:flex;gap:26px;padding:12px 16px;background:#131c2e;border-radius:8px;font-size:14px;">
-      <div><div style="color:#94a3b8;font-size:10px;text-transform:uppercase;">Games</div><div style="font-weight:800;font-size:17px;">${latest.matches ?? '—'}</div></div>
-      <div><div style="color:#94a3b8;font-size:10px;text-transform:uppercase;">GF</div><div style="font-weight:800;font-size:17px;">${latest.goalsFor ?? '—'}</div></div>
-      <div><div style="color:#94a3b8;font-size:10px;text-transform:uppercase;">GA</div><div style="font-weight:800;font-size:17px;">${latest.goalsAgainst ?? '—'}</div></div>
-      <div><div style="color:#94a3b8;font-size:10px;text-transform:uppercase;">PPG</div><div style="font-weight:800;font-size:17px;">${latest.points != null && latest.matches ? (latest.points / latest.matches).toFixed(2) : '—'}</div></div>
-      <div><div style="color:#94a3b8;font-size:10px;text-transform:uppercase;">Pts Rank</div><div style="font-weight:800;font-size:17px;color:${latest.pointsRank != null && latest.pointsRank <= 3 ? '#00bf63' : '#ffde59'};">${latest.pointsRank != null && latest.leagueSize != null ? `${latest.pointsRank}/${latest.leagueSize}` : '—'}</div></div>
+    <!-- CHART / TEXTBOX SEPARATOR -->
+    <div style="position:absolute;left:890px;top:291px;width:2px;height:789px;background:#737373;"></div>
+
+    <!-- SEASON STATS (above the percentile chart, no direct equivalent on the player card) -->
+    <div style="position:absolute;left:24px;top:305px;font-size:15px;font-weight:800;color:#f3f5f7;text-transform:uppercase;letter-spacing:0.06em;">Season Stats</div>
+    <div style="position:absolute;left:24px;top:334px;width:830px;display:flex;gap:34px;">
+      <div><div style="font-size:14px;font-weight:500;color:#d9d9d9;">Games</div><div style="font-size:20px;font-weight:600;color:#fff;">${latest.matches ?? '—'}</div></div>
+      <div><div style="font-size:14px;font-weight:500;color:#d9d9d9;">GF</div><div style="font-size:20px;font-weight:600;color:#fff;">${latest.goalsFor ?? '—'}</div></div>
+      <div><div style="font-size:14px;font-weight:500;color:#d9d9d9;">GA</div><div style="font-size:20px;font-weight:600;color:#fff;">${latest.goalsAgainst ?? '—'}</div></div>
+      <div><div style="font-size:14px;font-weight:500;color:#d9d9d9;">PPG</div><div style="font-size:20px;font-weight:600;color:#fff;">${latest.points != null && latest.matches ? (latest.points / latest.matches).toFixed(2) : '—'}</div></div>
+      <div><div style="font-size:14px;font-weight:500;color:#d9d9d9;">Pts Rank</div><span style="font-size:20px;font-weight:700;color:#000;background:${latest.pointsRank != null && latest.pointsRank <= 3 ? '#00bf63' : latest.pointsRank != null && latest.pointsRank <= 8 ? '#7ed957' : '#ffde59'};border-radius:6px;padding:2px 10px;">${latest.pointsRank != null && latest.leagueSize != null ? `${latest.pointsRank}/${latest.leagueSize}` : '—'}</span></div>
     </div>
 
-    <!-- ATTACKING / DEFENSIVE / POSSESSION — individual metric bars, career-averaged -->
-    ${attackHtml}
-    ${defenceHtml}
-    ${possessionHtml}
-
-    <!-- MIDDLE COLUMN: Narrative + Levels -->
-    <div style="position:absolute;left:940px;top:300px;width:550px;">
-      ${coach.playStyle ? `<div style="margin-bottom:16px;font-size:15px;line-height:1.55;"><span style="color:${ACCENT_PINK};font-weight:800;">Play Style: </span>${coach.playStyle}</div>` : ''}
-      ${coach.development ? `<div style="margin-bottom:16px;font-size:15px;line-height:1.55;"><span style="color:${ACCENT_PINK};font-weight:800;">Development: </span>${coach.development}</div>` : ''}
-      ${coach.view ? `<div style="margin-bottom:24px;font-size:15px;line-height:1.55;"><span style="color:${ACCENT_PINK};font-weight:800;">View: </span>${coach.view}</div>` : ''}
-      <div style="font-size:14px;font-weight:800;text-transform:uppercase;margin-bottom:6px;">Current Level</div>
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;">${starsHtmlSimple(coach.currentStars || 0)}<span style="font-size:14px;color:#c0c0c0;">${coach.currentLabel || ''}</span></div>
-      <div style="font-size:14px;font-weight:800;text-transform:uppercase;margin-bottom:6px;">Potential Level</div>
-      <div style="display:flex;align-items:center;gap:10px;">${starsHtmlSimple(coach.potentialStars || 0)}<span style="font-size:14px;color:#c0c0c0;">${coach.potentialLabel || ''}</span></div>
+    <!-- PERCENTILE CHART — exact real position (top:409 left:0 width:876 height:671) -->
+    <div style="position:absolute;top:409px;left:0px;width:876px;height:671px;overflow:hidden;box-sizing:border-box;padding-left:24px;">
+      ${metricGroups.Attack.length ? `<div style="font-size:24px;font-weight:800;color:#f3f5f7;margin:0 0 6px;">Attacking</div>${barsHtml(metricGroups.Attack)}` : ''}
+      ${metricGroups.Defence.length ? `<div style="font-size:24px;font-weight:800;color:#f3f5f7;margin:8px 0 6px;">Defensive</div>${barsHtml(metricGroups.Defence)}` : ''}
+      ${metricGroups.Possession.length ? `<div style="font-size:24px;font-weight:800;color:#f3f5f7;margin:8px 0 6px;">Possession</div>${barsHtml(metricGroups.Possession)}` : ''}
+      <div style="display:flex;align-items:center;margin-top:6px;">
+        <div style="width:188px;flex-shrink:0;"></div>
+        <div style="flex:1;position:relative;height:22px;">
+          ${[0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map(p => `<span style="position:absolute;left:${p}%;top:0;transform:translateX(${p === 0 ? '0' : p === 100 ? '-100%' : '-50%'});font-size:12px;font-weight:600;color:#c4cbd9;">${p}%</span>`).join('')}
+        </div>
+      </div>
+      <div style="display:flex;">
+        <div style="width:188px;flex-shrink:0;"></div>
+        <div style="flex:1;text-align:center;font-size:14px;font-weight:700;color:${LABEL_COL};padding-top:6px;">Percentile Rank</div>
+      </div>
     </div>
+
+    <!-- NOTES (Play Style / Development / View) — exact real position/font -->
+    <div style="position:absolute;top:311px;left:898px;width:616px;height:570px;padding:0 22px;box-sizing:border-box;display:flex;flex-direction:column;justify-content:space-between;">
+      ${coach.playStyle ? `<div style="display:flex;gap:10px;"><span style="color:#fff;font-size:27.9px;flex-shrink:0;line-height:1.5;">•</span><div style="font-size:27.9px;line-height:1.5;color:#fff;"><span style="color:${ACCENT_PINK};font-weight:700;">Play Style: </span><span style="font-weight:600;">${coach.playStyle}</span></div></div>` : '<div></div>'}
+      ${coach.development ? `<div style="display:flex;gap:10px;"><span style="color:#fff;font-size:27.9px;flex-shrink:0;line-height:1.5;">•</span><div style="font-size:27.9px;line-height:1.5;color:#fff;"><span style="color:${ACCENT_PINK};font-weight:700;">Development: </span><span style="font-weight:600;">${coach.development}</span></div></div>` : '<div></div>'}
+      ${coach.view ? `<div style="display:flex;gap:10px;"><span style="color:#fff;font-size:27.9px;flex-shrink:0;line-height:1.5;">•</span><div style="font-size:27.9px;line-height:1.5;color:#fff;"><span style="color:${ACCENT_PINK};font-weight:700;">View: </span><span style="font-weight:600;">${coach.view}</span></div></div>` : '<div></div>'}
+    </div>
+
+    <!-- CURRENT / POTENTIAL LEVEL — exact real position/font -->
+    <div style="position:absolute;top:894px;left:938px;font-size:26.6px;font-weight:700;color:#fff;">CURRENT LEVEL</div>
+    <div style="position:absolute;top:940px;left:941px;">${starsHtmlSimple(coach.currentStars || 0, 40)}</div>
+    <div style="position:absolute;top:948px;left:1133px;font-size:20px;font-weight:500;color:#c0c0c0;">${coach.currentLabel || ''}</div>
+    <div style="position:absolute;top:995px;left:938px;font-size:26.6px;font-weight:700;color:#fff;">POTENTIAL LEVEL</div>
+    <div style="position:absolute;top:1041px;left:941px;">${starsHtmlSimple(coach.potentialStars || 0, 40)}</div>
+    <div style="position:absolute;top:1049px;left:1133px;font-size:20px;font-weight:500;color:#c0c0c0;">${coach.potentialLabel || ''}</div>
 
     <!-- RIGHT PANEL: Pitch, Coaching Traits, League Position, Form -->
-    <div style="position:absolute;top:15px;left:1520px;width:400px;display:flex;justify-content:center;">${pitchDiagramSvg(coach.formation)}</div>
-    <div style="position:absolute;top:288px;left:1520px;width:400px;text-align:center;font-size:16px;font-weight:800;color:#93c5fd;">${coach.formation || ''}</div>
+    <div style="position:absolute;top:15px;left:1520px;width:400px;display:flex;justify-content:center;"><div style="width:345px;height:229px;">${pitchDiagramSvg(coach.formation)}</div></div>
+    <div style="position:absolute;top:250px;left:1520px;width:400px;text-align:center;font-size:20px;font-weight:700;color:#d9d9d9;">${coach.formation || ''}</div>
 
-    <div style="position:absolute;top:320px;left:1546px;width:349px;height:1px;background:rgba(192,192,192,.35);"></div>
-    <div style="position:absolute;top:336px;left:1520px;width:400px;text-align:center;font-size:20px;font-weight:800;color:#d9d9d9;">Coaching Traits</div>
-    <div style="position:absolute;top:376px;left:1546px;width:349px;display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+    <div style="position:absolute;top:288px;left:1546px;width:349px;height:2px;background:rgba(192,192,192,.35);"></div>
+    <div style="position:absolute;top:302px;left:1520px;width:400px;text-align:center;font-size:27.9px;font-weight:700;color:#d9d9d9;">COACHING TRAITS</div>
+    <div style="position:absolute;top:350px;left:1546px;width:349px;display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;">
       ${TRAIT_ORDER.map(key => traitPillHtml(key, getTraitScore(key))).join('')}
     </div>
 
-    <div style="position:absolute;top:590px;left:1546px;width:349px;height:1px;background:rgba(192,192,192,.35);"></div>
-    <div style="position:absolute;top:606px;left:1520px;width:400px;text-align:center;font-size:20px;font-weight:800;color:#d9d9d9;">League Position</div>
-    <div style="position:absolute;top:646px;left:1520px;width:400px;display:flex;justify-content:center;">${leaguePositionTrendSvg(sortedDesc)}</div>
+    <div style="position:absolute;top:562px;left:1546px;width:349px;height:2px;background:rgba(192,192,192,.35);"></div>
+    <div style="position:absolute;top:576px;left:1520px;width:400px;text-align:center;font-size:27.9px;font-weight:700;color:#d9d9d9;">LEAGUE POSITION</div>
+    <div style="position:absolute;top:618px;left:1520px;width:400px;display:flex;justify-content:center;">${leaguePositionTrendSvg(sortedDesc)}</div>
 
-    <div style="position:absolute;top:800px;left:1546px;width:349px;height:1px;background:rgba(192,192,192,.35);"></div>
-    <div style="position:absolute;top:816px;left:1520px;width:400px;text-align:center;font-size:20px;font-weight:800;color:#d9d9d9;">Form</div>
-    <div style="position:absolute;top:856px;left:1520px;width:400px;display:flex;align-items:center;justify-content:center;gap:8px;">
+    <div style="position:absolute;top:800px;left:1546px;width:349px;height:2px;background:rgba(192,192,192,.35);"></div>
+    <div style="position:absolute;top:814px;left:1520px;width:400px;text-align:center;font-size:27.9px;font-weight:700;color:#d9d9d9;">FORM</div>
+    <div style="position:absolute;top:862px;left:1520px;width:400px;display:flex;align-items:center;justify-content:center;gap:8px;">
       ${formSquaresHtml(coach.form)}
-      <span style="font-size:13px;color:#c0c0c0;margin-left:8px;">${last5PPG(coach.form) ?? '—'} Last 5 PPG</span>
+      <span style="font-size:15px;color:#c0c0c0;margin-left:10px;">${last5PPG(coach.form) ?? '—'} Last 5 PPG</span>
     </div>
   `;
 
