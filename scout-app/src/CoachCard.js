@@ -4031,7 +4031,7 @@ function traitPillHtml(key, score) {
   const sc = score != null ? Math.round(score) : null;
   const bc = sc != null ? traitPillBgColor(sc) : "#3a4560";
   const tc = sc != null ? traitTextColor(sc) : "#c0c0c0";
-  return `<span style="background:${bc};border-radius:8px;padding:5px 12px;font-size:19px;color:${tc};font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;text-align:center;width:100%;box-sizing:border-box;">${label}</span>`;
+  return `<span style="background:${bc};border-radius:8px;padding:5px 7px;font-size:18px;color:${tc};font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;text-align:center;width:100%;box-sizing:border-box;">${label}</span>`;
 }
 
 // ===== Main export function =====
@@ -4150,7 +4150,7 @@ export function buildCoachCardElement(coach, tenureRows, traits) {
 
     <!-- SEASON STATS — pink title + league inline with stats -->
     <div style="position:absolute;top:300px;left:17px;font-size:26.6px;font-weight:700;color:${ACCENT_PINK};">Season Stats</div>
-    <div style="position:absolute;top:343px;left:17px;width:855px;display:flex;gap:24px;align-items:center;">
+    <div style="position:absolute;top:343px;left:17px;width:855px;display:flex;gap:0;justify-content:space-between;align-items:center;">
       <div style="display:flex;align-items:center;gap:6px;min-width:0;">
         ${leagueLogo ? `<div style="width:26px;height:26px;flex-shrink:0;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${leagueLogo}');"></div>` : ""}
         <span style="font-size:18px;font-weight:600;color:#fff;max-width:110px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${latest.league || ""}</span>
@@ -4211,7 +4211,12 @@ export function buildCoachCardElement(coach, tenureRows, traits) {
     <div style="position:absolute;top:296px;left:1520px;width:400px;text-align:center;font-size:27.9px;font-weight:700;color:#d9d9d9;">COACHING TRAITS</div>
     <!-- Pills in a flex-wrap layout, full-width, tighter spacing -->
     <div style="position:absolute;top:340px;left:1522px;width:376px;display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-      ${TRAIT_ORDER.map((key) => traitPillHtml(key, getTraitScore(key))).join("")}
+      ${TRAIT_ORDER.map((key) => {
+        const pill = traitPillHtml(key, getTraitScore(key));
+        return key === "youthDevelopment"
+          ? `<div style="grid-column:1 / -1;">${pill}</div>`
+          : pill;
+      }).join("")}
     </div>
 
     <div style="position:absolute;top:640px;left:1535px;width:370px;height:2px;background:rgba(192,192,192,.35);"></div>

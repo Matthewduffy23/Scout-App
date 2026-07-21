@@ -98,7 +98,7 @@ export default function CoachBuilder({ allTeams = [], existingCoach = null, onCl
       nationality: nationality.trim(),
       dob,
       photoDataUrl,
-      fotmobId: fotmobId.trim() || null,
+      fotmobId: (() => { const raw = fotmobId.trim(); const m = raw.match(/(\d{5,})/); return m ? m[1] : (raw || null); })(),
       role: 'Head Coach',
       clubs: clubs === '' ? null : Number(clubs),
       ppg: ppg === '' ? null : Number(ppg),
@@ -147,9 +147,9 @@ export default function CoachBuilder({ allTeams = [], existingCoach = null, onCl
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
             <div><span style={labelStyle}>PPG</span><input style={inputStyle} type="number" step="0.01" value={ppg} onChange={e => setPpg(e.target.value)} placeholder="1.53" /></div>
             <div>
-              <span style={labelStyle}>Fotmob ID</span>
-              <input style={inputStyle} value={fotmobId} onChange={e => setFotmobId(e.target.value)} placeholder="1381560" />
-              <div style={{ fontSize: 9, color: '#475569', marginTop: 3 }}>Pulls photo from Fotmob automatically</div>
+              <span style={labelStyle}>Fotmob ID or URL</span>
+              <input style={inputStyle} value={fotmobId} onChange={e => setFotmobId(e.target.value)} placeholder="1381560 or full Fotmob URL" />
+              <div style={{ fontSize: 9, color: '#475569', marginTop: 3 }}>Paste full URL or just the numeric ID</div>
             </div>
             <div>
               <span style={labelStyle}>Photo (upload)</span>
