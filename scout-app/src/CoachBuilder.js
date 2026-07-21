@@ -8,7 +8,7 @@
 import React, { useState, useMemo } from 'react';
 import { newCoachId, upsertCoach } from './coachStorage';
 
-const FORMATIONS = ['4-3-3', '5-4-1', '4-4-2', '4-2-3-1', '3-5-2', '4-1-4-1'];
+const FORMATIONS = ['4-3-3', '4-4-2', '4-2-3-1', '4-1-4-1', '4-1-3-2', '4-2-2-2', '3-5-2', '3-4-3', '3-4-2-1', '5-4-1', '5-3-2'];
 const TRAIT_KEYS = ['possession', 'pressing', 'passing', 'adaptability', 'youthDevelopment', 'attacking', 'setPieces', 'defensive', 'directness'];
 const NARRATIVE_LIMIT = 420; // combined char budget across Play Style + Development + View (matches player card)
 const TRAIT_LABELS = { possession: 'Possession', pressing: 'Pressing', passing: 'Passing', adaptability: 'Adaptability', youthDevelopment: 'Youth Development', attacking: 'Attacking', setPieces: 'Set Pieces', defensive: 'Defensive', directness: 'Directness' };
