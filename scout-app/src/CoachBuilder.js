@@ -258,14 +258,15 @@ export default function CoachBuilder({ allTeams = [], existingCoach = null, onCl
         {/* Form */}
         <div style={sectionStyle}>
           <div style={{ fontSize: 9, fontWeight: 700, color: '#c8d4e8', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 8 }}>Form (last 5, oldest → newest)</div>
-          <div style={{ display: 'flex', gap: 0, justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', gap: 6, justifyContent: 'space-between' }}>
             {form.map((r, i) => (
               <select
                 key={i}
                 value={r}
                 onChange={e => setFormResult(i, e.target.value)}
                 style={{
-                  width: 'calc(20% - 6px)',
+                  flex: '1 1 0',
+                  minWidth: 0,
                   background: '#0d1220',
                   border: '1px solid #1e2d45',
                   borderRadius: 5,

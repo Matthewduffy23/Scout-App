@@ -3897,7 +3897,7 @@ const FORMATIONS = {
 // Formation labels with fading are rendered separately below the pitch.
 function pitchDiagramSvg(formations) {
   // Accept a single string or array; render up to 3 formations with different colours
-  const fmList = (Array.isArray(formations) ? formations : [formations]).filter(Boolean).slice(0, 3);
+  const fmList = (Array.isArray(formations) ? formations : [formations]).filter(Boolean).slice(0, 1);
   // Primary = white, Secondary = cyan, Tertiary = pink
   const dotColors = [
     { fill: "rgba(255,255,255,1.0)", r: 12 },
@@ -4031,7 +4031,7 @@ function traitPillHtml(key, score) {
   const sc = score != null ? Math.round(score) : null;
   const bc = sc != null ? traitPillBgColor(sc) : "#3a4560";
   const tc = sc != null ? traitTextColor(sc) : "#c0c0c0";
-  return `<span style="background:${bc};border-radius:8px;padding:5px 12px;font-size:20px;color:${tc};font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:inline-block;text-align:center;">${label}</span>`;
+  return `<span style="background:${bc};border-radius:8px;padding:5px 12px;font-size:19px;color:${tc};font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;text-align:center;width:100%;box-sizing:border-box;">${label}</span>`;
 }
 
 // ===== Main export function =====
@@ -4072,7 +4072,7 @@ export function buildCoachCardElement(coach, tenureRows, traits) {
   const formationLabelsHtml = fmList
     .map(
       (f, i) =>
-        `<span style="display:inline-block;padding:4px 14px;border-radius:8px;background:rgba(80,90,115,${fmOpacities[i]});font-size:${18 - i * 2}px;font-weight:700;color:rgba(217,217,217,${Math.min(1, fmOpacities[i] + 0.1)});">${f}</span>`,
+        `<span style="display:inline-block;padding:4px 14px;border-radius:8px;background:rgba(80,90,115,${fmOpacities[i]});font-size:18px;font-weight:700;color:rgba(217,217,217,${Math.min(1, fmOpacities[i] + 0.1)});">${f}</span>`,
     )
     .join("");
 
@@ -4085,7 +4085,13 @@ export function buildCoachCardElement(coach, tenureRows, traits) {
 
     <!-- PHOTO (bleeds slightly off the left edge, same as the real card) -->
     ${(() => {
-      const _pUrl = coach.fotmobId ? `${FOTMOB_PHOTO_BASE}${coach.fotmobId}.png` : (coach.photoUrl || null);
+      const _rawId = coach.fotmobId || "";
+      const _fotmobId = typeof _rawId === "string" && _rawId.includes("fotmob.com")
+        ? (_rawId.match(/\/(\d+)\.png/) || [])[1] || null
+        : (_rawId || null);
+      const _pUrl = _fotmobId
+        ? `${FOTMOB_PHOTO_BASE}${_fotmobId}.png`
+        : (coach.photoDataUrl || coach.photoUrl || null);
       return _pUrl
         ? `<div id="ccc-photo" style="position:absolute;left:-12px;top:16px;width:261px;height:261px;background-size:cover;background-position:center top;background-image:url('${_pUrl}');"></div>`
         : `<div id="ccc-photo" style="position:absolute;left:-12px;top:16px;width:261px;height:261px;background:#1b2636;"></div>`;
@@ -4142,18 +4148,18 @@ export function buildCoachCardElement(coach, tenureRows, traits) {
     <!-- CHART / TEXTBOX SEPARATOR -->
     <div style="position:absolute;left:890px;top:291px;width:2px;height:789px;background:#737373;"></div>
 
-    <!-- SEASON STATS — pink title, league logo, xGF/xGA, Resource Efficiency rank -->
+    <!-- SEASON STATS — pink title + league inline with stats -->
     <div style="position:absolute;top:300px;left:17px;font-size:26.6px;font-weight:700;color:${ACCENT_PINK};">Season Stats</div>
-    <div style="position:absolute;top:343px;left:17px;display:flex;align-items:center;gap:8px;">
-      ${leagueLogo ? `<div style="width:30px;height:30px;flex-shrink:0;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${leagueLogo}');"></div>` : ""}
-      <span style="font-size:20px;font-weight:500;color:#fff;max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${latest.league || ""}</span>
-    </div>
-    <div style="position:absolute;top:383px;left:17px;width:855px;display:flex;gap:30px;align-items:center;">
+    <div style="position:absolute;top:343px;left:17px;width:855px;display:flex;gap:24px;align-items:center;">
+      <div style="display:flex;align-items:center;gap:6px;min-width:0;">
+        ${leagueLogo ? `<div style="width:26px;height:26px;flex-shrink:0;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${leagueLogo}');"></div>` : ""}
+        <span style="font-size:18px;font-weight:600;color:#fff;max-width:110px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${latest.league || ""}</span>
+      </div>
       <div><div style="font-size:13px;font-weight:500;color:#d9d9d9;">Games</div><div style="font-size:20px;font-weight:600;color:#fff;">${latest.matches ?? "—"}</div></div>
       <div><div style="font-size:13px;font-weight:500;color:#d9d9d9;">GF</div><div style="font-size:20px;font-weight:600;color:#fff;">${latest.goalsFor ?? "—"}</div></div>
       <div><div style="font-size:13px;font-weight:500;color:#d9d9d9;">GA</div><div style="font-size:20px;font-weight:600;color:#fff;">${latest.goalsAgainst ?? "—"}</div></div>
-      <div><div style="font-size:13px;font-weight:500;color:#d9d9d9;">XG</div><div style="font-size:20px;font-weight:600;color:#fff;">${latest.xGoalsFor != null ? Number(latest.xGoalsFor).toFixed(1) : "—"}</div></div>
-      <div><div style="font-size:13px;font-weight:500;color:#d9d9d9;">XG Against</div><div style="font-size:20px;font-weight:600;color:#fff;">${latest.xGoalsAgainst != null ? Number(latest.xGoalsAgainst).toFixed(1) : "—"}</div></div>
+      <div><div style="font-size:13px;font-weight:500;color:#d9d9d9;">XG</div><div style="font-size:20px;font-weight:600;color:#fff;">${(latest.xGoalsFor ?? latest.xGF ?? latest.xgf) != null ? Number(latest.xGoalsFor ?? latest.xGF ?? latest.xgf).toFixed(1) : "—"}</div></div>
+      <div><div style="font-size:13px;font-weight:500;color:#d9d9d9;">XG Against</div><div style="font-size:20px;font-weight:600;color:#fff;">${(latest.xGoalsAgainst ?? latest.xGA ?? latest.xga) != null ? Number(latest.xGoalsAgainst ?? latest.xGA ?? latest.xga).toFixed(1) : "—"}</div></div>
       <div><div style="font-size:13px;font-weight:500;color:#d9d9d9;">PPG</div><div style="font-size:20px;font-weight:600;color:#fff;">${latest.points != null && latest.matches ? (latest.points / latest.matches).toFixed(2) : latest.ppg != null ? Number(latest.ppg).toFixed(2) : "—"}</div></div>
       <div>
         <div style="font-size:13px;font-weight:500;color:#d9d9d9;">Resource Efficiency</div>
@@ -4204,7 +4210,7 @@ export function buildCoachCardElement(coach, tenureRows, traits) {
     <div style="position:absolute;top:282px;left:1535px;width:370px;height:2px;background:rgba(192,192,192,.35);"></div>
     <div style="position:absolute;top:296px;left:1520px;width:400px;text-align:center;font-size:27.9px;font-weight:700;color:#d9d9d9;">COACHING TRAITS</div>
     <!-- Pills in a flex-wrap layout, full-width, tighter spacing -->
-    <div style="position:absolute;top:340px;left:1522px;width:376px;display:flex;flex-wrap:wrap;gap:8px 8px;align-content:flex-start;">
+    <div style="position:absolute;top:340px;left:1522px;width:376px;display:grid;grid-template-columns:1fr 1fr;gap:8px;">
       ${TRAIT_ORDER.map((key) => traitPillHtml(key, getTraitScore(key))).join("")}
     </div>
 
@@ -4215,7 +4221,7 @@ export function buildCoachCardElement(coach, tenureRows, traits) {
     <div style="position:absolute;top:864px;left:1535px;width:370px;height:2px;background:rgba(192,192,192,.35);"></div>
     <div style="position:absolute;top:878px;left:1520px;width:400px;text-align:center;font-size:27.9px;font-weight:700;color:#d9d9d9;">FORM</div>
     <!-- Form — vertical bars like player card: W=green, D=yellow, L=red; PPG badge below -->
-    <div style="position:absolute;top:930px;left:1520px;width:400px;display:flex;justify-content:center;align-items:flex-end;gap:5px;height:60px;">
+    <div style="position:absolute;top:948px;left:1520px;width:400px;display:flex;justify-content:center;align-items:flex-end;gap:5px;height:60px;">
       ${(coach.form || [])
         .slice(0, 5)
         .map((r) => {
@@ -4225,7 +4231,7 @@ export function buildCoachCardElement(coach, tenureRows, traits) {
         })
         .join("")}
     </div>
-    <div style="position:absolute;top:1005px;left:1520px;width:400px;display:flex;align-items:center;justify-content:center;gap:10px;">
+    <div style="position:absolute;top:1022px;left:1520px;width:400px;display:flex;align-items:center;justify-content:center;gap:10px;">
       <span style="font-size:16px;font-weight:700;color:#000;background:${last5PPG(coach.form) != null && Number(last5PPG(coach.form)) >= 2.0 ? BAR_GREEN : last5PPG(coach.form) != null && Number(last5PPG(coach.form)) >= 1.0 ? BAR_GOLD : BAR_RED};border-radius:6px;padding:1px 8px;">${last5PPG(coach.form) ?? "—"}</span>
       <span style="font-size:17.3px;font-weight:600;color:#c0c0c0;">Last 5 PPG</span>
     </div>
@@ -4243,9 +4249,13 @@ export async function downloadCoachCardPNG(coach, tenureRows, traits) {
   // html-to-image would silently blank it out without this conversion step.
   const photoDiv = el.querySelector("#ccc-photo");
   if (photoDiv) {
-    const _pUrl = coach.fotmobId
-      ? `${FOTMOB_PHOTO_BASE}${coach.fotmobId}.png`
-      : coach.photoUrl || null;
+    const _rawId2 = coach.fotmobId || "";
+    const _fotmobId2 = typeof _rawId2 === "string" && _rawId2.includes("fotmob.com")
+      ? (_rawId2.match(/\/(\d+)\.png/) || [])[1] || null
+      : (_rawId2 || null);
+    const _pUrl = _fotmobId2
+      ? `${FOTMOB_PHOTO_BASE}${_fotmobId2}.png`
+      : (coach.photoDataUrl || coach.photoUrl || null);
     if (_pUrl) {
       try {
         const resp = await fetch(_pUrl);
