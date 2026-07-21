@@ -4223,7 +4223,7 @@ export function buildCoachCardElement(coach, tenureRows, traits) {
     <div style="position:absolute;top:292px;left:1535px;width:370px;height:2px;background:rgba(192,192,192,.35);"></div>
     <div style="position:absolute;top:296px;left:1520px;width:400px;text-align:center;font-size:27.9px;font-weight:700;color:#d9d9d9;">COACHING TRAITS</div>
     <!-- Pills in a flex-wrap layout, full-width, tighter spacing -->
-    <div style="position:absolute;top:344px;left:1556px;width:324px;display:flex;flex-wrap:wrap;gap:16px 32px;justify-content:flex-start;align-content:flex-start;">
+    <div style="position:absolute;top:344px;left:1556px;width:324px;display:flex;flex-wrap:wrap;gap:15px 30px;justify-content:flex-start;align-content:flex-start;">
       ${TRAIT_ORDER.map((key) => traitPillHtml(key, getTraitScore(key))).join("")}
     </div>
 
