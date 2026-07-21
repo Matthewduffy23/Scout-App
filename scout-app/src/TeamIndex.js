@@ -1,13 +1,12 @@
-// TeamIndex.js v7 - Fixed real bug: "Latest season" and "weighted" grouping were keyed on
-// team+league, so a promoted/relegated team (different league across seasons) showed up as
-// TWO separate rows instead of one (e.g. Leeds United in both England 1 and England 2). Now
-// keyed on team name alone. Also fixed allTeamSeasons being filtered to only the clicked row's
-// league, which hid a promoted/relegated team's history in the other league entirely.
+// TeamIndex.js v8 - Wired in the Coach system: new "Coaches" button (sidebar, above the team
+// search) opens CoachPanel, which lists/creates/edits/deletes saved coaches and generates their
+// card PNG, using the already-loaded team data (all) to resolve each coach's tenure.
 // v1 - New tab: searchable/sortable/filterable team database, using teams_final.json
 // (built by build_teams.py). Team detail/click-through page deliberately deferred per Matty —
 // this is list/scoring/filtering only for now.
 import React, { useState, useEffect, useMemo } from 'react';
 import TeamCard from './TeamCard';
+import CoachPanel from './CoachPanel';
 import { LEAGUE_STRENGTHS, ALL_LEAGUES, DEFAULT_LEAGUES, HIDDEN_LEAGUES, YOUTH_LEAGUES,
          PRESET_LEAGUES, COUNTRY_TO_REGION, GBE_LEAGUE_BANDS, leagueToRegion, leagueToBand } from './constants';
 
@@ -108,6 +107,7 @@ export default function TeamIndex({ players = [] }) {
   const [all, setAll] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selTeam, setSelTeam] = useState(null);
+  const [showCoaches, setShowCoaches] = useState(false);
 
   useEffect(() => {
     fetch('/teams_final.json').then(r => r.ok ? r.json() : []).catch(() => [])
@@ -274,6 +274,9 @@ export default function TeamIndex({ players = [] }) {
   return (
     <div style={T.layout}>
       <aside style={T.sb}>
+        <div style={{ ...T.fg, display: 'flex', gap: 6 }}>
+          <button onClick={() => setShowCoaches(true)} style={{ flex: 1, padding: '6px 10px', borderRadius: 5, border: '1px solid #1e2d45', background: 'transparent', color: '#93c5fd', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>👔 Coaches</button>
+        </div>
         <div style={T.fg}>
           <input placeholder="Team…" value={search} onChange={e => { setSearch(e.target.value); setPage(0); }}
             style={{ width: '100%', background: '#0d1220', border: '1px solid #1e2d45', borderRadius: 5, padding: '6px 8px', color: '#e2e8f4', fontSize: 12, outline: 'none' }} />
@@ -525,6 +528,12 @@ export default function TeamIndex({ players = [] }) {
           team={selTeam}
           allTeamSeasons={all.filter(t => t.team === selTeam.team && teamCountry(t.league) === teamCountry(selTeam.league)).map(t => ({ ...t, crest: undefined }))}
           onClose={() => setSelTeam(null)}
+        />
+      )}
+      {showCoaches && (
+        <CoachPanel
+          allTeams={all}
+          onClose={() => setShowCoaches(false)}
         />
       )}
     </div>
