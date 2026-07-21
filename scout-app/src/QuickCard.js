@@ -1,4 +1,4 @@
-// QuickCard v67 - Edit position label, upload player photo, edit team name, flag gap fix.
+// QuickCard v68 - Edit position label, upload player photo, edit team name, flag gap fix.
 import React, { useState } from 'react';
 import { scoreLabel, formatFoot, formatMV, GBE_LEAGUE_BANDS } from './constants';
 
@@ -1023,7 +1023,7 @@ function buildQuickCardElement(player, players, manual = {}) {
       <div style="position:absolute;left:${teamTextLeft}px;top:90px;width:266px;font-size:32px;font-weight:800;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${(manual.teamOverride || sdTeam).length >= 16 ? 'letter-spacing:-1px;' : ''}">${manual.teamOverride || sdTeam}</div>
       <div style="position:absolute;left:${teamTextLeft}px;top:150px;display:flex;align-items:center;">
         <span style="font-size:21px;font-weight:500;color:#fff;white-space:nowrap;">${leagueDisplayName}</span>
-        ${countryToIso2(leagueToCountry(sdLeague)) ? `<div style="width:32px;height:20px;flex-shrink:0;margin-left:40px;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(leagueToCountry(sdLeague))}.png');border-radius:2px;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15);"></div>` : ''}
+        ${countryToIso2(leagueToCountry(sdLeague)) ? `<div style="width:32px;height:20px;flex-shrink:0;margin-left:33px;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(leagueToCountry(sdLeague))}.png');border-radius:2px;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15);"></div>` : ''}
       </div>
       ${player.onLoan ? `<div style="position:absolute;left:${teamTextLeft}px;top:194px;font-size:21.3px;color:#d9d9d9;white-space:nowrap;">On Loan</div>` : ''}
 
@@ -1192,37 +1192,13 @@ export default function QuickCardModal({ player, players, onClose }) {
   return (
     <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.85)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center'}}
       onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
-      <div style={{background:'#09111e',border:'1px solid #1e2d45',borderRadius:12,padding:32,textAlign:'center',boxShadow:'0 8px 40px rgba(0,0,0,.7)',minWidth:320,maxWidth:360}}>
+      <div style={{background:'#09111e',border:'1px solid #1e2d45',borderRadius:12,padding:32,textAlign:'center',boxShadow:'0 8px 40px rgba(0,0,0,.7)',minWidth:320,maxWidth:360,maxHeight:'90vh',overflowY:'auto'}}>
         <div style={{fontSize:15,fontWeight:700,color:'#e2e8f4',marginBottom:8}}>⚡ Quick Card</div>
         <div style={{fontSize:12,color:'#64748b',marginBottom:20}}>{player.name} · {player.team}</div>
 
         <div style={{marginBottom:12}}>
           <label style={qcLabelStyle}>Player Name</label>
           <input style={qcInputStyle} value={nameOverride} onChange={e=>setNameOverride(e.target.value)} placeholder={player.name} />
-        </div>
-
-        <div style={{marginBottom:12}}>
-          <label style={qcLabelStyle}>Team Name</label>
-          <input style={qcInputStyle} value={teamOverride} onChange={e=>setTeamOverride(e.target.value)} placeholder={player.team} />
-        </div>
-
-        <div style={{marginBottom:12}}>
-          <label style={qcLabelStyle}>Position Label</label>
-          <input style={qcInputStyle} value={posLabelOverride} onChange={e=>setPosLabelOverride(e.target.value)} placeholder="e.g. Right Back, Striker…" />
-        </div>
-
-        <div style={{marginBottom:12}}>
-          <label style={qcLabelStyle}>Player Photo</label>
-          <div style={{display:'flex',alignItems:'center',gap:8}}>
-            <label style={{flex:1,padding:'6px 10px',background:'#0e1e38',border:'1px solid #1e2d45',borderRadius:6,color:'#94a3b8',fontSize:11.5,cursor:'pointer',textAlign:'center'}}>
-              {uploadedPhotoDataUrl ? '✓ Photo uploaded' : 'Upload image…'}
-              <input type="file" accept="image/*" onChange={handlePhotoUpload} style={{display:'none'}} />
-            </label>
-            {uploadedPhotoDataUrl && (
-              <button type="button" onClick={() => setUploadedPhotoDataUrl('')}
-                style={{padding:'6px 10px',background:'none',border:'1px solid #1e2d45',borderRadius:6,color:'#f87171',fontSize:11,cursor:'pointer'}}>✕</button>
-            )}
-          </div>
         </div>
 
         {availableSeasons.length > 1 && (
@@ -1291,6 +1267,30 @@ export default function QuickCardModal({ player, players, onClose }) {
         <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12,textAlign:'left'}}>
           <input type="checkbox" id="qc-pitch" checked={showPitchPosition} onChange={e=>setShowPitchPosition(e.target.checked)} style={{cursor:'pointer'}} />
           <label htmlFor="qc-pitch" style={{fontSize:11.5,color:'#cbd5e1',cursor:'pointer'}}>Replace GBE card with pitch position diagram</label>
+        </div>
+
+        <div style={{marginBottom:12}}>
+          <label style={qcLabelStyle}>Team Name</label>
+          <input style={qcInputStyle} value={teamOverride} onChange={e=>setTeamOverride(e.target.value)} placeholder={player.team} />
+        </div>
+
+        <div style={{marginBottom:12}}>
+          <label style={qcLabelStyle}>Position Label</label>
+          <input style={qcInputStyle} value={posLabelOverride} onChange={e=>setPosLabelOverride(e.target.value)} placeholder="e.g. Right Back, Striker…" />
+        </div>
+
+        <div style={{marginBottom:12}}>
+          <label style={qcLabelStyle}>Player Photo</label>
+          <div style={{display:'flex',alignItems:'center',gap:8}}>
+            <label style={{flex:1,padding:'6px 10px',background:'#0e1e38',border:'1px solid #1e2d45',borderRadius:6,color:'#94a3b8',fontSize:11.5,cursor:'pointer',textAlign:'center'}}>
+              {uploadedPhotoDataUrl ? '✓ Photo uploaded' : 'Upload image…'}
+              <input type="file" accept="image/*" onChange={handlePhotoUpload} style={{display:'none'}} />
+            </label>
+            {uploadedPhotoDataUrl && (
+              <button type="button" onClick={() => setUploadedPhotoDataUrl('')}
+                style={{padding:'6px 10px',background:'none',border:'1px solid #1e2d45',borderRadius:6,color:'#f87171',fontSize:11,cursor:'pointer'}}>✕</button>
+            )}
+          </div>
         </div>
 
         {halfTeamContext && (
