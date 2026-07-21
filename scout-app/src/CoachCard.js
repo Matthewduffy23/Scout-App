@@ -3961,8 +3961,8 @@ function leaguePositionTrendSvg(tenureRows) {
   // collide (two different clubs both showing "23-24") — disambiguate with a
   // short team tag in that case.
   const multiClub = new Set(data.map((d) => d.team)).size > 1;
-  const W = 338,
-    H = 140;
+  const W = 360,
+    H = 152;
   const ranks = data.map((d) => d.rank);
   const mn = Math.min(...ranks) - 2,
     mx = Math.max(...ranks) + 2;
@@ -4041,7 +4041,7 @@ function traitPillHtml(key, score) {
   const sc = score != null ? Math.round(score) : null;
   const bc = sc != null ? traitPillBgColor(sc) : "#3a4560";
   const tc = sc != null ? traitTextColor(sc) : "#c0c0c0";
-  return `<span style="background:${bc};border-radius:8px;padding:3px 11px;font-size:22px;color:${tc};font-weight:700;white-space:nowrap;display:inline-block;text-align:center;">${label}</span>`;
+  return `<span style="background:${bc};border-radius:8px;padding:3px 11px;font-size:23px;color:${tc};font-weight:700;white-space:nowrap;display:inline-block;text-align:center;">${label}</span>`;
 }
 
 // ===== Main export function =====
@@ -4229,18 +4229,18 @@ export function buildCoachCardElement(coach, tenureRows, traits) {
 
     <div style="position:absolute;top:636px;left:1535px;width:370px;height:2px;background:rgba(192,192,192,.35);"></div>
     <div style="position:absolute;top:650px;left:1520px;width:400px;text-align:center;font-size:27.9px;font-weight:700;color:#d9d9d9;">LEAGUE POSITION</div>
-    <div style="position:absolute;top:690px;left:1520px;width:400px;display:flex;justify-content:center;">${leaguePositionTrendSvg(sortedDesc)}</div>
+    <div style="position:absolute;top:700px;left:1520px;width:400px;display:flex;justify-content:center;">${leaguePositionTrendSvg(sortedDesc)}</div>
 
     <div style="position:absolute;top:876px;left:1535px;width:370px;height:2px;background:rgba(192,192,192,.35);"></div>
     <div style="position:absolute;top:890px;left:1520px;width:400px;text-align:center;font-size:27.9px;font-weight:700;color:#d9d9d9;">FORM</div>
     <!-- Form — vertical bars like player card: W=green, D=yellow, L=red; PPG badge below -->
-    <div style="position:absolute;top:956px;left:1520px;width:400px;display:flex;justify-content:center;align-items:flex-end;gap:5px;height:78px;">
+    <div style="position:absolute;top:952px;left:1520px;width:400px;display:flex;justify-content:center;align-items:flex-end;gap:6px;height:86px;">
       ${(coach.form || [])
         .slice(0, 5)
         .map((r) => {
-          const h = r === "W" ? 78 : r === "D" ? 40 : 12;
+          const h = r === "W" ? 86 : r === "D" ? 44 : 13;
           const bc = r === "W" ? BAR_GREEN : r === "D" ? BAR_GOLD : BAR_RED;
-          return `<span style="width:26px;height:${h}px;border-radius:6px;background:${bc};display:inline-block;flex-shrink:0;"></span>`;
+          return `<span style="width:28px;height:${h}px;border-radius:6px;background:${bc};display:inline-block;flex-shrink:0;"></span>`;
         })
         .join("")}
     </div>
