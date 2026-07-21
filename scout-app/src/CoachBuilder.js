@@ -3,7 +3,7 @@
 // coach dataset — tenure (which team+seasons count toward this coach's record) is
 // picked from the existing Team Index data, everything else computed from that
 // selection via coachMetrics.js, except the fields explicitly called out as manual
-// (Clubs/PPG/Contract, narrative bullets, Current/Potential Level, Form, formation,
+// (Clubs/PPG/Contract, narrative bullets, Current/Potential Level, Form, formations,
 // trait overrides).
 import React, { useState, useMemo } from 'react';
 import { newCoachId, upsertCoach } from './coachStorage';
@@ -21,10 +21,18 @@ export default function CoachBuilder({ allTeams = [], existingCoach = null, onCl
   const [nationality, setNationality] = useState(existingCoach?.nationality || '');
   const [dob, setDob] = useState(existingCoach?.dob || '');
   const [photoDataUrl, setPhotoDataUrl] = useState(existingCoach?.photoDataUrl || '');
+  const [fotmobId, setFotmobId] = useState(existingCoach?.fotmobId || '');
   const [clubs, setClubs] = useState(existingCoach?.clubs ?? '');
   const [ppg, setPpg] = useState(existingCoach?.ppg ?? '');
   const [contract, setContract] = useState(existingCoach?.contract || '');
-  const [formation, setFormation] = useState(existingCoach?.formation || '4-3-3');
+  // formations: array of up to 3, primary first. Migrate from legacy single `formation` field.
+  const [formations, setFormations] = useState(
+    existingCoach?.formations?.length
+      ? existingCoach.formations
+      : existingCoach?.formation
+        ? [existingCoach.formation]
+        : ['4-3-3']
+  );
   const [tenures, setTenures] = useState(existingCoach?.tenures || []); // [{team, league, season}]
   const [playStyle, setPlayStyle] = useState(existingCoach?.playStyle || '');
   const [development, setDevelopment] = useState(existingCoach?.development || '');
@@ -35,6 +43,15 @@ export default function CoachBuilder({ allTeams = [], existingCoach = null, onCl
   const [potentialLabel, setPotentialLabel] = useState(existingCoach?.potentialLabel || '');
   const [form, setForm] = useState(existingCoach?.form || ['W', 'W', 'D', 'L', 'W']); // last 5, oldest->newest
   const [traitOverrides, setTraitOverrides] = useState(existingCoach?.traitOverrides || {});
+
+  // Toggle a formation on/off (max 3). Order of selection becomes primary/secondary/tertiary.
+  const toggleFormation = (f) => {
+    setFormations(prev => {
+      if (prev.includes(f)) return prev.filter(x => x !== f);
+      if (prev.length >= 3) return prev; // already at max — must deselect one first
+      return [...prev, f];
+    });
+  };
 
   // Tenure picker: search team+season combos from the already-loaded Team Index data.
   const [tenureSearch, setTenureSearch] = useState('');
@@ -74,17 +91,20 @@ export default function CoachBuilder({ allTeams = [], existingCoach = null, onCl
   const handleSave = () => {
     if (!name.trim()) { alert('Name is required.'); return; }
     if (!tenures.length) { alert('Add at least one team/season to this coach\'s tenure.'); return; }
+    if (!formations.length) { alert('Select at least one formation.'); return; }
     const coach = {
       id: existingCoach?.id || newCoachId(),
       name: name.trim(),
       nationality: nationality.trim(),
       dob,
       photoDataUrl,
+      fotmobId: fotmobId.trim() || null,
       role: 'Head Coach',
       clubs: clubs === '' ? null : Number(clubs),
       ppg: ppg === '' ? null : Number(ppg),
       contract,
-      formation,
+      formation: formations[0],   // backward compat — primary formation
+      formations,                 // full ordered array for the card
       tenures,
       playStyle,
       development,
@@ -124,24 +144,66 @@ export default function CoachBuilder({ allTeams = [], existingCoach = null, onCl
             <div><span style={labelStyle}>Clubs</span><input style={inputStyle} type="number" value={clubs} onChange={e => setClubs(e.target.value)} placeholder="2" /></div>
             <div><span style={labelStyle}>Contract</span><input style={inputStyle} value={contract} onChange={e => setContract(e.target.value)} placeholder="2027" /></div>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
             <div><span style={labelStyle}>PPG</span><input style={inputStyle} type="number" step="0.01" value={ppg} onChange={e => setPpg(e.target.value)} placeholder="1.53" /></div>
             <div>
-              <span style={labelStyle}>Photo</span>
+              <span style={labelStyle}>Fotmob ID</span>
+              <input style={inputStyle} value={fotmobId} onChange={e => setFotmobId(e.target.value)} placeholder="1381560" />
+              <div style={{ fontSize: 9, color: '#475569', marginTop: 3 }}>Pulls photo from Fotmob automatically</div>
+            </div>
+            <div>
+              <span style={labelStyle}>Photo (upload)</span>
               <input type="file" accept="image/*" onChange={e => handlePhotoUpload(e.target.files[0])} style={{ fontSize: 10, color: '#94a3b8' }} />
+              <div style={{ fontSize: 9, color: '#475569', marginTop: 3 }}>Overrides Fotmob if set</div>
             </div>
           </div>
           {photoDataUrl && <img src={photoDataUrl} alt="" style={{ width: 60, height: 60, objectFit: 'cover', borderRadius: 8, marginTop: 8 }} />}
         </div>
 
-        {/* Formation */}
+        {/* Formation — multi-select up to 3, order = primary/secondary/tertiary */}
         <div style={sectionStyle}>
-          <div style={{ fontSize: 9, fontWeight: 700, color: '#c8d4e8', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 8 }}>Formation</div>
-          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-            {FORMATIONS.map(f => (
-              <button key={f} onClick={() => setFormation(f)} style={{ padding: '5px 12px', borderRadius: 6, border: `1px solid ${formation === f ? '#3b7de8' : '#1e2d45'}`, background: formation === f ? '#0e2040' : 'transparent', color: formation === f ? '#60a5fa' : '#94a3b8', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>{f}</button>
-            ))}
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 }}>
+            <div style={{ fontSize: 9, fontWeight: 700, color: '#c8d4e8', letterSpacing: '0.12em', textTransform: 'uppercase' }}>Formation</div>
+            <div style={{ fontSize: 9, color: '#475569' }}>
+              Select up to 3 · first selected = primary &nbsp;
+              {formations.length > 0 && (
+                <span style={{ color: '#60a5fa' }}>{formations.join(' › ')}</span>
+              )}
+            </div>
           </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'space-between' }}>
+            {FORMATIONS.map(f => {
+              const idx = formations.indexOf(f);
+              const selected = idx !== -1;
+              const orderLabel = selected ? ['①', '②', '③'][idx] : null;
+              return (
+                <button
+                  key={f}
+                  onClick={() => toggleFormation(f)}
+                  style={{
+                    flex: '1 1 calc(33% - 8px)',
+                    padding: '7px 10px',
+                    borderRadius: 6,
+                    border: `1px solid ${selected ? '#3b7de8' : '#1e2d45'}`,
+                    background: selected ? '#0e2040' : 'transparent',
+                    color: selected ? '#60a5fa' : '#94a3b8',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 5,
+                  }}
+                >
+                  {f}{orderLabel && <span style={{ fontSize: 13 }}>{orderLabel}</span>}
+                </button>
+              );
+            })}
+          </div>
+          {formations.length >= 3 && (
+            <div style={{ fontSize: 9, color: '#f59e0b', marginTop: 6 }}>Max 3 formations — deselect one to change.</div>
+          )}
         </div>
 
         {/* Tenure — team/season picker */}
@@ -196,12 +258,29 @@ export default function CoachBuilder({ allTeams = [], existingCoach = null, onCl
         {/* Form */}
         <div style={sectionStyle}>
           <div style={{ fontSize: 9, fontWeight: 700, color: '#c8d4e8', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 8 }}>Form (last 5, oldest → newest)</div>
-          <div style={{ display: 'flex', gap: 6 }}>
+          <div style={{ display: 'flex', gap: 0, justifyContent: 'space-between' }}>
             {form.map((r, i) => (
-              <select key={i} value={r} onChange={e => setFormResult(i, e.target.value)} style={{ ...inputStyle, width: 56, textAlign: 'center', fontWeight: 700, color: r === 'W' ? '#22c55e' : r === 'D' ? '#f59e0b' : '#ef4444' }}>
-                <option value="W">W</option>
-                <option value="D">D</option>
-                <option value="L">L</option>
+              <select
+                key={i}
+                value={r}
+                onChange={e => setFormResult(i, e.target.value)}
+                style={{
+                  width: 'calc(20% - 6px)',
+                  background: '#0d1220',
+                  border: '1px solid #1e2d45',
+                  borderRadius: 5,
+                  padding: '8px 4px',
+                  color: r === 'W' ? '#22c55e' : r === 'D' ? '#f59e0b' : '#ef4444',
+                  fontSize: 14,
+                  fontWeight: 800,
+                  outline: 'none',
+                  textAlign: 'center',
+                  cursor: 'pointer',
+                }}
+              >
+                <option value="W" style={{ color: '#22c55e' }}>W</option>
+                <option value="D" style={{ color: '#f59e0b' }}>D</option>
+                <option value="L" style={{ color: '#ef4444' }}>L</option>
               </select>
             ))}
           </div>

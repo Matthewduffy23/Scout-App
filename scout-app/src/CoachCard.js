@@ -46,6 +46,7 @@ function ensureMontserratEmbedded() {
 // ===== Coach-specific helpers (new — not from PlayerScoutingCard.js) =====
 
 const CREST_BASE = "https://raw.githubusercontent.com/Matthewduffy23/scouting-photos/main/crests/";
+const FOTMOB_PHOTO_BASE = "https://images.fotmob.com/image_resources/playerimages/";
 const TEAM_FOTMOB_MAP = {
   "1860 München": "9753",
   "1860 munchen": "9753",
@@ -3895,11 +3896,21 @@ const FORMATIONS = {
 // Pitch diagram — shows only the primary (first) formation's dots.
 // Formation labels with fading are rendered separately below the pitch.
 function pitchDiagramSvg(formations) {
-  // Accept a single string or array; only use the first for the dots
-  const fmList = (Array.isArray(formations) ? formations : [formations]).filter(Boolean);
-  const primary = fmList[0] || "4-3-3";
-  const coords = FORMATIONS[primary] || FORMATIONS["4-3-3"];
-  const allDotLayers = coords.map(([x, y]) => `<circle cx="${x}" cy="${y}" r="13" fill="rgba(255,255,255,1.0)" filter="url(#dotShadow)"/>`).join("");
+  // Accept a single string or array; render up to 3 formations with different colours
+  const fmList = (Array.isArray(formations) ? formations : [formations]).filter(Boolean).slice(0, 3);
+  // Primary = white, Secondary = cyan, Tertiary = pink
+  const dotColors = [
+    { fill: "rgba(255,255,255,1.0)", r: 12 },
+    { fill: "rgba(0,202,220,0.75)", r: 10 },
+    { fill: "rgba(255,102,196,0.65)", r: 9 },
+  ];
+
+  let allDotLayers = "";
+  fmList.forEach((fm, fi) => {
+    const coords = FORMATIONS[fm] || FORMATIONS["4-3-3"];
+    const { fill, r } = dotColors[fi];
+    allDotLayers += coords.map(([x, y]) => `<circle cx="${x}" cy="${y}" r="${r}" fill="${fill}" filter="url(#dotShadow)"/>`).join("");
+  });
 
   return `<svg viewBox="0 0 330 220" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;">
     <defs>
@@ -4061,7 +4072,7 @@ export function buildCoachCardElement(coach, tenureRows, traits) {
   const formationLabelsHtml = fmList
     .map(
       (f, i) =>
-        `<span style="display:inline-block;padding:5px 16px;border-radius:8px;background:rgba(80,90,115,${fmOpacities[i]});font-size:${21 - i * 2}px;font-weight:700;color:rgba(217,217,217,${Math.min(1, fmOpacities[i] + 0.1)});">${f}</span>`,
+        `<span style="display:inline-block;padding:4px 14px;border-radius:8px;background:rgba(80,90,115,${fmOpacities[i]});font-size:${18 - i * 2}px;font-weight:700;color:rgba(217,217,217,${Math.min(1, fmOpacities[i] + 0.1)});">${f}</span>`,
     )
     .join("");
 
@@ -4073,11 +4084,12 @@ export function buildCoachCardElement(coach, tenureRows, traits) {
     <div style="position:absolute;top:0;left:0;width:1520px;height:292px;background:linear-gradient(to right, ${HEADER_L} 0%, ${HEADER_R} 100%);"></div>
 
     <!-- PHOTO (bleeds slightly off the left edge, same as the real card) -->
-    ${
-      coach.photoUrl
-        ? `<div style="position:absolute;left:-12px;top:16px;width:261px;height:261px;background-size:cover;background-position:center top;background-image:url('${coach.photoUrl}');"></div>`
-        : `<div style="position:absolute;left:-12px;top:16px;width:261px;height:261px;background:#1b2636;"></div>`
-    }
+    ${(() => {
+      const _pUrl = coach.fotmobId ? `${FOTMOB_PHOTO_BASE}${coach.fotmobId}.png` : (coach.photoUrl || null);
+      return _pUrl
+        ? `<div id="ccc-photo" style="position:absolute;left:-12px;top:16px;width:261px;height:261px;background-size:cover;background-position:center top;background-image:url('${_pUrl}');"></div>`
+        : `<div id="ccc-photo" style="position:absolute;left:-12px;top:16px;width:261px;height:261px;background:#1b2636;"></div>`;
+    })()}
 
     <!-- NAME / ROLE / FLAG / AGE -->
     <div style="position:absolute;left:248px;top:24px;width:880px;font-size:53.2px;font-weight:700;line-height:1.05;letter-spacing:-0.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${coach.name || ""}</div>
@@ -4089,13 +4101,13 @@ export function buildCoachCardElement(coach, tenureRows, traits) {
     </div>
 
     <!-- CREST (bigger) / TEAM / LEAGUE + FLAG / TENURE -->
-    ${teamCrestUrl(latest.team) ? `<div style="position:absolute;left:756px;top:39px;width:118px;height:164px;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${teamCrestUrl(latest.team)}');"></div>` : ""}
-    <div style="position:absolute;left:884px;top:57px;font-size:26.6px;font-weight:700;color:#fff;">${latest.team || ""}</div>
-    <div style="position:absolute;left:884px;top:97px;display:flex;align-items:center;gap:10px;">
+    ${teamCrestUrl(latest.team) ? `<div style="position:absolute;left:738px;top:28px;width:155px;height:195px;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${teamCrestUrl(latest.team)}');"></div>` : ""}
+    <div style="position:absolute;left:904px;top:44px;font-size:34px;font-weight:700;color:#fff;">${latest.team || ""}</div>
+    <div style="position:absolute;left:904px;top:99px;display:flex;align-items:center;gap:10px;">
       <span style="font-size:21.3px;font-weight:500;color:#fff;white-space:nowrap;">${latest.league || ""}</span>
       ${leagueIso2 ? `<div style="width:31px;height:19px;flex-shrink:0;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${leagueIso2}.png');"></div>` : ""}
     </div>
-    <div style="position:absolute;left:884px;top:147px;font-size:21.3px;color:#d9d9d9;">${coach.tenure || ""}</div>
+    <div style="position:absolute;left:904px;top:148px;font-size:21.3px;color:#d9d9d9;">${coach.tenure || ""}</div>
 
     <!-- HEADER VERTICAL SEPARATOR -->
     <div style="position:absolute;left:1164px;top:45px;width:3px;height:155px;background:#737373;"></div>
@@ -4140,8 +4152,8 @@ export function buildCoachCardElement(coach, tenureRows, traits) {
       <div><div style="font-size:13px;font-weight:500;color:#d9d9d9;">Games</div><div style="font-size:20px;font-weight:600;color:#fff;">${latest.matches ?? "—"}</div></div>
       <div><div style="font-size:13px;font-weight:500;color:#d9d9d9;">GF</div><div style="font-size:20px;font-weight:600;color:#fff;">${latest.goalsFor ?? "—"}</div></div>
       <div><div style="font-size:13px;font-weight:500;color:#d9d9d9;">GA</div><div style="font-size:20px;font-weight:600;color:#fff;">${latest.goalsAgainst ?? "—"}</div></div>
-      <div><div style="font-size:13px;font-weight:500;color:#d9d9d9;">xGF</div><div style="font-size:20px;font-weight:600;color:#fff;">${latest.xGoalsFor != null ? Number(latest.xGoalsFor).toFixed(1) : "—"}</div></div>
-      <div><div style="font-size:13px;font-weight:500;color:#d9d9d9;">xGA</div><div style="font-size:20px;font-weight:600;color:#fff;">${latest.xGoalsAgainst != null ? Number(latest.xGoalsAgainst).toFixed(1) : "—"}</div></div>
+      <div><div style="font-size:13px;font-weight:500;color:#d9d9d9;">XG</div><div style="font-size:20px;font-weight:600;color:#fff;">${latest.xGoalsFor != null ? Number(latest.xGoalsFor).toFixed(1) : "—"}</div></div>
+      <div><div style="font-size:13px;font-weight:500;color:#d9d9d9;">XG Against</div><div style="font-size:20px;font-weight:600;color:#fff;">${latest.xGoalsAgainst != null ? Number(latest.xGoalsAgainst).toFixed(1) : "—"}</div></div>
       <div><div style="font-size:13px;font-weight:500;color:#d9d9d9;">PPG</div><div style="font-size:20px;font-weight:600;color:#fff;">${latest.points != null && latest.matches ? (latest.points / latest.matches).toFixed(2) : latest.ppg != null ? Number(latest.ppg).toFixed(2) : "—"}</div></div>
       <div>
         <div style="font-size:13px;font-weight:500;color:#d9d9d9;">Resource Efficiency</div>
@@ -4185,12 +4197,12 @@ export function buildCoachCardElement(coach, tenureRows, traits) {
     <!-- Multi-formation pitch (up to 3, faded) -->
     <div style="position:absolute;top:10px;left:1526px;width:388px;height:230px;">${pitchDiagramSvg(coach.formations || coach.formation)}</div>
     <!-- Formation labels with fade — primary full, secondary dimmed, tertiary most faded -->
-    <div style="position:absolute;top:246px;left:1520px;width:400px;display:flex;justify-content:center;gap:20px;align-items:center;">
+    <div style="position:absolute;top:242px;left:1520px;width:400px;display:flex;justify-content:space-evenly;align-items:center;gap:0;">
       ${formationLabelsHtml}
     </div>
 
-    <div style="position:absolute;top:278px;left:1535px;width:370px;height:2px;background:rgba(192,192,192,.35);"></div>
-    <div style="position:absolute;top:292px;left:1520px;width:400px;text-align:center;font-size:27.9px;font-weight:700;color:#d9d9d9;">COACHING TRAITS</div>
+    <div style="position:absolute;top:282px;left:1535px;width:370px;height:2px;background:rgba(192,192,192,.35);"></div>
+    <div style="position:absolute;top:296px;left:1520px;width:400px;text-align:center;font-size:27.9px;font-weight:700;color:#d9d9d9;">COACHING TRAITS</div>
     <!-- Pills in a flex-wrap layout, full-width, tighter spacing -->
     <div style="position:absolute;top:340px;left:1522px;width:376px;display:flex;flex-wrap:wrap;gap:8px 8px;align-content:flex-start;">
       ${TRAIT_ORDER.map((key) => traitPillHtml(key, getTraitScore(key))).join("")}
@@ -4203,17 +4215,17 @@ export function buildCoachCardElement(coach, tenureRows, traits) {
     <div style="position:absolute;top:864px;left:1535px;width:370px;height:2px;background:rgba(192,192,192,.35);"></div>
     <div style="position:absolute;top:878px;left:1520px;width:400px;text-align:center;font-size:27.9px;font-weight:700;color:#d9d9d9;">FORM</div>
     <!-- Form — vertical bars like player card: W=green, D=yellow, L=red; PPG badge below -->
-    <div style="position:absolute;top:920px;left:1520px;width:400px;display:flex;justify-content:center;align-items:flex-end;gap:8px;height:90px;">
+    <div style="position:absolute;top:930px;left:1520px;width:400px;display:flex;justify-content:center;align-items:flex-end;gap:5px;height:60px;">
       ${(coach.form || [])
         .slice(0, 5)
         .map((r) => {
-          const h = r === "W" ? 90 : r === "D" ? 45 : 9;
+          const h = r === "W" ? 60 : r === "D" ? 30 : 8;
           const bc = r === "W" ? BAR_GREEN : r === "D" ? BAR_GOLD : BAR_RED;
-          return `<span style="width:38px;height:${h}px;border-radius:6px;background:${bc};display:inline-block;flex-shrink:0;"></span>`;
+          return `<span style="width:26px;height:${h}px;border-radius:6px;background:${bc};display:inline-block;flex-shrink:0;"></span>`;
         })
         .join("")}
     </div>
-    <div style="position:absolute;top:1022px;left:1520px;width:400px;display:flex;align-items:center;justify-content:center;gap:10px;">
+    <div style="position:absolute;top:1005px;left:1520px;width:400px;display:flex;align-items:center;justify-content:center;gap:10px;">
       <span style="font-size:16px;font-weight:700;color:#000;background:${last5PPG(coach.form) != null && Number(last5PPG(coach.form)) >= 2.0 ? BAR_GREEN : last5PPG(coach.form) != null && Number(last5PPG(coach.form)) >= 1.0 ? BAR_GOLD : BAR_RED};border-radius:6px;padding:1px 8px;">${last5PPG(coach.form) ?? "—"}</span>
       <span style="font-size:17.3px;font-weight:600;color:#c0c0c0;">Last 5 PPG</span>
     </div>
@@ -4226,6 +4238,32 @@ export async function downloadCoachCardPNG(coach, tenureRows, traits) {
   await ensureMontserratEmbedded();
   const el = buildCoachCardElement(coach, tenureRows, traits);
   document.body.appendChild(el);
+
+  // Pre-fetch photo and convert to data URL — Fotmob CDN is CORS-restricted so
+  // html-to-image would silently blank it out without this conversion step.
+  const photoDiv = el.querySelector("#ccc-photo");
+  if (photoDiv) {
+    const _pUrl = coach.fotmobId
+      ? `${FOTMOB_PHOTO_BASE}${coach.fotmobId}.png`
+      : coach.photoUrl || null;
+    if (_pUrl) {
+      try {
+        const resp = await fetch(_pUrl);
+        if (!resp.ok) throw new Error("fetch failed");
+        const blob = await resp.blob();
+        const dataUrl = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+        photoDiv.style.backgroundImage = `url('${dataUrl}')`;
+      } catch (_err) {
+        photoDiv.style.backgroundImage = "url('/fallback.png')";
+      }
+    }
+  }
+
   try {
     const { toPng } = await import("html-to-image");
     // fontEmbedCSS explicitly provided -> tells html-to-image to use OUR already-embedded
