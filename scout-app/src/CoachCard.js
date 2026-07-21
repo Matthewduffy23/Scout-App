@@ -3900,9 +3900,9 @@ function pitchDiagramSvg(formations) {
   const fmList = (Array.isArray(formations) ? formations : [formations]).filter(Boolean).slice(0, 1);
   // Primary = white, Secondary = cyan, Tertiary = pink
   const dotColors = [
-    { fill: "rgba(255,255,255,1.0)", r: 12 },
-    { fill: "rgba(0,202,220,0.75)", r: 10 },
-    { fill: "rgba(255,102,196,0.65)", r: 9 },
+    { fill: "rgba(255,255,255,1.0)", r: 8 },
+    { fill: "rgba(0,202,220,0.75)", r: 7 },
+    { fill: "rgba(255,102,196,0.65)", r: 6 },
   ];
 
   let allDotLayers = "";
@@ -4031,7 +4031,7 @@ function traitPillHtml(key, score) {
   const sc = score != null ? Math.round(score) : null;
   const bc = sc != null ? traitPillBgColor(sc) : "#3a4560";
   const tc = sc != null ? traitTextColor(sc) : "#c0c0c0";
-  return `<span style="background:${bc};border-radius:8px;padding:5px 7px;font-size:18px;color:${tc};font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;text-align:center;width:100%;box-sizing:border-box;">${label}</span>`;
+  return `<span style="background:${bc};border-radius:8px;padding:6px 4px;font-size:17px;color:${tc};font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;text-align:center;width:100%;box-sizing:border-box;">${label}</span>`;
 }
 
 // ===== Main export function =====
@@ -4150,10 +4150,10 @@ export function buildCoachCardElement(coach, tenureRows, traits) {
 
     <!-- SEASON STATS — pink title + league inline with stats -->
     <div style="position:absolute;top:300px;left:17px;font-size:26.6px;font-weight:700;color:${ACCENT_PINK};">Season Stats</div>
-    <div style="position:absolute;top:343px;left:17px;width:855px;display:flex;gap:0;justify-content:space-between;align-items:center;">
-      <div style="display:flex;align-items:center;gap:6px;min-width:0;">
-        ${leagueLogo ? `<div style="width:26px;height:26px;flex-shrink:0;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${leagueLogo}');"></div>` : ""}
-        <span style="font-size:18px;font-weight:600;color:#fff;max-width:110px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${latest.league || ""}</span>
+    <div style="position:absolute;top:343px;left:17px;width:855px;display:flex;gap:0;justify-content:space-between;align-items:flex-end;">
+      <div>
+        <div style="height:20px;display:flex;align-items:center;">${leagueLogo ? `<div style="width:20px;height:20px;flex-shrink:0;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${leagueLogo}');"></div>` : ""}</div>
+        <div style="font-size:20px;font-weight:600;color:#fff;max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${latest.league || ""}</div>
       </div>
       <div><div style="font-size:13px;font-weight:500;color:#d9d9d9;">Games</div><div style="font-size:20px;font-weight:600;color:#fff;">${latest.matches ?? "—"}</div></div>
       <div><div style="font-size:13px;font-weight:500;color:#d9d9d9;">GF</div><div style="font-size:20px;font-weight:600;color:#fff;">${latest.goalsFor ?? "—"}</div></div>
@@ -4207,10 +4207,10 @@ export function buildCoachCardElement(coach, tenureRows, traits) {
       ${formationLabelsHtml}
     </div>
 
-    <div style="position:absolute;top:282px;left:1535px;width:370px;height:2px;background:rgba(192,192,192,.35);"></div>
+    <div style="position:absolute;top:292px;left:1535px;width:370px;height:2px;background:rgba(192,192,192,.35);"></div>
     <div style="position:absolute;top:296px;left:1520px;width:400px;text-align:center;font-size:27.9px;font-weight:700;color:#d9d9d9;">COACHING TRAITS</div>
     <!-- Pills in a flex-wrap layout, full-width, tighter spacing -->
-    <div style="position:absolute;top:340px;left:1522px;width:376px;display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+    <div style="position:absolute;top:340px;left:1522px;width:376px;display:grid;grid-template-columns:1fr 1fr;gap:12px 8px;">
       ${TRAIT_ORDER.map((key) => {
         const pill = traitPillHtml(key, getTraitScore(key));
         return key === "youthDevelopment"
@@ -4236,7 +4236,7 @@ export function buildCoachCardElement(coach, tenureRows, traits) {
         })
         .join("")}
     </div>
-    <div style="position:absolute;top:1022px;left:1520px;width:400px;display:flex;align-items:center;justify-content:center;gap:10px;">
+    <div style="position:absolute;top:1040px;left:1520px;width:400px;display:flex;align-items:center;justify-content:center;gap:10px;">
       <span style="font-size:16px;font-weight:700;color:#000;background:${last5PPG(coach.form) != null && Number(last5PPG(coach.form)) >= 2.0 ? BAR_GREEN : last5PPG(coach.form) != null && Number(last5PPG(coach.form)) >= 1.0 ? BAR_GOLD : BAR_RED};border-radius:6px;padding:1px 8px;">${last5PPG(coach.form) ?? "—"}</span>
       <span style="font-size:17.3px;font-weight:600;color:#c0c0c0;">Last 5 PPG</span>
     </div>
