@@ -19,6 +19,14 @@ import { LEAGUE_STRENGTHS, ALL_LEAGUES, DEFAULT_LEAGUES, HIDDEN_LEAGUES, YOUTH_L
 function normLeague(l) {
   return String(l || '').trim().replace(/\.$/, '').toLowerCase();
 }
+// Base country from a league name — strips the trailing tier number so 'England 1'/'England 2'/
+// etc all collapse to 'england'. Used to group a team's history correctly: a promoted/relegated
+// team (same country, different tier) should merge into one entity, but two unrelated clubs that
+// happen to share a name in different countries (e.g. Arsenal England vs Arsenal Argentina) must
+// NOT merge — an earlier version grouped by team name alone and incorrectly combined them.
+function teamCountry(l) {
+  return String(l || '').trim().replace(/\s+\d+\.?$/, '').toLowerCase();
+}
 // Reverse-lookup: normalized league name -> the '.' formatted key constants.js actually uses.
 const NORM_TO_DOT = {};
 for (const l of ALL_LEAGUES) NORM_TO_DOT[normLeague(l)] = l;
@@ -34,6 +42,23 @@ function teamCrest(name) {
 }
 
 const ALL_ATTRIBUTES = ['Possession', 'Pressing', 'Long Ball', 'Attacking', 'Short Passing', 'Transitional', 'Vertical'];
+
+// Distinct color per style archetype — same map duplicated in TeamCard.js.
+const STYLE_COLORS = {
+  'Possession-Pressing Based': { bg: '#0e2040', color: '#60a5fa' },
+  'Possession Based': { bg: '#0a2e33', color: '#22d3ee' },
+  'Vertical Possession Approach': { bg: '#1e1b4b', color: '#818cf8' },
+  'Pressing': { bg: '#3a1a05', color: '#fb923c' },
+  'Long Ball Style': { bg: '#3a2a05', color: '#fbbf24' },
+  'Effective-Structured': { bg: '#0a2e17', color: '#4ade80' },
+  'Balanced Style': { bg: '#1e293b', color: '#94a3b8' },
+  'Mixed': { bg: '#2e1065', color: '#c084fc' },
+  'Low Block': { bg: '#3a0a0a', color: '#f87171' },
+  'No Defined Style': { bg: '#1e2d45', color: '#64748b' },
+};
+function styleColor(label) {
+  return STYLE_COLORS[label] || { bg: '#0e1e38', color: '#93c5fd' };
+}
 
 const STYLE_KEYS = ['attack', 'defence', 'possession', 'pressing'];
 const STYLE_LABELS = { attack: 'Attacking', defence: 'Defence', possession: 'Possession', pressing: 'Pressing' };
@@ -154,7 +179,7 @@ export default function TeamIndex({ players = [] }) {
       if (season === 'latest') {
         const byTeam = {};
         for (const t of all) {
-          const key = t.team; // team name only — a promoted/relegated team (different league across seasons) should collapse to one row, not one per league
+          const key = t.team + '|' + teamCountry(t.league); // team+country — merges promotion/relegation (same country) but NOT unrelated clubs sharing a name across countries
           if (!byTeam[key] || t.season > byTeam[key].season) byTeam[key] = t;
         }
         return Object.values(byTeam);
@@ -164,7 +189,7 @@ export default function TeamIndex({ players = [] }) {
     // weighted mode
     const byTeam = {};
     for (const t of all) {
-      const key = t.team; // team name only — same fix as latest mode above
+      const key = t.team + '|' + teamCountry(t.league); // team+country — same fix as latest mode above
       (byTeam[key] = byTeam[key] || []).push(t);
     }
     const NUMERIC = ['completeScore', 'overall', 'attack', 'defence', 'possession', 'pressing', 'points', 'expectedPoints', 'goalsFor', 'goalsAgainst', 'avgAge', 'wins', 'draws', 'losses', 'matches'];
@@ -473,7 +498,7 @@ export default function TeamIndex({ players = [] }) {
                         <td style={{ ...T.td, fontWeight: 700 }}>{t.team}</td>
                         <td style={T.td}>{t.league}</td>
                         <td style={T.td}>
-                          <span style={{ display: 'inline-block', padding: '2px 6px', borderRadius: 8, background: '#0e1e38', color: '#93c5fd', fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap' }}>{t.style || '—'}</span>
+                          <span style={{ display: 'inline-block', padding: '2px 6px', borderRadius: 8, background: t.style ? styleColor(t.style).bg : '#0e1e38', color: t.style ? styleColor(t.style).color : '#93c5fd', fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap' }}>{t.style || '—'}</span>
                         </td>
                         <td style={{ ...T.td, fontWeight: 700, color: scoreColor(getDisplayScore(t)) }}>{getDisplayScore(t) != null ? getDisplayScore(t).toFixed(1) : '—'}</td>
                         <td style={{ ...T.td, color: scoreColor(t.attack) }}>{t.attack != null ? t.attack.toFixed(1) : '—'}</td>
@@ -498,7 +523,7 @@ export default function TeamIndex({ players = [] }) {
       {selTeam && (
         <TeamCard
           team={selTeam}
-          allTeamSeasons={all.filter(t => t.team === selTeam.team).map(t => ({ ...t, crest: undefined }))}
+          allTeamSeasons={all.filter(t => t.team === selTeam.team && teamCountry(t.league) === teamCountry(selTeam.league)).map(t => ({ ...t, crest: undefined }))}
           onClose={() => setSelTeam(null)}
         />
       )}
