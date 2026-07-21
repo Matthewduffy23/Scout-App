@@ -4107,9 +4107,7 @@ export function buildCoachCardElement(coach, tenureRows, traits) {
       const _pUrl = _fotmobId
         ? `${FOTMOB_PHOTO_BASE}${_fotmobId}.png`
         : (coach.photoDataUrl || coach.photoUrl || null);
-      return _pUrl
-        ? `<div id="ccc-photo" style="position:absolute;left:-12px;top:16px;width:261px;height:261px;background-size:cover;background-position:center top;background-image:url('${_pUrl}');"></div>`
-        : `<div id="ccc-photo" style="position:absolute;left:-12px;top:16px;width:261px;height:261px;background:#1b2636;"></div>`;
+      return `<div id="ccc-photo" style="position:absolute;left:-12px;top:16px;width:261px;height:261px;background-color:#1b2636;background-size:cover;background-position:center top;background-image:url('${_pUrl || "/fallback.png"}');"></div>`;
     })()}
 
     <!-- NAME / ROLE / FLAG / AGE -->
@@ -4230,7 +4228,7 @@ export function buildCoachCardElement(coach, tenureRows, traits) {
     <div style="position:absolute;top:292px;left:1535px;width:370px;height:2px;background:rgba(192,192,192,.35);"></div>
     <div style="position:absolute;top:296px;left:1520px;width:400px;text-align:center;font-size:27.9px;font-weight:700;color:#d9d9d9;">COACHING TRAITS</div>
     <!-- Pills in a flex-wrap layout, full-width, tighter spacing -->
-    <div style="position:absolute;top:340px;left:1522px;width:376px;display:flex;flex-wrap:wrap;gap:14px 10px;align-content:flex-start;">
+    <div style="position:absolute;top:352px;left:1522px;width:376px;display:flex;flex-wrap:wrap;gap:16px 10px;justify-content:center;align-content:flex-start;">
       ${TRAIT_ORDER.map((key) => traitPillHtml(key, getTraitScore(key))).join("")}
     </div>
 
