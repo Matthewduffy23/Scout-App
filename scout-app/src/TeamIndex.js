@@ -64,9 +64,9 @@ function styleColor(label) {
 const STYLE_KEYS = ['attack', 'defence', 'possession', 'pressing'];
 const STYLE_LABELS = { attack: 'Attacking', defence: 'Defence', possession: 'Possession', pressing: 'Pressing' };
 const SCORE_MODES = ['Overall', 'Attack', 'Defence', 'Possession', 'Pressing'];
-const IMPROVED_MODES = ['Overall', 'Attack', 'Defence', 'Possession', 'Pressing'];
+const IMPROVED_MODES = ['Overall', 'Raw Overall', 'Attack', 'Defence', 'Possession', 'Pressing'];
 // Field on each team row used for each improved mode
-const IMPROVED_FIELD = { Overall: 'completeScore', Attack: 'attack', Defence: 'defence', Possession: 'possession', Pressing: 'pressing' };
+const IMPROVED_FIELD = { Overall: 'completeScore', 'Raw Overall': 'overall', Attack: 'attack', Defence: 'defence', Possession: 'possession', Pressing: 'pressing' };
 const DECAY = 0.45; // matches build_players.py's recency decay for the "weighted avg" season mode
 
 const T = {
@@ -261,19 +261,19 @@ export default function TeamIndex({ players = [] }) {
       // Sub-scores (attack/defence/possession/pressing) are raw within-league percentiles —
       // they reset completely when a team changes division, making cross-division deltas
       // meaningless (a relegated team jumps from 5th→95th pct naturally = +90 raw).
-      // For division-changers, always fall back to completeScore which IS cross-league
-      // comparable (it's league-strength-weighted). Same-division: use the requested field.
-      const field = sameDiv ? (IMPROVED_FIELD[improvedMode] || 'completeScore') : 'completeScore';
+      // For division-changers, fall back to completeScore which IS cross-league comparable —
+      // UNLESS the user explicitly chose Raw Overall, in which case use overall as-is.
+      const isRawOverall = improvedMode === 'Raw Overall';
+      const field = sameDiv || isRawOverall ? (IMPROVED_FIELD[improvedMode] || 'completeScore') : 'completeScore';
       const currVal = curr[field];
       const prevVal = prev[field];
       if (currVal == null || prevVal == null) { map[key] = null; continue; }
 
       let delta = currVal - prevVal;
 
-      // For division-changers using completeScore: apply league-strength correction so
-      // a team promoted into a harder league gets credit for maintaining/improving their
-      // weighted score in tougher competition, and a relegated team is penalised.
-      if (!sameDiv) {
+      // For division-changers using completeScore: apply league-strength correction.
+      // Raw Overall mode: no correction — user explicitly wants the unweighted number.
+      if (!sameDiv && !isRawOverall) {
         const currLs = LEAGUE_STRENGTHS[currDot] || 50;
         const prevLs = LEAGUE_STRENGTHS[prevDot] || 50;
         // promoted (currLs > prevLs): multiply UP — same completeScore in harder league = real improvement
@@ -624,7 +624,7 @@ export default function TeamIndex({ players = [] }) {
                           const color = delta > 5 ? '#4ade80' : delta > 0 ? '#86efac' : delta > -5 ? '#fca5a5' : '#f87171';
                           const prefix = delta >= 0 ? '+' : '';
                           const divArrow = !sameDiv ? (LEAGUE_STRENGTHS[toDotLeague(t.league)] > LEAGUE_STRENGTHS[toDotLeague(prevLeague)] ? '↑' : '↓') : '';
-                          const tooltip = `${prevSeason} (${prevLeague}) → ${t.league} | ${prevVal?.toFixed(1)} → ${currVal?.toFixed(1)} (${fieldUsed === 'completeScore' && improvedMode !== 'Overall' ? 'Overall used — div. changed' : improvedMode})`;
+                          const tooltip = `${prevSeason} (${prevLeague}) → ${t.league} | ${prevVal?.toFixed(1)} → ${currVal?.toFixed(1)} (${fieldUsed === 'completeScore' && improvedMode !== 'Overall' && improvedMode !== 'Raw Overall' ? 'Overall used — div. changed' : improvedMode})`;
                           return (
                             <td style={{ ...T.td, fontWeight: 700 }} title={tooltip}>
                               <span style={{ color, fontSize: 12 }}>{prefix}{delta.toFixed(1)}</span>
