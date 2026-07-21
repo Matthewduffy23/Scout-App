@@ -25,6 +25,7 @@ export default function CoachBuilder({ allTeams = [], existingCoach = null, onCl
   const [clubs, setClubs] = useState(existingCoach?.clubs ?? '');
   const [ppg, setPpg] = useState(existingCoach?.ppg ?? '');
   const [contract, setContract] = useState(existingCoach?.contract || '');
+  const [tenure, setTenure] = useState(existingCoach?.tenure || '');
   // formations: array of up to 3, primary first. Migrate from legacy single `formation` field.
   const [formations, setFormations] = useState(
     existingCoach?.formations?.length
@@ -103,6 +104,7 @@ export default function CoachBuilder({ allTeams = [], existingCoach = null, onCl
       clubs: clubs === '' ? null : Number(clubs),
       ppg: ppg === '' ? null : Number(ppg),
       contract,
+      tenure: tenure.trim() || null,   // manual display string e.g. '2024–Present'
       formation: formations[0],   // backward compat — primary formation
       formations,                 // full ordered array for the card
       tenures,
@@ -139,10 +141,11 @@ export default function CoachBuilder({ allTeams = [], existingCoach = null, onCl
             <div><span style={labelStyle}>Name</span><input style={inputStyle} value={name} onChange={e => setName(e.target.value)} placeholder="Eder Sarabia" /></div>
             <div><span style={labelStyle}>Nationality</span><input style={inputStyle} value={nationality} onChange={e => setNationality(e.target.value)} placeholder="Spain" /></div>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8, marginBottom: 8 }}>
             <div><span style={labelStyle}>Date of Birth</span><input style={inputStyle} type="date" value={dob} onChange={e => setDob(e.target.value)} /></div>
             <div><span style={labelStyle}>Clubs</span><input style={inputStyle} type="number" value={clubs} onChange={e => setClubs(e.target.value)} placeholder="2" /></div>
             <div><span style={labelStyle}>Contract</span><input style={inputStyle} value={contract} onChange={e => setContract(e.target.value)} placeholder="2027" /></div>
+            <div><span style={labelStyle}>Tenure</span><input style={inputStyle} value={tenure} onChange={e => setTenure(e.target.value)} placeholder="2024–Present" /></div>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
             <div><span style={labelStyle}>PPG</span><input style={inputStyle} type="number" step="0.01" value={ppg} onChange={e => setPpg(e.target.value)} placeholder="1.53" /></div>
