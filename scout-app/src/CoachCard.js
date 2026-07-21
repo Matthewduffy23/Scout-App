@@ -1,4 +1,4 @@
-import { traitTierColor } from './coachMetrics';
+import { traitTierColor, computeCoachMetricGroups } from './coachMetrics';
 
 // CoachCard.js — generates a Coach Card PNG, same export pattern and visual
 // system as PlayerScoutingCard.js (same fonts, colors, PNG-export mechanism via
@@ -84,24 +84,25 @@ function starsHtmlSimple(stars, size = 20) {
   return Array(full).fill(s('full')).join('') + (half ? s('half') : '') + Array(empty).fill(s('empty')).join('');
 }
 
-function barRowCoach(label, pct, rawVal, rowH = 20) {
+function barRowCoach(label, pct, rawVal, rowH = 18) {
   const p = Math.max(0, Math.min(100, pct || 0));
   const t = p / 100;
   const RED = [199, 54, 60], GOLD = [240, 197, 106], GREEN = [61, 166, 91];
   const interp = (a, b, f) => [0, 1, 2].map(i => Math.round(a[i] + (b[i] - a[i]) * f));
   const rgb = t <= 0.5 ? interp(RED, GOLD, t / 0.5) : interp(GOLD, GREEN, (t - 0.5) / 0.5);
   const bc = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
-  const barH = Math.max(10, Math.round(rowH * 0.85));
+  const barH = Math.max(9, Math.round(rowH * 0.85));
   return `
     <div style="display:flex;align-items:center;height:${rowH}px;margin-bottom:1px;">
-      <div style="font-size:13px;font-weight:700;color:${LABEL_COL};width:170px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${label}</div>
+      <div style="font-size:11.5px;font-weight:700;color:${LABEL_COL};width:150px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${label}</div>
       <div style="flex:1;position:relative;height:${barH}px;">
         <div style="position:absolute;inset:0;background:${BAR_TRACK};"></div>
         <div style="position:relative;height:100%;width:${p}%;background:${bc};">
-          ${rawVal != null ? `<span style="position:absolute;left:6px;top:50%;transform:translateY(-50%);font-size:10px;font-weight:400;color:#0b0b0b;white-space:nowrap;">${rawVal}</span>` : ''}
+          ${rawVal != null ? `<span style="position:absolute;left:5px;top:50%;transform:translateY(-50%);font-size:9px;font-weight:400;color:#0b0b0b;white-space:nowrap;">${rawVal}</span>` : ''}
         </div>
+        <div style="position:absolute;left:50%;top:0;width:1px;height:100%;background:rgba(255,255,255,.4);"></div>
       </div>
-      <div style="width:32px;text-align:right;font-size:12px;font-weight:700;color:${LABEL_COL};margin-left:6px;">${Math.round(p)}</div>
+      <div style="width:26px;text-align:right;font-size:10.5px;font-weight:700;color:${LABEL_COL};margin-left:5px;">${Math.round(p)}</div>
     </div>`;
 }
 
@@ -138,20 +139,32 @@ function pitchDiagramSvg(formation) {
 // League Position trend chart — plots either league finishing position (lower
 // is better, so the y-axis is inverted) across the coach's tenure seasons.
 function leaguePositionTrendSvg(tenureRows) {
-  const data = tenureRows.filter(t => t.pointsRank != null).map(t => ({ season: t.season, rank: t.pointsRank }));
+  // Sort chronologically ascending (oldest -> newest, left to right) — the caller
+  // passes tenureRows sorted DESCENDING (for "latest" lookups elsewhere), which
+  // was silently plotting this chart backwards (newest team-season on the left).
+  const data = [...tenureRows]
+    .filter(t => t.pointsRank != null)
+    .sort((a, b) => a.season < b.season ? -1 : a.season > b.season ? 1 : 0)
+    .map(t => ({ season: t.season, team: t.team, rank: t.pointsRank }))
+    .filter((d, i, arr) => arr.findIndex(x => x.season === d.season && x.team === d.team) === i); // dedup exact repeats
   if (data.length < 2) return '';
-  const W = 338, H = 130;
+  // If the coach's tenure spans more than one club, the season label alone can
+  // collide (two different clubs both showing "23-24") — disambiguate with a
+  // short team tag in that case.
+  const multiClub = new Set(data.map(d => d.team)).size > 1;
+  const W = 338, H = 140;
   const ranks = data.map(d => d.rank);
   const mn = Math.min(...ranks) - 2, mx = Math.max(...ranks) + 2;
   const tx = i => 30 + i * (W - 60) / (data.length - 1);
-  const ty = r => 22 + (r - mn) / (mx - mn || 1) * (H - 56); // inverted: low rank (good) near top
+  const ty = r => 22 + (r - mn) / (mx - mn || 1) * (H - 66); // inverted: low rank (good) near top
   const pts = data.map((d, i) => `${tx(i)},${ty(d.rank)}`).join(' ');
   const rankColor = (r) => r <= 3 ? '#00bf63' : r <= 8 ? '#7ed957' : r <= 14 ? '#ffde59' : '#ff3131';
   const dots = data.map((d, i) => {
     const x = tx(i), y = ty(d.rank);
-    return `<rect x="${x - 20}" y="${y - 12}" width="40" height="24" rx="6" fill="${rankColor(d.rank)}"/>
-      <text x="${x}" y="${y + 5}" text-anchor="middle" fill="#000000" font-size="13" font-weight="700" font-family="Montserrat, sans-serif">${d.rank}</text>
-      <text x="${x}" y="${H - 2}" text-anchor="middle" fill="#c0c0c0" font-size="13" font-weight="700" font-family="Montserrat, sans-serif">${d.season.replace(/^20/, '')}</text>`;
+    return `<rect x="${x - 18}" y="${y - 11}" width="36" height="22" rx="5" fill="${rankColor(d.rank)}"/>
+      <text x="${x}" y="${y + 5}" text-anchor="middle" fill="#000000" font-size="12" font-weight="700" font-family="Montserrat, sans-serif">${d.rank}</text>
+      <text x="${x}" y="${H - 14}" text-anchor="middle" fill="#c0c0c0" font-size="11" font-weight="700" font-family="Montserrat, sans-serif">${d.season.replace(/^20/, '')}</text>
+      ${multiClub ? `<text x="${x}" y="${H - 2}" text-anchor="middle" fill="#7a8699" font-size="9" font-weight="600" font-family="Montserrat, sans-serif">${d.team.slice(0, 8)}</text>` : ''}`;
   }).join('');
   return `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
     <polyline points="${pts}" fill="none" stroke="${TREND_CYAN}" stroke-width="2.5"/>
@@ -186,94 +199,106 @@ function traitPillHtml(key, score) {
 // traits: pre-computed via computeCoachTraits(tenureRows, allTeams) from coachMetrics.js
 export function buildCoachCardElement(coach, tenureRows, traits) {
   const age = computeAge(coach.dob);
-  const sortedTenure = [...tenureRows].sort((a, b) => a.season < b.season ? 1 : -1);
-  const latest = sortedTenure[0] || {};
+  const sortedDesc = [...tenureRows].sort((a, b) => a.season < b.season ? 1 : -1);
+  const latest = sortedDesc[0] || {};
   const traitOverrides = coach.traitOverrides || {};
   const getTraitScore = (key) => traitOverrides[key] != null ? traitOverrides[key] * 10 : traits?.[key];
+  const metricGroups = computeCoachMetricGroups(tenureRows) || { Attack: [], Defence: [], Possession: [] };
+
+  const sectionHeader = (text, x, y, w) => `<div style="position:absolute;left:${x}px;top:${y}px;width:${w}px;font-size:15px;font-weight:800;color:${ACCENT_PINK};text-transform:uppercase;letter-spacing:0.06em;">${text}</div>`;
+
+  const colX = 60, colW = 830;
+  let y = 470; // Attacking starts right below Season Stats
+  const barsHtml = (rows) => rows.map(r => barRowCoach(r.label, r.pct, r.val)).join('');
+  const attackHtml = sectionHeader('Attacking', colX, y, colW) + `<div style="position:absolute;left:${colX}px;top:${y + 24}px;width:${colW}px;">${barsHtml(metricGroups.Attack)}</div>`;
+  y += 24 + metricGroups.Attack.length * 19 + 20;
+  const defenceHtml = sectionHeader('Defensive', colX, y, colW) + `<div style="position:absolute;left:${colX}px;top:${y + 24}px;width:${colW}px;">${barsHtml(metricGroups.Defence)}</div>`;
+  y += 24 + metricGroups.Defence.length * 19 + 20;
+  const possessionHtml = sectionHeader('Possession', colX, y, colW) + `<div style="position:absolute;left:${colX}px;top:${y + 24}px;width:${colW}px;">${barsHtml(metricGroups.Possession)}</div>`;
 
   const container = document.createElement('div');
-  container.style.cssText = `width:1920px;height:1080px;background:${BG};font-family:'Montserrat',sans-serif;color:${LABEL_COL};position:relative;overflow:hidden;`;
+  container.style.cssText = `width:1920px;height:1080px;background:${BG};font-family:'Montserrat',sans-serif;color:${LABEL_COL};position:relative;overflow:hidden;box-sizing:border-box;`;
 
   container.innerHTML = `
-    <!-- Header -->
-    <div style="display:flex;align-items:center;gap:24px;padding:28px 40px;background:linear-gradient(90deg, ${HEADER_L}, ${HEADER_R});">
-      ${coach.photoDataUrl ? `<img src="${coach.photoDataUrl}" style="width:120px;height:120px;object-fit:cover;border-radius:12px;"/>` : `<div style="width:120px;height:120px;border-radius:12px;background:#1b2636;"></div>`}
-      <div style="flex:1;">
-        <div style="font-size:42px;font-weight:900;color:#ffffff;line-height:1;">${coach.name || ''}</div>
-        <div style="font-size:20px;font-weight:600;color:#93c5fd;margin-top:6px;">Head Coach</div>
-        <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
-          ${coach.nationality ? `<span style="font-size:14px;color:#93c5fd;font-weight:700;">${coach.nationality}</span>` : ''}
-          <span style="font-size:15px;color:#c0c0c0;">${age != null ? `${age} years old` : ''}${coach.dob ? ` · ${formatDOB(coach.dob)}` : ''}</span>
-        </div>
-      </div>
-      <div style="display:flex;align-items:center;gap:14px;">
-        ${teamCrestUrl(latest.team) ? `<img src="${teamCrestUrl(latest.team)}" onerror="this.style.display='none'" style="width:56px;height:56px;object-fit:contain;"/>` : ''}
-        <div>
-          <div style="font-size:20px;font-weight:800;color:#ffffff;">${latest.team || ''}</div>
-          <div style="font-size:14px;color:#c0c0c0;">${latest.league || ''}</div>
-        </div>
-      </div>
-      <div style="display:flex;gap:24px;padding:12px 20px;background:rgba(255,255,255,0.06);border-radius:10px;">
-        <div><div style="font-size:11px;color:#94a3b8;text-transform:uppercase;">Clubs</div><div style="font-size:18px;font-weight:800;">${coach.clubs ?? '—'}</div></div>
-        <div><div style="font-size:11px;color:#94a3b8;text-transform:uppercase;">PPG</div><div style="font-size:18px;font-weight:800;">${coach.ppg ?? '—'}</div></div>
-        <div><div style="font-size:11px;color:#94a3b8;text-transform:uppercase;">Contract</div><div style="font-size:18px;font-weight:800;">${coach.contract || '—'}</div></div>
-      </div>
+    <!-- HEADER GRADIENT BAND -->
+    <div style="position:absolute;top:0;left:0;width:1520px;height:270px;background:linear-gradient(to right, ${HEADER_L} 0%, ${HEADER_R} 100%);"></div>
+
+    <!-- PHOTO -->
+    ${coach.photoDataUrl
+      ? `<div style="position:absolute;left:20px;top:20px;width:210px;height:210px;background-size:cover;background-position:center top;background-image:url('${coach.photoDataUrl}');border-radius:8px;"></div>`
+      : `<div style="position:absolute;left:20px;top:20px;width:210px;height:210px;background:#1b2636;border-radius:8px;"></div>`}
+
+    <!-- NAME / ROLE / NATIONALITY / AGE -->
+    <div style="position:absolute;left:250px;top:22px;width:800px;font-size:46px;font-weight:800;color:#ffffff;line-height:1.05;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${coach.name || ''}</div>
+    <div style="position:absolute;left:250px;top:82px;font-size:22px;font-weight:600;color:#93c5fd;">Head Coach</div>
+    <div style="position:absolute;left:250px;top:128px;display:flex;align-items:baseline;gap:14px;">
+      ${coach.nationality ? `<span style="font-size:18px;font-weight:700;color:#93c5fd;">${coach.nationality}</span>` : ''}
+      <span style="font-size:18px;color:#c0c0c0;">${age != null ? `${age} years old` : ''}</span>
+      ${coach.dob ? `<span style="font-size:15px;color:#8a94a6;">${formatDOB(coach.dob)}</span>` : ''}
     </div>
 
-    <!-- Body: 3 columns -->
-    <div style="display:flex;gap:24px;padding:24px 40px;">
+    <!-- CREST / TEAM / LEAGUE / TENURE -->
+    ${teamCrestUrl(latest.team) ? `<div style="position:absolute;left:700px;top:30px;width:80px;height:80px;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${teamCrestUrl(latest.team)}');"></div>` : ''}
+    <div style="position:absolute;left:800px;top:36px;font-size:24px;font-weight:800;color:#ffffff;">${latest.team || ''}</div>
+    <div style="position:absolute;left:800px;top:72px;font-size:16px;color:#c0c0c0;">${latest.league || ''}</div>
+    <div style="position:absolute;left:800px;top:100px;font-size:14px;color:#8a94a6;">${latest.season || ''}</div>
 
-      <!-- Left: Season Stats + Percentile bars -->
-      <div style="flex:1.1;">
-        <div style="font-size:14px;font-weight:800;color:${ACCENT_PINK};text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">Season Stats</div>
-        <div style="display:flex;gap:18px;padding:10px 14px;background:#131c2e;border-radius:8px;margin-bottom:20px;font-size:13px;">
-          <div><div style="color:#94a3b8;font-size:10px;">GAMES</div><div style="font-weight:800;">${latest.matches ?? '—'}</div></div>
-          <div><div style="color:#94a3b8;font-size:10px;">GF</div><div style="font-weight:800;">${latest.goalsFor ?? '—'}</div></div>
-          <div><div style="color:#94a3b8;font-size:10px;">GA</div><div style="font-weight:800;">${latest.goalsAgainst ?? '—'}</div></div>
-          <div><div style="color:#94a3b8;font-size:10px;">PPG</div><div style="font-weight:800;">${latest.points != null && latest.matches ? (latest.points / latest.matches).toFixed(2) : '—'}</div></div>
-          <div><div style="color:#94a3b8;font-size:10px;">RESOURCE EFF.</div><div style="font-weight:800;color:${latest.pointsRank != null && latest.pointsRank <= 3 ? '#00bf63' : '#ffde59'};">${latest.pointsRank ? `${latest.pointsRank}${latest.pointsRank === 1 ? 'st' : latest.pointsRank === 2 ? 'nd' : latest.pointsRank === 3 ? 'rd' : 'th'}` : '—'}</div></div>
-        </div>
+    <!-- SEPARATOR -->
+    <div style="position:absolute;left:1130px;top:30px;width:2px;height:170px;background:rgba(255,255,255,.2);"></div>
 
-        <div style="font-size:14px;font-weight:800;color:${ACCENT_PINK};text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">Attacking</div>
-        <div style="margin-bottom:16px;">${barRowCoach('Overall', latest.attack)}</div>
-        <div style="font-size:14px;font-weight:800;color:${ACCENT_PINK};text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">Defensive</div>
-        <div style="margin-bottom:16px;">${barRowCoach('Overall', latest.defence)}</div>
-        <div style="font-size:14px;font-weight:800;color:${ACCENT_PINK};text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">Possession</div>
-        <div style="margin-bottom:16px;">${barRowCoach('Overall', latest.possession)}</div>
-      </div>
+    <!-- CLUBS / PPG / CONTRACT INFO BOX -->
+    ${[['Clubs', coach.clubs ?? '—'], ['PPG', coach.ppg ?? '—'], ['Contract', coach.contract || '—']].map(([k, v], i) => `
+      <div style="position:absolute;left:1160px;top:${40 + i * 44}px;font-size:14px;font-weight:600;color:#94a3b8;">${k}</div>
+      <div style="position:absolute;left:1300px;top:${36 + i * 44}px;font-size:20px;font-weight:800;color:#ffffff;">${v}</div>`).join('')}
 
-      <!-- Middle: Narrative + Levels -->
-      <div style="flex:1;">
-        ${coach.playStyle ? `<div style="margin-bottom:14px;"><span style="color:${ACCENT_PINK};font-weight:800;">Play Style: </span><span style="font-size:15px;line-height:1.5;">${coach.playStyle}</span></div>` : ''}
-        ${coach.development ? `<div style="margin-bottom:14px;"><span style="color:${ACCENT_PINK};font-weight:800;">Development: </span><span style="font-size:15px;line-height:1.5;">${coach.development}</span></div>` : ''}
-        ${coach.view ? `<div style="margin-bottom:20px;"><span style="color:${ACCENT_PINK};font-weight:800;">View: </span><span style="font-size:15px;line-height:1.5;">${coach.view}</span></div>` : ''}
+    <!-- FULL-HEIGHT VERTICAL SEPARATOR (right panel boundary) -->
+    <div style="position:absolute;left:1520px;top:0;width:2px;height:1080px;background:rgba(255,255,255,.15);"></div>
 
-        <div style="font-size:14px;font-weight:800;text-transform:uppercase;margin-bottom:6px;">Current Level</div>
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">${starsHtmlSimple(coach.currentStars || 0)}<span style="font-size:14px;color:#c0c0c0;">${coach.currentLabel || ''}</span></div>
+    <!-- SEASON STATS -->
+    ${sectionHeader('Season Stats', colX, 300, colW)}
+    <div style="position:absolute;left:${colX}px;top:328px;width:${colW}px;display:flex;gap:26px;padding:12px 16px;background:#131c2e;border-radius:8px;font-size:14px;">
+      <div><div style="color:#94a3b8;font-size:10px;text-transform:uppercase;">Games</div><div style="font-weight:800;font-size:17px;">${latest.matches ?? '—'}</div></div>
+      <div><div style="color:#94a3b8;font-size:10px;text-transform:uppercase;">GF</div><div style="font-weight:800;font-size:17px;">${latest.goalsFor ?? '—'}</div></div>
+      <div><div style="color:#94a3b8;font-size:10px;text-transform:uppercase;">GA</div><div style="font-weight:800;font-size:17px;">${latest.goalsAgainst ?? '—'}</div></div>
+      <div><div style="color:#94a3b8;font-size:10px;text-transform:uppercase;">PPG</div><div style="font-weight:800;font-size:17px;">${latest.points != null && latest.matches ? (latest.points / latest.matches).toFixed(2) : '—'}</div></div>
+      <div><div style="color:#94a3b8;font-size:10px;text-transform:uppercase;">Pts Rank</div><div style="font-weight:800;font-size:17px;color:${latest.pointsRank != null && latest.pointsRank <= 3 ? '#00bf63' : '#ffde59'};">${latest.pointsRank != null && latest.leagueSize != null ? `${latest.pointsRank}/${latest.leagueSize}` : '—'}</div></div>
+    </div>
 
-        <div style="font-size:14px;font-weight:800;text-transform:uppercase;margin-bottom:6px;">Potential Level</div>
-        <div style="display:flex;align-items:center;gap:10px;">${starsHtmlSimple(coach.potentialStars || 0)}<span style="font-size:14px;color:#c0c0c0;">${coach.potentialLabel || ''}</span></div>
-      </div>
+    <!-- ATTACKING / DEFENSIVE / POSSESSION — individual metric bars, career-averaged -->
+    ${attackHtml}
+    ${defenceHtml}
+    ${possessionHtml}
 
-      <!-- Right: Pitch/formation, Coaching Traits, League Position, Form -->
-      <div style="flex:1;background:rgba(255,255,255,0.03);border-radius:12px;padding:20px;">
-        <div style="display:flex;justify-content:center;margin-bottom:12px;">${pitchDiagramSvg(coach.formation)}</div>
-        <div style="text-align:center;font-size:14px;font-weight:800;color:#93c5fd;margin-bottom:20px;">${coach.formation || ''}</div>
+    <!-- MIDDLE COLUMN: Narrative + Levels -->
+    <div style="position:absolute;left:940px;top:300px;width:550px;">
+      ${coach.playStyle ? `<div style="margin-bottom:16px;font-size:15px;line-height:1.55;"><span style="color:${ACCENT_PINK};font-weight:800;">Play Style: </span>${coach.playStyle}</div>` : ''}
+      ${coach.development ? `<div style="margin-bottom:16px;font-size:15px;line-height:1.55;"><span style="color:${ACCENT_PINK};font-weight:800;">Development: </span>${coach.development}</div>` : ''}
+      ${coach.view ? `<div style="margin-bottom:24px;font-size:15px;line-height:1.55;"><span style="color:${ACCENT_PINK};font-weight:800;">View: </span>${coach.view}</div>` : ''}
+      <div style="font-size:14px;font-weight:800;text-transform:uppercase;margin-bottom:6px;">Current Level</div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;">${starsHtmlSimple(coach.currentStars || 0)}<span style="font-size:14px;color:#c0c0c0;">${coach.currentLabel || ''}</span></div>
+      <div style="font-size:14px;font-weight:800;text-transform:uppercase;margin-bottom:6px;">Potential Level</div>
+      <div style="display:flex;align-items:center;gap:10px;">${starsHtmlSimple(coach.potentialStars || 0)}<span style="font-size:14px;color:#c0c0c0;">${coach.potentialLabel || ''}</span></div>
+    </div>
 
-        <div style="font-size:14px;font-weight:800;text-transform:uppercase;margin-bottom:10px;">Coaching Traits</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px;">
-          ${TRAIT_ORDER.map(key => traitPillHtml(key, getTraitScore(key))).join('')}
-        </div>
+    <!-- RIGHT PANEL: Pitch, Coaching Traits, League Position, Form -->
+    <div style="position:absolute;top:15px;left:1520px;width:400px;display:flex;justify-content:center;">${pitchDiagramSvg(coach.formation)}</div>
+    <div style="position:absolute;top:288px;left:1520px;width:400px;text-align:center;font-size:16px;font-weight:800;color:#93c5fd;">${coach.formation || ''}</div>
 
-        <div style="font-size:14px;font-weight:800;text-transform:uppercase;margin-bottom:8px;">League Position</div>
-        <div style="margin-bottom:20px;">${leaguePositionTrendSvg(sortedTenure)}</div>
+    <div style="position:absolute;top:320px;left:1546px;width:349px;height:1px;background:rgba(192,192,192,.35);"></div>
+    <div style="position:absolute;top:336px;left:1520px;width:400px;text-align:center;font-size:20px;font-weight:800;color:#d9d9d9;">Coaching Traits</div>
+    <div style="position:absolute;top:376px;left:1546px;width:349px;display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+      ${TRAIT_ORDER.map(key => traitPillHtml(key, getTraitScore(key))).join('')}
+    </div>
 
-        <div style="font-size:14px;font-weight:800;text-transform:uppercase;margin-bottom:8px;">Form</div>
-        <div style="display:flex;align-items:center;gap:8px;">
-          ${formSquaresHtml(coach.form)}
-          <span style="font-size:13px;color:#c0c0c0;margin-left:10px;">${last5PPG(coach.form) ?? '—'} Last 5 PPG</span>
-        </div>
-      </div>
+    <div style="position:absolute;top:590px;left:1546px;width:349px;height:1px;background:rgba(192,192,192,.35);"></div>
+    <div style="position:absolute;top:606px;left:1520px;width:400px;text-align:center;font-size:20px;font-weight:800;color:#d9d9d9;">League Position</div>
+    <div style="position:absolute;top:646px;left:1520px;width:400px;display:flex;justify-content:center;">${leaguePositionTrendSvg(sortedDesc)}</div>
+
+    <div style="position:absolute;top:800px;left:1546px;width:349px;height:1px;background:rgba(192,192,192,.35);"></div>
+    <div style="position:absolute;top:816px;left:1520px;width:400px;text-align:center;font-size:20px;font-weight:800;color:#d9d9d9;">Form</div>
+    <div style="position:absolute;top:856px;left:1520px;width:400px;display:flex;align-items:center;justify-content:center;gap:8px;">
+      ${formSquaresHtml(coach.form)}
+      <span style="font-size:13px;color:#c0c0c0;margin-left:8px;">${last5PPG(coach.form) ?? '—'} Last 5 PPG</span>
     </div>
   `;
 

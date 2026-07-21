@@ -109,6 +109,34 @@ export function computeCoachTraits(tenureRows, allTeams) {
   return { possession, pressing, passing, adaptability, youthDevelopment, attacking, setPieces, defensive, directness };
 }
 
+/**
+ * Per-metric percentile breakdown (career-averaged), for showing multiple bars
+ * per category — same pattern as the real Metric Percentiles section, just
+ * averaged across the coach's whole tenure instead of one season.
+ */
+export function computeCoachMetricGroups(tenureRows) {
+  if (!tenureRows || !tenureRows.length) return null;
+  const groups = {};
+  const groupNames = ['Attack', 'Defence', 'Possession'];
+  for (const groupName of groupNames) {
+    const byLabel = {}; // label -> { pctSum, valSum, n }
+    for (const t of tenureRows) {
+      const rows = (t.metricGroups && t.metricGroups[groupName]) || [];
+      for (const [label, pct, val] of rows) {
+        if (!byLabel[label]) byLabel[label] = { pctSum: 0, valSum: 0, n: 0, valN: 0 };
+        if (pct != null) { byLabel[label].pctSum += pct; byLabel[label].n += 1; }
+        if (val != null) { byLabel[label].valSum += val; byLabel[label].valN += 1; }
+      }
+    }
+    groups[groupName] = Object.entries(byLabel).map(([label, d]) => ({
+      label,
+      pct: d.n ? Math.round((d.pctSum / d.n) * 10) / 10 : null,
+      val: d.valN ? Math.round((d.valSum / d.valN) * 100) / 100 : null,
+    })).filter(r => r.pct != null);
+  }
+  return groups;
+}
+
 // Red/yellow/green tier color for a 0-100 trait score, same palette convention
 // used elsewhere in the app (scoreBandColor/divColor).
 export function traitTierColor(score) {

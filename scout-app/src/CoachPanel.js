@@ -41,6 +41,17 @@ export default function CoachPanel({ allTeams = [], onClose }) {
       alert("This coach's saved tenure doesn't match any teams currently in the data — the underlying team-season data may have changed. Try editing the coach and re-picking their seasons.");
       return;
     }
+    const missingCount = (coach.tenures || []).length - tenureRows.length;
+    if (missingCount > 0) {
+      const resolvedKeys = new Set(tenureRows.map(t => `${t.team}|${t.league}|${t.season}`));
+      const missing = (coach.tenures || []).filter(t => !resolvedKeys.has(`${t.team}|${t.league}|${t.season}`));
+      const proceed = window.confirm(
+        `${missingCount} of ${coach.tenures.length} saved season(s) couldn't be matched against the current team data and will be left out of this card:\n\n` +
+        missing.map(t => `${t.team} — ${t.league} · ${t.season}`).join('\n') +
+        `\n\nThis usually means the underlying team data was updated since you added that season. Generate the card anyway with just the ${tenureRows.length} that matched?`
+      );
+      if (!proceed) return;
+    }
     setGeneratingId(coach.id);
     try {
       const traits = computeCoachTraits(tenureRows, allTeams);
