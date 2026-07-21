@@ -136,31 +136,63 @@ const FORMATIONS = {
   '4-1-4-1': [[25, 110], [75, 50], [75, 85], [75, 135], [75, 170], [150, 110], [220, 50], [215, 85], [215, 135], [220, 170], [295, 110]],
 };
 
-// Ported verbatim from the real card's pitchDiagramSvg — same 330×220 side-on
-// pitch drawing (colors, box/circle strokes, drop-shadow dot filter). Only the
-// dot positions differ (formation-based here instead of player position slots).
-function pitchDiagramSvg(formation) {
-  const coords = FORMATIONS[formation] || FORMATIONS['4-3-3'];
-  const dots = coords.map(([x, y]) => `<circle cx="${x}" cy="${y}" r="14" fill="#ffffff" filter="url(#dotShadow)"/>`).join('');
+// Pitch diagram — shows only the primary (first) formation's dots.
+// Formation labels with fading are rendered separately below the pitch.
+function pitchDiagramSvg(formations) {
+  // Accept a single string or array; only use the first for the dots
+  const fmList = (Array.isArray(formations) ? formations : [formations]).filter(Boolean);
+  const primary = fmList[0] || '4-3-3';
+  const coords = FORMATIONS[primary] || FORMATIONS['4-3-3'];
+  const allDotLayers = coords.map(([x, y]) =>
+    `<circle cx="${x}" cy="${y}" r="13" fill="rgba(255,255,255,1.0)" filter="url(#dotShadow)"/>`
+  ).join('');
+
+  // Grass stripe pattern for the pitch background
+  const stripes = Array.from({length: 8}, (_, i) => {
+    const x = 12 + i * 38;
+    return `<rect x="${x}" y="12" width="19" height="196" fill="rgba(255,255,255,0.025)"/>`;
+  }).join('');
+
   return `<svg viewBox="0 0 330 220" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;">
     <defs>
       <filter id="dotShadow" x="-50%" y="-50%" width="200%" height="200%">
-        <feDropShadow dx="0" dy="1" stdDeviation="1" flood-color="#000000" flood-opacity="0.4"/>
+        <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#000000" flood-opacity="0.55"/>
       </filter>
     </defs>
-    <rect x="0" y="0" width="330" height="220" fill="#0d1117" rx="6"/>
-    <rect x="10" y="10" width="310" height="200" fill="none" stroke="#5a6478" stroke-width="2" rx="3"/>
-    <line x1="165" y1="10" x2="165" y2="210" stroke="#5a6478" stroke-width="2"/>
-    <circle cx="165" cy="110" r="28" fill="none" stroke="#5a6478" stroke-width="2"/>
-    <circle cx="165" cy="110" r="1.5" fill="#5a6478"/>
-    <rect x="10" y="65" width="35" height="90" fill="none" stroke="#5a6478" stroke-width="2"/>
-    <rect x="10" y="85" width="14" height="50" fill="none" stroke="#5a6478" stroke-width="2"/>
-    <path d="M 45 92 A 18 18 0 0 1 45 128" fill="none" stroke="#5a6478" stroke-width="2"/>
-    <rect x="285" y="65" width="35" height="90" fill="none" stroke="#5a6478" stroke-width="2"/>
-    <rect x="306" y="85" width="14" height="50" fill="none" stroke="#5a6478" stroke-width="2"/>
-    <path d="M 285 92 A 18 18 0 0 0 285 128" fill="none" stroke="#5a6478" stroke-width="2"/>
-    <circle cx="320" cy="110" r="1.5" fill="#5a6478"/>
-    ${dots}
+    <!-- Pitch base -->
+    <rect x="0" y="0" width="330" height="220" fill="#0a1a0e" rx="6"/>
+    <!-- Grass stripes -->
+    ${stripes}
+    <!-- Pitch outline -->
+    <rect x="10" y="10" width="310" height="200" fill="none" stroke="#3d5c42" stroke-width="2.5" rx="2"/>
+    <!-- Halfway line -->
+    <line x1="165" y1="10" x2="165" y2="210" stroke="#3d5c42" stroke-width="2"/>
+    <!-- Centre circle -->
+    <circle cx="165" cy="110" r="30" fill="none" stroke="#3d5c42" stroke-width="2"/>
+    <circle cx="165" cy="110" r="3" fill="#3d5c42"/>
+    <!-- Left penalty area -->
+    <rect x="10" y="58" width="52" height="104" fill="none" stroke="#3d5c42" stroke-width="2"/>
+    <!-- Left 6-yard box -->
+    <rect x="10" y="82" width="20" height="56" fill="none" stroke="#3d5c42" stroke-width="2"/>
+    <!-- Left penalty arc -->
+    <path d="M 62 88 A 28 28 0 0 1 62 132" fill="none" stroke="#3d5c42" stroke-width="2"/>
+    <!-- Left penalty spot -->
+    <circle cx="45" cy="110" r="2.5" fill="#3d5c42"/>
+    <!-- Right penalty area -->
+    <rect x="268" y="58" width="52" height="104" fill="none" stroke="#3d5c42" stroke-width="2"/>
+    <!-- Right 6-yard box -->
+    <rect x="300" y="82" width="20" height="56" fill="none" stroke="#3d5c42" stroke-width="2"/>
+    <!-- Right penalty arc -->
+    <path d="M 268 88 A 28 28 0 0 0 268 132" fill="none" stroke="#3d5c42" stroke-width="2"/>
+    <!-- Right penalty spot -->
+    <circle cx="285" cy="110" r="2.5" fill="#3d5c42"/>
+    <!-- Left corner arcs -->
+    <path d="M 10 18 A 8 8 0 0 1 18 10" fill="none" stroke="#3d5c42" stroke-width="1.5"/>
+    <path d="M 10 202 A 8 8 0 0 0 18 210" fill="none" stroke="#3d5c42" stroke-width="1.5"/>
+    <!-- Right corner arcs -->
+    <path d="M 320 18 A 8 8 0 0 0 312 10" fill="none" stroke="#3d5c42" stroke-width="1.5"/>
+    <path d="M 320 202 A 8 8 0 0 1 312 210" fill="none" stroke="#3d5c42" stroke-width="1.5"/>
+    ${allDotLayers}
   </svg>`;
 }
 
@@ -214,18 +246,33 @@ function last5PPG(form) {
 const TRAIT_ORDER = ['possession', 'pressing', 'passing', 'adaptability', 'youthDevelopment', 'attacking', 'setPieces', 'defensive', 'directness'];
 const TRAIT_LABELS = { possession: 'Possession', pressing: 'Pressing', passing: 'Passing', adaptability: 'Adaptability', youthDevelopment: 'Youth Development', attacking: 'Attacking', setPieces: 'Set Pieces', defensive: 'Defensive', directness: 'Directness' };
 
-// Same visual pattern as the real card's rolePill() — gray label badge + a
-// separate colored score badge (scoreTierColor), not a single colored pill.
-// This is what "Attacking LB"-style role pills actually look like.
+// Coaching trait pill — coloured background based on score (like Image 1 reference),
+// text only (no separate score badge). Font size is 2 sizes smaller than the middle
+// text (27.9px ÷ ~1.27 ≈ 22px → 20px for the pill text).
+function traitPillBgColor(score) {
+  // Green/lime/yellow/amber/orange/red spectrum matching the reference image
+  const v = Number(score);
+  if (isNaN(v)) return '#3a4560';
+  if (v >= 79) return '#00bf63';   // deep green
+  if (v >= 67) return '#7ed957';   // lime green
+  if (v >= 55) return '#c1ff72';   // yellow-green
+  if (v >= 43) return '#ffde59';   // yellow
+  if (v >= 34) return '#ffbd59';   // amber
+  if (v >= 25) return '#ff914d';   // orange
+  return '#ff3131';                // red
+}
+function traitTextColor(score) {
+  const v = Number(score);
+  // Dark text on bright backgrounds, white on dark ones
+  if (isNaN(v) || v < 25) return '#ffffff';
+  return '#0b0b0b';
+}
 function traitPillHtml(key, score) {
   const label = TRAIT_LABELS[key];
   const sc = score != null ? Math.round(score) : null;
-  const bc = sc != null ? scoreTierColor(sc) : '#3a4560';
-  return `
-    <div style="display:flex;align-items:center;justify-content:space-between;width:100%;height:32px;">
-      <span style="background:#737373;border-radius:7px;padding:2px 8px;font-size:13px;color:#fff;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${label}</span>
-      <span style="font-size:12.5px;font-weight:700;padding:1px 7px;border-radius:6px;min-width:26px;text-align:center;background:${bc};color:#000000;margin-left:6px;">${sc ?? '—'}</span>
-    </div>`;
+  const bc = sc != null ? traitPillBgColor(sc) : '#3a4560';
+  const tc = sc != null ? traitTextColor(sc) : '#c0c0c0';
+  return `<span style="background:${bc};border-radius:8px;padding:5px 12px;font-size:20px;color:${tc};font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:inline-block;text-align:center;">${label}</span>`;
 }
 
 // ===== Main export function =====
@@ -250,6 +297,13 @@ export function buildCoachCardElement(coach, tenureRows, traits) {
   const rowH = totalRows > 0 ? Math.max(8, Math.min(30, Math.floor((CHART_HEIGHT - FIXED_OVERHEAD) / totalRows) - 1)) : 20;
 
   const barsHtml = (rows) => rows.map(r => barRowCoach(r.label, r.pct, r.val, rowH)).join('');
+
+  // Formation labels — primary full opacity, secondary faded, tertiary more faded
+  const fmList = (Array.isArray(coach.formations) ? coach.formations : [coach.formation]).slice(0, 3).filter(Boolean);
+  const fmOpacities = [1, 0.5, 0.28];
+  const formationLabelsHtml = fmList.map((f, i) =>
+    `<span style="font-size:${20 - i * 2}px;font-weight:700;color:rgba(217,217,217,${fmOpacities[i]});">${f}</span>`
+  ).join('');
 
   const container = document.createElement('div');
   container.style.cssText = `width:1920px;height:1080px;background:${BG};font-family:'Montserrat',sans-serif;color:${LABEL_COL};position:relative;overflow:hidden;box-sizing:border-box;`;
@@ -326,33 +380,51 @@ export function buildCoachCardElement(coach, tenureRows, traits) {
       ${coach.view ? `<div style="display:flex;gap:10px;"><span style="color:#fff;font-size:27.9px;flex-shrink:0;line-height:1.5;">•</span><div style="font-size:27.9px;line-height:1.5;color:#fff;"><span style="color:${ACCENT_PINK};font-weight:700;">View: </span><span style="font-weight:600;">${coach.view}</span></div></div>` : '<div></div>'}
     </div>
 
-    <!-- CURRENT / POTENTIAL LEVEL — exact real position/font -->
-    <div style="position:absolute;top:894px;left:938px;font-size:26.6px;font-weight:700;color:#fff;">CURRENT LEVEL</div>
-    <div style="position:absolute;top:940px;left:941px;">${starsHtmlSimple(coach.currentStars || 0, 40)}</div>
-    <div style="position:absolute;top:948px;left:1133px;font-size:20px;font-weight:500;color:#c0c0c0;">${coach.currentLabel || ''}</div>
-    <div style="position:absolute;top:995px;left:938px;font-size:26.6px;font-weight:700;color:#fff;">POTENTIAL LEVEL</div>
-    <div style="position:absolute;top:1041px;left:941px;">${starsHtmlSimple(coach.potentialStars || 0, 40)}</div>
-    <div style="position:absolute;top:1049px;left:1133px;font-size:20px;font-weight:500;color:#c0c0c0;">${coach.potentialLabel || ''}</div>
+    <!-- CURRENT / POTENTIAL LEVEL — moved up slightly from bottom edge -->
+    <div style="position:absolute;top:862px;left:938px;font-size:26.6px;font-weight:700;color:#fff;">CURRENT LEVEL</div>
+    <div style="position:absolute;top:906px;left:941px;">${starsHtmlSimple(coach.currentStars || 0, 40)}</div>
+    <div style="position:absolute;top:914px;left:1133px;font-size:20px;font-weight:500;color:#c0c0c0;">${coach.currentLabel || ''}</div>
+    <div style="position:absolute;top:963px;left:938px;font-size:26.6px;font-weight:700;color:#fff;">POTENTIAL LEVEL</div>
+    <div style="position:absolute;top:1007px;left:941px;">${starsHtmlSimple(coach.potentialStars || 0, 40)}</div>
+    <div style="position:absolute;top:1015px;left:1133px;font-size:20px;font-weight:500;color:#c0c0c0;">${coach.potentialLabel || ''}</div>
 
     <!-- RIGHT PANEL: Pitch, Coaching Traits, League Position, Form -->
-    <div style="position:absolute;top:15px;left:1520px;width:400px;display:flex;justify-content:center;"><div style="width:345px;height:229px;">${pitchDiagramSvg(coach.formation)}</div></div>
-    <div style="position:absolute;top:250px;left:1520px;width:400px;text-align:center;font-size:20px;font-weight:700;color:#d9d9d9;">${coach.formation || ''}</div>
+    <!-- Multi-formation pitch (up to 3, faded) -->
+    <div style="position:absolute;top:10px;left:1526px;width:388px;height:230px;">${pitchDiagramSvg(coach.formations || coach.formation)}</div>
+    <!-- Formation labels with fade — primary full, secondary dimmed, tertiary most faded -->
+    <div style="position:absolute;top:246px;left:1520px;width:400px;display:flex;justify-content:center;gap:20px;align-items:center;">
+      ${formationLabelsHtml}
+    </div>
 
-    <div style="position:absolute;top:288px;left:1546px;width:349px;height:2px;background:rgba(192,192,192,.35);"></div>
-    <div style="position:absolute;top:302px;left:1520px;width:400px;text-align:center;font-size:27.9px;font-weight:700;color:#d9d9d9;">COACHING TRAITS</div>
-    <div style="position:absolute;top:350px;left:1546px;width:349px;display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;">
+    <div style="position:absolute;top:278px;left:1546px;width:349px;height:2px;background:rgba(192,192,192,.35);"></div>
+    <div style="position:absolute;top:292px;left:1520px;width:400px;text-align:center;font-size:27.9px;font-weight:700;color:#d9d9d9;">COACHING TRAITS</div>
+    <!-- Pills in a flex-wrap layout, larger and coloured by score -->
+    <div style="position:absolute;top:340px;left:1530px;width:360px;display:flex;flex-wrap:wrap;gap:9px 10px;">
       ${TRAIT_ORDER.map(key => traitPillHtml(key, getTraitScore(key))).join('')}
     </div>
 
-    <div style="position:absolute;top:562px;left:1546px;width:349px;height:2px;background:rgba(192,192,192,.35);"></div>
-    <div style="position:absolute;top:576px;left:1520px;width:400px;text-align:center;font-size:27.9px;font-weight:700;color:#d9d9d9;">LEAGUE POSITION</div>
-    <div style="position:absolute;top:618px;left:1520px;width:400px;display:flex;justify-content:center;">${leaguePositionTrendSvg(sortedDesc)}</div>
+    <div style="position:absolute;top:560px;left:1546px;width:349px;height:2px;background:rgba(192,192,192,.35);"></div>
+    <div style="position:absolute;top:574px;left:1520px;width:400px;text-align:center;font-size:27.9px;font-weight:700;color:#d9d9d9;">LEAGUE POSITION</div>
+    <div style="position:absolute;top:614px;left:1520px;width:400px;display:flex;justify-content:center;">${leaguePositionTrendSvg(sortedDesc)}</div>
 
-    <div style="position:absolute;top:800px;left:1546px;width:349px;height:2px;background:rgba(192,192,192,.35);"></div>
-    <div style="position:absolute;top:814px;left:1520px;width:400px;text-align:center;font-size:27.9px;font-weight:700;color:#d9d9d9;">FORM</div>
-    <div style="position:absolute;top:862px;left:1520px;width:400px;display:flex;align-items:center;justify-content:center;gap:8px;">
-      ${formSquaresHtml(coach.form)}
-      <span style="font-size:15px;color:#c0c0c0;margin-left:10px;">${last5PPG(coach.form) ?? '—'} Last 5 PPG</span>
+    <div style="position:absolute;top:784px;left:1546px;width:349px;height:2px;background:rgba(192,192,192,.35);"></div>
+    <div style="position:absolute;top:798px;left:1520px;width:400px;text-align:center;font-size:27.9px;font-weight:700;color:#d9d9d9;">FORM</div>
+    <!-- Form as bar rows — W=3pts, D=1pt, L=0pt, shown as percentile bars like the player card -->
+    <div style="position:absolute;top:840px;left:1530px;width:374px;">
+      ${(coach.form || []).map((r, i) => {
+        const pct = r === 'W' ? 100 : r === 'D' ? 33 : 3;
+        const bc = r === 'W' ? BAR_GREEN : r === 'D' ? BAR_GOLD : BAR_RED;
+        const label = `Match ${(coach.form.length) - i}`;
+        return `<div style="display:flex;align-items:center;height:22px;margin-bottom:3px;">
+          <div style="font-size:13px;font-weight:700;color:${LABEL_COL};width:70px;flex-shrink:0;">${label}</div>
+          <div style="flex:1;position:relative;height:17px;background:${BAR_TRACK};border-radius:2px;">
+            <div style="height:100%;width:${pct}%;background:${bc};border-radius:2px;display:flex;align-items:center;">
+              <span style="margin-left:7px;font-size:11px;font-weight:800;color:#0b0b0b;">${r}</span>
+            </div>
+          </div>
+        </div>`;
+      }).join('')}
+      <div style="font-size:14px;font-weight:700;color:#c0c0c0;margin-top:8px;text-align:right;">${last5PPG(coach.form) ?? '—'} Last 5 PPG</div>
     </div>
   `;
 
