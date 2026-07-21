@@ -3900,9 +3900,9 @@ function pitchDiagramSvg(formations) {
   const fmList = (Array.isArray(formations) ? formations : [formations]).filter(Boolean).slice(0, 1);
   // Primary = white, Secondary = cyan, Tertiary = pink
   const dotColors = [
-    { fill: "rgba(255,255,255,1.0)", r: 8 },
-    { fill: "rgba(0,202,220,0.75)", r: 7 },
-    { fill: "rgba(255,102,196,0.65)", r: 6 },
+    { fill: "rgba(255,255,255,1.0)", r: 14 },
+    { fill: "rgba(0,202,220,0.75)", r: 12 },
+    { fill: "rgba(255,102,196,0.65)", r: 11 },
   ];
 
   let allDotLayers = "";
@@ -4031,7 +4031,7 @@ function traitPillHtml(key, score) {
   const sc = score != null ? Math.round(score) : null;
   const bc = sc != null ? traitPillBgColor(sc) : "#3a4560";
   const tc = sc != null ? traitTextColor(sc) : "#c0c0c0";
-  return `<span style="background:${bc};border-radius:8px;padding:6px 4px;font-size:17px;color:${tc};font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;text-align:center;width:100%;box-sizing:border-box;">${label}</span>`;
+  return `<span style="background:${bc};border-radius:8px;padding:4px 4px;font-size:17px;color:${tc};font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;text-align:center;width:100%;box-sizing:border-box;">${label}</span>`;
 }
 
 // ===== Main export function =====
@@ -4131,16 +4131,18 @@ export function buildCoachCardElement(coach, tenureRows, traits) {
       )
       .join("")}
 
-    <!-- NAV BAR — Profile / Performance / Managerial History / Honors / Video -->
-    ${[
-      ["Profile ▸", 267, true],
-      ["Performance ▾", 455, false],
-      ["Managerial History ▾", 667, false],
-      ["Honors ▾", 970, false],
-      ["Video ▾", 1165, false],
-    ]
-      .map(([t, x, act]) => `<div style="position:absolute;left:${x}px;top:227px;font-size:27.9px;font-weight:700;color:${act ? "#fff" : "#b4b4b4"};">${t}</div>`)
-      .join("")}
+    <!-- NAV BAR — Profile / Performance / Managerial History / Honors / Video (flex, evenly spaced) -->
+    <div style="position:absolute;left:255px;top:227px;display:flex;align-items:baseline;gap:36px;">
+      ${[
+        ["Profile ▸", true],
+        ["Performance ▾", false],
+        ["Managerial History ▾", false],
+        ["Honors ▾", false],
+        ["Video ▾", false],
+      ]
+        .map(([t, act]) => `<span style="font-size:27.9px;font-weight:700;white-space:nowrap;color:${act ? "#fff" : "#b4b4b4"};">${t}</span>`)
+        .join("")}
+    </div>
 
     <!-- FULL-HEIGHT SEPARATOR (right panel boundary) -->
     <div style="position:absolute;left:1520px;top:0;width:3px;height:1080px;background:#737373;"></div>
@@ -4148,24 +4150,27 @@ export function buildCoachCardElement(coach, tenureRows, traits) {
     <!-- CHART / TEXTBOX SEPARATOR -->
     <div style="position:absolute;left:890px;top:291px;width:2px;height:789px;background:#737373;"></div>
 
-    <!-- SEASON STATS — pink title + league inline with stats -->
+    <!-- SEASON STATS — matched EXACTLY to player card (font 20 / weight 500, labels top:319, values top:357) -->
     <div style="position:absolute;top:300px;left:17px;font-size:26.6px;font-weight:700;color:${ACCENT_PINK};">Season Stats</div>
-    <div style="position:absolute;top:343px;left:17px;width:855px;display:flex;gap:0;justify-content:space-between;align-items:flex-end;">
-      <div>
-        <div style="height:20px;display:flex;align-items:center;">${leagueLogo ? `<div style="width:20px;height:20px;flex-shrink:0;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${leagueLogo}');"></div>` : ""}</div>
-        <div style="font-size:20px;font-weight:600;color:#fff;max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${latest.league || ""}</div>
-      </div>
-      <div><div style="font-size:13px;font-weight:500;color:#d9d9d9;">Games</div><div style="font-size:20px;font-weight:600;color:#fff;">${latest.matches ?? "—"}</div></div>
-      <div><div style="font-size:13px;font-weight:500;color:#d9d9d9;">GF</div><div style="font-size:20px;font-weight:600;color:#fff;">${latest.goalsFor ?? "—"}</div></div>
-      <div><div style="font-size:13px;font-weight:500;color:#d9d9d9;">GA</div><div style="font-size:20px;font-weight:600;color:#fff;">${latest.goalsAgainst ?? "—"}</div></div>
-      <div><div style="font-size:13px;font-weight:500;color:#d9d9d9;">XG</div><div style="font-size:20px;font-weight:600;color:#fff;">${(latest.xGoalsFor ?? latest.xGF ?? latest.xgf) != null ? Number(latest.xGoalsFor ?? latest.xGF ?? latest.xgf).toFixed(1) : "—"}</div></div>
-      <div><div style="font-size:13px;font-weight:500;color:#d9d9d9;">XG Against</div><div style="font-size:20px;font-weight:600;color:#fff;">${(latest.xGoalsAgainst ?? latest.xGA ?? latest.xga) != null ? Number(latest.xGoalsAgainst ?? latest.xGA ?? latest.xga).toFixed(1) : "—"}</div></div>
-      <div><div style="font-size:13px;font-weight:500;color:#d9d9d9;">PPG</div><div style="font-size:20px;font-weight:600;color:#fff;">${latest.points != null && latest.matches ? (latest.points / latest.matches).toFixed(2) : latest.ppg != null ? Number(latest.ppg).toFixed(2) : "—"}</div></div>
-      <div>
-        <div style="font-size:13px;font-weight:500;color:#d9d9d9;">Resource Efficiency</div>
-        <span style="font-size:20px;font-weight:700;color:#000;background:${resEffRank != null && resEffRank <= 3 ? "#00bf63" : resEffRank != null && resEffRank <= 8 ? "#7ed957" : "#ffde59"};border-radius:6px;padding:2px 10px;">${resEffRank != null ? ordinal(resEffRank) : "—"}</span>
-      </div>
+    <div style="position:absolute;top:356px;left:17px;display:flex;align-items:center;gap:8px;">
+      ${leagueLogo ? `<div style="width:30px;height:30px;flex-shrink:0;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${leagueLogo}');"></div>` : ""}
+      <span style="font-size:20px;font-weight:500;color:#fff;max-width:150px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${latest.league || ""}</span>
     </div>
+    ${(() => {
+      const cols = [
+        ["Games", 205, latest.matches ?? "—"],
+        ["GF", 300, latest.goalsFor ?? "—"],
+        ["GA", 372, latest.goalsAgainst ?? "—"],
+        ["XG", 444, (latest.xGoalsFor ?? latest.xGF ?? latest.xgf) != null ? Number(latest.xGoalsFor ?? latest.xGF ?? latest.xgf).toFixed(1) : "—"],
+        ["XG Against", 516, (latest.xGoalsAgainst ?? latest.xGA ?? latest.xga) != null ? Number(latest.xGoalsAgainst ?? latest.xGA ?? latest.xga).toFixed(1) : "—"],
+        ["PPG", 650, latest.points != null && latest.matches ? (latest.points / latest.matches).toFixed(2) : latest.ppg != null ? Number(latest.ppg).toFixed(2) : "—"],
+      ];
+      const heads = cols.map(([lab, x]) => `<div style="position:absolute;top:319px;left:${x}px;font-size:20px;font-weight:500;color:#d9d9d9;">${lab}</div>`).join("");
+      const vals = cols.map(([, x, v]) => `<div style="position:absolute;top:357px;left:${x}px;font-size:20px;font-weight:500;color:#fff;">${v}</div>`).join("");
+      const reHead = `<div style="position:absolute;top:319px;left:722px;font-size:20px;font-weight:500;color:#d9d9d9;">Resource Efficiency</div>`;
+      const reVal = `<span style="position:absolute;top:354px;left:722px;font-size:20px;font-weight:700;color:#000;background:${resEffRank != null && resEffRank <= 3 ? "#00bf63" : resEffRank != null && resEffRank <= 8 ? "#7ed957" : "#ffde59"};border-radius:6px;padding:2px 10px;">${resEffRank != null ? ordinal(resEffRank) : "—"}</span>`;
+      return heads + vals + reHead + reVal;
+    })()}
 
     <!-- PERCENTILE CHART — exact real position (top:409 left:0 width:876 height:671) -->
     <div style="position:absolute;top:409px;left:0px;width:876px;height:671px;overflow:hidden;box-sizing:border-box;padding-left:24px;">
@@ -4201,7 +4206,7 @@ export function buildCoachCardElement(coach, tenureRows, traits) {
 
     <!-- RIGHT PANEL: Pitch, Coaching Traits, League Position, Form -->
     <!-- Multi-formation pitch (up to 3, faded) -->
-    <div style="position:absolute;top:10px;left:1526px;width:388px;height:230px;">${pitchDiagramSvg(coach.formations || coach.formation)}</div>
+    <div style="position:absolute;top:15px;left:1520px;width:400px;display:flex;justify-content:center;"><div style="width:345px;height:229px;">${pitchDiagramSvg(coach.formations || coach.formation)}</div></div>
     <!-- Formation labels with fade — primary full, secondary dimmed, tertiary most faded -->
     <div style="position:absolute;top:242px;left:1520px;width:400px;display:flex;justify-content:space-evenly;align-items:center;gap:0;">
       ${formationLabelsHtml}
@@ -4210,7 +4215,7 @@ export function buildCoachCardElement(coach, tenureRows, traits) {
     <div style="position:absolute;top:292px;left:1535px;width:370px;height:2px;background:rgba(192,192,192,.35);"></div>
     <div style="position:absolute;top:296px;left:1520px;width:400px;text-align:center;font-size:27.9px;font-weight:700;color:#d9d9d9;">COACHING TRAITS</div>
     <!-- Pills in a flex-wrap layout, full-width, tighter spacing -->
-    <div style="position:absolute;top:340px;left:1522px;width:376px;display:grid;grid-template-columns:1fr 1fr;gap:12px 8px;">
+    <div style="position:absolute;top:340px;left:1522px;width:376px;display:grid;grid-template-columns:1fr 1fr;gap:22px 10px;">
       ${TRAIT_ORDER.map((key) => {
         const pill = traitPillHtml(key, getTraitScore(key));
         return key === "youthDevelopment"
@@ -4226,11 +4231,11 @@ export function buildCoachCardElement(coach, tenureRows, traits) {
     <div style="position:absolute;top:864px;left:1535px;width:370px;height:2px;background:rgba(192,192,192,.35);"></div>
     <div style="position:absolute;top:878px;left:1520px;width:400px;text-align:center;font-size:27.9px;font-weight:700;color:#d9d9d9;">FORM</div>
     <!-- Form — vertical bars like player card: W=green, D=yellow, L=red; PPG badge below -->
-    <div style="position:absolute;top:948px;left:1520px;width:400px;display:flex;justify-content:center;align-items:flex-end;gap:5px;height:60px;">
+    <div style="position:absolute;top:948px;left:1520px;width:400px;display:flex;justify-content:center;align-items:flex-end;gap:5px;height:78px;">
       ${(coach.form || [])
         .slice(0, 5)
         .map((r) => {
-          const h = r === "W" ? 60 : r === "D" ? 30 : 8;
+          const h = r === "W" ? 78 : r === "D" ? 40 : 12;
           const bc = r === "W" ? BAR_GREEN : r === "D" ? BAR_GOLD : BAR_RED;
           return `<span style="width:26px;height:${h}px;border-radius:6px;background:${bc};display:inline-block;flex-shrink:0;"></span>`;
         })
