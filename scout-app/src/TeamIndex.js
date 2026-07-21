@@ -1,6 +1,8 @@
-// TeamIndex.js v8 - Wired in the Coach system: new "Coaches" button (sidebar, above the team
-// search) opens CoachPanel, which lists/creates/edits/deletes saved coaches and generates their
-// card PNG, using the already-loaded team data (all) to resolve each coach's tenure.
+// TeamIndex.js v9 - Most Improved toggle: sidebar control sorts by adjusted season-on-season
+// score delta for Overall/Attack/Defence/Possession/Pressing. Division-change correction:
+// delta is multiplied by (prev_ls / curr_ls) so promoted teams (harder context) aren't
+// penalised and relegated teams (easier context) aren't artificially inflated. Only available
+// in Latest season mode; auto-disables in Weighted/specific-season modes.
 // v1 - New tab: searchable/sortable/filterable team database, using teams_final.json
 // (built by build_teams.py). Team detail/click-through page deliberately deferred per Matty —
 // this is list/scoring/filtering only for now.
@@ -62,6 +64,9 @@ function styleColor(label) {
 const STYLE_KEYS = ['attack', 'defence', 'possession', 'pressing'];
 const STYLE_LABELS = { attack: 'Attacking', defence: 'Defence', possession: 'Possession', pressing: 'Pressing' };
 const SCORE_MODES = ['Overall', 'Attack', 'Defence', 'Possession', 'Pressing'];
+const IMPROVED_MODES = ['Overall', 'Attack', 'Defence', 'Possession', 'Pressing'];
+// Field on each team row used for each improved mode
+const IMPROVED_FIELD = { Overall: 'completeScore', Attack: 'attack', Defence: 'defence', Possession: 'possession', Pressing: 'pressing' };
 const DECAY = 0.45; // matches build_players.py's recency decay for the "weighted avg" season mode
 
 const T = {
@@ -161,6 +166,9 @@ export default function TeamIndex({ players = [] }) {
     { key: 'avgAge', label: 'Avg Age' }, { key: 'wins', label: 'Wins' }, { key: 'draws', label: 'Draws' }, { key: 'losses', label: 'Losses' },
   ];
 
+  const [mostImproved, setMostImproved] = useState(false);
+  const [improvedMode, setImprovedMode] = useState('Overall');
+
   const [sort, setSort] = useState({ col: 'score', asc: false });
   const [page, setPage] = useState(0);
   const PAGE_SIZE = 50;
@@ -219,6 +227,61 @@ export default function TeamIndex({ players = [] }) {
     return t[scoreMode.toLowerCase()];
   };
 
+  // For each team in the current resolved set, compute how much its score improved vs the
+  // previous season. Uses (prev_ls / curr_ls) as a division-change correction factor so:
+  //   - promoted teams (curr_ls > prev_ls) get their delta multiplied UP (they improved in harder context)
+  //   - relegated teams (curr_ls < prev_ls) get their delta multiplied DOWN (easier context)
+  //   - same-league teams get factor ~1.0 (no adjustment)
+  // Only meaningful in 'latest' season mode — returns empty map otherwise.
+  const improvementMap = useMemo(() => {
+    const map = {};
+    if (season !== 'latest' || !mostImproved) return map;
+
+    // Build a lookup of ALL seasons per team (team+country key, same as resolved)
+    const byTeam = {};
+    for (const t of all) {
+      const key = t.team + '|' + teamCountry(t.league);
+      (byTeam[key] = byTeam[key] || []).push(t);
+    }
+
+    for (const t of resolved) {
+      const key = t.team + '|' + teamCountry(t.league);
+      const rows = (byTeam[key] || []).sort((a, b) => a.season < b.season ? -1 : 1);
+      if (rows.length < 2) { map[key] = null; continue; }
+
+      const curr = rows[rows.length - 1];
+      const prev = rows[rows.length - 2];
+
+      const field = IMPROVED_FIELD[improvedMode] || 'completeScore';
+      const currVal = curr[field];
+      const prevVal = prev[field];
+      if (currVal == null || prevVal == null) { map[key] = null; continue; }
+
+      const rawDelta = currVal - prevVal;
+
+      // League-change correction: look up league strengths (with period format)
+      const currDot = toDotLeague(curr.league);
+      const prevDot = toDotLeague(prev.league);
+      const currLs = LEAGUE_STRENGTHS[currDot] || 50;
+      const prevLs = LEAGUE_STRENGTHS[prevDot] || 50;
+
+      // factor = prev_ls / curr_ls:
+      //   promoted (curr stronger): factor < 1 → divide delta by a smaller number → larger adjusted delta (reward)
+      //   relegated (curr weaker):  factor > 1 → divide delta by a larger number → smaller adjusted delta (penalise)
+      //   same league: factor ~1.0 → no change
+      const factor = prevLs / currLs;
+      const adjustedDelta = rawDelta * factor;
+
+      map[key] = { delta: adjustedDelta, rawDelta, prevSeason: prev.season, prevLeague: prev.league, prevVal, currVal };
+    }
+    return map;
+  }, [all, resolved, season, mostImproved, improvedMode]);
+
+  const getImprovement = (t) => {
+    const key = t.team + '|' + teamCountry(t.league);
+    return improvementMap[key] ?? null;
+  };
+
   const filtered = useMemo(() => {
     return resolved.filter(t => {
       if (search && !t.team.toLowerCase().includes(search.toLowerCase())) return false;
@@ -253,6 +316,17 @@ export default function TeamIndex({ players = [] }) {
 
   const sorted = useMemo(() => {
     const arr = [...filtered];
+    if (mostImproved && season === 'latest') {
+      // Sort by adjusted improvement delta desc; teams with no prior season sink to bottom
+      arr.sort((a, b) => {
+        const ai = getImprovement(a);
+        const bi = getImprovement(b);
+        const av = ai != null ? ai.delta : -Infinity;
+        const bv = bi != null ? bi.delta : -Infinity;
+        return bv - av;
+      });
+      return arr;
+    }
     arr.sort((a, b) => {
       let av, bv;
       if (sort.col === 'score' || sort.col === 'overall') { av = getDisplayScore(a); bv = getDisplayScore(b); }
@@ -264,7 +338,7 @@ export default function TeamIndex({ players = [] }) {
       return sort.asc ? av - bv : bv - av;
     });
     return arr;
-  }, [filtered, sort, scoreMode, rawMode, xValueByTeam]);
+  }, [filtered, sort, scoreMode, rawMode, xValueByTeam, mostImproved, improvedMode, improvementMap]);
 
   const onSort = (col) => setSort(p => p.col === col ? { col, asc: !p.asc } : { col, asc: false });
   const paged = sorted.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
@@ -343,6 +417,26 @@ export default function TeamIndex({ players = [] }) {
           <span style={T.cl(rawMode)}>Raw Score (not league weighted)</span>
         </label>
         <div style={{ fontSize: 9, color: '#475569', marginTop: -4, marginBottom: 8 }}>Only affects Overall — Attack/Defence/Possession/Pressing are always raw percentiles.</div>
+
+        <label style={{ ...T.cr, opacity: season !== 'latest' ? 0.4 : 1 }} onClick={() => { if (season !== 'latest') return; setMostImproved(p => !p); setPage(0); }}>
+          <div style={T.cb(mostImproved && season === 'latest')}>{(mostImproved && season === 'latest') && <span style={{ color: '#fff', fontSize: 8 }}>✓</span>}</div>
+          <span style={{ ...T.cl(mostImproved && season === 'latest'), fontWeight: 600 }}>📈 Most Improved</span>
+        </label>
+        {season !== 'latest' && <div style={{ fontSize: 9, color: '#475569', marginTop: -4, marginBottom: 4 }}>Requires "Latest season" mode.</div>}
+        {mostImproved && season === 'latest' && (
+          <div style={{ marginTop: 2, marginBottom: 8 }}>
+            <span style={T.fl}>Improve by</span>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+              {IMPROVED_MODES.map(m => (
+                <button key={m} onClick={() => { setImprovedMode(m); setPage(0); }}
+                  style={{ padding: '3px 8px', borderRadius: 10, border: `1px solid ${improvedMode === m ? '#3b7de8' : '#1e2d45'}`, background: improvedMode === m ? '#0e2040' : 'transparent', color: improvedMode === m ? '#60a5fa' : '#64748b', fontSize: 9.5, fontWeight: improvedMode === m ? 700 : 400, cursor: 'pointer' }}>
+                  {m}
+                </button>
+              ))}
+            </div>
+            <div style={{ fontSize: 9, color: '#475569', marginTop: 5 }}>Division-change adjusted. Promoted teams rewarded, relegated teams penalised.</div>
+          </div>
+        )}
 
         <div style={T.fg}>
           <span style={T.fl}>Min Score: <strong style={{ color: '#60a5fa' }}>{minScore}</strong></span>
@@ -481,6 +575,7 @@ export default function TeamIndex({ players = [] }) {
                   <Th col="team" label="Club" sort={sort} onSort={onSort} />
                   <th style={T.th}>League</th>
                   <th style={T.th}>Style</th>
+                  {mostImproved && season === 'latest' && <th style={{ ...T.th, color: '#4ade80' }}>Δ {improvedMode}</th>}
                   <Th col="overall" label="Overall" sort={sort} onSort={onSort} />
                   <Th col="attack" label="Attack" sort={sort} onSort={onSort} />
                   <Th col="defence" label="Defence" sort={sort} onSort={onSort} />
@@ -503,6 +598,20 @@ export default function TeamIndex({ players = [] }) {
                         <td style={T.td}>
                           <span style={{ display: 'inline-block', padding: '2px 6px', borderRadius: 8, background: t.style ? styleColor(t.style).bg : '#0e1e38', color: t.style ? styleColor(t.style).color : '#93c5fd', fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap' }}>{t.style || '—'}</span>
                         </td>
+                        {mostImproved && season === 'latest' && (() => {
+                          const imp = getImprovement(t);
+                          if (!imp) return <td style={{ ...T.td, color: '#475569' }}>—</td>;
+                          const { delta, rawDelta, prevSeason, prevLeague, prevVal, currVal } = imp;
+                          const divChanged = toDotLeague(t.league) !== toDotLeague(prevLeague);
+                          const color = delta > 5 ? '#4ade80' : delta > 0 ? '#86efac' : delta > -5 ? '#fca5a5' : '#f87171';
+                          const prefix = delta >= 0 ? '+' : '';
+                          return (
+                            <td style={{ ...T.td, fontWeight: 700 }} title={`${prevSeason} (${prevLeague}): ${prevVal?.toFixed(1)} → ${t.league}: ${currVal?.toFixed(1)} | Raw Δ: ${rawDelta >= 0 ? '+' : ''}${rawDelta?.toFixed(1)}${divChanged ? ' | Div. adj.' : ''}`}>
+                              <span style={{ color, fontSize: 12 }}>{prefix}{delta.toFixed(1)}</span>
+                              {divChanged && <span style={{ fontSize: 8, color: '#94a3b8', marginLeft: 4 }}>{prevLeague !== t.league ? (LEAGUE_STRENGTHS[toDotLeague(t.league)] > LEAGUE_STRENGTHS[toDotLeague(prevLeague)] ? '↑' : '↓') : ''}</span>}
+                            </td>
+                          );
+                        })()}
                         <td style={{ ...T.td, fontWeight: 700, color: scoreColor(getDisplayScore(t)) }}>{getDisplayScore(t) != null ? getDisplayScore(t).toFixed(1) : '—'}</td>
                         <td style={{ ...T.td, color: scoreColor(t.attack) }}>{t.attack != null ? t.attack.toFixed(1) : '—'}</td>
                         <td style={{ ...T.td, color: scoreColor(t.defence) }}>{t.defence != null ? t.defence.toFixed(1) : '—'}</td>
