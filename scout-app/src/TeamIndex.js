@@ -233,6 +233,8 @@ export default function TeamIndex({ players = [] }) {
   //   - relegated teams (curr_ls < prev_ls) get their delta multiplied DOWN (easier context)
   //   - same-league teams get factor ~1.0 (no adjustment)
   // Only meaningful in 'latest' season mode — returns empty map otherwise.
+  const [sameDivOnly, setSameDivOnly] = useState(false);
+
   const improvementMap = useMemo(() => {
     const map = {};
     if (season !== 'latest' || !mostImproved) return map;
@@ -252,27 +254,34 @@ export default function TeamIndex({ players = [] }) {
       const curr = rows[rows.length - 1];
       const prev = rows[rows.length - 2];
 
-      const field = IMPROVED_FIELD[improvedMode] || 'completeScore';
+      const currDot = toDotLeague(curr.league);
+      const prevDot = toDotLeague(prev.league);
+      const sameDiv = currDot === prevDot;
+
+      // Sub-scores (attack/defence/possession/pressing) are raw within-league percentiles —
+      // they reset completely when a team changes division, making cross-division deltas
+      // meaningless (a relegated team jumps from 5th→95th pct naturally = +90 raw).
+      // For division-changers, always fall back to completeScore which IS cross-league
+      // comparable (it's league-strength-weighted). Same-division: use the requested field.
+      const field = sameDiv ? (IMPROVED_FIELD[improvedMode] || 'completeScore') : 'completeScore';
       const currVal = curr[field];
       const prevVal = prev[field];
       if (currVal == null || prevVal == null) { map[key] = null; continue; }
 
-      const rawDelta = currVal - prevVal;
+      let delta = currVal - prevVal;
 
-      // League-change correction: look up league strengths (with period format)
-      const currDot = toDotLeague(curr.league);
-      const prevDot = toDotLeague(prev.league);
-      const currLs = LEAGUE_STRENGTHS[currDot] || 50;
-      const prevLs = LEAGUE_STRENGTHS[prevDot] || 50;
+      // For division-changers using completeScore: apply league-strength correction so
+      // a team promoted into a harder league gets credit for maintaining/improving their
+      // weighted score in tougher competition, and a relegated team is penalised.
+      if (!sameDiv) {
+        const currLs = LEAGUE_STRENGTHS[currDot] || 50;
+        const prevLs = LEAGUE_STRENGTHS[prevDot] || 50;
+        // promoted (currLs > prevLs): multiply UP — same completeScore in harder league = real improvement
+        // relegated (currLs < prevLs): multiply DOWN — same completeScore in easier league = regression
+        delta = delta * (currLs / prevLs);
+      }
 
-      // factor = prev_ls / curr_ls:
-      //   promoted (curr stronger): factor < 1 → divide delta by a smaller number → larger adjusted delta (reward)
-      //   relegated (curr weaker):  factor > 1 → divide delta by a larger number → smaller adjusted delta (penalise)
-      //   same league: factor ~1.0 → no change
-      const factor = prevLs / currLs;
-      const adjustedDelta = rawDelta * factor;
-
-      map[key] = { delta: adjustedDelta, rawDelta, prevSeason: prev.season, prevLeague: prev.league, prevVal, currVal };
+      map[key] = { delta, rawDelta: currVal - prevVal, sameDiv, prevSeason: prev.season, prevLeague: prev.league, prevVal, currVal, fieldUsed: field };
     }
     return map;
   }, [all, resolved, season, mostImproved, improvedMode]);
@@ -310,9 +319,14 @@ export default function TeamIndex({ players = [] }) {
         const v = t[mf.key];
         if (v == null || v < mf.min || v > mf.max) return false;
       }
+      // Same division filter — only show teams that stayed in the same league as last season
+      if (mostImproved && season === 'latest' && sameDivOnly) {
+        const imp = improvementMap[t.team + '|' + teamCountry(t.league)];
+        if (!imp || !imp.sameDiv) return false;
+      }
       return true;
     });
-  }, [resolved, search, leagues, showHidden, showYouth, activeBands, activeRegions, lsMin, lsMax, scoreMode, rawMode, minScore, styleFilters, minStyleScore, attrFilters, metricFilters]);
+  }, [resolved, search, leagues, showHidden, showYouth, activeBands, activeRegions, lsMin, lsMax, scoreMode, rawMode, minScore, styleFilters, minStyleScore, attrFilters, metricFilters, mostImproved, season, sameDivOnly, improvementMap]);
 
   const sorted = useMemo(() => {
     const arr = [...filtered];
@@ -434,7 +448,12 @@ export default function TeamIndex({ players = [] }) {
                 </button>
               ))}
             </div>
-            <div style={{ fontSize: 9, color: '#475569', marginTop: 5 }}>Division-change adjusted. Promoted teams rewarded, relegated teams penalised.</div>
+            <div style={{ fontSize: 9, color: '#475569', marginTop: 5, marginBottom: 6 }}>Sub-scores (Attack etc.) only compare same-division teams. Cross-division uses Overall.</div>
+            <label style={T.cr} onClick={() => { setSameDivOnly(p => !p); setPage(0); }}>
+              <div style={T.cb(sameDivOnly)}>{sameDivOnly && <span style={{ color: '#fff', fontSize: 8 }}>✓</span>}</div>
+              <span style={T.cl(sameDivOnly)}>Same Division Only</span>
+            </label>
+            <div style={{ fontSize: 9, color: '#475569', marginTop: -2 }}>Hide teams that changed league.</div>
           </div>
         )}
 
@@ -601,14 +620,15 @@ export default function TeamIndex({ players = [] }) {
                         {mostImproved && season === 'latest' && (() => {
                           const imp = getImprovement(t);
                           if (!imp) return <td style={{ ...T.td, color: '#475569' }}>—</td>;
-                          const { delta, rawDelta, prevSeason, prevLeague, prevVal, currVal } = imp;
-                          const divChanged = toDotLeague(t.league) !== toDotLeague(prevLeague);
+                          const { delta, rawDelta, sameDiv, prevSeason, prevLeague, prevVal, currVal, fieldUsed } = imp;
                           const color = delta > 5 ? '#4ade80' : delta > 0 ? '#86efac' : delta > -5 ? '#fca5a5' : '#f87171';
                           const prefix = delta >= 0 ? '+' : '';
+                          const divArrow = !sameDiv ? (LEAGUE_STRENGTHS[toDotLeague(t.league)] > LEAGUE_STRENGTHS[toDotLeague(prevLeague)] ? '↑' : '↓') : '';
+                          const tooltip = `${prevSeason} (${prevLeague}) → ${t.league} | ${prevVal?.toFixed(1)} → ${currVal?.toFixed(1)} (${fieldUsed === 'completeScore' && improvedMode !== 'Overall' ? 'Overall used — div. changed' : improvedMode})`;
                           return (
-                            <td style={{ ...T.td, fontWeight: 700 }} title={`${prevSeason} (${prevLeague}): ${prevVal?.toFixed(1)} → ${t.league}: ${currVal?.toFixed(1)} | Raw Δ: ${rawDelta >= 0 ? '+' : ''}${rawDelta?.toFixed(1)}${divChanged ? ' | Div. adj.' : ''}`}>
+                            <td style={{ ...T.td, fontWeight: 700 }} title={tooltip}>
                               <span style={{ color, fontSize: 12 }}>{prefix}{delta.toFixed(1)}</span>
-                              {divChanged && <span style={{ fontSize: 8, color: '#94a3b8', marginLeft: 4 }}>{prevLeague !== t.league ? (LEAGUE_STRENGTHS[toDotLeague(t.league)] > LEAGUE_STRENGTHS[toDotLeague(prevLeague)] ? '↑' : '↓') : ''}</span>}
+                              {!sameDiv && <span style={{ fontSize: 9, color: '#94a3b8', marginLeft: 3 }}>{divArrow}</span>}
                             </td>
                           );
                         })()}
