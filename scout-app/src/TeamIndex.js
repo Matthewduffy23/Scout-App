@@ -714,7 +714,7 @@ export default function TeamIndex({ players = [] }) {
           <div style={T.sdv} />
           <div style={T.si}><div style={T.sv}>{sorted.filter(t => (getDisplayScore(t) || 0) >= 80).length}</div><div style={T.sl2}>Score 80+</div></div>
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 3, flexWrap: 'wrap', alignItems: 'center' }}>
-            {['overall', 'attack', 'defence', 'possession', 'pressing', 'avgAge', 'avgXValue', 'totalMV', 'mvPerf'].map(col => (
+            {['overall', 'attack', 'defence', 'possession', 'pressing', 'avgAge', 'totalMV', 'mvPerf', 'avgXValue'].map(col => (
               <button key={col} onClick={() => onSort(col)} style={{ padding: '4px 9px', borderRadius: 4, border: `1px solid ${sort.col === col ? '#3b7de8' : '#1e2d45'}`, background: sort.col === col ? '#0e2040' : 'transparent', color: sort.col === col ? '#93c5fd' : '#94a3b8', fontSize: 10, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
                 {col === 'overall' ? 'Overall' : col === 'attack' ? 'Attack' : col === 'defence' ? 'Defence' : col === 'possession' ? 'Possession' : col === 'pressing' ? 'Pressing' : col === 'avgAge' ? 'Avg Age' : col === 'avgXValue' ? 'Avg xValue' : col === 'totalMV' ? 'Squad MV' : '£ Perf'}{sort.col === col ? (sort.asc ? ' ↑' : ' ↓') : ''}
               </button>
@@ -740,9 +740,9 @@ export default function TeamIndex({ players = [] }) {
                   <Th col="possession" label="Possession" sort={sort} onSort={onSort} />
                   <Th col="pressing" label="Pressing" sort={sort} onSort={onSort} />
                   <Th col="avgAge" label="Avg Age" sort={sort} onSort={onSort} />
-                  <Th col="avgXValue" label="Avg xValue" sort={sort} onSort={onSort} />
                   <Th col="totalMV" label="Squad MV" sort={sort} onSort={onSort} />
                   <Th col="mvPerf" label="£ Perf" sort={sort} onSort={onSort} />
+                  <Th col="avgXValue" label="Avg xValue" sort={sort} onSort={onSort} />
                 </tr></thead>
                 <tbody>
                   {paged.map((t, i) => {
@@ -781,13 +781,13 @@ export default function TeamIndex({ players = [] }) {
                         <td style={{ ...T.td, color: scoreColor(t.possession) }}>{t.possession != null ? t.possession.toFixed(1) : '—'}</td>
                         <td style={{ ...T.td, color: scoreColor(t.pressing) }}>{t.pressing != null ? t.pressing.toFixed(1) : '—'}</td>
                         <td style={T.td}>{t.avgAge ?? '—'}</td>
-                        <td style={{ ...T.td, color: '#93c5fd', fontWeight: 700 }}>{avgXV != null ? `£${(avgXV / 1000000).toFixed(1)}m` : '—'}</td>
                         <td style={{ ...T.td, color: '#c084fc', fontWeight: 700 }}>{totMV != null ? `£${(totMV / 1000000).toFixed(1)}m` : '—'}</td>
                         <td style={{ ...T.td, fontWeight: 700, textAlign: 'center' }} title={mvPerf != null ? `Pts Rank: ${t.pointsRank} | MV Rank: ${t.pointsRank - mvPerf} | £ Perf: ${mvPerf > 0 ? '+' : ''}${mvPerf} (${mvPerf > 0 ? 'overperforming' : 'underperforming'})` : 'No MV data'}>
                           {mvPerf != null
                             ? <span style={{ color: mvPerf > 2 ? '#4ade80' : mvPerf > 0 ? '#86efac' : mvPerf < -2 ? '#f87171' : mvPerf < 0 ? '#fca5a5' : '#94a3b8', fontSize: 13 }}>{mvPerf > 0 ? '+' : ''}{mvPerf}</span>
                             : <span style={{ color: '#334155' }}>—</span>}
                         </td>
+                        <td style={{ ...T.td, color: '#93c5fd', fontWeight: 700 }}>{avgXV != null ? `£${(avgXV / 1000000).toFixed(1)}m` : '—'}</td>
                       </tr>
                     );
                   })}
