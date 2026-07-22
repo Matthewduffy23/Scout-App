@@ -216,7 +216,7 @@ function _decile(pool, spec) {
   return ticks;
 }
 
-function impactRadarSvg(rowA, rowB, pool, labelA, labelB, leagueA, leagueB) {
+function impactRadarSvg(rowA, rowB, pool, labelA, labelB, subA, subB) {
   if (!rowA || !rowB) return `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#6b7a9f;font-size:14px;">Pick two seasons to compare</div>`;
   const leagues = new Set([String(rowA.league||''), String(rowB.league||'')]);
   const base = (Array.isArray(pool) && pool.length) ? pool : [rowA, rowB];
@@ -226,21 +226,18 @@ function impactRadarSvg(rowA, rowB, pool, labelA, labelB, leagueA, leagueB) {
   const N = _RADAR.length;
   const A = _RADAR.map(s => _pct(usePool, s, _raw(rowA, s)));
   const B = _RADAR.map(s => _pct(usePool, s, _raw(rowB, s)));
-  const ticks = _RADAR.map(s => _decile(usePool, s));
 
-  // Team HQ geometry: theta_offset=+90 (top), direction=-1 (clockwise)
-  const W = 620, H = 560, cx = 310, cy = 280, INNER = 10, OUTER = 100, LABEL_R = 118, RSCALE = 2.0;
-  const ang = (i) => (-90 + (i * 360) / N) * Math.PI/180;   // top, clockwise
-  const rpx = (r) => r * RSCALE;                             // 0..100 -> px
+  // square canvas so it scales to the tile height and centres
+  const VB = 540, cx = 270, cy = 262, INNER = 10, OUTER = 100, R = 150, LABEL_R = 168;
+  const rpx = (r) => (r / 100) * R;
+  const ang = (i) => (-90 + (i * 360) / N) * Math.PI/180;
   const pt = (i, r) => [cx + rpx(r)*Math.cos(ang(i)), cy + rpx(r)*Math.sin(ang(i))];
 
-  // Dark theme (Team HQ)
   const BAND_OUT='#162235', BAND_IN='#0d1524', RING_IN='#3a4050', RING_OUT='#cbd5e1',
-        LBL='#f5f5f5', TICK='#e5e7eb', HOLE=BG, COL_A='#C81E1E', COL_B='#1D4ED8',
-        FILL_A='rgba(200,30,30,0.60)', FILL_B='rgba(29,78,216,0.60)';
+        LBL='#dfe6f2', HOLE=BG, COL_A='#e23b3b', COL_B='#3b6fe2',
+        FILL_A='rgba(200,30,30,0.55)', FILL_B='rgba(29,78,216,0.55)';
 
   const edges = Array.from({length: 11}, (_, i) => INNER + i*(OUTER-INNER)/10);
-  // alternating wedge bands (drawn as thick-stroke circles), outermost = BAND_OUT
   let bands = '';
   for (let i = 0; i < 10; i++) {
     const col = (9 - i) % 2 === 0 ? BAND_OUT : BAND_IN;
@@ -249,42 +246,30 @@ function impactRadarSvg(rowA, rowB, pool, labelA, labelB, leagueA, leagueB) {
   }
   let rings = '';
   edges.forEach((r, j) => { rings += `<circle cx="${cx}" cy="${cy}" r="${rpx(r).toFixed(1)}" fill="none" stroke="${j===edges.length-1?RING_OUT:RING_IN}" stroke-width="1"/>`; });
-
-  // spokes + decile tick numbers (from 3rd ring outward, like Team HQ) + rotated labels
-  let spokes = '', ticknums = '', labels = '';
-  _RADAR.forEach((s, i) => {
+  let spokes = '', labels = '';
+  _RADAR.forEach((sp, i) => {
     const [ex, ey] = pt(i, OUTER);
     spokes += `<line x1="${cx}" y1="${cy}" x2="${ex.toFixed(1)}" y2="${ey.toFixed(1)}" stroke="${RING_IN}" stroke-width="1"/>`;
-    const tv = ticks[i];
-    if (tv) {
-      for (let k = 2; k < edges.length; k++) {
-        const [tx, ty] = pt(i, edges[k] - 1.8);
-        const val = tv[k];
-        const disp = Math.abs(val) >= 100 ? val.toFixed(0) : val.toFixed(1);
-        ticknums += `<text x="${tx.toFixed(1)}" y="${ty.toFixed(1)}" text-anchor="middle" dominant-baseline="middle" font-family="Montserrat,sans-serif" font-size="8.5" fill="${TICK}">${disp}</text>`;
-      }
-    }
-    // rotated tangential label
     let rot = (ang(i) * 180/Math.PI) + 90;
     let rn = ((rot + 180) % 360) - 180;
     if (rn > 90 || rn < -90) rot += 180;
-    const [lx, ly] = pt(i, LABEL_R);
-    labels += `<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" transform="rotate(${rot.toFixed(1)} ${lx.toFixed(1)} ${ly.toFixed(1)})" text-anchor="middle" dominant-baseline="middle" font-family="Montserrat,sans-serif" font-size="12.5" font-weight="600" fill="${LBL}">${s[0]}</text>`;
+    const [lx, ly] = pt(i, LABEL_R / R * 100);
+    labels += `<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" transform="rotate(${rot.toFixed(1)} ${lx.toFixed(1)} ${ly.toFixed(1)})" text-anchor="middle" dominant-baseline="middle" font-family="Montserrat,sans-serif" font-size="13" font-weight="600" fill="${LBL}">${sp[0]}</text>`;
   });
   const hole = `<circle cx="${cx}" cy="${cy}" r="${rpx(INNER-0.6).toFixed(1)}" fill="${HOLE}"/>`;
   const poly = (arr) => arr.map((p,i) => pt(i, p).map(v=>v.toFixed(1)).join(',')).join(' ');
-  const dots = (arr, col) => arr.map((p,i) => { const [x,y]=pt(i,p); return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4" fill="${col}"/>`; }).join('');
+  const dots = (arr, col) => arr.map((p,i) => { const [x,y]=pt(i,p); return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4.5" fill="${col}"/>`; }).join('');
 
-  return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;">
-    ${bands}${rings}${spokes}${ticknums}${labels}${hole}
+  return `<svg viewBox="0 0 ${VB} ${VB}" xmlns="http://www.w3.org/2000/svg" style="height:100%;width:auto;display:block;margin:0 auto;">
+    ${bands}${rings}${spokes}${labels}${hole}
     <polygon points="${poly(A)}" fill="${FILL_A}" stroke="${COL_A}" stroke-width="2.6"/>
     <polygon points="${poly(B)}" fill="${FILL_B}" stroke="${COL_B}" stroke-width="2.6"/>
     ${dots(A, COL_A)}${dots(B, COL_B)}
-    <g font-family="Montserrat,sans-serif" font-weight="800">
-      <text x="6" y="24" font-size="22" fill="${COL_A}">${(labelA||'').slice(0,20)}</text>
-      <text x="6" y="44" font-size="13" font-weight="600" fill="${COL_A}">${(leagueA||'')}</text>
-      <text x="${W-6}" y="24" font-size="22" fill="${COL_B}" text-anchor="end">${(labelB||'').slice(0,20)}</text>
-      <text x="${W-6}" y="44" font-size="13" font-weight="600" fill="${COL_B}" text-anchor="end">${(leagueB||'')}</text>
+    <g font-family="Montserrat,sans-serif">
+      <text x="4" y="20" font-size="20" font-weight="800" fill="${COL_A}">${(labelA||'').slice(0,18)}</text>
+      <text x="4" y="40" font-size="13" font-weight="600" fill="${COL_A}">${(subA||'')}</text>
+      <text x="${VB-4}" y="20" font-size="20" font-weight="800" fill="${COL_B}" text-anchor="end">${(labelB||'').slice(0,18)}</text>
+      <text x="${VB-4}" y="40" font-size="13" font-weight="600" fill="${COL_B}" text-anchor="end">${(subB||'')}</text>
     </g>
   </svg>`;
 }
@@ -298,6 +283,15 @@ function _costPerf(row, size) {
   return 50;
 }
 function _ageBonus(age) { if (age == null) return 0; if (age < 35) return 10; if (age <= 45) return 5; if (age <= 50) return 2; return 0; }
+
+function _rankIn(pool, row, field) {
+  if (!Array.isArray(pool) || !pool.length || row == null) return null;
+  var v = Number(row[field]); if (!isFinite(v)) return null;
+  var peers = pool.filter(function(r){ return String(r.league) === String(row.league) && String(r.season) === String(row.season); });
+  if (peers.length < 2) return null;
+  var greater = peers.filter(function(r){ var x = Number(r[field]); return isFinite(x) && x > v; }).length;
+  return { rank: greater + 1, size: peers.length };
+}
 
 export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides = {}) {
   const age = computeAge(coach.dob);
@@ -326,7 +320,7 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
     ['Possession', getTrait('possession')], ['Pressing', getTrait('pressing')],
     ['Attacking', getTrait('attacking')], ['Defensive', getTrait('defensive')],
     ['Long Ball', getTrait('directness')], ['Passing', getTrait('passing')],
-  ].map(([l, v]) => [l, v == null ? 0 : v]);
+  ].map(([l, v]) => [l, v == null ? 0 : v]).sort((a, b) => b[1] - a[1]);
 
   // Career line points (oldest -> newest)
   const careerPts = [...perSeason].reverse().map(s => ({ season: s.season, sc: s.sc }));
@@ -334,10 +328,15 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
   // LEFT percentile bars
   const mg = computeCoachMetricGroups(tenureRows) || { Attack: [], Defence: [], Possession: [] };
   const totalRows = mg.Attack.length + mg.Defence.length + mg.Possession.length;
+  const activeSections = ['Attack','Defence','Possession'].filter(k => mg[k] && mg[k].length > 0).length;
   const CHART_HEIGHT = 671, LEFT_TOP = 296;
-  const FIXED_OVERHEAD = 3*48 + 70;
-  const rowH = totalRows > 0 ? Math.max(8, Math.min(55, Math.floor((CHART_HEIGHT - FIXED_OVERHEAD)/totalRows) - 1)) : 20;
-  const barsHtml = (rows) => rows.map(r => barRow(r.label, r.pct, r.val, rowH)).join('');
+  const SECTION_TITLE_H = 48;
+  const FIXED_OVERHEAD = 193 - (3 - activeSections) * SECTION_TITLE_H;
+  const rowH = totalRows > 0 ? Math.max(8, Math.min(55, Math.floor((CHART_HEIGHT - FIXED_OVERHEAD) / totalRows) - 1)) : 55;
+  const leftoverSlack = Math.max(0, (1080 - LEFT_TOP) - CHART_HEIGHT);
+  const totalSlots = totalRows + 4;
+  const EXTRA_GAP = Math.round(totalSlots > 0 ? leftoverSlack / totalSlots : 0);
+  const barsHtml = (rows) => rows.map(r => barRow(r.label, r.pct, r.val, rowH, EXTRA_GAP)).join('');
 
   // Impact radar rows
   const rowA = overrides.impactRowA || sortedDesc[sortedDesc.length - 1];
@@ -345,16 +344,22 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
   const radarPool = (overrides.allTeams && overrides.allTeams.length) ? overrides.allTeams : tenureRows;
   const labelA = overrides.impactLabelA || (rowA ? String(rowA.team||'') : '');
   const labelB = overrides.impactLabelB || (rowB ? String(rowB.team||'') : '');
+  const subA = rowA ? String(rowA.league||'') : '';
+  const subB = rowB ? String(rowB.league||'') : '';
 
   // header + info
   const formation = overrides.formation || (Array.isArray(coach.formations) ? coach.formations[0] : coach.formation) || '—';
   const infoRows = [['Formation:', formation], ['Contract:', coach.contract || '—'], ['Clubs:', coach.clubs ?? '—'], ['Agent:', overrides.agent || coach.agent || '—']];
   const stat = (v) => (v == null ? '—' : String(v));
   const ppg = latest.points != null && latest.matches ? (latest.points/latest.matches).toFixed(2) : '—';
+  const _pool = (overrides.allTeams && overrides.allTeams.length) ? overrides.allTeams : tenureRows;
+  const _ptsR = _rankIn(_pool, latest, 'points') || (latest.pointsRank != null && latest.leagueSize != null ? { rank: latest.pointsRank, size: latest.leagueSize } : null);
+  const _xptsR = _rankIn(_pool, latest, 'expectedPoints');
+  const _rankStr = (r) => r ? `${r.rank}/${r.size}` : '—';
   const statRow = [
     ['Games', stat(latest.matches)], ['GF', stat(latest.goalsFor)], ['GA', stat(latest.goalsAgainst)],
-    ['xG', latest.xGoalsFor != null ? Number(latest.xGoalsFor).toFixed(1) : '—'],
-    ['xGA', latest.xGoalsAgainst != null ? Number(latest.xGoalsAgainst).toFixed(1) : '—'],
+    ['Pts', _rankStr(_ptsR)],
+    ['xPts', _rankStr(_xptsR)],
     ['PPG', ppg],
   ];
   const tc = overrides.teamContext || {};
@@ -387,7 +392,8 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
 
   const styleHtml = styleHexSvg(styleRows, STYLE_PANEL_W - PANEL_PAD*2);
   const careerHtml = careerChartSvg(careerPts, CAREER_PANEL_W - PANEL_PAD*2, hexH);
-  const radarHtml = impactRadarSvg(rowA, rowB, radarPool, labelA, labelB, rowA ? rowA.season : '', rowB ? rowB.season : '');
+  const _radarInnerH = ROW2_PANEL_H - PANEL_PAD * 2 - 40;
+  const radarHtml = `<div style="height:${_radarInnerH}px;display:flex;align-items:center;justify-content:center;">${impactRadarSvg(rowA, rowB, radarPool, labelA, labelB, subA, subB)}</div>`;
 
   const pill = (v) => { if (v == null) return ''; const c = pillColor(v); return `<span style="display:inline-flex;align-items:center;justify-content:center;line-height:1;min-width:18px;font-size:19px;font-weight:800;padding:7px 13px;border-radius:7px;background:${c.bg};color:${c.fg};">${Math.round(v)}</span>`; };
 
@@ -444,10 +450,10 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
       </div>
 
       <div style="position:absolute;top:${LEFT_TOP}px;left:0px;width:920px;height:${1080-LEFT_TOP}px;overflow:hidden;box-sizing:border-box;padding-left:24px;padding-top:12px;">
-        ${mg.Attack.length ? `<div style="font-size:24px;font-weight:800;color:#f3f5f7;margin:0 0 6px;">Attacking</div>${barsHtml(mg.Attack)}` : ''}
-        ${mg.Defence.length ? `<div style="font-size:24px;font-weight:800;color:#f3f5f7;margin:8px 0 6px;">Defensive</div>${barsHtml(mg.Defence)}` : ''}
-        ${mg.Possession.length ? `<div style="font-size:24px;font-weight:800;color:#f3f5f7;margin:8px 0 6px;">Possession</div>${barsHtml(mg.Possession)}` : ''}
-        <div style="display:flex;align-items:center;margin-top:6px;">
+        ${mg.Attack.length ? `<div style="font-size:24px;font-weight:800;color:#f3f5f7;margin:${EXTRA_GAP}px 0 6px;">Attacking</div>${barsHtml(mg.Attack)}` : ''}
+        ${mg.Defence.length ? `<div style="font-size:24px;font-weight:800;color:#f3f5f7;margin:${8+EXTRA_GAP}px 0 6px;">Defensive</div>${barsHtml(mg.Defence)}` : ''}
+        ${mg.Possession.length ? `<div style="font-size:24px;font-weight:800;color:#f3f5f7;margin:${8+EXTRA_GAP}px 0 6px;">Possession</div>${barsHtml(mg.Possession)}` : ''}
+        <div style="display:flex;align-items:center;margin-top:${6+EXTRA_GAP}px;">
           <div style="width:188px;flex-shrink:0;"></div>
           <div style="flex:1;position:relative;height:26px;">
             ${[0,10,20,30,40,50,60,70,80,90,100].map(p => `<span style="position:absolute;left:${p}%;top:0;transform:translateX(${p===0?'0':p===100?'-100%':'-50%'});font-size:12px;font-weight:600;color:#c4cbd9;">${p}%</span>`).join('')}

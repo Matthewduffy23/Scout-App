@@ -349,7 +349,8 @@ export default function CoachPanel({ allTeams, onClose }) {
     setGeneratingId(coach.id);
     try {
       var traits = computeCoachTraits(tenureRows, teams);
-      var overrides = cardOverrides[coach.id] || {};
+      var overrides = Object.assign({}, cardOverrides[coach.id] || {});
+      overrides.allTeams = teams;
       await downloadCoachCardPNG(coach, tenureRows, traits, overrides);
     } catch (err) {
       alert('Could not generate the card — check the browser console for details.');
@@ -416,8 +417,8 @@ export default function CoachPanel({ allTeams, onClose }) {
         formation: q.formation,
       };
       if (q.gbeStatus || q.gbeNote) overrides.gbe = { status: q.gbeStatus, note: q.gbeNote };
-      if (rowA) { overrides.impactRowA = rowA; overrides.impactLabelA = rowA.team + ' ' + rowA.season; }
-      if (rowB) { overrides.impactRowB = rowB; overrides.impactLabelB = rowB.team + ' ' + rowB.season; }
+      if (rowA) { overrides.impactRowA = rowA; overrides.impactLabelA = rowA.team; }
+      if (rowB) { overrides.impactRowB = rowB; overrides.impactLabelB = rowB.team; }
 
       await downloadCoachQuickCardPNG(coach, tenureRows, traits, overrides);
     } catch (err) {

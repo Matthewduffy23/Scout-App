@@ -4049,10 +4049,23 @@ function traitPillHtml(key, score) {
 // tenureRows: the matching team-season records from teams_final.json for this coach's tenure
 // allTeams: full teams_final.json array (for league rank context, etc — passed through if needed)
 // traits: pre-computed via computeCoachTraits(tenureRows, allTeams) from coachMetrics.js
+function _rankIn(pool, row, field) {
+  if (!Array.isArray(pool) || !pool.length || row == null) return null;
+  var v = Number(row[field]); if (!isFinite(v)) return null;
+  var peers = pool.filter(function(r){ return String(r.league) === String(row.league) && String(r.season) === String(row.season); });
+  if (peers.length < 2) return null;
+  var greater = peers.filter(function(r){ var x = Number(r[field]); return isFinite(x) && x > v; }).length;
+  return { rank: greater + 1, size: peers.length };
+}
+
 export function buildCoachCardElement(coach, tenureRows, traits, overrides = {}) {
   const age = computeAge(coach.dob);
   const sortedDesc = [...tenureRows].sort((a, b) => (a.season < b.season ? 1 : -1));
   const latest = sortedDesc[0] || {};
+  const _pool = (overrides.allTeams && overrides.allTeams.length) ? overrides.allTeams : tenureRows;
+  const _ptsR = _rankIn(_pool, latest, 'points') || (latest.pointsRank != null && latest.leagueSize != null ? { rank: latest.pointsRank, size: latest.leagueSize } : null);
+  const _xptsR = _rankIn(_pool, latest, 'expectedPoints');
+  const _rankStr = (r) => r ? `${r.rank}/${r.size}` : "—";
   const natIso2 = countryToIso2(coach.nationality || "");
   const leagueIso2 = countryToIso2(leagueToCountry(latest.league || ""));
   const leagueKey = (latest.league || "") + ".";
@@ -4191,8 +4204,8 @@ export function buildCoachCardElement(coach, tenureRows, traits, overrides = {})
         ["Games",     230, resolvedMatches ?? "—"],
         ["GF",        330, resolvedGF      ?? "—"],
         ["GA",        410, resolvedGA      ?? "—"],
-        ["XG",        490, resolvedXG      ?? "—"],
-        ["XG Against",570, resolvedXGA     ?? "—"],
+        ["Pts",       490, _rankStr(_ptsR)],
+        ["xPts",      570, _rankStr(_xptsR)],
         ["PPG",       712, resolvedPPG     ?? "—"],
       ];
       const heads = cols.map(([lab, x]) => `<div style="position:absolute;top:319px;left:${x}px;font-size:20px;font-weight:500;color:#d9d9d9;">${lab}</div>`).join("");
@@ -4334,11 +4347,3 @@ export async function downloadCoachCardPNG(coach, tenureRows, traits, overrides 
     document.body.removeChild(el);
   }
 }
-
-// ── Shared primitives exposed for CoachQuickCard.js (this card's own rendering
-//    is unchanged; these are the helpers/constants the quick card reuses).
-export {
-  computeAge, countryToIso2, leagueToCountry, barRowCoach, scoreTierColor,
-  teamCrestUrl, fadeHexToBG, FOTMOB_PHOTO_BASE, ensureMontserratEmbedded,
-  MONTSERRAT_EMBED_CSS, BG, HEADER_L, HEADER_R, ACCENT_PINK, LABEL_COL,
-};
