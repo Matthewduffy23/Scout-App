@@ -314,7 +314,7 @@ export default function TeamIndex({ players = [] }) {
       withMV.sort((a, b) => b.mv - a.mv);
       withMV.forEach(({ t }, i) => {
         const key = String(t.team).toLowerCase() + '|' + normLeague(t.league);
-        out[key] = t.pointsRank - (i + 1);
+        out[key] = (i + 1) - t.pointsRank; // positive = overperforming (low MV rank vs high table position)
       });
     }
     return out;
@@ -783,7 +783,7 @@ export default function TeamIndex({ players = [] }) {
                         <td style={T.td}>{t.avgAge ?? '—'}</td>
                         <td style={{ ...T.td, color: '#93c5fd', fontWeight: 700 }}>{avgXV != null ? `£${(avgXV / 1000000).toFixed(1)}m` : '—'}</td>
                         <td style={{ ...T.td, color: '#c084fc', fontWeight: 700 }}>{totMV != null ? `£${(totMV / 1000000).toFixed(1)}m` : '—'}</td>
-                        <td style={{ ...T.td, fontWeight: 700, textAlign: 'center' }} title={mvPerf != null ? `Pts Rank: ${t.pointsRank} | MV Rank: ${t.pointsRank - mvPerf} | £ Perf: ${mvPerf > 0 ? '+' : ''}${mvPerf}` : 'No MV data'}>
+                        <td style={{ ...T.td, fontWeight: 700, textAlign: 'center' }} title={mvPerf != null ? `Pts Rank: ${t.pointsRank} | MV Rank: ${t.pointsRank - mvPerf} | £ Perf: ${mvPerf > 0 ? '+' : ''}${mvPerf} (${mvPerf > 0 ? 'overperforming' : 'underperforming'})` : 'No MV data'}>
                           {mvPerf != null
                             ? <span style={{ color: mvPerf > 2 ? '#4ade80' : mvPerf > 0 ? '#86efac' : mvPerf < -2 ? '#f87171' : mvPerf < 0 ? '#fca5a5' : '#94a3b8', fontSize: 13 }}>{mvPerf > 0 ? '+' : ''}{mvPerf}</span>
                             : <span style={{ color: '#334155' }}>—</span>}
