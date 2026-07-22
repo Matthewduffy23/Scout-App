@@ -130,7 +130,7 @@ function CoachQuickOverrides({ coach, coachId, overrides, teams, onFieldChange, 
   var latestRow = latestT ? teams.find(function(x) { return x.team === latestT.team && x.league === latestT.league && x.season === latestT.season; }) : null;
   var sizeHint = latestRow && latestRow.leagueSize != null ? String(latestRow.leagueSize) : '20';
 
-  var VR  = [['squadValue', 'Squad Cost', '£340m'], ['wageBill', 'Wage Bill', '£120m'], ['odds', 'Odds', '5/1']];
+  var VR  = [['squadValue', 'Squad Cost', '£340m'], ['wageBill', 'Wage Bill*', '£120m'], ['odds', 'Betting Forecast', '5/1']];
   var TXT = [['agent', 'Agent', ''], ['formation', 'Formation', '4-3-3'], ['tenure', 'Tenure', '2024-Present']];
   var lbl = { fontSize: 9, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' };
   var inp = { width: 100, background: '#080f1c', border: '1px solid #2b1e45', borderRadius: 4, color: '#e2e8f4', fontSize: 11, padding: '4px 6px' };

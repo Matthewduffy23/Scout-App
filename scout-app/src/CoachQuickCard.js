@@ -158,7 +158,7 @@ function _ctxBarHtml(label, pct, sub, lowLbl = 'Low', highLbl = 'High') {
   const col = scoreTierColor(val);
   const pVal = Math.max(2, Math.min(96, pct));
   return `
-    <div style="margin-bottom:11px;">
+    <div>
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px;">
         <span style="font-size:15px;font-weight:700;color:#c8d2e0;">${label}</span>
         <span style="font-size:20px;font-weight:900;color:${col};">${val}</span>
@@ -176,21 +176,26 @@ function _ctxBarHtml(label, pct, sub, lowLbl = 'Low', highLbl = 'High') {
     </div>`;
 }
 function teamContextHtml(tc, ageVal, agePct) {
-  const cats = [['squadValue','Squad Cost'],['wageBill','Wage Bill'],['odds','Odds']];
-  let bars = cats.map(([k,label]) => {
+  const cats = [['squadValue','Squad Cost'],['wageBill','Wage Bill*'],['odds','Betting Forecast']];
+  const parts = [];
+  cats.forEach(([k,label]) => {
     const m = tc[k];
-    if (!m) return '';
+    if (!m) return;
     const size = _n(m.size), rank = _n(m.rank);
-    if (rank == null || size == null || size <= 1) return '';
+    if (rank == null || size == null || size <= 1) return;
     const pct = _clamp(((size - rank) / (size - 1)) * 100);
-    return _ctxBarHtml(label, pct, `Rank ${rank} of ${size}`);
-  }).join('');
+    parts.push(_ctxBarHtml(label, pct, `Rank ${rank} of ${size}`));
+  });
   if (agePct != null) {
-    bars += _ctxBarHtml('Average Age', agePct, `Avg age ${ageVal}`, 'Young', 'Old');
+    parts.push(_ctxBarHtml('Average Age', agePct, `Avg age ${ageVal}`, 'Young', 'Old'));
   } else if (ageVal !== '—') {
-    bars += `<div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:2px;"><span style="font-size:15px;font-weight:700;color:#c8d2e0;">Average Age</span><span style="font-size:20px;font-weight:900;color:#fff;">${ageVal}</span></div>`;
+    parts.push(`<div style="display:flex;justify-content:space-between;align-items:baseline;"><span style="font-size:15px;font-weight:700;color:#c8d2e0;">Average Age</span><span style="font-size:20px;font-weight:900;color:#fff;">${ageVal}</span></div>`);
   }
-  return bars || `<div style="font-size:13px;color:#5e6678;margin-bottom:8px;">No context entered.</div>`;
+  const n = parts.length;
+  if (!n) return `<div style="font-size:13px;color:#5e6678;margin-bottom:8px;">No context entered.</div>`;
+  // Fill the tile: 4 rows sit top-aligned with a fixed gap; fewer rows spread out to fill the height.
+  const layout = n >= 4 ? 'justify-content:flex-start;gap:20px;' : 'justify-content:space-between;';
+  return `<div style="flex:1;min-height:0;display:flex;flex-direction:column;${layout}">${parts.join('')}</div>`;
 }
 
 // ─── IMPACT radar — faithful replica of Team HQ Section 8 comparison radar ───
@@ -526,7 +531,7 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
         ${careerHtml}
       </div>
 
-      <div style="position:absolute;top:${ROW2_TOP}px;left:984px;width:${STYLE_PANEL_W}px;height:${ROW2_PANEL_H}px;background:${PANEL_BG};border:1px solid ${PANEL_BORDER};border-radius:${PANEL_RADIUS}px;padding:${PANEL_PAD}px;box-sizing:border-box;overflow:hidden;box-shadow:${PANEL_SHADOW};">
+      <div style="position:absolute;top:${ROW2_TOP}px;left:984px;width:${STYLE_PANEL_W}px;height:${ROW2_PANEL_H}px;background:${PANEL_BG};border:1px solid ${PANEL_BORDER};border-radius:${PANEL_RADIUS}px;padding:${PANEL_PAD}px;box-sizing:border-box;overflow:hidden;box-shadow:${PANEL_SHADOW};display:flex;flex-direction:column;">
         <div style="font-size:22px;font-weight:700;color:${ACCENT_PINK};margin-bottom:14px;">Team Context</div>
         ${teamContextHtml(tc, ageVal, agePct)}
       </div>
