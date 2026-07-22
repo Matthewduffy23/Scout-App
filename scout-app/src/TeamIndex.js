@@ -237,6 +237,7 @@ export default function TeamIndex({ players = [] }) {
   const [mostImproved, setMostImproved] = useState(false);
   const [improvedMode, setImprovedMode] = useState('Overall');
 
+  const [minMVPerf, setMinMVPerf] = useState(null); // null = no filter; number = show teams with mvPerf >= this
   const [sort, setSort] = useState({ col: 'score', asc: false });
   const [page, setPage] = useState(0);
   const PAGE_SIZE = 50;
@@ -410,14 +411,19 @@ export default function TeamIndex({ players = [] }) {
         const v = resolveMetricVal(t, mf);
         if (v == null || v < mf.min || v > mf.max) return false;
       }
-      // Same division filter — only show teams that stayed in the same league as last season
+      // Same division filter
       if (mostImproved && season === 'latest' && sameDivOnly) {
         const imp = improvementMap[t.team + '|' + teamCountry(t.league)];
         if (!imp || !imp.sameDiv) return false;
       }
+      // £ Performance filter
+      if (minMVPerf !== null) {
+        const perf = getMVPerf(t.team, t.league);
+        if (perf == null || perf < minMVPerf) return false;
+      }
       return true;
     });
-  }, [resolved, search, leagues, showHidden, showYouth, activeBands, activeRegions, lsMin, lsMax, scoreMode, rawMode, minScore, styleFilters, minStyleScore, attrFilters, metricFilters, mostImproved, season, sameDivOnly, improvementMap]);
+  }, [resolved, search, leagues, showHidden, showYouth, activeBands, activeRegions, lsMin, lsMax, scoreMode, rawMode, minScore, styleFilters, minStyleScore, attrFilters, metricFilters, mostImproved, season, sameDivOnly, improvementMap, minMVPerf, mvPerfByTeam]);
 
   const sorted = useMemo(() => {
     const arr = [...filtered];
@@ -439,8 +445,8 @@ export default function TeamIndex({ players = [] }) {
       else if (sort.col === 'totalMV') { av = getTotalMV(a.team, a.league); bv = getTotalMV(b.team, b.league); }
       else if (sort.col === 'mvPerf') { av = getMVPerf(a.team, a.league); bv = getMVPerf(b.team, b.league); }
       else { av = a[sort.col]; bv = b[sort.col]; }
-      av = av ?? (sort.asc ? Infinity : -Infinity);
-      bv = bv ?? (sort.asc ? Infinity : -Infinity);
+      av = av ?? (sort.col === 'mvPerf' ? -Infinity : sort.asc ? Infinity : -Infinity);
+      bv = bv ?? (sort.col === 'mvPerf' ? -Infinity : sort.asc ? Infinity : -Infinity);
       if (typeof av === 'string') return sort.asc ? av.localeCompare(bv) : bv.localeCompare(av);
       return sort.asc ? av - bv : bv - av;
     });
@@ -549,6 +555,19 @@ export default function TeamIndex({ players = [] }) {
             <div style={{ fontSize: 9, color: '#475569', marginTop: -2 }}>Hide teams that changed league.</div>
           </div>
         )}
+
+        <div style={T.fg}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+            <span style={T.fl}>£ Performance Min</span>
+            {minMVPerf !== null && <button onClick={() => { setMinMVPerf(null); setPage(0); }} style={{ fontSize: 9, color: '#f87171', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>clear</button>}
+          </div>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <input type="number" value={minMVPerf ?? ''} onChange={e => { setMinMVPerf(e.target.value === '' ? null : Number(e.target.value)); setPage(0); }}
+              placeholder="e.g. 3" style={{ width: 60, background: '#0d1220', border: '1px solid #1e2d45', borderRadius: 4, color: '#e2e8f4', fontSize: 11, padding: '4px 6px' }} />
+            <span style={{ fontSize: 9, color: '#475569' }}>league places overperformed</span>
+          </div>
+          <div style={{ fontSize: 9, color: '#334155', marginTop: 3 }}>Pos rank − MV rank. +3 = 3 places above expected.</div>
+        </div>
 
         <div style={T.fg}>
           <span style={T.fl}>Min Score: <strong style={{ color: '#60a5fa' }}>{minScore}</strong></span>
@@ -764,8 +783,10 @@ export default function TeamIndex({ players = [] }) {
                         <td style={T.td}>{t.avgAge ?? '—'}</td>
                         <td style={{ ...T.td, color: '#93c5fd', fontWeight: 700 }}>{avgXV != null ? `£${(avgXV / 1000000).toFixed(1)}m` : '—'}</td>
                         <td style={{ ...T.td, color: '#c084fc', fontWeight: 700 }}>{totMV != null ? `£${(totMV / 1000000).toFixed(1)}m` : '—'}</td>
-                        <td style={{ ...T.td, fontWeight: 700 }} title={mvPerf != null ? `Pts Rank: ${t.pointsRank} | MV Rank: ${t.pointsRank - mvPerf} | Diff: ${mvPerf > 0 ? '+' : ''}${mvPerf}` : ''}>
-                          {mvPerf != null ? <span style={{ color: mvPerf > 0 ? '#4ade80' : mvPerf < 0 ? '#f87171' : '#94a3b8' }}>{mvPerf > 0 ? '+' : ''}{mvPerf}</span> : '—'}
+                        <td style={{ ...T.td, fontWeight: 700, textAlign: 'center' }} title={mvPerf != null ? `Pts Rank: ${t.pointsRank} | MV Rank: ${t.pointsRank - mvPerf} | £ Perf: ${mvPerf > 0 ? '+' : ''}${mvPerf}` : 'No MV data'}>
+                          {mvPerf != null
+                            ? <span style={{ color: mvPerf > 2 ? '#4ade80' : mvPerf > 0 ? '#86efac' : mvPerf < -2 ? '#f87171' : mvPerf < 0 ? '#fca5a5' : '#94a3b8', fontSize: 13 }}>{mvPerf > 0 ? '+' : ''}{mvPerf}</span>
+                            : <span style={{ color: '#334155' }}>—</span>}
                         </td>
                       </tr>
                     );
