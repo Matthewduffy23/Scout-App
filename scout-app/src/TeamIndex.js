@@ -151,30 +151,6 @@ export default function TeamIndex({ players = [] }) {
   }, [players]);
   const getTotalMV = (team, league) => totalMVByTeam[String(team).toLowerCase() + '|' + normLeague(league)] ?? null;
 
-  // £ Performance rank per league: league position rank minus MV rank within that league.
-  // Positive = outperforming market value (e.g. 1st in table, 5th by MV = +4).
-  const mvPerfByTeam = useMemo(() => {
-    // Group latest-season resolved teams by league, rank by MV, compare to pointsRank
-    const byLeague = {};
-    for (const t of resolved) {
-      if (!byLeague[t.league]) byLeague[t.league] = [];
-      byLeague[t.league].push(t);
-    }
-    const out = {};
-    for (const [league, teams] of Object.entries(byLeague)) {
-      const withMV = teams.map(t => ({ t, mv: getTotalMV(t.team, t.league) })).filter(x => x.mv != null && x.t.pointsRank != null);
-      if (withMV.length < 2) continue;
-      withMV.sort((a, b) => b.mv - a.mv);
-      withMV.forEach(({ t }, i) => {
-        const mvRank = i + 1;
-        const key = String(t.team).toLowerCase() + '|' + normLeague(t.league);
-        out[key] = t.pointsRank - mvRank; // positive = overperforming
-      });
-    }
-    return out;
-  }, [resolved, totalMVByTeam]);
-  const getMVPerf = (team, league) => mvPerfByTeam[String(team).toLowerCase() + '|' + normLeague(league)] ?? null;
-
   const [search, setSearch] = useState('');
   const [scoreMode, setScoreMode] = useState('Overall');
   const [styleFilters, setStyleFilters] = useState(new Set());
@@ -319,7 +295,30 @@ export default function TeamIndex({ players = [] }) {
     return t[scoreMode.toLowerCase()];
   };
 
-  // For each team in the current resolved set, compute how much its score improved vs the
+  // £ Performance: within each league rank teams by total squad MV, compare to pointsRank.
+  // Positive = outperforming market value (1st in table, 5th by MV = +4).
+  const mvPerfByTeam = useMemo(() => {
+    const byLeague = {};
+    for (const t of resolved) {
+      if (!byLeague[t.league]) byLeague[t.league] = [];
+      byLeague[t.league].push(t);
+    }
+    const out = {};
+    for (const league of Object.keys(byLeague)) {
+      const teams = byLeague[league];
+      const withMV = teams
+        .map(t => ({ t, mv: getTotalMV(t.team, t.league) }))
+        .filter(x => x.mv != null && x.t.pointsRank != null);
+      if (withMV.length < 2) continue;
+      withMV.sort((a, b) => b.mv - a.mv);
+      withMV.forEach(({ t }, i) => {
+        const key = String(t.team).toLowerCase() + '|' + normLeague(t.league);
+        out[key] = t.pointsRank - (i + 1);
+      });
+    }
+    return out;
+  }, [resolved, totalMVByTeam]);
+  const getMVPerf = (team, league) => mvPerfByTeam[String(team).toLowerCase() + '|' + normLeague(league)] ?? null;
   // previous season. Uses (prev_ls / curr_ls) as a division-change correction factor so:
   //   - promoted teams (curr_ls > prev_ls) get their delta multiplied UP (they improved in harder context)
   //   - relegated teams (curr_ls < prev_ls) get their delta multiplied DOWN (easier context)
