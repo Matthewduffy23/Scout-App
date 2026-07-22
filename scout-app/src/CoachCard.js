@@ -4347,3 +4347,5 @@ export async function downloadCoachCardPNG(coach, tenureRows, traits, overrides 
     document.body.removeChild(el);
   }
 }
+
+export { computeAge, countryToIso2, leagueToCountry, teamCrestUrl, fadeHexToBG, FOTMOB_PHOTO_BASE, ensureMontserratEmbedded, MONTSERRAT_EMBED_CSS };
