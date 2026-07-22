@@ -176,7 +176,7 @@ function _ctxBarHtml(label, pct, sub, lowLbl = 'Low', highLbl = 'High') {
     </div>`;
 }
 function teamContextHtml(tc, ageVal, agePct) {
-  const cats = [['squadValue','Squad Value'],['summerSpend','Summer Spending'],['odds','Odds']];
+  const cats = [['squadValue','Squad Cost'],['wageBill','Wage Bill'],['odds','Odds']];
   let bars = cats.map(([k,label]) => {
     const m = tc[k];
     if (!m) return '';
@@ -202,7 +202,7 @@ const _RADAR = [
   ['Goals vs',     'Defence',    'Goals Against',       null, true],
   ['PPDA',         'Defence',    'PPDA',                null, true],
   ['Possession',   'Possession', 'Possession',          null, false],
-  ['Passed',       'Possession', 'Passes',              null, false],
+  ['Passes',       'Possession', 'Passes',              null, false],
   ['Pass F3rd',    'Possession', 'Passes to Final 3rd', null, false],
   ['Long Passes',  'Possession', 'Long Passes',         null, false],
   ['Pts',          null, null, (r) => (r && r.matches ? _n(r.points)/r.matches : null), false],
@@ -279,11 +279,13 @@ function impactRadarSvg(rowA, rowB, pool, labelA, labelB, subA, subB) {
   });
   const hole = `<circle cx="${cx}" cy="${cy}" r="${rpx(INNER-0.6).toFixed(1)}" fill="${HOLE}"/>`;
   const poly = (arr) => arr.map((p,i) => pt(i, p).map(v=>v.toFixed(1)).join(',')).join(' ');
+  const dots = (arr, col) => arr.map((p,i) => { const [x,y]=pt(i,p); return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="2.4" fill="${col}" opacity="0.85"/>`; }).join('');
 
   return `<svg viewBox="0 0 ${VB} ${VH}" xmlns="http://www.w3.org/2000/svg" style="height:100%;width:auto;display:block;margin:0 auto;">
     ${bands}${rings}${spokes}${labels}${hole}
     <polygon points="${poly(A)}" fill="${FILL_A}" stroke="${COL_A}" stroke-width="2.6"/>
     <polygon points="${poly(B)}" fill="${FILL_B}" stroke="${COL_B}" stroke-width="2.6"/>
+    ${dots(A, COL_A)}${dots(B, COL_B)}
     <g font-family="Montserrat,sans-serif">
       <text x="4" y="20"><tspan font-size="20" font-weight="800" fill="${COL_A}">${(labelA||'').slice(0,18)}</tspan>${seasonA ? ` <tspan font-size="13" font-weight="700" fill="${COL_A}" opacity="0.8">${seasonA}</tspan>` : ''}</text>
       <text x="4" y="40" font-size="13" font-weight="600" fill="${COL_A}">${(subA||'')}</text>
@@ -476,11 +478,11 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
 
       ${teamCrestUrl(latest.team) ? `<div style="position:absolute;left:740px;top:22px;width:155px;height:210px;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${teamCrestUrl(latest.team)}');filter:drop-shadow(0 1px 2px rgba(0,0,0,0.3));"></div>` : ''}
       <div style="position:absolute;left:915px;top:90px;width:266px;font-size:32px;font-weight:800;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${overrides.teamOverride || latest.team || ''}</div>
-      <div style="position:absolute;left:915px;top:150px;display:flex;align-items:center;">
+      <div style="position:absolute;left:915px;top:144px;display:flex;align-items:center;">
         <span style="font-size:21px;font-weight:500;color:#fff;white-space:nowrap;">${latest.league || ''}</span>
         ${leagueIso2 ? `<div style="width:32px;height:20px;flex-shrink:0;margin-left:24px;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${leagueIso2}.png');border-radius:2px;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15);"></div>` : ''}
       </div>
-      ${tenure ? `<div style="position:absolute;left:915px;top:184px;font-size:20px;font-weight:500;color:#9aa3b8;white-space:nowrap;">${tenure}</div>` : ''}
+      ${tenure ? `<div style="position:absolute;left:915px;top:178px;font-size:20px;font-weight:500;color:#9aa3b8;white-space:nowrap;">${tenure}</div>` : ''}
 
       <div style="position:absolute;left:1188px;top:36px;width:2px;height:210px;background:rgba(255,255,255,0.14);"></div>
       ${infoBox}

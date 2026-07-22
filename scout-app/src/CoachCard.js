@@ -4071,11 +4071,12 @@ export function buildCoachCardElement(coach, tenureRows, traits, overrides = {})
   const leagueKey = (latest.league || "") + ".";
   const leagueLogo = LEAGUE_LOGOS[leagueKey] || LEAGUE_LOGOS[latest.league || ""] || "";
   const resEffRank = latest.resourceEfficiencyRank ?? null;
-  // Dynamic season-stats title, e.g. "24-25 Stats" — overridable with a custom label.
-  const seasonLbl = String(latest.season || "").replace(/^20/, "");
+  // Stats title defaults to "Season Stats"; overridable per-coach (edit) or via the override panel.
   const statsTitle = (overrides.statsTitle && String(overrides.statsTitle).trim())
     ? String(overrides.statsTitle).trim()
-    : (seasonLbl ? `${seasonLbl} Stats` : "Season Stats");
+    : (coach.statsTitle && String(coach.statsTitle).trim())
+      ? String(coach.statsTitle).trim()
+      : "Season Stats";
   const hideCostPer = !!overrides.hideCostPer;
   const mvPerfRank = (overrides.mvPerfRank && overrides.mvPerfRank.rank != null) ? overrides.mvPerfRank : null;
   const traitOverrides = coach.traitOverrides || {};
@@ -4221,8 +4222,9 @@ export function buildCoachCardElement(coach, tenureRows, traits, overrides = {})
       const heads = cols.map(([lab, x]) => `<div style="position:absolute;top:319px;left:${x}px;font-size:20px;font-weight:500;color:#d9d9d9;">${lab}</div>`).join("");
       const vals = cols.map(([, x, v]) => `<div style="position:absolute;top:357px;left:${x}px;font-size:20px;font-weight:500;color:#fff;">${v}</div>`).join("");
       if (hideCostPer) return heads + vals;
-      const reHead = `<div style="position:absolute;top:319px;left:792px;font-size:20px;font-weight:500;color:#d9d9d9;">£ Per</div>`;
-      // £ Per shows the team's LEAGUE RANK on £ performance (rank 1 = best overperformer),
+      const reCx = 818; // shared centre for the £ Perf. label and its value
+      const reHead = `<div style="position:absolute;top:319px;left:${reCx}px;transform:translateX(-50%);text-align:center;font-size:20px;font-weight:500;color:#d9d9d9;white-space:nowrap;">£ Perf.</div>`;
+      // £ Perf. shows the team's LEAGUE RANK on £ performance (rank 1 = best overperformer),
       // not a raw figure. Priority: computed mvPerfRank -> pipeline resourceEfficiencyRank -> manual -> blank.
       let reValDisplay, reValBg;
       if (mvPerfRank != null) {
@@ -4239,8 +4241,8 @@ export function buildCoachCardElement(coach, tenureRows, traits, overrides = {})
         reValDisplay = "—"; reValBg = null;
       }
       const reVal = reValBg
-        ? `<span style="position:absolute;top:354px;left:792px;font-size:20px;font-weight:700;color:#000;background:${reValBg};border-radius:6px;padding:2px 10px;">${reValDisplay}</span>`
-        : `<div style="position:absolute;top:357px;left:792px;font-size:20px;font-weight:500;color:#fff;">${reValDisplay}</div>`;
+        ? `<span style="position:absolute;top:354px;left:${reCx}px;transform:translateX(-50%);font-size:20px;font-weight:700;color:#000;background:${reValBg};border-radius:6px;padding:2px 10px;white-space:nowrap;">${reValDisplay}</span>`
+        : `<div style="position:absolute;top:357px;left:${reCx}px;transform:translateX(-50%);text-align:center;font-size:20px;font-weight:500;color:#fff;">${reValDisplay}</div>`;
       return heads + vals + reHead + reVal;
     })()}
 

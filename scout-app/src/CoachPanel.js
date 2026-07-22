@@ -17,7 +17,7 @@ const FIELD_LABELS = [
   ['xgP90',  'xG p90'],
   ['xgaP90', 'xGA p90'],
   ['ppg',    'PPG'],
-  ['costPer','£ Per'],
+  ['costPer','£ Perf.'],
 ];
 
 function OverrideInput({ label, value, onCommit }) {
@@ -64,14 +64,14 @@ function CoachStatOverrides({ coachId, overrides, onFieldChange, onClear }) {
           <input
             type="text"
             defaultValue={overrides.statsTitle == null ? '' : overrides.statsTitle}
-            placeholder="24-25 Stats (auto)"
+            placeholder="Season Stats (default)"
             onBlur={function(e) { onFieldChange(coachId, 'statsTitle', e.target.value === '' ? undefined : e.target.value); }}
             style={{ width: 150, background: '#080f1c', border: '1px solid #1e2d45', borderRadius: 4, color: '#e2e8f4', fontSize: 11, padding: '4px 6px' }}
           />
         </div>
         <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#cbd5e1', cursor: 'pointer', paddingBottom: 4 }}>
           <input type="checkbox" checked={!!overrides.hideCostPer} onChange={function(e) { onFieldChange(coachId, 'hideCostPer', e.target.checked || undefined); }} />
-          Hide £ Per
+          Hide £ Perf.
         </label>
       </div>
       <button
@@ -130,7 +130,7 @@ function CoachQuickOverrides({ coach, coachId, overrides, teams, onFieldChange, 
   var latestRow = latestT ? teams.find(function(x) { return x.team === latestT.team && x.league === latestT.league && x.season === latestT.season; }) : null;
   var sizeHint = latestRow && latestRow.leagueSize != null ? String(latestRow.leagueSize) : '20';
 
-  var VR  = [['squadValue', 'Squad Value', '£340m'], ['summerSpend', 'Summer Spending', '£180m'], ['odds', 'Odds', '5/1']];
+  var VR  = [['squadValue', 'Squad Cost', '£340m'], ['wageBill', 'Wage Bill', '£120m'], ['odds', 'Odds', '5/1']];
   var TXT = [['agent', 'Agent', ''], ['formation', 'Formation', '4-3-3'], ['tenure', 'Tenure', '2024-Present']];
   var lbl = { fontSize: 9, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' };
   var inp = { width: 100, background: '#080f1c', border: '1px solid #2b1e45', borderRadius: 4, color: '#e2e8f4', fontSize: 11, padding: '4px 6px' };
@@ -511,7 +511,7 @@ export default function CoachPanel({ allTeams, allPlayers, onClose }) {
       }
       var teamContext = {
         squadValue: tcM('squadValue'),
-        summerSpend: tcM('summerSpend'),
+        wageBill: tcM('wageBill'),
         odds: tcM('odds'),
         age: (lr.avgAge != null ? Number(lr.avgAge).toFixed(1) : undefined),
       };
