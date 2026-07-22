@@ -43,6 +43,14 @@ export default function CoachPanel({ allTeams = [], onClose }) {
   const [expandedOverride, setExpandedOverride] = useState(null); // coachId whose override panel is open
   const importInputRef = React.useRef(null);
 
+  const handleClearOverrides = (coachId) => {
+    setCardOverrides(prev => {
+      const next = { ...prev };
+      delete next[coachId];
+      return next;
+    });
+  };
+
   const refresh = () => setCoaches(loadCoaches());
 
   // Resolve a coach's tenure (their picked {team, league, season} entries) into
@@ -145,7 +153,7 @@ export default function CoachPanel({ allTeams = [], onClose }) {
                 coachId={coach.id}
                 overrides={cardOverrides[coach.id] || {}}
                 onChange={(field, val) => setCardOverrides(prev => ({ ...prev, [coach.id]: { ...(prev[coach.id] || {}), [field]: val } }))}
-                onClear={() => setCardOverrides(prev => { const n = { ...prev }; delete n[coach.id]; return n; })}
+                onClear={() => handleClearOverrides(coach.id)}
               />}
             );
           })}
