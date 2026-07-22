@@ -811,6 +811,7 @@ export default function TeamIndex({ players = [] }) {
       {showCoaches && (
         <CoachPanel
           allTeams={all}
+          allPlayers={players}
           onClose={() => setShowCoaches(false)}
         />
       )}
