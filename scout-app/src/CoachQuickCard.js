@@ -74,6 +74,21 @@ function barRow(label, pct, rawVal, rowH = 18, extraGap = 0) {
     </div>`;
 }
 
+// GBE criteria row (manager) — player-style tick circle + label/sublabel.
+// No points for managers: a route is either selected (Pass) or not.
+function gbeCriteriaRow(label, sub, selected) {
+  return `
+    <div style="display:flex;align-items:center;gap:11px;">
+      <span style="width:17px;height:17px;border-radius:50%;flex-shrink:0;background:${selected?'#dbe1ee':'transparent'};border:1.5px solid ${selected?'#dbe1ee':'#3a4458'};display:flex;align-items:center;justify-content:center;">
+        ${selected ? `<span style="color:#07090f;font-size:11px;font-weight:900;line-height:1;">&#10003;</span>` : ''}
+      </span>
+      <div style="display:flex;flex-direction:column;line-height:1.2;">
+        <span style="font-size:14px;font-weight:700;color:${selected?'#e8eef8':'#9aa3b8'};">${label}</span>
+        <span style="font-size:11px;font-weight:500;color:#5e6678;">${sub}</span>
+      </div>
+    </div>`;
+}
+
 // STYLE hexagons — identical geometry to player rolesRankedSvgHtml
 function styleHexSvg(rows, maxWidth = 404) {
   const R = 11;
@@ -180,18 +195,18 @@ function teamContextHtml(tc, ageVal, agePct) {
 
 // ─── IMPACT radar — faithful replica of Team HQ Section 8 comparison radar ───
 const _RADAR = [
-  ['xG',              'Attack',     'xG',                  null, false],
-  ['Goals',          'Attack',     'Goals Scored',        null, false],
-  ['Touches in Box',  'Attack',     'Touches in Box',      null, false],
-  ['xG Against',      'Defence',    'xG Against',          null, true],
-  ['Goals Against',   'Defence',    'Goals Against',       null, true],
-  ['PPDA',            'Defence',    'PPDA',                null, true],
-  ['Possession',      'Possession', 'Possession',          null, false],
-  ['Passes',          'Possession', 'Passes',              null, false],
-  ['Passes to Final 3rd','Possession','Passes to Final 3rd',null, false],
-  ['Long Passes',     'Possession', 'Long Passes',         null, false],
-  ['Points p90',      null, null, (r) => (r && r.matches ? _n(r.points)/r.matches : null), false],
-  ['xPts p90',        null, null, (r) => (r && r.matches ? _n(r.expectedPoints)/r.matches : null), false],
+  ['xG',           'Attack',     'xG',                  null, false],
+  ['Goals',        'Attack',     'Goals Scored',        null, false],
+  ['Touches Box',  'Attack',     'Touches in Box',      null, false],
+  ['xGA',          'Defence',    'xG Against',          null, true],
+  ['Goals vs',     'Defence',    'Goals Against',       null, true],
+  ['PPDA',         'Defence',    'PPDA',                null, true],
+  ['Possession',   'Possession', 'Possession',          null, false],
+  ['Passed',       'Possession', 'Passes',              null, false],
+  ['Pass F3rd',    'Possession', 'Passes to Final 3rd', null, false],
+  ['Long Passes',  'Possession', 'Long Passes',         null, false],
+  ['Pts',          null, null, (r) => (r && r.matches ? _n(r.points)/r.matches : null), false],
+  ['xPts',         null, null, (r) => (r && r.matches ? _n(r.expectedPoints)/r.matches : null), false],
 ];
 function _mg(row, group, name) {
   const g = row && row.metricGroups && row.metricGroups[group];
@@ -229,8 +244,8 @@ function impactRadarSvg(rowA, rowB, pool, labelA, labelB, subA, subB) {
   const seasonA = rowA && rowA.season ? String(rowA.season).replace(/^20/, '') : '';
   const seasonB = rowB && rowB.season ? String(rowB.season).replace(/^20/, '') : '';
 
-  // square canvas so it scales to the tile height and centres
-  const VB = 540, cx = 270, cy = 262, INNER = 10, OUTER = 100, R = 150, LABEL_R = 168;
+  // square canvas so it scales to the tile — bigger radius, tighter margins
+  const VB = 560, VH = 420, cx = 280, cy = 230, INNER = 10, OUTER = 100, R = 170, LABEL_R = 184;
   const rpx = (r) => (r / 100) * R;
   const ang = (i) => (-90 + (i * 360) / N) * Math.PI/180;
   const pt = (i, r) => [cx + rpx(r)*Math.cos(ang(i)), cy + rpx(r)*Math.sin(ang(i))];
@@ -252,21 +267,19 @@ function impactRadarSvg(rowA, rowB, pool, labelA, labelB, subA, subB) {
   _RADAR.forEach((sp, i) => {
     const [ex, ey] = pt(i, OUTER);
     spokes += `<line x1="${cx}" y1="${cy}" x2="${ex.toFixed(1)}" y2="${ey.toFixed(1)}" stroke="${RING_IN}" stroke-width="1"/>`;
-    let rot = (ang(i) * 180/Math.PI) + 90;
-    let rn = ((rot + 180) % 360) - 180;
-    if (rn > 90 || rn < -90) rot += 180;
+    // All labels upright/horizontal (like Team HQ), anchored outward so they clear the ring.
+    const dx = Math.cos(ang(i)), dy = Math.sin(ang(i));
     const [lx, ly] = pt(i, LABEL_R / R * 100);
-    labels += `<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" transform="rotate(${rot.toFixed(1)} ${lx.toFixed(1)} ${ly.toFixed(1)})" text-anchor="middle" dominant-baseline="middle" font-family="Montserrat,sans-serif" font-size="13" font-weight="600" fill="${LBL}">${sp[0]}</text>`;
+    const anchor = dx > 0.2 ? 'start' : dx < -0.2 ? 'end' : 'middle';
+    labels += `<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" text-anchor="${anchor}" dominant-baseline="middle" font-family="Montserrat,sans-serif" font-size="14" font-weight="700" fill="${LBL}">${sp[0]}</text>`;
   });
   const hole = `<circle cx="${cx}" cy="${cy}" r="${rpx(INNER-0.6).toFixed(1)}" fill="${HOLE}"/>`;
   const poly = (arr) => arr.map((p,i) => pt(i, p).map(v=>v.toFixed(1)).join(',')).join(' ');
-  const dots = (arr, col) => arr.map((p,i) => { const [x,y]=pt(i,p); return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4.5" fill="${col}"/>`; }).join('');
 
-  return `<svg viewBox="0 0 ${VB} 440" xmlns="http://www.w3.org/2000/svg" style="height:100%;width:auto;display:block;margin:0 auto;">
+  return `<svg viewBox="0 0 ${VB} ${VH}" xmlns="http://www.w3.org/2000/svg" style="height:100%;width:auto;display:block;margin:0 auto;">
     ${bands}${rings}${spokes}${labels}${hole}
     <polygon points="${poly(A)}" fill="${FILL_A}" stroke="${COL_A}" stroke-width="2.6"/>
     <polygon points="${poly(B)}" fill="${FILL_B}" stroke="${COL_B}" stroke-width="2.6"/>
-    ${dots(A, COL_A)}${dots(B, COL_B)}
     <g font-family="Montserrat,sans-serif">
       <text x="4" y="20"><tspan font-size="20" font-weight="800" fill="${COL_A}">${(labelA||'').slice(0,18)}</tspan>${seasonA ? ` <tspan font-size="13" font-weight="700" fill="${COL_A}" opacity="0.8">${seasonA}</tspan>` : ''}</text>
       <text x="4" y="40" font-size="13" font-weight="600" fill="${COL_A}">${(subA||'')}</text>
@@ -383,10 +396,22 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
     ageVal = String(tc.age);
   }
 
-  // GBE
-  const gbeStatus = (overrides.gbe && overrides.gbe.status) || '';
-  const gbeNote = (overrides.gbe && overrides.gbe.note) || 'GBE points to be entered manually.';
-  const gbeCol = /pass/i.test(gbeStatus) ? '#3da65b' : /fail/i.test(gbeStatus) ? '#c7363c' : '#9aa3b8';
+  // GBE (manager) — no points. Pass = either route selected, OR autopass.
+  // Autopass: managing in an England league, or nationality is a home nation.
+  const HOME_NATIONS = new Set(['England','Scotland','Wales','Northern Ireland','Ireland','Republic of Ireland']);
+  const englandLeague = /^England/i.test(String(latest.league || ''));
+  const homeNation    = HOME_NATIONS.has(String(coach.nationality || '').trim());
+  const autopass      = englandLeague || homeNation;
+  const _gbe   = overrides.gbe || {};
+  const gbeC36 = !!_gbe.c36;                 // 36-months cumulative, Band 1-5
+  const gbeC24 = !!_gbe.c24;                 // 24-months consecutive, Band 1-5
+  const gbePass   = autopass || gbeC36 || gbeC24;
+  const gbeStatus = gbePass ? 'PASS' : 'FAIL';
+  const gbeExceptions     = !!_gbe.exceptions && !gbePass;
+  const gbeExceptionsText = String(_gbe.exceptionsText || '').trim();
+  const gbeShowPanel = gbeExceptions && gbeExceptionsText;
+  // FAIL badge turns orange when an Exceptions Panel note is in play (like the player card's panel state).
+  const gbeCol = gbePass ? '#3da65b' : gbeShowPanel ? '#f0a637' : '#c7363c';
 
   // panel geometry (match player)
   const STYLE_PANEL_W = 448, CAREER_PANEL_W = 448, STYLE_TOP = 322;
@@ -451,11 +476,16 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
       ${infoBox}
 
       <div style="position:absolute;top:24px;left:1510px;width:390px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.10);border-radius:12px;padding:20px 24px;box-sizing:border-box;">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-          <span style="font-size:15px;font-weight:700;color:#9aa3b8;text-transform:uppercase;letter-spacing:.04em;">GBE Calculation</span>
-          ${gbeStatus ? `<span style="font-size:16px;font-weight:800;color:${gbeCol};background:${gbeCol}22;border:1px solid ${gbeCol};border-radius:6px;padding:5px 14px;">${gbeStatus}</span>` : `<span style="font-size:16px;font-weight:800;color:#9aa3b8;">Manual</span>`}
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
+          <span style="font-size:15px;font-weight:700;color:#9aa3b8;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;">GBE Calculation</span>
+          <span style="font-size:16px;font-weight:800;color:${gbeCol};background:${gbeCol}22;border:1px solid ${gbeCol};border-radius:6px;padding:5px 14px;white-space:nowrap;">${gbeStatus}</span>
         </div>
-        <div style="font-size:14px;color:#c8d4f0;">${gbeNote}</div>
+        <div style="display:flex;flex-direction:column;gap:14px;">
+          ${gbeCriteriaRow('36 Months Cumulative', 'Band 1-5 League', gbeC36)}
+          ${gbeCriteriaRow('24 Months Consecutive', 'Band 1-5 League', gbeC24)}
+        </div>
+        ${autopass ? `<div style="margin-top:14px;font-size:12px;font-weight:600;color:#3da65b;border-top:1px solid rgba(61,166,91,0.2);padding-top:10px;">✓ Auto Pass — ${englandLeague ? 'English League' : 'Home Nation'}</div>` : ''}
+        ${gbeShowPanel ? `<div style="margin-top:14px;font-size:12px;font-weight:600;color:#f97316;border-top:1px solid rgba(249,115,22,0.2);padding-top:10px;line-height:1.4;">⚡ Exceptions Panel — ${gbeExceptionsText}</div>` : ''}
       </div>
 
       <div style="position:absolute;top:${LEFT_TOP}px;left:0px;width:920px;height:${1080-LEFT_TOP}px;overflow:hidden;box-sizing:border-box;padding-left:24px;padding-top:12px;">

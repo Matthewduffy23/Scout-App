@@ -115,7 +115,7 @@ function CoachQuickOverrides({ coach, coachId, overrides, teams, onFieldChange, 
   var sizeHint = latestRow && latestRow.leagueSize != null ? String(latestRow.leagueSize) : '20';
 
   var VR  = [['squadValue', 'Squad Value', '£340m'], ['summerSpend', 'Summer Spending', '£180m'], ['odds', 'Odds', '5/1']];
-  var TXT = [['agent', 'Agent', ''], ['formation', 'Formation', '4-3-3'], ['gbeStatus', 'GBE Status', 'Pass'], ['gbeNote', 'GBE Note', '22 pts']];
+  var TXT = [['agent', 'Agent', ''], ['formation', 'Formation', '4-3-3']];
   var lbl = { fontSize: 9, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' };
   var inp = { width: 100, background: '#080f1c', border: '1px solid #2b1e45', borderRadius: 4, color: '#e2e8f4', fontSize: 11, padding: '4px 6px' };
   var rankInp = Object.assign({}, inp, { width: 58 });
@@ -161,6 +161,35 @@ function CoachQuickOverrides({ coach, coachId, overrides, teams, onFieldChange, 
           onPick={function(o) { onFieldChange(coachId, 'impactB', o); }}
           onClear={function() { onFieldChange(coachId, 'impactB', undefined); }}
         />
+      </div>
+      <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid #1a1030' }}>
+        <span style={lbl}>GBE — pass route (managers have no points; tick one to pass)</span>
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginTop: 6 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#cbd5e1', cursor: 'pointer' }}>
+            <input type="checkbox" checked={!!overrides.gbeC36} onChange={function(e) { onFieldChange(coachId, 'gbeC36', e.target.checked || undefined); }} />
+            36 months cumulative (Band 1-5)
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#cbd5e1', cursor: 'pointer' }}>
+            <input type="checkbox" checked={!!overrides.gbeC24} onChange={function(e) { onFieldChange(coachId, 'gbeC24', e.target.checked || undefined); }} />
+            24 months consecutive (Band 1-5)
+          </label>
+        </div>
+        <div style={{ fontSize: 9, color: '#475569', marginTop: 5 }}>
+          Auto-passes if managing in an England league or nationality is England / Scotland / Wales / N. Ireland / Ireland.
+        </div>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#cbd5e1', cursor: 'pointer', marginTop: 10 }}>
+          <input type="checkbox" checked={!!overrides.gbeExceptions} onChange={function(e) { onFieldChange(coachId, 'gbeExceptions', e.target.checked || undefined); }} />
+          Show Exceptions Panel note (orange)
+        </label>
+        {overrides.gbeExceptions ? (
+          <textarea
+            value={overrides.gbeExceptionsText == null ? '' : overrides.gbeExceptionsText}
+            maxLength={160}
+            placeholder="Why the exceptions panel applies (one–two lines)…"
+            onChange={function(e) { onFieldChange(coachId, 'gbeExceptionsText', e.target.value === '' ? undefined : e.target.value); }}
+            style={{ width: '100%', minHeight: 40, resize: 'vertical', marginTop: 6, background: '#080f1c', border: '1px solid #2b1e45', borderRadius: 4, color: '#e2e8f4', fontSize: 11, padding: '5px 7px', boxSizing: 'border-box', fontFamily: 'inherit', lineHeight: 1.4 }}
+          />
+        ) : null}
       </div>
       <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 3 }}>
         <span style={lbl}>Biography (replaces the Impact radar when filled — max 350)</span>
@@ -461,7 +490,14 @@ export default function CoachPanel({ allTeams, allPlayers, onClose }) {
         agent: q.agent,
         formation: q.formation,
       };
-      if (q.gbeStatus || q.gbeNote) overrides.gbe = { status: q.gbeStatus, note: q.gbeNote };
+      if (q.gbeC36 || q.gbeC24 || q.gbeExceptions) {
+        overrides.gbe = {
+          c36: !!q.gbeC36,
+          c24: !!q.gbeC24,
+          exceptions: !!q.gbeExceptions,
+          exceptionsText: q.gbeExceptionsText || '',
+        };
+      }
       if (q.biography && q.biography.trim()) overrides.biography = q.biography.trim().slice(0, 350);
       if (rowA) { overrides.impactRowA = rowA; overrides.impactLabelA = rowA.team; }
       if (rowB) { overrides.impactRowB = rowB; overrides.impactLabelB = rowB.team; }
