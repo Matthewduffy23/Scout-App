@@ -66,7 +66,7 @@ function getCrest(name) {
 
 
 function Tag({ label, bg = '#0e1e38', color = '#7eb3f8' }) {
-  return <span style={{ padding: '2px 8px', borderRadius: 8, background: bg, color, fontSize: 10.5, fontWeight: 600, display: 'inline-block' }}>{label}</span>;
+  return <span style={{ padding: '2px 8px', borderRadius: 8, background: bg, color, fontSize: 10.5, fontWeight: 600, display: 'inline-block', whiteSpace: 'nowrap', flexShrink: 0 }}>{label}</span>;
 }
 
 function ScoreCard({ label, score, sub, showBand = true, showStars = true }) {
@@ -195,7 +195,7 @@ export default function TeamCard({ team, allTeamSeasons = [], onClose }) {
             </div>
             {activeTeam.completeScore != null && <div style={{ fontSize: 10, color: scoreBandColor(activeTeam.completeScore), fontWeight: 600, marginBottom: 3 }}>{starLabel(scoreToStars(activeTeam.completeScore))}</div>}
             <div style={{ fontSize: 11, color: '#64748b', marginBottom: 8 }}>{activeTeam.league} · {activeTeam.season}{activeTeam.pointsRank != null && activeTeam.leagueSize != null && ` · ${activeTeam.pointsRank}${activeTeam.pointsRank === 1 ? 'st' : activeTeam.pointsRank === 2 ? 'nd' : activeTeam.pointsRank === 3 ? 'rd' : 'th'} of ${activeTeam.leagueSize}`}</div>
-            <div style={{ display: 'flex', gap: 5, alignItems: 'center', overflowX: 'auto', paddingBottom: 2, scrollbarWidth: 'none' }}>
+            <div style={{ display: 'flex', gap: 5, alignItems: 'center', overflowX: 'auto', overflowY: 'hidden', paddingBottom: 2, scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
               {activeTeam.style && <Tag label={activeTeam.style} bg={styleColor(activeTeam.style).bg} color={styleColor(activeTeam.style).color} />}
               {record && <Tag label={record} bg="#0f1f10" color="#4ade80" />}
               {activeTeam.points != null && <Tag label={`${activeTeam.points} pts`} bg="#1a1205" color="#fbbf24" />}
