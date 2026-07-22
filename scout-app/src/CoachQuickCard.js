@@ -255,9 +255,9 @@ function impactRadarSvg(rowA, rowB, pool, labelA, labelB, subA, subB) {
   const ang = (i) => (-90 + (i * 360) / N) * Math.PI/180;
   const pt = (i, r) => [cx + rpx(r)*Math.cos(ang(i)), cy + rpx(r)*Math.sin(ang(i))];
 
-  const BAND_OUT='#141d2e', BAND_IN='#0c1320', RING='#2b3547',
-        LBL='#dfe6f2', HOLE=BG, COL_A='#e23b3b', COL_B='#3b6fe2',
-        FILL_A='rgba(200,30,30,0.55)', FILL_B='rgba(29,78,216,0.55)';
+  const BAND_OUT='#162235', BAND_IN='#0d1524', RING='#3a4050',
+        LBL='#f5f5f5', HOLE=BG, COL_A='#C81E1E', COL_B='#1D4ED8',
+        FILL_A='rgba(200,30,30,0.60)', FILL_B='rgba(29,78,216,0.60)';
 
   const edges = Array.from({length: 11}, (_, i) => INNER + i*(OUTER-INNER)/10);
   let bands = '';
@@ -270,13 +270,13 @@ function impactRadarSvg(rowA, rowB, pool, labelA, labelB, subA, subB) {
   edges.forEach((r, j) => {
     if (j === 0) return;
     const outer = j === edges.length - 1;
-    rings += `<circle cx="${cx}" cy="${cy}" r="${rpx(r).toFixed(1)}" fill="none" stroke="${outer ? '#5a6884' : RING}" stroke-width="${outer ? 1.1 : 0.8}" opacity="${outer ? 0.8 : 0.55}"/>`;
+    rings += `<circle cx="${cx}" cy="${cy}" r="${rpx(r).toFixed(1)}" fill="none" stroke="${outer ? '#8b97ab' : RING}" stroke-width="${outer ? 1.2 : 1}" opacity="${outer ? 0.9 : 0.85}"/>`;
   });
   let spokes = '', labels = '';
   _RADAR.forEach((sp, i) => {
     const [ex, ey] = pt(i, OUTER);
-    spokes += `<line x1="${cx}" y1="${cy}" x2="${ex.toFixed(1)}" y2="${ey.toFixed(1)}" stroke="${RING}" stroke-width="0.8" opacity="0.6"/>`;
-    // All labels upright/horizontal (like Team HQ), anchored outward so they clear the ring.
+    spokes += `<line x1="${cx}" y1="${cy}" x2="${ex.toFixed(1)}" y2="${ey.toFixed(1)}" stroke="${RING}" stroke-width="1" opacity="0.85"/>`;
+    // Labels upright/horizontal, anchored outward so they clear the ring.
     const dx = Math.cos(ang(i)), dy = Math.sin(ang(i));
     const [lx, ly] = pt(i, LABEL_R / R * 100);
     const anchor = dx > 0.2 ? 'start' : dx < -0.2 ? 'end' : 'middle';
@@ -284,12 +284,12 @@ function impactRadarSvg(rowA, rowB, pool, labelA, labelB, subA, subB) {
   });
   const hole = `<circle cx="${cx}" cy="${cy}" r="${rpx(INNER-0.6).toFixed(1)}" fill="${HOLE}"/>`;
   const poly = (arr) => arr.map((p,i) => pt(i, p).map(v=>v.toFixed(1)).join(',')).join(' ');
-  const dots = (arr, col) => arr.map((p,i) => { const [x,y]=pt(i,p); return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="2.4" fill="${col}" opacity="0.85"/>`; }).join('');
+  const dots = (arr, col) => arr.map((p,i) => { const [x,y]=pt(i,p); return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3" fill="${col}"/>`; }).join('');
 
   return `<svg viewBox="0 0 ${VB} ${VH}" xmlns="http://www.w3.org/2000/svg" style="height:100%;width:auto;display:block;margin:0 auto;">
     ${bands}${rings}${spokes}${labels}${hole}
-    <polygon points="${poly(A)}" fill="${FILL_A}" stroke="${COL_A}" stroke-width="2.6"/>
-    <polygon points="${poly(B)}" fill="${FILL_B}" stroke="${COL_B}" stroke-width="2.6"/>
+    <polygon points="${poly(A)}" fill="${FILL_A}" stroke="${COL_A}" stroke-width="2.2"/>
+    <polygon points="${poly(B)}" fill="${FILL_B}" stroke="${COL_B}" stroke-width="2.2"/>
     ${dots(A, COL_A)}${dots(B, COL_B)}
     <g font-family="Montserrat,sans-serif">
       <text x="4" y="20"><tspan font-size="20" font-weight="800" fill="${COL_A}">${(labelA||'').slice(0,18)}</tspan>${seasonA ? ` <tspan font-size="13" font-weight="700" fill="${COL_A}" opacity="0.8">${seasonA}</tspan>` : ''}</text>
@@ -427,7 +427,7 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
   const gbeTop = gbeShowPanel ? 24 : 52;
 
   // panel geometry (match player)
-  const STYLE_PANEL_W = 448, CAREER_PANEL_W = 448, STYLE_TOP = 322;
+  const STYLE_PANEL_W = 448, CAREER_PANEL_W = 448, STYLE_TOP = 310;
   const STYLE_HEADER_H = 40, hexH = styleRows.length*46 + 8;
   const ROW1_PANEL_H = PANEL_PAD*2 + STYLE_HEADER_H + hexH;
   const ROW2_TOP = STYLE_TOP + ROW1_PANEL_H + 14;            // tighter gap -> row 2 sits higher
