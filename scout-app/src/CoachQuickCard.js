@@ -250,7 +250,7 @@ function impactRadarSvg(rowA, rowB, pool, labelA, labelB, subA, subB) {
   const ang = (i) => (-90 + (i * 360) / N) * Math.PI/180;
   const pt = (i, r) => [cx + rpx(r)*Math.cos(ang(i)), cy + rpx(r)*Math.sin(ang(i))];
 
-  const BAND_OUT='#162235', BAND_IN='#0d1524', RING_IN='#3a4050', RING_OUT='#cbd5e1',
+  const BAND_OUT='#141d2e', BAND_IN='#0c1320', RING='#2b3547',
         LBL='#dfe6f2', HOLE=BG, COL_A='#e23b3b', COL_B='#3b6fe2',
         FILL_A='rgba(200,30,30,0.55)', FILL_B='rgba(29,78,216,0.55)';
 
@@ -262,11 +262,11 @@ function impactRadarSvg(rowA, rowB, pool, labelA, labelB, subA, subB) {
     bands += `<circle cx="${cx}" cy="${cy}" r="${mid.toFixed(1)}" fill="none" stroke="${col}" stroke-width="${wpx.toFixed(1)}"/>`;
   }
   let rings = '';
-  edges.forEach((r, j) => { rings += `<circle cx="${cx}" cy="${cy}" r="${rpx(r).toFixed(1)}" fill="none" stroke="${j===edges.length-1?RING_OUT:RING_IN}" stroke-width="1"/>`; });
+  edges.forEach((r, j) => { if (j === 0) return; rings += `<circle cx="${cx}" cy="${cy}" r="${rpx(r).toFixed(1)}" fill="none" stroke="${RING}" stroke-width="0.8" opacity="0.6"/>`; });
   let spokes = '', labels = '';
   _RADAR.forEach((sp, i) => {
     const [ex, ey] = pt(i, OUTER);
-    spokes += `<line x1="${cx}" y1="${cy}" x2="${ex.toFixed(1)}" y2="${ey.toFixed(1)}" stroke="${RING_IN}" stroke-width="1"/>`;
+    spokes += `<line x1="${cx}" y1="${cy}" x2="${ex.toFixed(1)}" y2="${ey.toFixed(1)}" stroke="${RING}" stroke-width="0.8" opacity="0.6"/>`;
     // All labels upright/horizontal (like Team HQ), anchored outward so they clear the ring.
     const dx = Math.cos(ang(i)), dy = Math.sin(ang(i));
     const [lx, ly] = pt(i, LABEL_R / R * 100);

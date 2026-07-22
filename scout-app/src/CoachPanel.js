@@ -322,6 +322,23 @@ export default function CoachPanel({ allTeams, allPlayers, onClose }) {
     return (idx + 1) - Number(row.pointsRank);
   }
 
+  // £ Performance league RANK — rank every team in the league+season by their £ performance
+  // (MV-rank minus points-rank; higher = bigger overperformance), rank 1 = best overperformer.
+  function getMVPerfRank(row) {
+    if (!row) return null;
+    var peers = teams.filter(function (t) { return String(t.league) === String(row.league) && String(t.season) === String(row.season); });
+    var withMV = peers
+      .map(function (t) { return { t: t, mv: getTotalMV(t.team, t.league) }; })
+      .filter(function (x) { return x.mv != null && x.t.pointsRank != null; });
+    if (withMV.length < 2) return null;
+    withMV.sort(function (a, b) { return b.mv - a.mv; });
+    var perf = withMV.map(function (x, i) { return { team: x.t.team, val: (i + 1) - Number(x.t.pointsRank) }; });
+    var ranked = perf.slice().sort(function (a, b) { return b.val - a.val; });
+    var idx = ranked.findIndex(function (x) { return String(x.team).toLowerCase() === String(row.team).toLowerCase(); });
+    if (idx < 0) return null;
+    return { rank: idx + 1, size: ranked.length };
+  }
+
   var importInputRef = useRef(null);
   var [coaches, setCoaches] = useState(function() { return loadCoaches(); });
   var [showBuilder, setShowBuilder] = useState(false);
@@ -425,6 +442,8 @@ export default function CoachPanel({ allTeams, allPlayers, onClose }) {
       var latestRow = tenureRows.slice().sort(function (a, b) { return a.season < b.season ? 1 : -1; })[0];
       var mvp = getMVPerf(latestRow);
       if (mvp != null) overrides.mvPerf = mvp;
+      var mvpRank = getMVPerfRank(latestRow);
+      if (mvpRank != null) overrides.mvPerfRank = mvpRank;
       await downloadCoachCardPNG(coach, tenureRows, traits, overrides);
     } catch (err) {
       alert('Could not generate the card — check the browser console for details.');
