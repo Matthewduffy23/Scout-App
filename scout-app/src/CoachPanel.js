@@ -9,6 +9,31 @@ import { loadCoaches, deleteCoach, exportCoaches, importCoachesFile } from './co
 import { computeCoachTraits } from './coachMetrics';
 import { downloadCoachCardPNG } from './CoachCard';
 
+function CoachStatOverrides({ overrides, onChange, onClear }) {
+  const inp = (field, label) => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <span style={{ fontSize: 9, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</span>
+      <input type="number" value={overrides[field] ?? ''} onChange={e => onChange(field, e.target.value === '' ? undefined : Number(e.target.value))}
+        placeholder="auto" style={{ width: 72, background: '#080f1c', border: '1px solid #1e2d45', borderRadius: 4, color: '#e2e8f4', fontSize: 11, padding: '4px 6px' }} />
+    </div>
+  );
+  return (
+    <div style={{ margin: '4px 0 6px 52px', padding: '10px 12px', background: '#060c18', border: '1px solid #1e2d45', borderRadius: 7 }}>
+      <div style={{ fontSize: 10, color: '#475569', marginBottom: 8 }}>Override card stats — leave blank to use auto-calculated values. xG/xGA entered as per-90 (multiplied by matches on card).</div>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        {inp('games', 'Games')}
+        {inp('gf', 'GF')}
+        {inp('ga', 'GA')}
+        {inp('xgP90', 'xG p90')}
+        {inp('xgaP90', 'xGA p90')}
+        {inp('ppg', 'PPG')}
+        {inp('costPer', '£ Per')}
+      </div>
+      <button onClick={onClear} style={{ marginTop: 8, fontSize: 10, color: '#f87171', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Clear overrides</button>
+    </div>
+  );
+}
+
 export default function CoachPanel({ allTeams = [], onClose }) {
   const [coaches, setCoaches] = useState(() => loadCoaches());
   const [showBuilder, setShowBuilder] = useState(false);
@@ -116,33 +141,12 @@ export default function CoachPanel({ allTeams = [], onClose }) {
                 <button onClick={() => handleEdit(coach)} style={{ padding: '5px 10px', borderRadius: 5, border: '1px solid #1e2d45', background: 'transparent', color: '#94a3b8', fontSize: 11, cursor: 'pointer' }}>Edit</button>
                 <button onClick={() => handleDelete(coach)} style={{ padding: '5px 10px', borderRadius: 5, border: '1px solid #1e2d45', background: 'transparent', color: '#f87171', fontSize: 11, cursor: 'pointer' }}>Delete</button>
               </div>
-              {expandedOverride === coach.id && (() => {
-                const ov = cardOverrides[coach.id] || {};
-                const set = (field, val) => setCardOverrides(prev => ({ ...prev, [coach.id]: { ...(prev[coach.id] || {}), [field]: val } }));
-                const inp = (field, placeholder) => (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <span style={{ fontSize: 9, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{placeholder}</span>
-                    <input type="number" value={ov[field] ?? ''} onChange={e => set(field, e.target.value === '' ? undefined : Number(e.target.value))}
-                      placeholder="auto" style={{ width: 72, background: '#080f1c', border: '1px solid #1e2d45', borderRadius: 4, color: '#e2e8f4', fontSize: 11, padding: '4px 6px' }} />
-                  </div>
-                );
-                return (
-                  <div style={{ margin: '4px 0 6px 52px', padding: '10px 12px', background: '#060c18', border: '1px solid #1e2d45', borderRadius: 7 }}>
-                    <div style={{ fontSize: 10, color: '#475569', marginBottom: 8 }}>Override card stats — leave blank to use auto-calculated values. xG/xGA entered as per-90 (multiplied by matches on card).</div>
-                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                      {inp('games', 'Games')}
-                      {inp('gf', 'GF')}
-                      {inp('ga', 'GA')}
-                      {inp('xgP90', 'xG p90')}
-                      {inp('xgaP90', 'xGA p90')}
-                      {inp('ppg', 'PPG')}
-                      {inp('costPer', '£ Per')}
-                    </div>
-                    <button onClick={() => setCardOverrides(prev => { const n = { ...prev }; delete n[coach.id]; return n; })}
-                      style={{ marginTop: 8, fontSize: 10, color: '#f87171', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Clear overrides</button>
-                  </div>
-                );
-              })()}
+              {expandedOverride === coach.id && <CoachStatOverrides
+                coachId={coach.id}
+                overrides={cardOverrides[coach.id] || {}}
+                onChange={(field, val) => setCardOverrides(prev => ({ ...prev, [coach.id]: { ...(prev[coach.id] || {}), [field]: val } }))}
+                onClear={() => setCardOverrides(prev => { const n = { ...prev }; delete n[coach.id]; return n; })}
+              />}
             );
           })}
         </div>
