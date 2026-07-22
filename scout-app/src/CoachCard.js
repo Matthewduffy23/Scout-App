@@ -4334,3 +4334,11 @@ export async function downloadCoachCardPNG(coach, tenureRows, traits, overrides 
     document.body.removeChild(el);
   }
 }
+
+// ── Shared primitives exposed for CoachQuickCard.js (this card's own rendering
+//    is unchanged; these are the helpers/constants the quick card reuses).
+export {
+  computeAge, countryToIso2, leagueToCountry, barRowCoach, scoreTierColor,
+  teamCrestUrl, fadeHexToBG, FOTMOB_PHOTO_BASE, ensureMontserratEmbedded,
+  MONTSERRAT_EMBED_CSS, BG, HEADER_L, HEADER_R, ACCENT_PINK, LABEL_COL,
+};

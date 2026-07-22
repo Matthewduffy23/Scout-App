@@ -8,6 +8,7 @@ import CoachBuilder from './CoachBuilder';
 import { loadCoaches, deleteCoach, exportCoaches, importCoachesFile } from './coachStorage';
 import { computeCoachTraits } from './coachMetrics';
 import { downloadCoachCardPNG } from './CoachCard';
+import { downloadCoachQuickCardPNG } from './CoachQuickCard';
 
 const FIELD_LABELS = [
   ['games',  'Games'],
@@ -67,7 +68,7 @@ function CoachStatOverrides({ coachId, overrides, onFieldChange, onClear }) {
   );
 }
 
-function CoachRow({ coach, generatingId, expandedOverride, cardOverrides, onGenerate, onToggleOverride, onEdit, onDelete, onFieldChange, onClear }) {
+function CoachRow({ coach, generatingId, generatingQuickId, expandedOverride, cardOverrides, onGenerate, onGenerateQuick, onToggleOverride, onEdit, onDelete, onFieldChange, onClear }) {
   var tenureCount = (coach.tenures || []).length;
   var sorted = (coach.tenures || []).slice().sort(function(a, b) { return a.season < b.season ? 1 : -1; });
   var latestTenure = sorted[0];
@@ -76,6 +77,7 @@ function CoachRow({ coach, generatingId, expandedOverride, cardOverrides, onGene
   var overrideBg = isExpanded ? '#0e2040' : 'transparent';
   var overrideColor = isExpanded ? '#60a5fa' : '#64748b';
   var isGenerating = generatingId === coach.id;
+  var isGenQuick = generatingQuickId === coach.id;
   return (
     <div key={coach.id}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#0d1624', border: '1px solid #1e2d45', borderRadius: 8, padding: '10px 14px' }}>
@@ -95,6 +97,13 @@ function CoachRow({ coach, generatingId, expandedOverride, cardOverrides, onGene
           style={{ padding: '5px 10px', borderRadius: 5, border: '1px solid #3b7de8', background: isGenerating ? '#1e2d45' : 'transparent', color: '#60a5fa', fontSize: 11, fontWeight: 600, cursor: isGenerating ? 'default' : 'pointer', whiteSpace: 'nowrap' }}
         >
           {isGenerating ? 'Generating…' : '⬇ Card'}
+        </button>
+        <button
+          onClick={function() { onGenerateQuick(coach); }}
+          disabled={isGenQuick}
+          style={{ padding: '5px 10px', borderRadius: 5, border: '1px solid #a855f7', background: isGenQuick ? '#1e2d45' : 'transparent', color: '#c084fc', fontSize: 11, fontWeight: 600, cursor: isGenQuick ? 'default' : 'pointer', whiteSpace: 'nowrap' }}
+        >
+          {isGenQuick ? 'Generating…' : '⚡ Quick'}
         </button>
         <button
           onClick={function() { onToggleOverride(coach.id); }}
@@ -125,6 +134,7 @@ export default function CoachPanel({ allTeams, onClose }) {
   var [showBuilder, setShowBuilder] = useState(false);
   var [editingCoach, setEditingCoach] = useState(null);
   var [generatingId, setGeneratingId] = useState(null);
+  var [generatingQuickId, setGeneratingQuickId] = useState(null);
   var [cardOverrides, setCardOverrides] = useState({});
   var [expandedOverride, setExpandedOverride] = useState(null);
 
@@ -202,6 +212,36 @@ export default function CoachPanel({ allTeams, onClose }) {
     }
   }
 
+  async function handleGenerateQuickCard(coach) {
+    var tenureRows = resolveTenureRows(coach);
+    if (!tenureRows.length) {
+      alert("This coach's saved tenure doesn't match any teams currently in the data — the underlying team-season data may have changed. Try editing the coach and re-picking their seasons.");
+      return;
+    }
+    var missingCount = (coach.tenures || []).length - tenureRows.length;
+    if (missingCount > 0) {
+      var resolvedKeys = new Set(tenureRows.map(function(t) { return t.team + '|' + t.league + '|' + t.season; }));
+      var missing = (coach.tenures || []).filter(function(t) { return !resolvedKeys.has(t.team + '|' + t.league + '|' + t.season); });
+      var proceed = window.confirm(
+        missingCount + ' of ' + coach.tenures.length + ' saved season(s) couldn\'t be matched against the current team data and will be left out of this card:\n\n' +
+        missing.map(function(t) { return t.team + ' — ' + t.league + ' · ' + t.season; }).join('\n') +
+        '\n\nGenerate the quick card anyway with just the ' + tenureRows.length + ' that matched?'
+      );
+      if (!proceed) return;
+    }
+    setGeneratingQuickId(coach.id);
+    try {
+      var traits = computeCoachTraits(tenureRows, teams);
+      var overrides = Object.assign({}, cardOverrides[coach.id] || {}, { allTeams: teams });
+      await downloadCoachQuickCardPNG(coach, tenureRows, traits, overrides);
+    } catch (err) {
+      alert('Could not generate the quick card — check the browser console for details.');
+      console.error(err);
+    } finally {
+      setGeneratingQuickId(null);
+    }
+  }
+
   function handleImportFile(file) {
     importCoachesFile(file, function() { refresh(); });
   }
@@ -238,9 +278,11 @@ export default function CoachPanel({ allTeams, onClose }) {
                 key={coach.id}
                 coach={coach}
                 generatingId={generatingId}
+                generatingQuickId={generatingQuickId}
                 expandedOverride={expandedOverride}
                 cardOverrides={cardOverrides}
                 onGenerate={handleGenerateCard}
+                onGenerateQuick={handleGenerateQuickCard}
                 onToggleOverride={handleToggleOverride}
                 onEdit={handleEdit}
                 onDelete={handleDelete}
