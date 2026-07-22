@@ -4071,9 +4071,12 @@ export function buildCoachCardElement(coach, tenureRows, traits, overrides = {})
   const leagueKey = (latest.league || "") + ".";
   const leagueLogo = LEAGUE_LOGOS[leagueKey] || LEAGUE_LOGOS[latest.league || ""] || "";
   const resEffRank = latest.resourceEfficiencyRank ?? null;
-  // Dynamic season-stats title, e.g. "24-25 Stats" (matches the player scouting card).
+  // Dynamic season-stats title, e.g. "24-25 Stats" — overridable with a custom label.
   const seasonLbl = String(latest.season || "").replace(/^20/, "");
-  const statsTitle = seasonLbl ? `${seasonLbl} Stats` : "Season Stats";
+  const statsTitle = (overrides.statsTitle && String(overrides.statsTitle).trim())
+    ? String(overrides.statsTitle).trim()
+    : (seasonLbl ? `${seasonLbl} Stats` : "Season Stats");
+  const hideCostPer = !!overrides.hideCostPer;
   const mvPerfRank = (overrides.mvPerfRank && overrides.mvPerfRank.rank != null) ? overrides.mvPerfRank : null;
   const traitOverrides = coach.traitOverrides || {};
 
@@ -4213,10 +4216,11 @@ export function buildCoachCardElement(coach, tenureRows, traits, overrides = {})
         ["GA",        410, resolvedGA      ?? "—"],
         ["Pts",       490, _rankStr(_ptsR)],
         ["xPts",      570, _rankStr(_xptsR)],
-        ["PPG",       712, resolvedPPG     ?? "—"],
+        ["PPG",       654, resolvedPPG     ?? "—"],
       ];
       const heads = cols.map(([lab, x]) => `<div style="position:absolute;top:319px;left:${x}px;font-size:20px;font-weight:500;color:#d9d9d9;">${lab}</div>`).join("");
       const vals = cols.map(([, x, v]) => `<div style="position:absolute;top:357px;left:${x}px;font-size:20px;font-weight:500;color:#fff;">${v}</div>`).join("");
+      if (hideCostPer) return heads + vals;
       const reHead = `<div style="position:absolute;top:319px;left:792px;font-size:20px;font-weight:500;color:#d9d9d9;">£ Per</div>`;
       // £ Per shows the team's LEAGUE RANK on £ performance (rank 1 = best overperformer),
       // not a raw figure. Priority: computed mvPerfRank -> pipeline resourceEfficiencyRank -> manual -> blank.

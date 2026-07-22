@@ -262,7 +262,11 @@ function impactRadarSvg(rowA, rowB, pool, labelA, labelB, subA, subB) {
     bands += `<circle cx="${cx}" cy="${cy}" r="${mid.toFixed(1)}" fill="none" stroke="${col}" stroke-width="${wpx.toFixed(1)}"/>`;
   }
   let rings = '';
-  edges.forEach((r, j) => { if (j === 0) return; rings += `<circle cx="${cx}" cy="${cy}" r="${rpx(r).toFixed(1)}" fill="none" stroke="${RING}" stroke-width="0.8" opacity="0.6"/>`; });
+  edges.forEach((r, j) => {
+    if (j === 0) return;
+    const outer = j === edges.length - 1;
+    rings += `<circle cx="${cx}" cy="${cy}" r="${rpx(r).toFixed(1)}" fill="none" stroke="${outer ? '#5a6884' : RING}" stroke-width="${outer ? 1.1 : 0.8}" opacity="${outer ? 0.8 : 0.55}"/>`;
+  });
   let spokes = '', labels = '';
   _RADAR.forEach((sp, i) => {
     const [ex, ey] = pt(i, OUTER);
@@ -412,6 +416,8 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
   const gbeShowPanel = gbeExceptions && gbeExceptionsText;
   // FAIL badge turns orange when an Exceptions Panel note is in play (like the player card's panel state).
   const gbeCol = gbePass ? '#3da65b' : gbeShowPanel ? '#f0a637' : '#c7363c';
+  // Centre the GBE tile a little lower when there's no Exceptions Panel note; keep it up top when there is.
+  const gbeTop = gbeShowPanel ? 24 : 52;
 
   // panel geometry (match player)
   const STYLE_PANEL_W = 448, CAREER_PANEL_W = 448, STYLE_TOP = 322;
@@ -443,6 +449,9 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
      <div style="position:absolute;left:1353px;top:${50 + i*48}px;font-size:18px;font-weight:600;color:#fff;white-space:nowrap;">${String(v).slice(0,20)}</div>`
   ).join('');
 
+  const tenure = overrides.tenure || coach.tenure || '';
+  const unattached = !!overrides.unattached;
+
   const container = document.createElement('div');
   container.style.cssText = `width:1920px;height:1080px;background:${BG};font-family:'Montserrat',sans-serif;color:#fff;position:relative;overflow:hidden;box-sizing:border-box;`;
   container.innerHTML = `
@@ -453,7 +462,7 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
       <div id="cqc-photo" style="position:absolute;left:-12px;top:16px;width:261px;height:261px;background-color:transparent;background-image:url('${photo}');background-size:cover;background-position:center top;border-radius:0 14px 14px 0;"></div>
 
       <div style="position:absolute;left:248px;top:24px;width:560px;font-size:53.2px;font-weight:700;line-height:1.05;letter-spacing:-0.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${overrides.nameOverride || coach.name || ''}</div>
-      <div style="position:absolute;left:248px;top:90px;font-size:26.6px;font-weight:600;color:#fff;">Manager</div>
+      <div style="position:absolute;left:248px;top:90px;font-size:26.6px;font-weight:600;color:#fff;">Manager${unattached ? ` <span style="color:#9aa3b8;font-weight:600;">(Unattached)</span>` : ''}</div>
       <div style="position:absolute;left:248px;top:148px;display:flex;align-items:center;gap:10px;">
         ${natIso2 ? `<div style="width:36px;height:22px;flex-shrink:0;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${natIso2}.png');border-radius:2px;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15);"></div>` : ''}
         <span style="font-size:26.6px;font-weight:600;color:#fff;white-space:nowrap;">${age != null ? age + ' years old' : ''}</span>
@@ -469,13 +478,14 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
       <div style="position:absolute;left:915px;top:90px;width:266px;font-size:32px;font-weight:800;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${overrides.teamOverride || latest.team || ''}</div>
       <div style="position:absolute;left:915px;top:150px;display:flex;align-items:center;">
         <span style="font-size:21px;font-weight:500;color:#fff;white-space:nowrap;">${latest.league || ''}</span>
-        ${leagueIso2 ? `<div style="width:32px;height:20px;flex-shrink:0;margin-left:33px;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${leagueIso2}.png');border-radius:2px;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15);"></div>` : ''}
+        ${leagueIso2 ? `<div style="width:32px;height:20px;flex-shrink:0;margin-left:24px;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${leagueIso2}.png');border-radius:2px;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15);"></div>` : ''}
       </div>
+      ${tenure ? `<div style="position:absolute;left:915px;top:184px;font-size:20px;font-weight:500;color:#9aa3b8;white-space:nowrap;">${tenure}</div>` : ''}
 
       <div style="position:absolute;left:1188px;top:36px;width:2px;height:210px;background:rgba(255,255,255,0.14);"></div>
       ${infoBox}
 
-      <div style="position:absolute;top:24px;left:1510px;width:390px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.10);border-radius:12px;padding:20px 24px;box-sizing:border-box;">
+      <div style="position:absolute;top:${gbeTop}px;left:1510px;width:390px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.10);border-radius:12px;padding:20px 24px;box-sizing:border-box;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
           <span style="font-size:15px;font-weight:700;color:#9aa3b8;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;">GBE Calculation</span>
           <span style="font-size:16px;font-weight:800;color:${gbeCol};background:${gbeCol}22;border:1px solid ${gbeCol};border-radius:6px;padding:5px 14px;white-space:nowrap;">${gbeStatus}</span>

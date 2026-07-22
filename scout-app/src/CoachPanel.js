@@ -58,6 +58,22 @@ function CoachStatOverrides({ coachId, overrides, onFieldChange, onClear }) {
           );
         })}
       </div>
+      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'flex-end', marginTop: 10 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <span style={{ fontSize: 9, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Stats title</span>
+          <input
+            type="text"
+            defaultValue={overrides.statsTitle == null ? '' : overrides.statsTitle}
+            placeholder="24-25 Stats (auto)"
+            onBlur={function(e) { onFieldChange(coachId, 'statsTitle', e.target.value === '' ? undefined : e.target.value); }}
+            style={{ width: 150, background: '#080f1c', border: '1px solid #1e2d45', borderRadius: 4, color: '#e2e8f4', fontSize: 11, padding: '4px 6px' }}
+          />
+        </div>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#cbd5e1', cursor: 'pointer', paddingBottom: 4 }}>
+          <input type="checkbox" checked={!!overrides.hideCostPer} onChange={function(e) { onFieldChange(coachId, 'hideCostPer', e.target.checked || undefined); }} />
+          Hide £ Per
+        </label>
+      </div>
       <button
         onClick={function() { onClear(coachId); }}
         style={{ marginTop: 8, fontSize: 10, color: '#f87171', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
@@ -115,7 +131,7 @@ function CoachQuickOverrides({ coach, coachId, overrides, teams, onFieldChange, 
   var sizeHint = latestRow && latestRow.leagueSize != null ? String(latestRow.leagueSize) : '20';
 
   var VR  = [['squadValue', 'Squad Value', '£340m'], ['summerSpend', 'Summer Spending', '£180m'], ['odds', 'Odds', '5/1']];
-  var TXT = [['agent', 'Agent', ''], ['formation', 'Formation', '4-3-3']];
+  var TXT = [['agent', 'Agent', ''], ['formation', 'Formation', '4-3-3'], ['tenure', 'Tenure', '2024-Present']];
   var lbl = { fontSize: 9, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' };
   var inp = { width: 100, background: '#080f1c', border: '1px solid #2b1e45', borderRadius: 4, color: '#e2e8f4', fontSize: 11, padding: '4px 6px' };
   var rankInp = Object.assign({}, inp, { width: 58 });
@@ -161,6 +177,16 @@ function CoachQuickOverrides({ coach, coachId, overrides, teams, onFieldChange, 
           onPick={function(o) { onFieldChange(coachId, 'impactB', o); }}
           onClear={function() { onFieldChange(coachId, 'impactB', undefined); }}
         />
+      </div>
+      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginTop: 8 }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#cbd5e1', cursor: 'pointer' }}>
+          <input type="checkbox" checked={!!overrides.unattached} onChange={function(e) { onFieldChange(coachId, 'unattached', e.target.checked || undefined); }} />
+          Unattached (shows "Manager (Unattached)")
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#cbd5e1', cursor: 'pointer' }}>
+          <input type="checkbox" checked={!!overrides.hidePills} onChange={function(e) { onFieldChange(coachId, 'hidePills', e.target.checked || undefined); }} />
+          Hide Score / Potential
+        </label>
       </div>
       <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid #1a1030' }}>
         <span style={lbl}>GBE — pass route (managers have no points; tick one to pass)</span>
@@ -509,6 +535,9 @@ export default function CoachPanel({ allTeams, allPlayers, onClose }) {
         agent: q.agent,
         formation: q.formation,
       };
+      if (q.tenure && q.tenure.trim()) overrides.tenure = q.tenure.trim();
+      if (q.unattached) overrides.unattached = true;
+      if (q.hidePills) overrides.showScorePills = false;
       if (q.gbeC36 || q.gbeC24 || q.gbeExceptions) {
         overrides.gbe = {
           c36: !!q.gbeC36,
