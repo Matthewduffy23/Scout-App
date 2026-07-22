@@ -159,7 +159,7 @@ export default function TeamCard({ team, allTeamSeasons = [], onClose }) {
   const [selSeasonKey, setSelSeasonKey] = useState(`${team.season}||${team.league}`);
   const activeTeam = useMemo(() => {
     const found = allTeamSeasons.find(t => `${t.season}||${t.league}` === selSeasonKey);
-    return found ? { ...found, crest: team.crest, avgXValue: team.avgXValue } : team;
+    return found ? { ...found, crest: team.crest, avgXValue: team.avgXValue, totalMV: team.totalMV, mvPerf: team.mvPerf } : team;
   }, [allTeamSeasons, selSeasonKey, team]);
 
   // Sorted season history for this team (oldest -> newest, for the trend chart and table).
@@ -207,6 +207,13 @@ export default function TeamCard({ team, allTeamSeasons = [], onClose }) {
               })()}
               {activeTeam.avgAge != null && <Tag label={`Avg Age ${activeTeam.avgAge}`} bg="#0e1830" color="#93c5fd" />}
               {activeTeam.avgXValue != null && <Tag label={`Avg xValue £${(activeTeam.avgXValue / 1000000).toFixed(1)}m`} bg="#1a0a2e" color="#c084fc" />}
+              {activeTeam.totalMV != null && <Tag label={`Squad MV £${(activeTeam.totalMV / 1000000).toFixed(1)}m`} bg="#0f1a2e" color="#818cf8" />}
+              {activeTeam.mvPerf != null && (() => {
+                const v = activeTeam.mvPerf;
+                const color = v > 0 ? '#4ade80' : v < 0 ? '#f87171' : '#94a3b8';
+                const bg = v > 0 ? '#052015' : v < 0 ? '#200505' : '#0d1220';
+                return <Tag label={`£ Perf ${v > 0 ? '+' : ''}${v}`} bg={bg} color={color} />;
+              })()}
               {(activeTeam.attributes || []).map(a => <Tag key={a} label={a} bg="#0a1a30" color="#7eb3f8" />)}
             </div>
           </div>

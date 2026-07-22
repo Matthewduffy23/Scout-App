@@ -4049,7 +4049,7 @@ function traitPillHtml(key, score) {
 // tenureRows: the matching team-season records from teams_final.json for this coach's tenure
 // allTeams: full teams_final.json array (for league rank context, etc — passed through if needed)
 // traits: pre-computed via computeCoachTraits(tenureRows, allTeams) from coachMetrics.js
-export function buildCoachCardElement(coach, tenureRows, traits) {
+export function buildCoachCardElement(coach, tenureRows, traits, overrides = {}) {
   const age = computeAge(coach.dob);
   const sortedDesc = [...tenureRows].sort((a, b) => (a.season < b.season ? 1 : -1));
   const latest = sortedDesc[0] || {};
@@ -4059,6 +4059,28 @@ export function buildCoachCardElement(coach, tenureRows, traits) {
   const leagueLogo = LEAGUE_LOGOS[leagueKey] || LEAGUE_LOGOS[latest.league || ""] || "";
   const resEffRank = latest.resourceEfficiencyRank ?? null;
   const traitOverrides = coach.traitOverrides || {};
+
+  // Resolve overrideable stat values — panel supplies xG/xGA as per-90 rates,
+  // card multiplies by matches to get season totals (matching the xG p90 × matches formula)
+  const resolvedMatches = overrides.games != null ? overrides.games : (latest.matches ?? null);
+  const resolvedGF      = overrides.gf    != null ? overrides.gf    : (latest.goalsFor ?? null);
+  const resolvedGA      = overrides.ga    != null ? overrides.ga    : (latest.goalsAgainst ?? null);
+  const resolvedXG      = overrides.xgP90 != null
+    ? (Number(overrides.xgP90) * (resolvedMatches || 1)).toFixed(1)
+    : (latest.xGoalsFor ?? latest.xGF ?? latest.xgf) != null
+      ? Number(latest.xGoalsFor ?? latest.xGF ?? latest.xgf).toFixed(1)
+      : null;
+  const resolvedXGA     = overrides.xgaP90 != null
+    ? (Number(overrides.xgaP90) * (resolvedMatches || 1)).toFixed(1)
+    : (latest.xGoalsAgainst ?? latest.xGA ?? latest.xga) != null
+      ? Number(latest.xGoalsAgainst ?? latest.xGA ?? latest.xga).toFixed(1)
+      : null;
+  const resolvedPPG     = overrides.ppg != null
+    ? Number(overrides.ppg).toFixed(2)
+    : latest.points != null && latest.matches
+      ? (latest.points / latest.matches).toFixed(2)
+      : latest.ppg != null ? Number(latest.ppg).toFixed(2) : null;
+  const resolvedCostPer = overrides.costPer != null ? overrides.costPer : null;
   const getTraitScore = (key) => (traitOverrides[key] != null ? traitOverrides[key] * 10 : traits?.[key]);
   const metricGroups = computeCoachMetricGroups(tenureRows) || {
     Attack: [],
@@ -4166,17 +4188,19 @@ export function buildCoachCardElement(coach, tenureRows, traits) {
     </div>
     ${(() => {
       const cols = [
-        ["Games", 230, latest.matches ?? "—"],
-        ["GF", 330, latest.goalsFor ?? "—"],
-        ["GA", 410, latest.goalsAgainst ?? "—"],
-        ["XG", 490, (latest.xGoalsFor ?? latest.xGF ?? latest.xgf) != null ? Number(latest.xGoalsFor ?? latest.xGF ?? latest.xgf).toFixed(1) : "—"],
-        ["XG Against", 570, (latest.xGoalsAgainst ?? latest.xGA ?? latest.xga) != null ? Number(latest.xGoalsAgainst ?? latest.xGA ?? latest.xga).toFixed(1) : "—"],
-        ["PPG", 712, latest.points != null && latest.matches ? (latest.points / latest.matches).toFixed(2) : latest.ppg != null ? Number(latest.ppg).toFixed(2) : "—"],
+        ["Games",     230, resolvedMatches ?? "—"],
+        ["GF",        330, resolvedGF      ?? "—"],
+        ["GA",        410, resolvedGA      ?? "—"],
+        ["XG",        490, resolvedXG      ?? "—"],
+        ["XG Against",570, resolvedXGA     ?? "—"],
+        ["PPG",       712, resolvedPPG     ?? "—"],
       ];
       const heads = cols.map(([lab, x]) => `<div style="position:absolute;top:319px;left:${x}px;font-size:20px;font-weight:500;color:#d9d9d9;">${lab}</div>`).join("");
       const vals = cols.map(([, x, v]) => `<div style="position:absolute;top:357px;left:${x}px;font-size:20px;font-weight:500;color:#fff;">${v}</div>`).join("");
       const reHead = `<div style="position:absolute;top:319px;left:792px;font-size:20px;font-weight:500;color:#d9d9d9;">£ Per</div>`;
-      const reVal = `<span style="position:absolute;top:354px;left:792px;font-size:20px;font-weight:700;color:#000;background:${resEffRank != null && resEffRank <= 3 ? "#00bf63" : resEffRank != null && resEffRank <= 8 ? "#7ed957" : "#ffde59"};border-radius:6px;padding:2px 10px;">${resEffRank != null ? ordinal(resEffRank) : "—"}</span>`;
+      const reValDisplay = resolvedCostPer != null ? resolvedCostPer : (resEffRank != null ? ordinal(resEffRank) : "—");
+      const reValBg = resolvedCostPer == null ? (resEffRank != null && resEffRank <= 3 ? "#00bf63" : resEffRank != null && resEffRank <= 8 ? "#7ed957" : "#ffde59") : "#60a5fa";
+      const reVal = `<span style="position:absolute;top:354px;left:792px;font-size:20px;font-weight:700;color:#000;background:${reValBg};border-radius:6px;padding:2px 10px;">${reValDisplay}</span>`;
       return heads + vals + reHead + reVal;
     })()}
 
@@ -4253,9 +4277,9 @@ export function buildCoachCardElement(coach, tenureRows, traits) {
   return container;
 }
 
-export async function downloadCoachCardPNG(coach, tenureRows, traits) {
+export async function downloadCoachCardPNG(coach, tenureRows, traits, overrides = {}) {
   await ensureMontserratEmbedded();
-  const el = buildCoachCardElement(coach, tenureRows, traits);
+  const el = buildCoachCardElement(coach, tenureRows, traits, overrides);
   document.body.appendChild(el);
 
   // Pre-fetch photo and convert to data URL — Fotmob CDN is CORS-restricted so

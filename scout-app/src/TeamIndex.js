@@ -71,7 +71,7 @@ const DECAY = 0.45; // matches build_players.py's recency decay for the "weighte
 
 const T = {
   layout: { display: 'flex', gap: 0, minHeight: '100vh', background: '#0a0e17', color: '#e2e8f4', fontFamily: 'system-ui,-apple-system,sans-serif' },
-  sb: { width: 300, flexShrink: 0, borderRight: '1px solid #1e2d45', padding: 14, overflowY: 'auto', maxHeight: '100vh', boxSizing: 'border-box' },
+  sb: { width: 260, flexShrink: 0, borderRight: '1px solid #1e2d45', padding: 14, overflowY: 'auto', maxHeight: '100vh', boxSizing: 'border-box' },
   main: { flex: 1, padding: 14, overflowX: 'auto' },
   fg: { marginBottom: 14 },
   fl: { fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.04em', display: 'block', marginBottom: 4 },
@@ -138,6 +138,42 @@ export default function TeamIndex({ players = [] }) {
     return out;
   }, [players]);
   const getAvgXValue = (team, league) => xValueByTeam[String(team).toLowerCase() + '|' + normLeague(league)] ?? null;
+
+  // Total squad market value per team (sum of all players' marketValue in that team)
+  const totalMVByTeam = useMemo(() => {
+    const sums = {};
+    for (const p of players) {
+      if (!p.marketValue || p.marketValue <= 0) continue;
+      const key = String(p.team).toLowerCase() + '|' + normLeague(p.league);
+      sums[key] = (sums[key] || 0) + p.marketValue;
+    }
+    return sums;
+  }, [players]);
+  const getTotalMV = (team, league) => totalMVByTeam[String(team).toLowerCase() + '|' + normLeague(league)] ?? null;
+
+  // £ Performance rank per league: league position rank minus MV rank within that league.
+  // Positive = outperforming market value (e.g. 1st in table, 5th by MV = +4).
+  const mvPerfByTeam = useMemo(() => {
+    // Group latest-season resolved teams by league, rank by MV, compare to pointsRank
+    const byLeague = {};
+    for (const t of resolved) {
+      if (!byLeague[t.league]) byLeague[t.league] = [];
+      byLeague[t.league].push(t);
+    }
+    const out = {};
+    for (const [league, teams] of Object.entries(byLeague)) {
+      const withMV = teams.map(t => ({ t, mv: getTotalMV(t.team, t.league) })).filter(x => x.mv != null && x.t.pointsRank != null);
+      if (withMV.length < 2) continue;
+      withMV.sort((a, b) => b.mv - a.mv);
+      withMV.forEach(({ t }, i) => {
+        const mvRank = i + 1;
+        const key = String(t.team).toLowerCase() + '|' + normLeague(t.league);
+        out[key] = t.pointsRank - mvRank; // positive = overperforming
+      });
+    }
+    return out;
+  }, [resolved, totalMVByTeam]);
+  const getMVPerf = (team, league) => mvPerfByTeam[String(team).toLowerCase() + '|' + normLeague(league)] ?? null;
 
   const [search, setSearch] = useState('');
   const [scoreMode, setScoreMode] = useState('Overall');
@@ -401,6 +437,8 @@ export default function TeamIndex({ players = [] }) {
       let av, bv;
       if (sort.col === 'score' || sort.col === 'overall') { av = getDisplayScore(a); bv = getDisplayScore(b); }
       else if (sort.col === 'avgXValue') { av = getAvgXValue(a.team, a.league); bv = getAvgXValue(b.team, b.league); }
+      else if (sort.col === 'totalMV') { av = getTotalMV(a.team, a.league); bv = getTotalMV(b.team, b.league); }
+      else if (sort.col === 'mvPerf') { av = getMVPerf(a.team, a.league); bv = getMVPerf(b.team, b.league); }
       else { av = a[sort.col]; bv = b[sort.col]; }
       av = av ?? (sort.asc ? Infinity : -Infinity);
       bv = bv ?? (sort.asc ? Infinity : -Infinity);
@@ -658,9 +696,9 @@ export default function TeamIndex({ players = [] }) {
           <div style={T.sdv} />
           <div style={T.si}><div style={T.sv}>{sorted.filter(t => (getDisplayScore(t) || 0) >= 80).length}</div><div style={T.sl2}>Score 80+</div></div>
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 3, flexWrap: 'wrap', alignItems: 'center' }}>
-            {['overall', 'attack', 'defence', 'possession', 'pressing', 'avgAge', 'avgXValue'].map(col => (
+            {['overall', 'attack', 'defence', 'possession', 'pressing', 'avgAge', 'avgXValue', 'totalMV', 'mvPerf'].map(col => (
               <button key={col} onClick={() => onSort(col)} style={{ padding: '4px 9px', borderRadius: 4, border: `1px solid ${sort.col === col ? '#3b7de8' : '#1e2d45'}`, background: sort.col === col ? '#0e2040' : 'transparent', color: sort.col === col ? '#93c5fd' : '#94a3b8', fontSize: 10, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                {col === 'overall' ? 'Overall' : col === 'attack' ? 'Attack' : col === 'defence' ? 'Defence' : col === 'possession' ? 'Possession' : col === 'pressing' ? 'Pressing' : col === 'avgAge' ? 'Avg Age' : 'Avg xValue'}{sort.col === col ? (sort.asc ? ' ↑' : ' ↓') : ''}
+                {col === 'overall' ? 'Overall' : col === 'attack' ? 'Attack' : col === 'defence' ? 'Defence' : col === 'possession' ? 'Possession' : col === 'pressing' ? 'Pressing' : col === 'avgAge' ? 'Avg Age' : col === 'avgXValue' ? 'Avg xValue' : col === 'totalMV' ? 'Squad MV' : '£ Perf'}{sort.col === col ? (sort.asc ? ' ↑' : ' ↓') : ''}
               </button>
             ))}
           </div>
@@ -685,12 +723,16 @@ export default function TeamIndex({ players = [] }) {
                   <Th col="pressing" label="Pressing" sort={sort} onSort={onSort} />
                   <Th col="avgAge" label="Avg Age" sort={sort} onSort={onSort} />
                   <Th col="avgXValue" label="Avg xValue" sort={sort} onSort={onSort} />
+                  <Th col="totalMV" label="Squad MV" sort={sort} onSort={onSort} />
+                  <Th col="mvPerf" label="£ Perf" sort={sort} onSort={onSort} />
                 </tr></thead>
                 <tbody>
                   {paged.map((t, i) => {
                     const avgXV = getAvgXValue(t.team, t.league);
+                    const totMV = getTotalMV(t.team, t.league);
+                    const mvPerf = getMVPerf(t.team, t.league);
                     return (
-                      <tr key={t.team + t.league + t.season + i} className="rh" onClick={() => setSelTeam({ ...t, crest: teamCrest(t.team), avgXValue: getAvgXValue(t.team, t.league) })} style={{ cursor: 'pointer' }}>
+                      <tr key={t.team + t.league + t.season + i} className="rh" onClick={() => setSelTeam({ ...t, crest: teamCrest(t.team), avgXValue: getAvgXValue(t.team, t.league), totalMV: getTotalMV(t.team, t.league), mvPerf: getMVPerf(t.team, t.league) })} style={{ cursor: 'pointer' }}>
                         <td style={{ ...T.td, textAlign: 'center', color: '#64748b', fontSize: 10 }}>{page * PAGE_SIZE + i + 1}</td>
                         <td style={T.td}>
                           {teamCrest(t.team) && <img src={teamCrest(t.team)} alt="" style={{ width: 20, height: 20, objectFit: 'contain' }} onError={e => { e.target.style.display = 'none'; }} />}
@@ -722,6 +764,10 @@ export default function TeamIndex({ players = [] }) {
                         <td style={{ ...T.td, color: scoreColor(t.pressing) }}>{t.pressing != null ? t.pressing.toFixed(1) : '—'}</td>
                         <td style={T.td}>{t.avgAge ?? '—'}</td>
                         <td style={{ ...T.td, color: '#93c5fd', fontWeight: 700 }}>{avgXV != null ? `£${(avgXV / 1000000).toFixed(1)}m` : '—'}</td>
+                        <td style={{ ...T.td, color: '#c084fc', fontWeight: 700 }}>{totMV != null ? `£${(totMV / 1000000).toFixed(1)}m` : '—'}</td>
+                        <td style={{ ...T.td, fontWeight: 700 }} title={mvPerf != null ? `Pts Rank: ${t.pointsRank} | MV Rank: ${t.pointsRank - mvPerf} | Diff: ${mvPerf > 0 ? '+' : ''}${mvPerf}` : ''}>
+                          {mvPerf != null ? <span style={{ color: mvPerf > 0 ? '#4ade80' : mvPerf < 0 ? '#f87171' : '#94a3b8' }}>{mvPerf > 0 ? '+' : ''}{mvPerf}</span> : '—'}
+                        </td>
                       </tr>
                     );
                   })}
