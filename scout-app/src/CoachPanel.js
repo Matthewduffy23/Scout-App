@@ -68,7 +68,90 @@ function CoachStatOverrides({ coachId, overrides, onFieldChange, onClear }) {
   );
 }
 
-function CoachRow({ coach, generatingId, generatingQuickId, expandedOverride, cardOverrides, onGenerate, onGenerateQuick, onToggleOverride, onEdit, onDelete, onFieldChange, onClear }) {
+function QCTextInput({ label, value, placeholder, onCommit }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <span style={{ fontSize: 9, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</span>
+      <input
+        type="text"
+        value={value == null ? '' : value}
+        placeholder={placeholder || ''}
+        onChange={onCommit}
+        style={{ width: 130, background: '#080f1c', border: '1px solid #2b1e45', borderRadius: 4, color: '#e2e8f4', fontSize: 11, padding: '4px 6px' }}
+      />
+    </div>
+  );
+}
+
+function CoachQuickOverrides({ coach, coachId, overrides, onFieldChange, onClear }) {
+  var seasonsDesc = (coach.tenures || []).map(function(t) { return t.season; })
+    .filter(function(v, i, a) { return a.indexOf(v) === i; })
+    .sort(function(a, b) { return a < b ? 1 : -1; });
+  var TEXT_FIELDS = [
+    ['squadValue', 'Squad Value', '£340m'],
+    ['summerSpend', 'Summer Spending', '£180m'],
+    ['odds', 'Odds', '5/1 Top 4'],
+    ['agent', 'Agent', ''],
+    ['formation', 'Formation', '4-3-3'],
+    ['gbeStatus', 'GBE Status', 'Pass'],
+    ['gbeNote', 'GBE Note', '22 pts — auto pass'],
+  ];
+  var selStyle = { width: 150, background: '#080f1c', border: '1px solid #2b1e45', borderRadius: 4, color: '#e2e8f4', fontSize: 11, padding: '4px 6px' };
+  return (
+    <div style={{ margin: '4px 0 6px 52px', padding: '10px 12px', background: '#0a0614', border: '1px solid #2b1e45', borderRadius: 7 }}>
+      <div style={{ fontSize: 10, color: '#8b5cf6', marginBottom: 8, fontWeight: 700 }}>
+        ⚡ Quick-card inputs — separate from the ⬇ Card stat overrides. Blank = shown as “—”.
+      </div>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        {TEXT_FIELDS.map(function(f) {
+          return (
+            <QCTextInput
+              key={f[0]}
+              label={f[1]}
+              placeholder={f[2]}
+              value={overrides[f[0]]}
+              onCommit={function(e) {
+                var raw = e.target.value;
+                onFieldChange(coachId, f[0], raw === '' ? undefined : raw);
+              }}
+            />
+          );
+        })}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <span style={{ fontSize: 9, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Impact — Season A (red)</span>
+          <select
+            style={selStyle}
+            value={overrides.impactA == null ? '' : overrides.impactA}
+            onChange={function(e) { var v = e.target.value; onFieldChange(coachId, 'impactA', v === '' ? undefined : v); }}
+          >
+            <option value="">Earliest (auto)</option>
+            <option value="__pre__">Season before he arrived</option>
+            {seasonsDesc.map(function(sn) { return <option key={sn} value={sn}>{sn}</option>; })}
+          </select>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <span style={{ fontSize: 9, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Impact — Season B (blue)</span>
+          <select
+            style={selStyle}
+            value={overrides.impactB == null ? '' : overrides.impactB}
+            onChange={function(e) { var v = e.target.value; onFieldChange(coachId, 'impactB', v === '' ? undefined : v); }}
+          >
+            <option value="">Latest (auto)</option>
+            {seasonsDesc.map(function(sn) { return <option key={sn} value={sn}>{sn}</option>; })}
+          </select>
+        </div>
+      </div>
+      <button
+        onClick={function() { onClear(coachId); }}
+        style={{ marginTop: 8, fontSize: 10, color: '#f87171', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+      >
+        Clear quick-card inputs
+      </button>
+    </div>
+  );
+}
+
+function CoachRow({ coach, generatingId, generatingQuickId, expandedOverride, cardOverrides, expandedQuick, quickOverrides, onGenerate, onGenerateQuick, onToggleOverride, onToggleQuick, onEdit, onDelete, onFieldChange, onClear, onQuickFieldChange, onQuickClear }) {
   var tenureCount = (coach.tenures || []).length;
   var sorted = (coach.tenures || []).slice().sort(function(a, b) { return a.season < b.season ? 1 : -1; });
   var latestTenure = sorted[0];
@@ -78,6 +161,10 @@ function CoachRow({ coach, generatingId, generatingQuickId, expandedOverride, ca
   var overrideColor = isExpanded ? '#60a5fa' : '#64748b';
   var isGenerating = generatingId === coach.id;
   var isGenQuick = generatingQuickId === coach.id;
+  var isQuickOpen = expandedQuick === coach.id;
+  var quickBorder = isQuickOpen ? '#a855f7' : '#2b1e45';
+  var quickBg = isQuickOpen ? '#2b1245' : 'transparent';
+  var quickColor = isQuickOpen ? '#c084fc' : '#8b5cf6';
   return (
     <div key={coach.id}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#0d1624', border: '1px solid #1e2d45', borderRadius: 8, padding: '10px 14px' }}>
@@ -106,6 +193,13 @@ function CoachRow({ coach, generatingId, generatingQuickId, expandedOverride, ca
           {isGenQuick ? 'Generating…' : '⚡ Quick'}
         </button>
         <button
+          onClick={function() { onToggleQuick(coach.id); }}
+          style={{ padding: '5px 8px', borderRadius: 5, border: '1px solid ' + quickBorder, background: quickBg, color: quickColor, fontSize: 11, cursor: 'pointer' }}
+          title="Quick-card inputs (context, agent, formation, GBE, radar seasons)"
+        >
+          ⚙
+        </button>
+        <button
           onClick={function() { onToggleOverride(coach.id); }}
           style={{ padding: '5px 8px', borderRadius: 5, border: '1px solid ' + overrideBorderColor, background: overrideBg, color: overrideColor, fontSize: 11, cursor: 'pointer' }}
           title="Override card stats"
@@ -123,6 +217,15 @@ function CoachRow({ coach, generatingId, generatingQuickId, expandedOverride, ca
           onClear={onClear}
         />
       )}
+      {isQuickOpen && (
+        <CoachQuickOverrides
+          coach={coach}
+          coachId={coach.id}
+          overrides={quickOverrides[coach.id] || {}}
+          onFieldChange={onQuickFieldChange}
+          onClear={onQuickClear}
+        />
+      )}
     </div>
   );
 }
@@ -137,6 +240,8 @@ export default function CoachPanel({ allTeams, onClose }) {
   var [generatingQuickId, setGeneratingQuickId] = useState(null);
   var [cardOverrides, setCardOverrides] = useState({});
   var [expandedOverride, setExpandedOverride] = useState(null);
+  var [quickOverrides, setQuickOverrides] = useState({});
+  var [expandedQuick, setExpandedQuick] = useState(null);
 
   function refresh() { setCoaches(loadCoaches()); }
 
@@ -170,6 +275,29 @@ export default function CoachPanel({ allTeams, onClose }) {
       }
       var next = Object.assign({}, prev);
       next[coachId] = updated;
+      return next;
+    });
+  }
+
+  function handleToggleQuick(coachId) {
+    setExpandedQuick(function(prev) { return prev === coachId ? null : coachId; });
+  }
+
+  function handleQuickFieldChange(coachId, field, val) {
+    setQuickOverrides(function(prev) {
+      var existing = prev[coachId] || {};
+      var updated = Object.assign({}, existing);
+      if (val === undefined) { delete updated[field]; } else { updated[field] = val; }
+      var next = Object.assign({}, prev);
+      next[coachId] = updated;
+      return next;
+    });
+  }
+
+  function handleQuickClear(coachId) {
+    setQuickOverrides(function(prev) {
+      var next = Object.assign({}, prev);
+      delete next[coachId];
       return next;
     });
   }
@@ -232,7 +360,38 @@ export default function CoachPanel({ allTeams, onClose }) {
     setGeneratingQuickId(coach.id);
     try {
       var traits = computeCoachTraits(tenureRows, teams);
-      var overrides = Object.assign({}, cardOverrides[coach.id] || {}, { allTeams: teams });
+      var q = quickOverrides[coach.id] || {};
+
+      // Resolve the two Impact-radar seasons.
+      var asc = tenureRows.slice().sort(function(a, b) { return a.season < b.season ? -1 : 1; });
+      var desc = tenureRows.slice().sort(function(a, b) { return a.season < b.season ? 1 : -1; });
+      var rowB = q.impactB ? tenureRows.find(function(r) { return r.season === q.impactB; }) : desc[0];
+      var rowA;
+      var labelA;
+      if (q.impactA === '__pre__') {
+        var earliest = asc[0];
+        if (earliest) {
+          var priors = teams.filter(function(x) {
+            return x.team === earliest.team && x.league === earliest.league && x.season < earliest.season;
+          }).sort(function(a, b) { return a.season < b.season ? 1 : -1; });
+          rowA = priors[0] || earliest;
+          labelA = rowA ? rowA.season + (priors[0] ? ' (pre)' : '') : '';
+        }
+      } else {
+        rowA = q.impactA ? tenureRows.find(function(r) { return r.season === q.impactA; }) : asc[0];
+        labelA = rowA ? rowA.season : '';
+      }
+
+      var overrides = {
+        allTeams: teams,
+        teamContext: { squadValue: q.squadValue, summerSpend: q.summerSpend, odds: q.odds },
+        agent: q.agent,
+        formation: q.formation,
+      };
+      if (q.gbeStatus || q.gbeNote) overrides.gbe = { status: q.gbeStatus, note: q.gbeNote };
+      if (rowA) { overrides.impactRowA = rowA; overrides.impactLabelA = labelA; }
+      if (rowB) { overrides.impactRowB = rowB; overrides.impactLabelB = rowB.season; }
+
       await downloadCoachQuickCardPNG(coach, tenureRows, traits, overrides);
     } catch (err) {
       alert('Could not generate the quick card — check the browser console for details.');
@@ -281,13 +440,18 @@ export default function CoachPanel({ allTeams, onClose }) {
                 generatingQuickId={generatingQuickId}
                 expandedOverride={expandedOverride}
                 cardOverrides={cardOverrides}
+                expandedQuick={expandedQuick}
+                quickOverrides={quickOverrides}
                 onGenerate={handleGenerateCard}
                 onGenerateQuick={handleGenerateQuickCard}
                 onToggleOverride={handleToggleOverride}
+                onToggleQuick={handleToggleQuick}
                 onEdit={handleEdit}
                 onDelete={handleDelete}
                 onFieldChange={handleFieldChange}
                 onClear={handleClear}
+                onQuickFieldChange={handleQuickFieldChange}
+                onQuickClear={handleQuickClear}
               />
             );
           })}
