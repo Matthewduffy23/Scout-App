@@ -124,26 +124,20 @@ function CoachQuickOverrides({ coach, coachId, overrides, teams, onFieldChange, 
   return (
     <div style={{ margin: '4px 0 6px 52px', padding: '10px 12px', background: '#0a0614', border: '1px solid #2b1e45', borderRadius: 7 }}>
       <div style={{ fontSize: 10, color: '#8b5cf6', marginBottom: 8, fontWeight: 700 }}>
-        ⚡ Quick-card inputs — separate from the ⬇ Card overrides. Value + league rank → percentile.
+        ⚡ Quick-card inputs — separate from the ⬇ Card overrides. Enter league rank only (size + avg age auto).
       </div>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
         {VR.map(function(f) {
           return (
-            <div key={f[0]} style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <span style={lbl}>{f[1]}</span>
-                <input type="text" value={overrides[f[0]] == null ? '' : overrides[f[0]]} placeholder={f[2]} onChange={function(e) { set(f[0], e.target.value); }} style={inp} />
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <span style={lbl}>Rank</span>
-                <input type="number" value={overrides[f[0] + 'Rank'] == null ? '' : overrides[f[0] + 'Rank']} placeholder="3" onChange={function(e) { set(f[0] + 'Rank', e.target.value); }} style={rankInp} />
-              </div>
+            <div key={f[0]} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <span style={lbl}>{f[1]} rank</span>
+              <input type="number" value={overrides[f[0] + 'Rank'] == null ? '' : overrides[f[0] + 'Rank']} placeholder="3" onChange={function(e) { set(f[0] + 'Rank', e.target.value); }} style={inp} />
             </div>
           );
         })}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, justifyContent: 'flex-end' }}>
           <span style={lbl}>League Size</span>
-          <input type="number" value={overrides.leagueSize == null ? '' : overrides.leagueSize} placeholder={sizeHint} onChange={function(e) { set('leagueSize', e.target.value); }} style={rankInp} />
+          <span style={{ fontSize: 11, color: '#8b5cf6', padding: '4px 0' }}>{sizeHint} (auto)</span>
         </div>
         {TXT.map(function(f) {
           return (
@@ -388,18 +382,19 @@ export default function CoachPanel({ allTeams, onClose }) {
       var q = quickOverrides[coach.id] || {};
 
       // League size: explicit input, else latest tenure row's leagueSize, else 20.
-      var size = (q.leagueSize != null && q.leagueSize !== '') ? Number(q.leagueSize) : null;
-      if (size == null) {
-        var lr = tenureRows.slice().sort(function(a, b) { return a.season < b.season ? 1 : -1; })[0];
-        if (lr && lr.leagueSize != null) size = Number(lr.leagueSize);
-      }
+      var lr = tenureRows.slice().sort(function(a, b) { return a.season < b.season ? 1 : -1; })[0] || {};
+      var size = (lr.leagueSize != null) ? Number(lr.leagueSize) : 20;
       function tcM(vKey) {
-        var v = q[vKey];
         var r = q[vKey + 'Rank'];
-        if ((v == null || v === '') && (r == null || r === '')) return undefined;
-        return { value: v, rank: (r != null && r !== '') ? Number(r) : null, size: size };
+        if (r == null || r === '') return undefined;
+        return { rank: Number(r), size: size };
       }
-      var teamContext = { squadValue: tcM('squadValue'), summerSpend: tcM('summerSpend'), odds: tcM('odds'), age: q.age };
+      var teamContext = {
+        squadValue: tcM('squadValue'),
+        summerSpend: tcM('summerSpend'),
+        odds: tcM('odds'),
+        age: (lr.avgAge != null ? Number(lr.avgAge).toFixed(1) : undefined),
+      };
 
       // Impact seasons: resolved from the team+season search (any team/league/season),
       // independent of the coach. A = red (main), B = blue. Fall back to tenure if unset.
