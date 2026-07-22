@@ -4065,7 +4065,7 @@ export function buildCoachCardElement(coach, tenureRows, traits, overrides = {})
   const _pool = (overrides.allTeams && overrides.allTeams.length) ? overrides.allTeams : tenureRows;
   const _ptsR = _rankIn(_pool, latest, 'points') || (latest.pointsRank != null && latest.leagueSize != null ? { rank: latest.pointsRank, size: latest.leagueSize } : null);
   const _xptsR = _rankIn(_pool, latest, 'expectedPoints');
-  const _rankStr = (r) => r ? `${r.rank}/${r.size}` : "—";
+  const _rankStr = (r) => r ? `${r.rank}<span style="color:#6b7385;font-weight:500;">/${r.size}</span>` : "—";
   const natIso2 = countryToIso2(coach.nationality || "");
   const leagueIso2 = countryToIso2(leagueToCountry(latest.league || ""));
   const leagueKey = (latest.league || "") + ".";
@@ -4095,7 +4095,10 @@ export function buildCoachCardElement(coach, tenureRows, traits, overrides = {})
       : latest.ppg != null ? Number(latest.ppg).toFixed(2) : null;
   const resolvedCostPer = overrides.costPer != null ? overrides.costPer : null;
   const getTraitScore = (key) => (traitOverrides[key] != null ? traitOverrides[key] * 10 : traits?.[key]);
-  const metricGroups = computeCoachMetricGroups(tenureRows) || {
+  // Percentile chart reflects the RECENT season only (aligns the bars + value labels
+  // with the header's latest team, instead of blending every tenure season).
+  const _mgRows = sortedDesc.length ? [sortedDesc[0]] : tenureRows;
+  const metricGroups = computeCoachMetricGroups(_mgRows) || {
     Attack: [],
     Defence: [],
     Possession: [],
@@ -4211,9 +4214,24 @@ export function buildCoachCardElement(coach, tenureRows, traits, overrides = {})
       const heads = cols.map(([lab, x]) => `<div style="position:absolute;top:319px;left:${x}px;font-size:20px;font-weight:500;color:#d9d9d9;">${lab}</div>`).join("");
       const vals = cols.map(([, x, v]) => `<div style="position:absolute;top:357px;left:${x}px;font-size:20px;font-weight:500;color:#fff;">${v}</div>`).join("");
       const reHead = `<div style="position:absolute;top:319px;left:792px;font-size:20px;font-weight:500;color:#d9d9d9;">£ Per</div>`;
-      const reValDisplay = resolvedCostPer != null ? resolvedCostPer : (resEffRank != null ? ordinal(resEffRank) : "—");
-      const reValBg = resolvedCostPer == null ? (resEffRank != null && resEffRank <= 3 ? "#00bf63" : resEffRank != null && resEffRank <= 8 ? "#7ed957" : "#ffde59") : "#60a5fa";
-      const reVal = `<span style="position:absolute;top:354px;left:792px;font-size:20px;font-weight:700;color:#000;background:${reValBg};border-radius:6px;padding:2px 10px;">${reValDisplay}</span>`;
+      // Priority: manual override -> £ Performance (mvPerf, from CoachPanel) -> legacy resEffRank -> blank.
+      // mvPerf is signed: positive = overperforming squad value (green), negative = under (red).
+      const _mvPerf = (overrides.mvPerf != null && isFinite(Number(overrides.mvPerf))) ? Number(overrides.mvPerf) : null;
+      let reValDisplay, reValBg;
+      if (resolvedCostPer != null) {
+        reValDisplay = resolvedCostPer; reValBg = "#60a5fa";
+      } else if (_mvPerf != null) {
+        reValDisplay = (_mvPerf > 0 ? "+" : "") + _mvPerf;
+        reValBg = _mvPerf > 2 ? "#00bf63" : _mvPerf > 0 ? "#7ed957" : _mvPerf < -2 ? "#ff3131" : _mvPerf < 0 ? "#ff914d" : "#ffde59";
+      } else if (resEffRank != null) {
+        reValDisplay = ordinal(resEffRank);
+        reValBg = resEffRank <= 3 ? "#00bf63" : resEffRank <= 8 ? "#7ed957" : "#ffde59";
+      } else {
+        reValDisplay = "—"; reValBg = null;
+      }
+      const reVal = reValBg
+        ? `<span style="position:absolute;top:354px;left:792px;font-size:20px;font-weight:700;color:#000;background:${reValBg};border-radius:6px;padding:2px 10px;">${reValDisplay}</span>`
+        : `<div style="position:absolute;top:357px;left:792px;font-size:20px;font-weight:500;color:#fff;">${reValDisplay}</div>`;
       return heads + vals + reHead + reVal;
     })()}
 

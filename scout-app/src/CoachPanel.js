@@ -3,7 +3,7 @@
 // is the piece that actually wires together the other four coach files:
 // coachStorage (persistence) -> CoachBuilder (entry form) -> coachMetrics
 // (trait computation) -> CoachCard (PNG render/download).
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import CoachBuilder from './CoachBuilder';
 import { loadCoaches, deleteCoach, exportCoaches, importCoachesFile } from './coachStorage';
 import { computeCoachTraits } from './coachMetrics';
@@ -162,6 +162,17 @@ function CoachQuickOverrides({ coach, coachId, overrides, teams, onFieldChange, 
           onClear={function() { onFieldChange(coachId, 'impactB', undefined); }}
         />
       </div>
+      <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 3 }}>
+        <span style={lbl}>Biography (replaces the Impact radar when filled — max 350)</span>
+        <textarea
+          value={overrides.biography == null ? '' : overrides.biography}
+          maxLength={350}
+          placeholder="Leave blank to keep the Impact radar. Type a short bio to swap it in."
+          onChange={function(e) { set('biography', e.target.value); }}
+          style={{ width: '100%', minHeight: 66, resize: 'vertical', background: '#080f1c', border: '1px solid #2b1e45', borderRadius: 4, color: '#e2e8f4', fontSize: 12, padding: '6px 8px', boxSizing: 'border-box', fontFamily: 'inherit', lineHeight: 1.45 }}
+        />
+        <span style={{ fontSize: 9, color: '#475569', textAlign: 'right' }}>{(overrides.biography || '').length}/350</span>
+      </div>
       <button onClick={function() { onClear(coachId); }} style={{ marginTop: 8, fontSize: 10, color: '#f87171', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
         Clear quick-card inputs
       </button>
@@ -249,8 +260,39 @@ function CoachRow({ coach, teams, generatingId, generatingQuickId, expandedOverr
   );
 }
 
-export default function CoachPanel({ allTeams, onClose }) {
+export default function CoachPanel({ allTeams, allPlayers, onClose }) {
   var teams = allTeams || [];
+  var players = allPlayers || [];
+
+  // £ Performance (mvPerf) — identical logic to TeamIndex: sum player market values per
+  // team, rank teams by MV within a league+season, compare to pointsRank. Positive = the
+  // squad overperformed its market value. Requires allPlayers to be passed in from App;
+  // if it isn't, £ Per just falls back to the manual override / blank on the card.
+  var normLeague = function (l) { return String(l || '').trim().replace(/\.$/, '').toLowerCase(); };
+  var totalMVByTeam = useMemo(function () {
+    var sums = {};
+    for (var i = 0; i < players.length; i++) {
+      var p = players[i];
+      if (!p.marketValue || p.marketValue <= 0) continue;
+      var key = String(p.team).toLowerCase() + '|' + normLeague(p.league);
+      sums[key] = (sums[key] || 0) + p.marketValue;
+    }
+    return sums;
+  }, [players]);
+  function getTotalMV(team, league) { return totalMVByTeam[String(team).toLowerCase() + '|' + normLeague(league)]; }
+  function getMVPerf(row) {
+    if (!row || row.pointsRank == null) return null;
+    var peers = teams.filter(function (t) { return String(t.league) === String(row.league) && String(t.season) === String(row.season); });
+    var withMV = peers
+      .map(function (t) { return { t: t, mv: getTotalMV(t.team, t.league) }; })
+      .filter(function (x) { return x.mv != null && x.t.pointsRank != null; });
+    if (withMV.length < 2) return null;
+    withMV.sort(function (a, b) { return b.mv - a.mv; });
+    var idx = withMV.findIndex(function (x) { return String(x.t.team).toLowerCase() === String(row.team).toLowerCase(); });
+    if (idx < 0) return null;
+    return (idx + 1) - Number(row.pointsRank);
+  }
+
   var importInputRef = useRef(null);
   var [coaches, setCoaches] = useState(function() { return loadCoaches(); });
   var [showBuilder, setShowBuilder] = useState(false);
@@ -351,6 +393,9 @@ export default function CoachPanel({ allTeams, onClose }) {
       var traits = computeCoachTraits(tenureRows, teams);
       var overrides = Object.assign({}, cardOverrides[coach.id] || {});
       overrides.allTeams = teams;
+      var latestRow = tenureRows.slice().sort(function (a, b) { return a.season < b.season ? 1 : -1; })[0];
+      var mvp = getMVPerf(latestRow);
+      if (mvp != null) overrides.mvPerf = mvp;
       await downloadCoachCardPNG(coach, tenureRows, traits, overrides);
     } catch (err) {
       alert('Could not generate the card — check the browser console for details.');
@@ -417,6 +462,7 @@ export default function CoachPanel({ allTeams, onClose }) {
         formation: q.formation,
       };
       if (q.gbeStatus || q.gbeNote) overrides.gbe = { status: q.gbeStatus, note: q.gbeNote };
+      if (q.biography && q.biography.trim()) overrides.biography = q.biography.trim().slice(0, 350);
       if (rowA) { overrides.impactRowA = rowA; overrides.impactLabelA = rowA.team; }
       if (rowB) { overrides.impactRowB = rowB; overrides.impactLabelB = rowB.team; }
 

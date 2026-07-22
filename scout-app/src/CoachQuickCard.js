@@ -138,7 +138,7 @@ function careerChartSvg(points, w = 404, h = 284) {
 }
 
 // TEAM CONTEXT — rank -> percentile, drawn in the player Team Context band style.
-function _ctxBarHtml(label, pct, sub) {
+function _ctxBarHtml(label, pct, sub, lowLbl = 'Low', highLbl = 'High') {
   const val = Math.round(pct);
   const col = scoreTierColor(val);
   const pVal = Math.max(2, Math.min(96, pct));
@@ -156,7 +156,7 @@ function _ctxBarHtml(label, pct, sub) {
         </div>
       </div>
       <div style="display:flex;justify-content:space-between;font-size:10px;color:#3a4458;">
-        <span>Low</span><span>${sub}</span><span>High</span>
+        <span>${lowLbl}</span><span>${sub}</span><span>${highLbl}</span>
       </div>
     </div>`;
 }
@@ -171,7 +171,7 @@ function teamContextHtml(tc, ageVal, agePct) {
     return _ctxBarHtml(label, pct, `Rank ${rank} of ${size}`);
   }).join('');
   if (agePct != null) {
-    bars += _ctxBarHtml('Average Age', agePct, `Avg age ${ageVal}`);
+    bars += _ctxBarHtml('Average Age', agePct, `Avg age ${ageVal}`, 'Young', 'Old');
   } else if (ageVal !== '—') {
     bars += `<div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:2px;"><span style="font-size:15px;font-weight:700;color:#c8d2e0;">Average Age</span><span style="font-size:20px;font-weight:900;color:#fff;">${ageVal}</span></div>`;
   }
@@ -226,6 +226,8 @@ function impactRadarSvg(rowA, rowB, pool, labelA, labelB, subA, subB) {
   const N = _RADAR.length;
   const A = _RADAR.map(s => _pct(usePool, s, _raw(rowA, s)));
   const B = _RADAR.map(s => _pct(usePool, s, _raw(rowB, s)));
+  const seasonA = rowA && rowA.season ? String(rowA.season).replace(/^20/, '') : '';
+  const seasonB = rowB && rowB.season ? String(rowB.season).replace(/^20/, '') : '';
 
   // square canvas so it scales to the tile height and centres
   const VB = 540, cx = 270, cy = 262, INNER = 10, OUTER = 100, R = 150, LABEL_R = 168;
@@ -260,15 +262,15 @@ function impactRadarSvg(rowA, rowB, pool, labelA, labelB, subA, subB) {
   const poly = (arr) => arr.map((p,i) => pt(i, p).map(v=>v.toFixed(1)).join(',')).join(' ');
   const dots = (arr, col) => arr.map((p,i) => { const [x,y]=pt(i,p); return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4.5" fill="${col}"/>`; }).join('');
 
-  return `<svg viewBox="0 0 ${VB} ${VB}" xmlns="http://www.w3.org/2000/svg" style="height:100%;width:auto;display:block;margin:0 auto;">
+  return `<svg viewBox="0 0 ${VB} 440" xmlns="http://www.w3.org/2000/svg" style="height:100%;width:auto;display:block;margin:0 auto;">
     ${bands}${rings}${spokes}${labels}${hole}
     <polygon points="${poly(A)}" fill="${FILL_A}" stroke="${COL_A}" stroke-width="2.6"/>
     <polygon points="${poly(B)}" fill="${FILL_B}" stroke="${COL_B}" stroke-width="2.6"/>
     ${dots(A, COL_A)}${dots(B, COL_B)}
     <g font-family="Montserrat,sans-serif">
-      <text x="4" y="20" font-size="20" font-weight="800" fill="${COL_A}">${(labelA||'').slice(0,18)}</text>
+      <text x="4" y="20"><tspan font-size="20" font-weight="800" fill="${COL_A}">${(labelA||'').slice(0,18)}</tspan>${seasonA ? ` <tspan font-size="13" font-weight="700" fill="${COL_A}" opacity="0.8">${seasonA}</tspan>` : ''}</text>
       <text x="4" y="40" font-size="13" font-weight="600" fill="${COL_A}">${(subA||'')}</text>
-      <text x="${VB-4}" y="20" font-size="20" font-weight="800" fill="${COL_B}" text-anchor="end">${(labelB||'').slice(0,18)}</text>
+      <text x="${VB-4}" y="20" text-anchor="end"><tspan font-size="20" font-weight="800" fill="${COL_B}">${(labelB||'').slice(0,18)}</tspan>${seasonB ? ` <tspan font-size="13" font-weight="700" fill="${COL_B}" opacity="0.8">${seasonB}</tspan>` : ''}</text>
       <text x="${VB-4}" y="40" font-size="13" font-weight="600" fill="${COL_B}" text-anchor="end">${(subB||'')}</text>
     </g>
   </svg>`;
@@ -325,8 +327,10 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
   // Career line points (oldest -> newest)
   const careerPts = [...perSeason].reverse().map(s => ({ season: s.season, sc: s.sc }));
 
-  // LEFT percentile bars
-  const mg = computeCoachMetricGroups(tenureRows) || { Attack: [], Defence: [], Possession: [] };
+  // LEFT percentile bars — RECENT season only (matches the header's latest team,
+  // rather than blending every tenure season).
+  const _mgRows = sortedDesc.length ? [sortedDesc[0]] : tenureRows;
+  const mg = computeCoachMetricGroups(_mgRows) || { Attack: [], Defence: [], Possession: [] };
   const totalRows = mg.Attack.length + mg.Defence.length + mg.Possession.length;
   const activeSections = ['Attack','Defence','Possession'].filter(k => mg[k] && mg[k].length > 0).length;
   const CHART_HEIGHT = 671, LEFT_TOP = 296;
@@ -355,7 +359,7 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
   const _pool = (overrides.allTeams && overrides.allTeams.length) ? overrides.allTeams : tenureRows;
   const _ptsR = _rankIn(_pool, latest, 'points') || (latest.pointsRank != null && latest.leagueSize != null ? { rank: latest.pointsRank, size: latest.leagueSize } : null);
   const _xptsR = _rankIn(_pool, latest, 'expectedPoints');
-  const _rankStr = (r) => r ? `${r.rank}/${r.size}` : '—';
+  const _rankStr = (r) => r ? `${r.rank}<span style="color:#5b6577;font-weight:600;">/${r.size}</span>` : '—';
   const statRow = [
     ['Games', stat(latest.matches)], ['GF', stat(latest.goalsFor)], ['GA', stat(latest.goalsAgainst)],
     ['Pts', _rankStr(_ptsR)],
@@ -371,8 +375,9 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
     const agePool = (radarPool || []).filter(r => String(r.league) === String(latest.league) && String(r.season) === String(latest.season));
     const ageVals = agePool.map(r => _n(r.avgAge)).filter(x => x != null && Number.isFinite(x));
     if (ageVals.length > 1) {
+      // older = higher: percentile of THIS squad's age within its league+season (no inversion)
       const raw = (ageVals.filter(x => x <= _lv).length / ageVals.length) * 100;
-      agePct = _clamp(100 - raw);
+      agePct = _clamp(raw);
     }
   } else if (tc.age != null && tc.age !== '') {
     ageVal = String(tc.age);
@@ -387,13 +392,17 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
   const STYLE_PANEL_W = 448, CAREER_PANEL_W = 448, STYLE_TOP = 322;
   const STYLE_HEADER_H = 40, hexH = styleRows.length*46 + 8;
   const ROW1_PANEL_H = PANEL_PAD*2 + STYLE_HEADER_H + hexH;
-  const ROW2_TOP = STYLE_TOP + ROW1_PANEL_H + PANEL_GAP_V;
-  const ROW2_PANEL_H = PANEL_PAD*2 + STYLE_HEADER_H + 5*52 + 16;
+  const ROW2_TOP = STYLE_TOP + ROW1_PANEL_H + 14;            // tighter gap -> row 2 sits higher
+  const ROW2_PANEL_H = PANEL_PAD*2 + STYLE_HEADER_H + 5*52 + 28; // taller tiles (bottom stays within 1080)
 
   const styleHtml = styleHexSvg(styleRows, STYLE_PANEL_W - PANEL_PAD*2);
   const careerHtml = careerChartSvg(careerPts, CAREER_PANEL_W - PANEL_PAD*2, hexH);
   const _radarInnerH = ROW2_PANEL_H - PANEL_PAD * 2 - 40;
   const radarHtml = `<div style="height:${_radarInnerH}px;display:flex;align-items:center;justify-content:center;">${impactRadarSvg(rowA, rowB, radarPool, labelA, labelB, subA, subB)}</div>`;
+
+  // Optional Biography — when set, it replaces the Impact tile (same slot), matching
+  // the player quick card's biography behaviour (350-char cap, no scout-status here).
+  const bioText = overrides.biography ? String(overrides.biography).slice(0, 350) : '';
 
   const pill = (v) => { if (v == null) return ''; const c = pillColor(v); return `<span style="display:inline-flex;align-items:center;justify-content:center;line-height:1;min-width:18px;font-size:19px;font-weight:800;padding:7px 13px;border-radius:7px;background:${c.bg};color:${c.fg};">${Math.round(v)}</span>`; };
 
@@ -481,8 +490,13 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
       </div>
 
       <div style="position:absolute;top:${ROW2_TOP}px;left:${984 + STYLE_PANEL_W + PANEL_GAP_H}px;width:${CAREER_PANEL_W}px;height:${ROW2_PANEL_H}px;background:${PANEL_BG};border:1px solid ${PANEL_BORDER};border-radius:${PANEL_RADIUS}px;padding:${PANEL_PAD}px;box-sizing:border-box;overflow:hidden;box-shadow:${PANEL_SHADOW};">
-        <div style="font-size:22px;font-weight:700;color:${ACCENT_PINK};margin-bottom:8px;">Impact</div>
+        ${bioText ? `
+        <div style="font-size:22px;font-weight:700;color:${ACCENT_PINK};margin-bottom:14px;">Biography</div>
+        <div style="font-size:20px;line-height:1.5;font-weight:600;color:#fff;">${bioText}</div>
+        ` : `
+        <div style="font-size:22px;font-weight:700;color:${ACCENT_PINK};margin-bottom:18px;">Impact</div>
         ${radarHtml}
+        `}
       </div>
 
     </div>`;
