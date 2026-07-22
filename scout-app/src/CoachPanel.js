@@ -68,90 +68,114 @@ function CoachStatOverrides({ coachId, overrides, onFieldChange, onClear }) {
   );
 }
 
-function QCTextInput({ label, value, placeholder, onCommit }) {
+function TeamSeasonSearch({ label, valueObj, teams, onPick, onClear }) {
+  var sv = useState('');
+  var q = sv[0], setQ = sv[1];
+  var ql = q.trim().toLowerCase();
+  var results = ql.length >= 2
+    ? teams.filter(function(t) { return String(t.team || '').toLowerCase().indexOf(ql) !== -1; })
+        .sort(function(a, b) { return a.season < b.season ? 1 : -1; })
+        .slice(0, 10)
+    : [];
+  var lbl = { fontSize: 9, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' };
+  var fieldStyle = { width: 190, background: '#080f1c', border: '1px solid #2b1e45', borderRadius: 4, color: '#e2e8f4', fontSize: 11, padding: '4px 6px' };
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <span style={{ fontSize: 9, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</span>
-      <input
-        type="text"
-        value={value == null ? '' : value}
-        placeholder={placeholder || ''}
-        onChange={onCommit}
-        style={{ width: 130, background: '#080f1c', border: '1px solid #2b1e45', borderRadius: 4, color: '#e2e8f4', fontSize: 11, padding: '4px 6px' }}
-      />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, position: 'relative' }}>
+      <span style={lbl}>{label}</span>
+      {valueObj ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, width: 190, background: '#080f1c', border: '1px solid #2b1e45', borderRadius: 4, padding: '4px 6px', boxSizing: 'border-box' }}>
+          <span style={{ fontSize: 11, color: '#e2e8f4', flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{valueObj.team} · {valueObj.season}</span>
+          <button onClick={onClear} style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer', fontSize: 12, padding: 0 }}>✕</button>
+        </div>
+      ) : (
+        <input type="text" value={q} placeholder="Search team…" onChange={function(e) { setQ(e.target.value); }} style={fieldStyle} />
+      )}
+      {!valueObj && results.length > 0 && (
+        <div style={{ position: 'absolute', top: '100%', left: 0, zIndex: 5, width: 240, maxHeight: 180, overflowY: 'auto', background: '#0b1120', border: '1px solid #2b1e45', borderRadius: 6, marginTop: 2 }}>
+          {results.map(function(t, i) {
+            return (
+              <div
+                key={t.team + '|' + t.league + '|' + t.season + '|' + i}
+                onClick={function() { onPick({ team: t.team, league: t.league, season: t.season }); setQ(''); }}
+                style={{ padding: '5px 8px', fontSize: 11, color: '#cbd5e1', cursor: 'pointer', borderBottom: '1px solid #131c30', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+              >
+                <b style={{ color: '#e2e8f4' }}>{t.team}</b> — {t.league} · {t.season}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
 
-function CoachQuickOverrides({ coach, coachId, overrides, onFieldChange, onClear }) {
-  var seasonsDesc = (coach.tenures || []).map(function(t) { return t.season; })
-    .filter(function(v, i, a) { return a.indexOf(v) === i; })
-    .sort(function(a, b) { return a < b ? 1 : -1; });
-  var TEXT_FIELDS = [
-    ['squadValue', 'Squad Value', '£340m'],
-    ['summerSpend', 'Summer Spending', '£180m'],
-    ['odds', 'Odds', '5/1 Top 4'],
-    ['agent', 'Agent', ''],
-    ['formation', 'Formation', '4-3-3'],
-    ['gbeStatus', 'GBE Status', 'Pass'],
-    ['gbeNote', 'GBE Note', '22 pts — auto pass'],
-  ];
-  var selStyle = { width: 150, background: '#080f1c', border: '1px solid #2b1e45', borderRadius: 4, color: '#e2e8f4', fontSize: 11, padding: '4px 6px' };
+function CoachQuickOverrides({ coach, coachId, overrides, teams, onFieldChange, onClear }) {
+  var latestT = (coach.tenures || []).slice().sort(function(a, b) { return a.season < b.season ? 1 : -1; })[0];
+  var latestRow = latestT ? teams.find(function(x) { return x.team === latestT.team && x.league === latestT.league && x.season === latestT.season; }) : null;
+  var sizeHint = latestRow && latestRow.leagueSize != null ? String(latestRow.leagueSize) : '20';
+
+  var VR  = [['squadValue', 'Squad Value', '£340m'], ['summerSpend', 'Summer Spending', '£180m'], ['odds', 'Odds', '5/1']];
+  var TXT = [['agent', 'Agent', ''], ['formation', 'Formation', '4-3-3'], ['gbeStatus', 'GBE Status', 'Pass'], ['gbeNote', 'GBE Note', '22 pts']];
+  var lbl = { fontSize: 9, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' };
+  var inp = { width: 100, background: '#080f1c', border: '1px solid #2b1e45', borderRadius: 4, color: '#e2e8f4', fontSize: 11, padding: '4px 6px' };
+  var rankInp = Object.assign({}, inp, { width: 58 });
+  function set(field, raw) { onFieldChange(coachId, field, raw === '' ? undefined : raw); }
+
   return (
     <div style={{ margin: '4px 0 6px 52px', padding: '10px 12px', background: '#0a0614', border: '1px solid #2b1e45', borderRadius: 7 }}>
       <div style={{ fontSize: 10, color: '#8b5cf6', marginBottom: 8, fontWeight: 700 }}>
-        ⚡ Quick-card inputs — separate from the ⬇ Card stat overrides. Blank = shown as “—”.
+        ⚡ Quick-card inputs — separate from the ⬇ Card overrides. Value + league rank → percentile.
       </div>
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        {TEXT_FIELDS.map(function(f) {
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        {VR.map(function(f) {
           return (
-            <QCTextInput
-              key={f[0]}
-              label={f[1]}
-              placeholder={f[2]}
-              value={overrides[f[0]]}
-              onCommit={function(e) {
-                var raw = e.target.value;
-                onFieldChange(coachId, f[0], raw === '' ? undefined : raw);
-              }}
-            />
+            <div key={f[0]} style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <span style={lbl}>{f[1]}</span>
+                <input type="text" value={overrides[f[0]] == null ? '' : overrides[f[0]]} placeholder={f[2]} onChange={function(e) { set(f[0], e.target.value); }} style={inp} />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <span style={lbl}>Rank</span>
+                <input type="number" value={overrides[f[0] + 'Rank'] == null ? '' : overrides[f[0] + 'Rank']} placeholder="3" onChange={function(e) { set(f[0] + 'Rank', e.target.value); }} style={rankInp} />
+              </div>
+            </div>
           );
         })}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <span style={{ fontSize: 9, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Impact — Season A (red)</span>
-          <select
-            style={selStyle}
-            value={overrides.impactA == null ? '' : overrides.impactA}
-            onChange={function(e) { var v = e.target.value; onFieldChange(coachId, 'impactA', v === '' ? undefined : v); }}
-          >
-            <option value="">Earliest (auto)</option>
-            <option value="__pre__">Season before he arrived</option>
-            {seasonsDesc.map(function(sn) { return <option key={sn} value={sn}>{sn}</option>; })}
-          </select>
+          <span style={lbl}>League Size</span>
+          <input type="number" value={overrides.leagueSize == null ? '' : overrides.leagueSize} placeholder={sizeHint} onChange={function(e) { set('leagueSize', e.target.value); }} style={rankInp} />
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <span style={{ fontSize: 9, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Impact — Season B (blue)</span>
-          <select
-            style={selStyle}
-            value={overrides.impactB == null ? '' : overrides.impactB}
-            onChange={function(e) { var v = e.target.value; onFieldChange(coachId, 'impactB', v === '' ? undefined : v); }}
-          >
-            <option value="">Latest (auto)</option>
-            {seasonsDesc.map(function(sn) { return <option key={sn} value={sn}>{sn}</option>; })}
-          </select>
-        </div>
+        {TXT.map(function(f) {
+          return (
+            <div key={f[0]} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <span style={lbl}>{f[1]}</span>
+              <input type="text" value={overrides[f[0]] == null ? '' : overrides[f[0]]} placeholder={f[2]} onChange={function(e) { set(f[0], e.target.value); }} style={inp} />
+            </div>
+          );
+        })}
+        <TeamSeasonSearch
+          label="Impact — A (red, main)"
+          valueObj={overrides.impactA}
+          teams={teams}
+          onPick={function(o) { onFieldChange(coachId, 'impactA', o); }}
+          onClear={function() { onFieldChange(coachId, 'impactA', undefined); }}
+        />
+        <TeamSeasonSearch
+          label="Impact — B (blue)"
+          valueObj={overrides.impactB}
+          teams={teams}
+          onPick={function(o) { onFieldChange(coachId, 'impactB', o); }}
+          onClear={function() { onFieldChange(coachId, 'impactB', undefined); }}
+        />
       </div>
-      <button
-        onClick={function() { onClear(coachId); }}
-        style={{ marginTop: 8, fontSize: 10, color: '#f87171', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-      >
+      <button onClick={function() { onClear(coachId); }} style={{ marginTop: 8, fontSize: 10, color: '#f87171', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
         Clear quick-card inputs
       </button>
     </div>
   );
 }
 
-function CoachRow({ coach, generatingId, generatingQuickId, expandedOverride, cardOverrides, expandedQuick, quickOverrides, onGenerate, onGenerateQuick, onToggleOverride, onToggleQuick, onEdit, onDelete, onFieldChange, onClear, onQuickFieldChange, onQuickClear }) {
+function CoachRow({ coach, teams, generatingId, generatingQuickId, expandedOverride, cardOverrides, expandedQuick, quickOverrides, onGenerate, onGenerateQuick, onToggleOverride, onToggleQuick, onEdit, onDelete, onFieldChange, onClear, onQuickFieldChange, onQuickClear }) {
   var tenureCount = (coach.tenures || []).length;
   var sorted = (coach.tenures || []).slice().sort(function(a, b) { return a.season < b.season ? 1 : -1; });
   var latestTenure = sorted[0];
@@ -222,6 +246,7 @@ function CoachRow({ coach, generatingId, generatingQuickId, expandedOverride, ca
           coach={coach}
           coachId={coach.id}
           overrides={quickOverrides[coach.id] || {}}
+          teams={teams}
           onFieldChange={onQuickFieldChange}
           onClear={onQuickClear}
         />
@@ -362,35 +387,42 @@ export default function CoachPanel({ allTeams, onClose }) {
       var traits = computeCoachTraits(tenureRows, teams);
       var q = quickOverrides[coach.id] || {};
 
-      // Resolve the two Impact-radar seasons.
-      var asc = tenureRows.slice().sort(function(a, b) { return a.season < b.season ? -1 : 1; });
-      var desc = tenureRows.slice().sort(function(a, b) { return a.season < b.season ? 1 : -1; });
-      var rowB = q.impactB ? tenureRows.find(function(r) { return r.season === q.impactB; }) : desc[0];
-      var rowA;
-      var labelA;
-      if (q.impactA === '__pre__') {
-        var earliest = asc[0];
-        if (earliest) {
-          var priors = teams.filter(function(x) {
-            return x.team === earliest.team && x.league === earliest.league && x.season < earliest.season;
-          }).sort(function(a, b) { return a.season < b.season ? 1 : -1; });
-          rowA = priors[0] || earliest;
-          labelA = rowA ? rowA.season + (priors[0] ? ' (pre)' : '') : '';
-        }
-      } else {
-        rowA = q.impactA ? tenureRows.find(function(r) { return r.season === q.impactA; }) : asc[0];
-        labelA = rowA ? rowA.season : '';
+      // League size: explicit input, else latest tenure row's leagueSize, else 20.
+      var size = (q.leagueSize != null && q.leagueSize !== '') ? Number(q.leagueSize) : null;
+      if (size == null) {
+        var lr = tenureRows.slice().sort(function(a, b) { return a.season < b.season ? 1 : -1; })[0];
+        if (lr && lr.leagueSize != null) size = Number(lr.leagueSize);
       }
+      function tcM(vKey) {
+        var v = q[vKey];
+        var r = q[vKey + 'Rank'];
+        if ((v == null || v === '') && (r == null || r === '')) return undefined;
+        return { value: v, rank: (r != null && r !== '') ? Number(r) : null, size: size };
+      }
+      var teamContext = { squadValue: tcM('squadValue'), summerSpend: tcM('summerSpend'), odds: tcM('odds'), age: q.age };
+
+      // Impact seasons: resolved from the team+season search (any team/league/season),
+      // independent of the coach. A = red (main), B = blue. Fall back to tenure if unset.
+      function resolveSel(sel) {
+        if (sel && sel.team) {
+          return teams.find(function(x) { return x.team === sel.team && x.league === sel.league && x.season === sel.season; }) || null;
+        }
+        return null;
+      }
+      var descT = tenureRows.slice().sort(function(a, b) { return a.season < b.season ? 1 : -1; });
+      var ascT  = tenureRows.slice().sort(function(a, b) { return a.season < b.season ? -1 : 1; });
+      var rowA = resolveSel(q.impactA) || descT[0];
+      var rowB = resolveSel(q.impactB) || ascT[0];
 
       var overrides = {
         allTeams: teams,
-        teamContext: { squadValue: q.squadValue, summerSpend: q.summerSpend, odds: q.odds },
+        teamContext: teamContext,
         agent: q.agent,
         formation: q.formation,
       };
       if (q.gbeStatus || q.gbeNote) overrides.gbe = { status: q.gbeStatus, note: q.gbeNote };
-      if (rowA) { overrides.impactRowA = rowA; overrides.impactLabelA = labelA; }
-      if (rowB) { overrides.impactRowB = rowB; overrides.impactLabelB = rowB.season; }
+      if (rowA) { overrides.impactRowA = rowA; overrides.impactLabelA = rowA.team + ' ' + rowA.season; }
+      if (rowB) { overrides.impactRowB = rowB; overrides.impactLabelB = rowB.team + ' ' + rowB.season; }
 
       await downloadCoachQuickCardPNG(coach, tenureRows, traits, overrides);
     } catch (err) {
@@ -436,6 +468,7 @@ export default function CoachPanel({ allTeams, onClose }) {
               <CoachRow
                 key={coach.id}
                 coach={coach}
+                teams={teams}
                 generatingId={generatingId}
                 generatingQuickId={generatingQuickId}
                 expandedOverride={expandedOverride}

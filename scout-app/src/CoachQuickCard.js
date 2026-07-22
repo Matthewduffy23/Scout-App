@@ -153,6 +153,45 @@ function _cqcRadarSvg(rowA, rowB, pool, labelA, labelB) {
   </svg>`;
 }
 
+// Team Context — value + league rank -> percentile bar (matches the player
+// QuickCard's Team Context styling: gradient track, dot at percentile, 50% avg tick).
+function _cqcCtxBar(label, m) {
+  if (!m || m.value == null || m.value === "") return "";
+  const size = _cqcNum(m.size) || null;
+  const rank = _cqcNum(m.rank);
+  const pct = (rank != null && size && size > 1) ? _cqcClamp(((size - rank) / (size - 1)) * 100) : null;
+  const col = pct != null ? scoreTierColor(pct) : "#c8d2e0";
+  const dotP = pct != null ? Math.max(2, Math.min(96, pct)) : null;
+  const sub = rank != null ? `Rank ${rank}${size ? " of " + size : ""}` : "Rank —";
+  return `
+    <div style="margin-bottom:13px;">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px;">
+        <span style="font-size:15px;font-weight:700;color:#c8d2e0;">${label}</span>
+        <span style="font-size:20px;font-weight:900;color:${col};">${m.value}</span>
+      </div>
+      <div style="position:relative;height:10px;background:#1b2636;border-radius:5px;margin-bottom:4px;">
+        <div style="position:absolute;left:0;top:0;height:100%;width:100%;background:linear-gradient(to right,#c7363c,#f0c56a,#3da65b);border-radius:5px;opacity:0.3;"></div>
+        <div style="position:absolute;top:-3px;left:50%;width:2px;height:16px;background:#5e6678;transform:translateX(-50%);"></div>
+        ${dotP != null ? `<div style="position:absolute;top:50%;left:${dotP}%;transform:translate(-50%,-50%);"><div style="width:16px;height:16px;border-radius:50%;background:${col};border:2.5px solid #07090f;"></div></div>` : ""}
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:10px;color:#3a4458;">
+        <span>Low</span><span>${sub}</span><span>High</span>
+      </div>
+    </div>`;
+}
+function _cqcTeamContextHtml(tc, age) {
+  const bars =
+    _cqcCtxBar("Squad Value", tc.squadValue) +
+    _cqcCtxBar("Summer Spending", tc.summerSpend) +
+    _cqcCtxBar("Odds", tc.odds);
+  const ageRow = `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding-top:2px;">
+      <span style="font-size:15px;font-weight:700;color:#c8d2e0;">Age</span>
+      <span style="font-size:18px;font-weight:800;color:#fff;">${(tc.age != null && tc.age !== "") ? tc.age : (age != null ? age : "—")}</span>
+    </div>`;
+  return (bars || `<div style="font-size:13px;color:#5e6678;margin-bottom:10px;">No context entered.</div>`) + ageRow;
+}
+
 export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides = {}) {
   const age = computeAge(coach.dob);
   const sortedDesc = [...tenureRows].sort((a, b) => (a.season < b.season ? 1 : -1));
@@ -220,12 +259,8 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
     ["PPG", ppg ?? "—"],
   ];
 
-  // ── TEAM CONTEXT (manual) ──────────────────────────────────────────
+  // ── TEAM CONTEXT (manual: value + league rank -> percentile) ───────
   const tc = overrides.teamContext || {};
-  const ctxRows = [
-    ["Squad Value", tc.squadValue ?? "—"], ["Summer Spending", tc.summerSpend ?? "—"],
-    ["Odds", tc.odds ?? "—"], ["Age", tc.age ?? (age != null ? String(age) : "—")],
-  ];
 
   // ── panel geometry (mirrors QuickCard) ─────────────────────────────
   const PANEL_BG = "#141823", PANEL_BORDER = "rgba(255,255,255,0.08)", PANEL_RADIUS = 14, PAD = 22, GAP = 24;
@@ -262,13 +297,6 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
      <div style="position:absolute;left:1353px;top:${50 + i * 48}px;font-size:18px;font-weight:600;color:#fff;white-space:nowrap;">${String(v).slice(0, 20)}</div>`
   ).join("");
 
-  const ctxHtml = ctxRows.map(([k, v]) =>
-    `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 2px;border-bottom:1px solid rgba(255,255,255,0.06);">
-      <span style="font-size:16px;color:#9aa3b8;">${k}</span>
-      <span style="font-size:17px;font-weight:700;color:#fff;">${v}</span>
-    </div>`
-  ).join("");
-
   // photo url
   const rawId = coach.fotmobId || "";
   const fmId = typeof rawId === "string" && rawId.includes("fotmob.com")
@@ -283,7 +311,7 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
 
       <div style="position:absolute;top:0;left:0;width:1920px;height:292px;background:linear-gradient(to right, ${coach.clubColor ? fadeHexToBG(coach.clubColor, 0.62) : HEADER_L} 0%, ${coach.clubColor ? fadeHexToBG(coach.clubColor, 0.93) : HEADER_R} 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,0.08);"></div>
 
-      <div style="position:absolute;left:-12px;top:16px;width:261px;height:261px;background-color:transparent;background-image:url('${photo}');background-size:cover;background-position:center top;border-radius:0 14px 14px 0;"></div>
+      <div id="cqc-photo" style="position:absolute;left:-12px;top:16px;width:261px;height:261px;background-color:transparent;background-image:url('${photo}');background-size:cover;background-position:center top;border-radius:0 14px 14px 0;"></div>
 
       <div style="position:absolute;left:248px;top:24px;width:560px;font-size:53.2px;font-weight:700;line-height:1.05;letter-spacing:-0.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${overrides.nameOverride || coach.name || ""}</div>
       <div style="position:absolute;left:248px;top:90px;font-size:26.6px;font-weight:600;color:#fff;">Manager</div>
@@ -347,8 +375,8 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
       </div>
 
       <div style="position:absolute;top:${ROW2_TOP}px;left:984px;width:${HALF_W}px;height:${ROW2_H}px;background:${PANEL_BG};border:1px solid ${PANEL_BORDER};border-radius:${PANEL_RADIUS}px;padding:${PAD}px;box-sizing:border-box;overflow:hidden;">
-        <div style="font-size:22px;font-weight:700;color:${ACCENT_PINK};margin-bottom:10px;">Team Context</div>
-        ${ctxHtml}
+        <div style="font-size:22px;font-weight:700;color:${ACCENT_PINK};margin-bottom:12px;">Team Context</div>
+        ${_cqcTeamContextHtml(tc, age)}
       </div>
 
       <div style="position:absolute;top:${ROW2_TOP}px;left:${984 + HALF_W + GAP}px;width:${HALF_W}px;height:${ROW2_H}px;background:${PANEL_BG};border:1px solid ${PANEL_BORDER};border-radius:${PANEL_RADIUS}px;padding:${PAD}px;box-sizing:border-box;overflow:hidden;">
@@ -363,18 +391,50 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
 
 export async function downloadCoachQuickCardPNG(coach, tenureRows, traits, overrides = {}) {
   await ensureMontserratEmbedded();
-  const { toPng } = await import("html-to-image");
   const el = buildCoachQuickCardElement(coach, tenureRows, traits, overrides);
-  el.style.position = "fixed"; el.style.left = "-99999px"; el.style.top = "0";
   document.body.appendChild(el);
+
+  // Fotmob CDN is CORS-restricted; convert the photo to a data URL first or
+  // html-to-image silently blanks it (same fix the full coach card uses).
+  const photoDiv = el.querySelector("#cqc-photo");
+  if (photoDiv) {
+    const _rawId = coach.fotmobId || "";
+    const _fmId = typeof _rawId === "string" && _rawId.includes("fotmob.com")
+      ? (_rawId.match(/\/(\d+)\.png/) || [])[1] || null
+      : (_rawId || null);
+    const _pUrl = _fmId ? `${FOTMOB_PHOTO_BASE}${_fmId}.png` : (coach.photoDataUrl || coach.photoUrl || null);
+    if (_pUrl) {
+      try {
+        const resp = await fetch(_pUrl);
+        if (!resp.ok) throw new Error("fetch failed");
+        const blob = await resp.blob();
+        const dataUrl = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+        photoDiv.style.backgroundImage = `url('${dataUrl}')`;
+      } catch (_err) {
+        photoDiv.style.backgroundImage = "url('/fallback.png')";
+      }
+    }
+  }
+
   try {
-    const opts = { pixelRatio: 1, width: 1920, height: 1080, fontEmbedCSS: MONTSERRAT_EMBED_CSS, cacheBust: true };
-    await toPng(el, opts);                 // warm-up render
-    const dataUrl = await toPng(el, opts); // real capture
+    const { toPng } = await import("html-to-image");
+    const dataUrl = await toPng(el, {
+      width: 1920,
+      height: 1080,
+      pixelRatio: 1,
+      fontEmbedCSS: MONTSERRAT_EMBED_CSS,
+    });
     const a = document.createElement("a");
     a.href = dataUrl;
     a.download = `${(overrides.nameOverride || coach.name || "coach").replace(/\s+/g, "_")}_quickcard.png`;
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
   } finally {
     document.body.removeChild(el);
   }
