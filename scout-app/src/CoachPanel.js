@@ -350,6 +350,19 @@ export default function CoachPanel({ allTeams, allPlayers, onClose }) {
 
   // £ Performance league RANK — rank every team in the league+season by their £ performance
   // (MV-rank minus points-rank; higher = bigger overperformance), rank 1 = best overperformer.
+  // Per-season £ PERFORMANCE percentile, keyed season||league||team, for the quick
+  // card's coach score. 100 = biggest overperformer in that league+season.
+  function buildSeasonPerfMap(rows) {
+    var map = {};
+    (rows || []).forEach(function (row) {
+      var r = getMVPerfRank(row);
+      if (!r || r.size < 2) return;
+      var pct = ((r.size - r.rank) / (r.size - 1)) * 100;
+      map[row.season + '||' + row.league + '||' + row.team] = Math.round(pct * 10) / 10;
+    });
+    return map;
+  }
+
   function getMVPerfRank(row) {
     if (!row) return null;
     var peers = teams.filter(function (t) { return String(t.league) === String(row.league) && String(t.season) === String(row.season); });
@@ -532,6 +545,7 @@ export default function CoachPanel({ allTeams, allPlayers, onClose }) {
       var overrides = {
         allTeams: teams,
         teamContext: teamContext,
+        seasonPerf: buildSeasonPerfMap(tenureRows),
         agent: q.agent,
         formation: q.formation,
       };

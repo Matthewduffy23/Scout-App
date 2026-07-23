@@ -302,11 +302,49 @@ function impactRadarSvg(rowA, rowB, pool, labelA, labelB, subA, subB) {
 
 // ── scoring helpers ──
 function _teamOverall(row) { return _n(row.completeScore ?? row.overall); }
-function _costPerf(row, size) {
-  const rank = _n(row.resourceEfficiencyRank);
-  const sz = _n(row.leagueSize ?? size);
-  if (rank != null && sz != null && sz > 1) return _clamp(((sz - rank) / (sz - 1)) * 100);
-  return 50;
+
+// remap() — mirrors build_teams.py / build_players.py exactly. Converts a raw
+// percentile (0-100) onto the displayed score scale (~52-96).
+function _remapPct(s) {
+  const bp = [0, 8, 18, 30, 44, 56, 70, 83, 95, 100];
+  const tg = [52, 57, 62, 67, 71, 75, 80, 86, 92, 96];
+  if (s <= bp[0]) return tg[0];
+  if (s >= bp[bp.length - 1]) return tg[tg.length - 1];
+  for (let i = 0; i < bp.length - 1; i++) {
+    if (s <= bp[i + 1]) {
+      const f = (s - bp[i]) / (bp[i + 1] - bp[i]);
+      return tg[i] + f * (tg[i + 1] - tg[i]);
+    }
+  }
+  return tg[tg.length - 1];
+}
+
+// The league-weighting factor actually applied to this row, derived empirically
+// from the data we already have: completeScore is the league-weighted score and
+// overall is the raw percentile, so their ratio is that league's effective scaler.
+function _leagueScaleFactor(row) {
+  const cs = _n(row.completeScore), ov = _n(row.overall);
+  if (cs == null || ov == null) return null;
+  const base = _remapPct(ov);
+  if (!base) return null;
+  return _clamp(cs / base, 0.5, 1.2);
+}
+
+// £ PERFORMANCE, on the SAME scale as the team score.
+//
+// This previously took a raw 0-100 uniform percentile and blended it straight
+// into a score that lives on the remapped ~52-96 scale. An exactly-average
+// manager therefore contributed 50 against a team score of ~70, dragging every
+// coach toward the middle (and, since resourceEfficiencyRank isn't present in
+// teams_final.json, it was CONSTANT 50 for everyone — a flat downward pull).
+// Remapping the percentile and applying the league factor puts both halves of
+// the blend on one scale, so "average resources, average results" now lands on
+// the league average instead of 50.
+function _costPerfScaled(row, perfPct) {
+  if (perfPct == null) return null;              // no market-value data -> stay neutral
+  const scaled = _remapPct(_clamp(perfPct));
+  const f = _leagueScaleFactor(row);
+  return f == null ? scaled : scaled * f;
 }
 function _ageBonus(age) { if (age == null) return 0; if (age < 35) return 10; if (age <= 45) return 5; if (age <= 50) return 2; return 0; }
 
@@ -327,14 +365,27 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
   const leagueIso2 = countryToIso2(leagueToCountry(latest.league || ''));
 
   // Score / Potential
+  // Per season: 75% team quality + 25% £ performance (both on the same scale).
+  // Where no market-value data exists for a season, the team score stands alone
+  // rather than being dragged toward a neutral 50.
+  const perfMap = overrides.seasonPerf || {};
   const perSeason = sortedDesc.map(r => {
     const ov = _teamOverall(r); if (ov == null) return null;
-    return { season: r.season, ov, sc: _clamp(0.8*ov + 0.2*_costPerf(r)) };
+    const pKey = `${r.season}||${r.league}||${r.team}`;
+    const perf = _costPerfScaled(r, perfMap[pKey] == null ? null : _n(perfMap[pKey]));
+    const sc = perf == null ? _clamp(ov) : _clamp(0.75*ov + 0.25*perf);
+    return { season: r.season, ov, sc };
   }).filter(Boolean);
   let score = null;
   if (perSeason.length) {
-    const n = perSeason.length; let ws = 0, acc = 0;
-    perSeason.forEach((s, k) => { const w = n - k; ws += w; acc += w*s.sc; });
+    // Exponential (EWMA-style) recency weighting: the most recent season carries
+    // weight 1 and each season further back is discounted by DECAY. This is the
+    // standard way to weight a time series toward recent form — it decays smoothly
+    // regardless of how many seasons a coach has, where the previous linear ramp
+    // (n, n-1, ... 1) flattened out as tenure grew.
+    const DECAY = 0.6;
+    let ws = 0, acc = 0;
+    perSeason.forEach((s, k) => { const w = Math.pow(DECAY, k); ws += w; acc += w*s.sc; });
     score = _clamp(acc/ws);
   }
   const potential = score == null ? null : _clamp(score + _ageBonus(age));
