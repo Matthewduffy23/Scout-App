@@ -1,4 +1,4 @@
-// TeamReport.js v4 — Team All-in-One report. 1920x1080 PNG export.
+// TeamReport.js v5 — Team All-in-One report. 1920x1080 PNG export.
 //
 // v2: bigger team name; country flag + league logo beside the league name;
 //     mini coach profile in the header gap; XI is now formation-driven and
@@ -169,6 +169,30 @@ export function reportUnmappedTokens(squad) {
   return bad;
 }
 const sideOf = (p) => SIDE_PREF[posTok(p)] || 'N';
+
+// Positional adjacency, best fit first. Tier 0 (the slot's own label) is handled
+// by passes 1 and 2; these are the "who else could actually do this job" tiers
+// used by pass 3 so an XI is never left with holes.
+//
+// Reasoning is football, not data: a full-back covers centre-back before a
+// midfielder does; a winger covers the opposite flank before dropping to
+// wing-back; a striker covers the wide slots before a central midfielder does.
+const NEIGHBOURS = {
+  GK:  [],                                                   // never substituted
+  CB:  [['LCB', 'RCB'], ['LB', 'RB', 'LWB', 'RWB'], ['DM']],
+  LCB: [['CB', 'RCB'], ['LB', 'LWB'], ['DM']],
+  RCB: [['CB', 'LCB'], ['RB', 'RWB'], ['DM']],
+  LB:  [['LWB'], ['LCB', 'CB'], ['LW'], ['RB', 'RWB']],
+  RB:  [['RWB'], ['RCB', 'CB'], ['RW'], ['LB', 'LWB']],
+  LWB: [['LB'], ['LW'], ['LCB', 'CB']],
+  RWB: [['RB'], ['RW'], ['RCB', 'CB']],
+  DM:  [['CM'], ['CB', 'LCB', 'RCB'], ['AM']],
+  CM:  [['DM'], ['AM'], ['LW', 'RW']],
+  AM:  [['CM'], ['LW', 'RW'], ['ST'], ['DM']],
+  LW:  [['AM'], ['ST'], ['RW'], ['LWB', 'LB']],
+  RW:  [['AM'], ['ST'], ['LW'], ['RWB', 'RB']],
+  ST:  [['AM'], ['LW', 'RW'], ['CM']],
+};
 
 // Slots are filled back-to-front in this order — specialists (GK, centre-backs)
 // claim their players before the generalist slots get a look in.
@@ -403,21 +427,48 @@ export function buildXI(formationKey, squad) {
     }
   }
 
-  // Pass 3 — a slot still empty after both passes gets the best unassigned player
-  // whose ANY token canonically fits, ranked by minutes. Streamlit leaves these
-  // blank; filling them (and flagging out-of-position) is more useful on a card
-  // that has to stand on its own.
+  // Pass 3 — fill anything still empty using positional adjacency, best tier
+  // first, ranked by minutes within a tier.
+  //
+  // Crucially this draws from anyone who isn't already a STARTER, not just the
+  // fully unassigned. Passes 1 and 2 hoover up every token-matching player into
+  // a slot's depth list, so by this point a 20-man squad can have nobody "spare"
+  // at all — the AM slot sat empty while three centre-mids idled on the bench.
+  // Promoting a depth player and removing him from that list is the right call:
+  // a hole in the XI is worse than an honest out-of-position pick, which gets
+  // flagged orange with the player's real token.
+  const starterOf = (id) => (slotMap[id] || [])[0] || null;
+  const starterSet = new Set();
+  for (const id of Object.keys(slotMap)) { const st = starterOf(id); if (st) starterSet.add(st); }
+  const removeFromDepth = (p) => {
+    for (const id of Object.keys(slotMap)) {
+      const i = (slotMap[id] || []).indexOf(p);
+      if (i > 0) { slotMap[id].splice(i, 1); return; }
+    }
+  };
+
   for (const label of PITCH_ORDER) {
     const list = byLabel[label];
     if (!list) continue;
     for (const sl of list) {
       if ((slotMap[sl.id] || []).length) continue;
-      const spare = squad
-        .filter(p => !assigned.has(p) && allToks(p).some(t => sl.accepts.includes(canon(t))))
+      const free = (pred) => squad
+        .filter(p => !starterSet.has(p) && pred(p))
         .sort((a, b) => mins(b) - mins(a));
-      if (spare.length) {
-        slotMap[sl.id] = [spare[0]];
-        assigned.add(spare[0]);
+
+      let pick = null;
+      for (const tier of (NEIGHBOURS[sl.label] || [])) {
+        const c = free(p => tier.includes(canon(posTok(p))));
+        if (c.length) { pick = c[0]; break; }
+      }
+      // Last resort: any outfielder left, most minutes. Never a keeper.
+      if (!pick && sl.label !== 'GK') {
+        pick = free(p => canon(posTok(p)) !== 'GK')[0] || null;
+      }
+      if (pick) {
+        removeFromDepth(pick);
+        slotMap[sl.id] = [pick];
+        starterSet.add(pick);
       }
     }
   }
@@ -744,12 +795,17 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
   const handleDownload = async () => {
     setDownloading(true);
     const { toPng } = await import('html-to-image');
+    // Warm the browser cache FIRST. With cacheBust on, html-to-image appends a
+    // unique param per call, so the warm-up render and the real render each
+    // re-fetched all ~15 images — 30 round trips per download. Preloading and
+    // turning cacheBust off means the second pass costs nothing.
+    await preloadImages(cardImageUrls(team, squad, coach));
     const el = buildTeamReportElement(team, { squad, formation, coach });
     try {
       const cardNode = el.querySelector('#tr-card-root') || el;
       const opts = {
         width: W, height: H, pixelRatio: 1, backgroundColor: BG,
-        cacheBust: true, fontEmbedCSS: MONTSERRAT_EMBED_CSS,
+        cacheBust: false, fontEmbedCSS: MONTSERRAT_EMBED_CSS,
         imagePlaceholder: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
       };
       await toPng(cardNode, opts);
