@@ -1,4 +1,4 @@
-// TeamReport.js v6 — Team All-in-One report. 1920x1080 PNG export.
+// TeamReport.js v7 — Team All-in-One report. 1920x1080 PNG export.
 //
 // v2: bigger team name; country flag + league logo beside the league name;
 //     mini coach profile in the header gap; XI is now formation-driven and
@@ -20,7 +20,8 @@ import {
   leagueLogo, leagueFlag, photoUrl,
 } from './cardAssets';
 import { loadCoaches } from './coachStorage';
-import { FOTMOB_PHOTO_BASE, countryToIso2 } from './CoachCard';
+import { FOTMOB_PHOTO_BASE, countryToIso2, computeAge } from './CoachCard';
+import { computeCoachScore } from './CoachQuickCard';
 
 // ─── Canvas geometry ───────────────────────────────────────────────────────
 const W = 1920;
@@ -46,14 +47,14 @@ const LEFT_H = ROW_3 + ROW_H - BODY_TOP; // 889
 const NAME_X = PAD + 128;
 const NAME_MAX_W = 520;
 // Order across the band: crest+name -> OVR/score card -> manager.
-const SCORE_X = 690;                     // score card left edge
-const SCORE_W = 566;                     // 690..1256
-const OVR_CX = SCORE_X + 74;             // centre of the OVR number
-const STAT_X = SCORE_X + 158;
-const STAT_W = 92;
-const STAT_GAP = 12;                     // 4*92 + 3*12 = 404 -> ends 1252
-const COACH_X = 1292;
-const COACH_W = 604;                     // 1292..1896
+const SCORE_X = 676;                     // score card left edge
+const SCORE_W = 512;                     // 676..1188
+const OVR_CX = SCORE_X + 66;             // centre of the OVR number
+const STAT_X = SCORE_X + 138;
+const STAT_W = 84;                       // 4*84 + 3*10 = 366 -> ends 1180
+const STAT_GAP = 10;
+const COACH_X = 1224;                    // manager gets 672px, spread wider
+const COACH_W = 672;
 
 // ─── Palette ───────────────────────────────────────────────────────────────
 const BG = '#0a0f1c';
@@ -90,6 +91,7 @@ function scoreColor(v) {
   if (v >= 35) return '#f18c31';
   return '#ef4444';
 }
+const whole = (v) => (v == null || isNaN(v) ? '—' : String(Math.round(Number(v))));
 const fmt = (v, dp = 1) => (v == null || isNaN(v) ? '—' : Number(v).toFixed(dp));
 const esc = (s) => String(s == null ? '' : s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -364,7 +366,11 @@ function sideScore(p, slotSide) {
   return ps === slotSide ? 0 : 2;
 }
 
-export function buildXI(formationKey, squad) {
+// A depth player has to have actually played — 50+ minutes in the latest season.
+// Without this the lists fill with academy names on 0 minutes.
+export const DEPTH_MIN_MINUTES = 50;
+
+export function buildXI(formationKey, squad, depthCount = 2) {
   const slots = FORMATIONS[formationKey] || FORMATIONS['4-3-3'];
   const mins = (p) => Number(p.minutesLatest || 0);
 
@@ -480,7 +486,10 @@ export function buildXI(formationKey, squad) {
     const oop = starter
       ? !(slot.native ? slot.native.includes(posTok(starter)) : firstTokFits(starter, slot))
       : false;
-    return { slot, starter, oop, depth: list.slice(1, 3) };
+    const depth = list.slice(1)
+      .filter(p => Number(p.minutesLatest || 0) >= DEPTH_MIN_MINUTES)
+      .slice(0, Math.max(0, depthCount));
+    return { slot, starter, oop, depth };
   });
 }
 
@@ -493,8 +502,8 @@ export function xiRating(xi) {
 }
 
 // ─── XI panel ──────────────────────────────────────────────────────────────
-const SLOT_W = 168;
-const SLOT_H = 118;
+const SLOT_W = 176;
+const SLOT_H = 138;
 const FACE = 62;
 function xiPanelHtml(w, h, xi) {
   const line = 'rgba(255,255,255,0.10)';
@@ -507,7 +516,9 @@ function xiPanelHtml(w, h, xi) {
     const sc = starter ? starter.careerScore : null;
     const img = starter ? photoUrl(starter.name, starter.team) : '';
     const tok = starter ? String(starter.position || '').split(',')[0].trim() : '';
-    const age = starter && starter.age != null ? ` (${starter.age})` : '';
+    // Age sits in a dimmer grey so the name reads first.
+    const age = starter && starter.age != null
+      ? ` <span style="color:#7c8798;font-weight:600;">(${starter.age})</span>` : '';
 
     // Ring is neutral grey — colour lives in the score, so the two don't compete.
     const face = starter
@@ -535,13 +546,13 @@ function xiPanelHtml(w, h, xi) {
       ? `<span style="color:#f18c31;font-weight:600;"> (${esc(tok)})</span>` : '';
 
     const depthNames = depth.map(d =>
-      `<div style="font-size:11.5px;color:#8b98ad;line-height:1.4;white-space:nowrap;
+      `<div style="font-size:12.5px;color:#93a1b5;line-height:1.42;white-space:nowrap;
                    overflow:hidden;text-overflow:ellipsis;">${esc(d.name)}${d.age != null ? ` (${d.age})` : ''}</div>`).join('');
 
     return `
       <div style="position:absolute;left:${left}px;top:${top}px;width:${SLOT_W}px;">
         <div style="position:relative;height:${FACE}px;">${face}${score}</div>
-        <div style="font-size:13.5px;font-weight:700;color:#eaf0f8;margin-top:6px;
+        <div style="font-size:15px;font-weight:700;color:#eaf0f8;margin-top:6px;
                     text-align:center;white-space:nowrap;overflow:hidden;
                     text-overflow:ellipsis;">${starter ? esc(starter.name) : '—'}${age}${oopTag}</div>
         <div style="margin-top:3px;text-align:center;">${depthNames}</div>
@@ -588,12 +599,12 @@ export function findCoachForTeam(team) {
   return coaches.find(c => (c.tenures || []).some(t => t.team === team.team)) || null;
 }
 
-function coachHtml(coach, team) {
+function coachHtml(coach, team, coachScore) {
   if (!coach) {
     return `
       <div style="position:absolute;left:${COACH_X}px;top:64px;width:${COACH_W}px;
                   font-size:13px;color:#55617a;">
-        No coach saved for this club — add one in the Coaches panel.
+        No coach saved for this club — pick one in the Manager dropdown.
       </div>`;
   }
   const rawId = coach.fotmobId || '';
@@ -612,35 +623,49 @@ function coachHtml(coach, team) {
     coach.contract ? ['Contract', coach.contract] : null,
   ].filter(Boolean);
 
+  // FotMob headshots are square with dead space above the head, so cover alone
+  // left a pale band across the top. Zooming past 100% and biasing downward
+  // crops that out instead of showing the container behind it.
+  const photoCss = photo
+    ? `background-image:url('${src(photo)}');background-size:132%;background-position:50% 22%;`
+    : '';
+
+  const scoreBadge = coachScore == null ? '' : `
+    <div style="position:absolute;right:0;top:14px;text-align:center;width:78px;">
+      <div style="font-size:32px;font-weight:900;line-height:1;color:${gradeColor(coachScore)};">${whole(coachScore)}</div>
+      <div style="font-size:8.5px;font-weight:700;letter-spacing:0.14em;color:#8fa0b8;margin-top:6px;">MANAGER</div>
+    </div>`;
+
   return `
-    <div style="position:absolute;left:${COACH_X}px;top:30px;width:${COACH_W}px;
-                display:flex;align-items:center;">
-      <div style="width:88px;height:88px;border-radius:10px;flex-shrink:0;
-                  background-color:rgba(255,255,255,0.06);
-                  ${photo ? `background-image:url('${src(photo)}');` : ''}
-                  background-size:cover;background-position:center 30%;
-                  border:1px solid rgba(255,255,255,0.16);overflow:hidden;"></div>
-      <div style="margin-left:14px;min-width:0;">
-        <div style="font-size:10px;font-weight:700;letter-spacing:0.16em;color:#7f8ca3;">MANAGER</div>
-        <div style="font-size:24px;font-weight:700;color:#fff;margin-top:3px;
-                    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-                    max-width:${COACH_W - 120}px;">${esc(coach.name || '')}</div>
-        <div style="display:flex;align-items:center;margin-top:6px;white-space:nowrap;">
+    <div style="position:absolute;left:${COACH_X}px;top:26px;width:${COACH_W}px;height:98px;">
+      <div style="position:absolute;left:0;top:2px;width:92px;height:92px;border-radius:11px;
+                  background-color:rgba(255,255,255,0.06);${photoCss}
+                  background-repeat:no-repeat;
+                  border:1px solid rgba(255,255,255,0.16);"></div>
+
+      <div style="position:absolute;left:108px;top:4px;width:${COACH_W - 108 - 90}px;">
+        <div style="font-size:9.5px;font-weight:700;letter-spacing:0.16em;color:#7f8ca3;">MANAGER</div>
+        <div style="font-size:25px;font-weight:700;color:#fff;margin-top:4px;
+                    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(coach.name || '')}</div>
+        <div style="display:flex;align-items:center;margin-top:7px;white-space:nowrap;">
           ${iso ? `<div style="width:24px;height:15px;flex-shrink:0;background-size:cover;
                      background-position:center;border-radius:2px;
                      box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15);
                      background-image:url('${src(`https://flagcdn.com/w40/${iso}.png`)}');"></div>` : ''}
-          <span style="font-size:13px;color:#aab4c8;${iso ? 'margin-left:7px;' : ''}">${esc(coach.nationality || '')}</span>
-          ${facts.map(([k, v]) =>
-            `<span style="font-size:12px;color:#6f7c92;margin-left:16px;">
+          <span style="font-size:12.5px;color:#aab4c8;${iso ? 'margin-left:7px;' : ''}">${esc(coach.nationality || '')}</span>
+        </div>
+        <div style="margin-top:6px;white-space:nowrap;">
+          ${facts.map(([k, v], i) =>
+            `<span style="font-size:11.5px;color:#6f7c92;${i ? 'margin-left:18px;' : ''}">
                ${k}: <span style="color:#c3ccdd;font-weight:600;">${esc(v)}</span></span>`).join('')}
         </div>
       </div>
+      ${scoreBadge}
     </div>`;
 }
 
 // ─── Header ────────────────────────────────────────────────────────────────
-function headerHtml(team, coach) {
+function headerHtml(team, coach, coachScore) {
   const crest = teamCrest(team.team);
   const league = leagueDisplayName(team.league);
   const logo = leagueLogo(team.league);
@@ -684,29 +709,39 @@ function headerHtml(team, coach) {
         League position ${team.pointsRank}${team.points != null ? ` &nbsp;·&nbsp; ${team.points} pts` : ''}
       </div>` : ''}
 
-    <!-- SCORE CARD: OVR + the four style scores, one panel, ahead of the manager -->
-    <div style="position:absolute;left:${SCORE_X}px;top:26px;width:${SCORE_W}px;height:98px;
-                background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.11);
-                border-radius:12px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.07);"></div>
+    <!-- SCORE CARD: OVR + the four splits. Whole numbers, each with a strength
+         bar so the four can be compared at a glance rather than read one by one. -->
+    <div style="position:absolute;left:${SCORE_X}px;top:22px;width:${SCORE_W}px;height:106px;
+                background:rgba(255,255,255,0.055);border:1px solid rgba(255,255,255,0.12);
+                border-radius:14px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.08);"></div>
 
-    <div style="position:absolute;left:${OVR_CX - 70}px;top:38px;width:140px;text-align:center;">
-      <div style="font-size:46px;font-weight:900;line-height:1;color:${scoreColor(ovr)};">${fmt(ovr)}</div>
-      <div style="font-size:9.5px;font-weight:700;letter-spacing:0.18em;color:#94a3b8;margin-top:7px;">OVERALL</div>
+    <div style="position:absolute;left:${OVR_CX - 62}px;top:34px;width:124px;text-align:center;">
+      <div style="font-size:52px;font-weight:900;line-height:1;color:${scoreColor(ovr)};">${whole(ovr)}</div>
+      <div style="width:64px;height:3px;border-radius:2px;margin:9px auto 0;
+                  background:${scoreColor(ovr)};opacity:0.85;"></div>
+      <div style="font-size:9.5px;font-weight:700;letter-spacing:0.18em;color:#94a3b8;margin-top:8px;">OVERALL</div>
     </div>
 
-    <!-- divider between OVR and the breakdown -->
-    <div style="position:absolute;left:${SCORE_X + 148}px;top:42px;width:1px;height:66px;
-                background:rgba(255,255,255,0.13);"></div>
+    <div style="position:absolute;left:${SCORE_X + 128}px;top:38px;width:1px;height:74px;
+                background:rgba(255,255,255,0.14);"></div>
 
-    <div style="position:absolute;left:${STAT_X}px;top:44px;display:flex;align-items:flex-start;">
+    <div style="position:absolute;left:${STAT_X}px;top:40px;display:flex;align-items:flex-start;">
       ${cells.map(([label, v], i) => `
-        <div style="text-align:center;width:${STAT_W}px;${i ? `margin-left:${STAT_GAP}px;` : ''}">
-          <div style="font-size:25px;font-weight:800;line-height:1;color:${scoreColor(v)};">${fmt(v)}</div>
-          <div style="font-size:9px;font-weight:700;letter-spacing:0.10em;color:#8fa0b8;margin-top:7px;">${label}</div>
+        <div style="width:${STAT_W}px;${i ? `margin-left:${STAT_GAP}px;` : ''}">
+          <div style="font-size:26px;font-weight:800;line-height:1;text-align:center;
+                      color:${scoreColor(v)};">${whole(v)}</div>
+          <div style="height:4px;border-radius:2px;margin-top:9px;
+                      background:rgba(255,255,255,0.10);position:relative;overflow:hidden;">
+            <div style="position:absolute;left:0;top:0;height:100%;
+                        width:${Math.max(0, Math.min(100, Number(v) || 0))}%;
+                        background:${scoreColor(v)};border-radius:2px;"></div>
+          </div>
+          <div style="font-size:8.5px;font-weight:700;letter-spacing:0.10em;color:#8fa0b8;
+                      margin-top:8px;text-align:center;">${label}</div>
         </div>`).join('')}
     </div>
 
-    ${coachHtml(coach, team)}`;
+    ${coachHtml(coach, team, coachScore)}`;
 }
 
 // ─── Image handling ────────────────────────────────────────────────────────
@@ -772,15 +807,8 @@ export async function preloadImages(urls, onProgress, timeoutMs = 4000, concurre
   return map;
 }
 
-// "4-3-3 · XI 68.5" in the panel's top-right.
-function xiRatingLabel(xi, formation) {
-  const r = xiRating(xi);
-  return r == null ? formation
-    : `${formation} &nbsp;·&nbsp; XI <span style="color:${gradeColor(r)};">${fmt(r)}</span>`;
-}
-
 export function buildTeamReportElement(team, opts = {}) {
-  const { squad = [], formation = '4-3-3', coach = null, images = {} } = opts;
+  const { squad = [], formation = '4-3-3', coach = null, images = {}, depthCount = 2, coachScore = null } = opts;
   IMG = images || {};
 
   const container = document.createElement('div');
@@ -795,16 +823,16 @@ export function buildTeamReportElement(team, opts = {}) {
   const xiW = LEFT_W - PANEL_PAD * 2;
   const xiH = LEFT_H - PANEL_PAD * 2 - TITLE_H;
 
-  const xi = buildXI(formation, squad);
+  const xi = buildXI(formation, squad, depthCount);
 
   container.innerHTML = `
     <div id="tr-card-root" style="width:${W}px;height:${H}px;overflow:hidden;background:${BG};
          font-family:'Montserrat',sans-serif;color:#fff;position:relative;box-sizing:border-box;">
 
-      ${headerHtml(team, coach)}
+      ${headerHtml(team, coach, coachScore)}
 
       ${panel({ x: PAD, y: BODY_TOP, w: LEFT_W, h: LEFT_H,
-                title: 'XI + Depth', right: xiRatingLabel(xi, formation), body: xiPanelHtml(xiW, xiH, xi) })}
+                title: 'XI + Depth', right: formation, body: xiPanelHtml(xiW, xiH, xi) })}
 
       ${panel({ x: COL_A_X, y: ROW_1, w: COL_W, h: ROW_H,
                 title: 'Performance Radar', body: radarPanelHtml(innerW, innerH) })}
@@ -831,6 +859,7 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
   const [progress, setProgress] = useState('');
   const [error, setError] = useState('');
   const [formation, setFormation] = useState('4-3-3');
+  const [depthCount, setDepthCount] = useState(2);
 
   // Player rows carry league in the '.' format ('England 1.'); team rows don't.
   // Compare on the normalised form or every squad comes back empty.
@@ -853,7 +882,25 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
       ? null
       : (savedCoaches.find(c => String(c.id) === String(coachId)) || autoCoach);
 
-  const xi = useMemo(() => buildXI(formation, squad), [formation, squad]);
+  // Same tenure resolution CoachPanel uses, so the manager score here matches
+  // the one on their quick card exactly.
+  const tenureRows = useMemo(() => {
+    if (!coach) return [];
+    return (coach.tenures || [])
+      .map(t => allTeams.find(x => x.team === t.team && x.league === t.league && x.season === t.season))
+      .filter(Boolean);
+  }, [coach, allTeams]);
+
+  const coachScore = useMemo(() => {
+    if (!coach || !tenureRows.length) return null;
+    try {
+      let age = null;
+      try { age = computeAge(coach.dob); } catch (e) { age = null; }
+      return computeCoachScore(tenureRows, age, {}).score;
+    } catch (e) { return null; }
+  }, [coach, tenureRows]);
+
+  const xi = useMemo(() => buildXI(formation, squad, depthCount), [formation, squad, depthCount]);
   const filled = xi.filter(s => s.starter).length;
   const rating = xiRating(xi);
 
@@ -878,7 +925,7 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
       const images = await preloadImages(urls, (d, t) => setProgress(`Images ${d}/${t}`));
       setProgress('Rendering…');
 
-      el = buildTeamReportElement(team, { squad, formation, coach, images });
+      el = buildTeamReportElement(team, { squad, formation, coach, images, depthCount, coachScore });
       const cardNode = el.querySelector('#tr-card-root') || el;
       const opts = {
         width: W, height: H, pixelRatio: 1, backgroundColor: BG,
@@ -928,6 +975,23 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
 
         <div style={{ textAlign: 'left', marginBottom: 12 }}>
           <span style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase',
+                         letterSpacing: '.04em', display: 'block', marginBottom: 5 }}>
+            Depth shown (50+ mins only)
+          </span>
+          <div style={{ display: 'flex' }}>
+            {[0, 1, 2, 3].map((n, i) => (
+              <button key={n} onClick={() => setDepthCount(n)}
+                style={{ flex: 1, padding: '5px 0', marginLeft: i ? 6 : 0, borderRadius: 5,
+                         border: `1px solid ${depthCount === n ? '#3b7de8' : '#1e2d45'}`,
+                         background: depthCount === n ? '#0e2040' : 'transparent',
+                         color: depthCount === n ? '#60a5fa' : '#94a3b8',
+                         fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>{n}</button>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ textAlign: 'left', marginBottom: 12 }}>
+          <span style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase',
                          letterSpacing: '.04em', display: 'block', marginBottom: 5 }}>Manager</span>
           <select value={coachId} onChange={e => setCoachId(e.target.value)}
             style={{ width: '100%', background: '#0d1220', border: '1px solid #1e2d45',
@@ -950,7 +1014,7 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
 
         <div style={{ fontSize: 11, color: '#64748b', textAlign: 'left', marginBottom: 14 }}>
           {squad.length} in squad · {filled}/11 filled{rating != null ? ` · XI ${rating.toFixed(1)}` : ''}
-          {coach ? ` · ${coach.name}` : ' · no coach saved'}
+          {coach ? ` · ${coach.name}${coachScore != null ? ` (${Math.round(coachScore)})` : ''}` : ' · no coach saved'}
         </div>
 
         {partialSquadData && (

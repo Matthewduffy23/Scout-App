@@ -1,4 +1,6 @@
-// CoachQuickCard.js — standalone manager quick card, formatted to match the
+// CoachQuickCard.js — standalone manager quick card
+// v2: computeCoachScore() extracted and exported (used by TeamReport) — the
+// build function now calls it, so there remains exactly one implementation., formatted to match the
 // player QuickCard EXACTLY (tile chrome, Style hexagons, Career line chart,
 // Team Context bands) with the Team HQ "⚡ Team Comparison Radar" as the
 // bottom-right Impact tile. Independent of CoachCard.js apart from a few
@@ -357,17 +359,14 @@ function _rankIn(pool, row, field) {
   return { rank: greater + 1, size: peers.length };
 }
 
-export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides = {}) {
-  const age = computeAge(coach.dob);
-  const sortedDesc = [...tenureRows].sort((a, b) => (a.season < b.season ? 1 : -1));
-  const latest = sortedDesc[0] || {};
-  const natIso2 = countryToIso2(coach.nationality || '');
-  const leagueIso2 = countryToIso2(leagueToCountry(latest.league || ''));
-
-  // Score / Potential
-  // Per season: 75% team quality + 25% £ performance (both on the same scale).
-  // Where no market-value data exists for a season, the team score stands alone
-  // rather than being dragged toward a neutral 50.
+// Score / Potential — extracted so TeamReport can show the same manager number
+// without re-implementing (and drifting from) the calibration.
+//
+// Per season: 75% team quality + 25% £ performance (both on the same scale).
+// Where no market-value data exists for a season, the team score stands alone
+// rather than being dragged toward a neutral 50.
+export function computeCoachScore(tenureRows, age, overrides = {}) {
+  const sortedDesc = [...(tenureRows || [])].sort((a, b) => (a.season < b.season ? 1 : -1));
   const perfMap = overrides.seasonPerf || {};
   const perSeason = sortedDesc.map(r => {
     const ov = _teamOverall(r); if (ov == null) return null;
@@ -376,6 +375,7 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
     const sc = perf == null ? _clamp(ov) : _clamp(0.75*ov + 0.25*perf);
     return { season: r.season, ov, sc };
   }).filter(Boolean);
+
   let score = null;
   if (perSeason.length) {
     // Exponential (EWMA-style) recency weighting: the most recent season carries
@@ -389,6 +389,17 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
     score = _clamp(acc/ws);
   }
   const potential = score == null ? null : _clamp(score + _ageBonus(age));
+  return { score, potential, perSeason };
+}
+
+export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides = {}) {
+  const age = computeAge(coach.dob);
+  const sortedDesc = [...tenureRows].sort((a, b) => (a.season < b.season ? 1 : -1));
+  const latest = sortedDesc[0] || {};
+  const natIso2 = countryToIso2(coach.nationality || '');
+  const leagueIso2 = countryToIso2(leagueToCountry(latest.league || ''));
+
+  const { score, potential, perSeason } = computeCoachScore(tenureRows, age, overrides);
   const showPills = overrides.showScorePills !== false;
 
   // Style hexagons (career-avg traits)
