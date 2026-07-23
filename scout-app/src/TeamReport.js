@@ -1,4 +1,4 @@
-// TeamReport.js v7 — Team All-in-One report. 1920x1080 PNG export.
+// TeamReport.js v8 — Team All-in-One report. 1920x1080 PNG export.
 //
 // v2: bigger team name; country flag + league logo beside the league name;
 //     mini coach profile in the header gap; XI is now formation-driven and
@@ -53,8 +53,8 @@ const OVR_CX = SCORE_X + 66;             // centre of the OVR number
 const STAT_X = SCORE_X + 138;
 const STAT_W = 84;                       // 4*84 + 3*10 = 366 -> ends 1180
 const STAT_GAP = 10;
-const COACH_X = 1224;                    // manager gets 672px, spread wider
-const COACH_W = 672;
+const COACH_X = 1216;
+const COACH_W = 680;                     // 1216..1896
 
 // ─── Palette ───────────────────────────────────────────────────────────────
 const BG = '#0a0f1c';
@@ -366,11 +366,28 @@ function sideScore(p, slotSide) {
   return ps === slotSide ? 0 : 2;
 }
 
-// A depth player has to have actually played — 50+ minutes in the latest season.
-// Without this the lists fill with academy names on 0 minutes.
+// A depth player has to have actually played THIS season — 50+ minutes.
+//
+// minutesLatest is the wrong field for this: it's the player's most recent
+// recorded season, which for someone who hasn't featured is last year's number.
+// That's how a 37-year-old with no minutes this term showed up as depth.
+// allSeasonsSummary carries {s, mins} per season, which is what App.js uses
+// for its "played 25-26" filter, so season minutes come from there.
 export const DEPTH_MIN_MINUTES = 50;
 
-export function buildXI(formationKey, squad, depthCount = 2) {
+// Season labels appear in two shapes across the data ('2025-26' and '2026'),
+// so accept either form of the team's season.
+export function seasonMinutes(p, season) {
+  const rows = p && p.allSeasonsSummary;
+  if (!Array.isArray(rows) || !season) return null;   // null = can't tell
+  const want = String(season);
+  const alt = want.includes('-') ? String(Number(want.slice(0, 4)) + 1) : want;
+  const hits = rows.filter(x => String(x.s) === want || String(x.s) === alt);
+  if (!hits.length) return 0;
+  return hits.reduce((a, x) => a + (Number(x.mins) || 0), 0);
+}
+
+export function buildXI(formationKey, squad, depthCount = 2, season = null) {
   const slots = FORMATIONS[formationKey] || FORMATIONS['4-3-3'];
   const mins = (p) => Number(p.minutesLatest || 0);
 
@@ -487,7 +504,13 @@ export function buildXI(formationKey, squad, depthCount = 2) {
       ? !(slot.native ? slot.native.includes(posTok(starter)) : firstTokFits(starter, slot))
       : false;
     const depth = list.slice(1)
-      .filter(p => Number(p.minutesLatest || 0) >= DEPTH_MIN_MINUTES)
+      .filter(p => {
+        const sm = seasonMinutes(p, season);
+        // No allSeasonsSummary at all -> fall back to minutesLatest rather than
+        // silently dropping everyone.
+        return sm == null ? Number(p.minutesLatest || 0) >= DEPTH_MIN_MINUTES
+                          : sm >= DEPTH_MIN_MINUTES;
+      })
       .slice(0, Math.max(0, depthCount));
     return { slot, starter, oop, depth };
   });
@@ -619,48 +642,50 @@ function coachHtml(coach, team, coachScore) {
 
   const facts = [
     formation ? ['Formation', formation] : null,
-    seasonsHere ? ['At club', `${seasonsHere} season${seasonsHere !== 1 ? 's' : ''}`] : null,
-    coach.contract ? ['Contract', coach.contract] : null,
+    seasonsHere ? ['At club', `${seasonsHere} szn${seasonsHere !== 1 ? 's' : ''}`] : null,
+    // Relabelled from "Contract" — same coach.contract field, so typing "2025-"
+    // in the Coaches panel renders as "Since: 2025-".
+    coach.contract ? ['Since', coach.contract] : null,
   ].filter(Boolean);
 
-  // FotMob headshots are square with dead space above the head, so cover alone
-  // left a pale band across the top. Zooming past 100% and biasing downward
-  // crops that out instead of showing the container behind it.
+  // The pale band at the top of the photo was never a crop problem — FotMob
+  // headshots have TRANSPARENT backgrounds, so the light container colour was
+  // showing through above the head. Zooming to hide it just cropped the face.
+  // A dark container fixes it properly and the image can sit at natural size.
   const photoCss = photo
-    ? `background-image:url('${src(photo)}');background-size:132%;background-position:50% 22%;`
+    ? `background-image:url('${src(photo)}');background-size:cover;background-position:center top;`
     : '';
 
-  const scoreBadge = coachScore == null ? '' : `
-    <div style="position:absolute;right:0;top:14px;text-align:center;width:78px;">
-      <div style="font-size:32px;font-weight:900;line-height:1;color:${gradeColor(coachScore)};">${whole(coachScore)}</div>
-      <div style="font-size:8.5px;font-weight:700;letter-spacing:0.14em;color:#8fa0b8;margin-top:6px;">MANAGER</div>
-    </div>`;
+  // Subtle, inline with the name — not a separate headline number.
+  const scoreChip = coachScore == null ? '' : `
+    <span style="display:inline-block;margin-left:12px;padding:2px 9px;border-radius:11px;
+                 background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.13);
+                 font-size:15px;font-weight:800;color:${gradeColor(coachScore)};
+                 vertical-align:middle;">${whole(coachScore)}</span>`;
 
   return `
-    <div style="position:absolute;left:${COACH_X}px;top:26px;width:${COACH_W}px;height:98px;">
-      <div style="position:absolute;left:0;top:2px;width:92px;height:92px;border-radius:11px;
-                  background-color:rgba(255,255,255,0.06);${photoCss}
+    <div style="position:absolute;left:${COACH_X}px;top:24px;width:${COACH_W}px;height:102px;">
+      <div style="position:absolute;left:0;top:2px;width:94px;height:94px;border-radius:11px;
+                  background-color:#151b2e;${photoCss}
                   background-repeat:no-repeat;
                   border:1px solid rgba(255,255,255,0.16);"></div>
 
-      <div style="position:absolute;left:108px;top:4px;width:${COACH_W - 108 - 90}px;">
+      <div style="position:absolute;left:110px;top:6px;width:${COACH_W - 110}px;">
         <div style="font-size:9.5px;font-weight:700;letter-spacing:0.16em;color:#7f8ca3;">MANAGER</div>
-        <div style="font-size:25px;font-weight:700;color:#fff;margin-top:4px;
-                    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(coach.name || '')}</div>
+        <div style="margin-top:4px;white-space:nowrap;">
+          <span style="font-size:25px;font-weight:700;color:#fff;vertical-align:middle;">${esc(coach.name || '')}</span>${scoreChip}
+        </div>
         <div style="display:flex;align-items:center;margin-top:7px;white-space:nowrap;">
           ${iso ? `<div style="width:24px;height:15px;flex-shrink:0;background-size:cover;
                      background-position:center;border-radius:2px;
                      box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15);
                      background-image:url('${src(`https://flagcdn.com/w40/${iso}.png`)}');"></div>` : ''}
           <span style="font-size:12.5px;color:#aab4c8;${iso ? 'margin-left:7px;' : ''}">${esc(coach.nationality || '')}</span>
-        </div>
-        <div style="margin-top:6px;white-space:nowrap;">
-          ${facts.map(([k, v], i) =>
-            `<span style="font-size:11.5px;color:#6f7c92;${i ? 'margin-left:18px;' : ''}">
+          ${facts.map(([k, v]) =>
+            `<span style="font-size:11.5px;color:#6f7c92;margin-left:18px;">
                ${k}: <span style="color:#c3ccdd;font-weight:600;">${esc(v)}</span></span>`).join('')}
         </div>
       </div>
-      ${scoreBadge}
     </div>`;
 }
 
@@ -709,37 +734,38 @@ function headerHtml(team, coach, coachScore) {
         League position ${team.pointsRank}${team.points != null ? ` &nbsp;·&nbsp; ${team.points} pts` : ''}
       </div>` : ''}
 
-    <!-- SCORE CARD: OVR + the four splits. Whole numbers, each with a strength
-         bar so the four can be compared at a glance rather than read one by one. -->
-    <div style="position:absolute;left:${SCORE_X}px;top:22px;width:${SCORE_W}px;height:106px;
+    <!-- SCORE CARD. Four tiny stacked columns forced the eye to read each number
+         separately; as labelled rows with full-width bars the splits compare
+         instantly and the labels get room to breathe. -->
+    <div style="position:absolute;left:${SCORE_X}px;top:20px;width:${SCORE_W}px;height:110px;
                 background:rgba(255,255,255,0.055);border:1px solid rgba(255,255,255,0.12);
                 border-radius:14px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.08);"></div>
 
-    <div style="position:absolute;left:${OVR_CX - 62}px;top:34px;width:124px;text-align:center;">
-      <div style="font-size:52px;font-weight:900;line-height:1;color:${scoreColor(ovr)};">${whole(ovr)}</div>
-      <div style="width:64px;height:3px;border-radius:2px;margin:9px auto 0;
-                  background:${scoreColor(ovr)};opacity:0.85;"></div>
-      <div style="font-size:9.5px;font-weight:700;letter-spacing:0.18em;color:#94a3b8;margin-top:8px;">OVERALL</div>
+    <div style="position:absolute;left:${SCORE_X + 14}px;top:34px;width:112px;text-align:center;">
+      <div style="font-size:50px;font-weight:900;line-height:1;color:${scoreColor(ovr)};">${whole(ovr)}</div>
+      <div style="width:56px;height:3px;border-radius:2px;margin:10px auto 0;
+                  background:${scoreColor(ovr)};"></div>
+      <div style="font-size:9px;font-weight:700;letter-spacing:0.18em;color:#94a3b8;margin-top:9px;">OVERALL</div>
     </div>
 
-    <div style="position:absolute;left:${SCORE_X + 128}px;top:38px;width:1px;height:74px;
+    <div style="position:absolute;left:${SCORE_X + 140}px;top:34px;width:1px;height:82px;
                 background:rgba(255,255,255,0.14);"></div>
 
-    <div style="position:absolute;left:${STAT_X}px;top:40px;display:flex;align-items:flex-start;">
-      ${cells.map(([label, v], i) => `
-        <div style="width:${STAT_W}px;${i ? `margin-left:${STAT_GAP}px;` : ''}">
-          <div style="font-size:26px;font-weight:800;line-height:1;text-align:center;
-                      color:${scoreColor(v)};">${whole(v)}</div>
-          <div style="height:4px;border-radius:2px;margin-top:9px;
-                      background:rgba(255,255,255,0.10);position:relative;overflow:hidden;">
-            <div style="position:absolute;left:0;top:0;height:100%;
-                        width:${Math.max(0, Math.min(100, Number(v) || 0))}%;
-                        background:${scoreColor(v)};border-radius:2px;"></div>
-          </div>
-          <div style="font-size:8.5px;font-weight:700;letter-spacing:0.10em;color:#8fa0b8;
-                      margin-top:8px;text-align:center;">${label}</div>
-        </div>`).join('')}
-    </div>
+    ${cells.map(([label, v], i) => {
+      const pct = Math.max(0, Math.min(100, Number(v) || 0));
+      return `
+      <div style="position:absolute;left:${SCORE_X + 160}px;top:${34 + i * 21}px;
+                  width:${SCORE_W - 176}px;height:16px;">
+        <span style="position:absolute;left:0;top:3px;font-size:9.5px;font-weight:700;
+                     letter-spacing:0.08em;color:#8fa0b8;">${label}</span>
+        <div style="position:absolute;left:86px;right:34px;top:5px;height:6px;
+                    background:rgba(255,255,255,0.09);border-radius:3px;overflow:hidden;">
+          <div style="width:${pct}%;height:100%;background:${scoreColor(v)};border-radius:3px;"></div>
+        </div>
+        <span style="position:absolute;right:0;top:0;font-size:15px;font-weight:800;
+                     color:${scoreColor(v)};">${whole(v)}</span>
+      </div>`;
+    }).join('')}
 
     ${coachHtml(coach, team, coachScore)}`;
 }
@@ -823,7 +849,7 @@ export function buildTeamReportElement(team, opts = {}) {
   const xiW = LEFT_W - PANEL_PAD * 2;
   const xiH = LEFT_H - PANEL_PAD * 2 - TITLE_H;
 
-  const xi = buildXI(formation, squad, depthCount);
+  const xi = buildXI(formation, squad, depthCount, team.season);
 
   container.innerHTML = `
     <div id="tr-card-root" style="width:${W}px;height:${H}px;overflow:hidden;background:${BG};
@@ -891,16 +917,51 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
       .filter(Boolean);
   }, [coach, allTeams]);
 
+  // Total squad market value per team+league — same grouping TeamIndex uses.
+  const totalMVByTeam = useMemo(() => {
+    const sums = {};
+    for (const p of players) {
+      if (!p.marketValue || p.marketValue <= 0) continue;
+      const k = String(p.team).toLowerCase() + '|' + String(p.league || '').trim().replace(/\.$/, '').toLowerCase();
+      sums[k] = (sums[k] || 0) + p.marketValue;
+    }
+    return sums;
+  }, [players]);
+
+  // Ported from CoachPanel.buildSeasonPerfMap / getMVPerfRank. This is the 25%
+  // "£ performance" half of the manager score — without it the score falls back
+  // to team quality alone and reads a couple of points below the quick card.
+  const seasonPerf = useMemo(() => {
+    const getTotalMV = (t, l) =>
+      totalMVByTeam[String(t).toLowerCase() + '|' + String(l || '').trim().replace(/\.$/, '').toLowerCase()] ?? null;
+    const map = {};
+    for (const row of tenureRows) {
+      const peers = allTeams.filter(t => String(t.league) === String(row.league)
+                                      && String(t.season) === String(row.season));
+      const withMV = peers
+        .map(t => ({ t, mv: getTotalMV(t.team, t.league) }))
+        .filter(x => x.mv != null && x.t.pointsRank != null);
+      if (withMV.length < 2) continue;
+      withMV.sort((a, b) => b.mv - a.mv);
+      const idx = withMV.findIndex(x => x.t.team === row.team);
+      if (idx < 0) continue;
+      const rank = idx + 1, size = withMV.length;
+      const pct = ((size - rank) / (size - 1)) * 100;
+      map[`${row.season}||${row.league}||${row.team}`] = Math.round(pct * 10) / 10;
+    }
+    return map;
+  }, [tenureRows, allTeams, totalMVByTeam]);
+
   const coachScore = useMemo(() => {
     if (!coach || !tenureRows.length) return null;
     try {
       let age = null;
       try { age = computeAge(coach.dob); } catch (e) { age = null; }
-      return computeCoachScore(tenureRows, age, {}).score;
+      return computeCoachScore(tenureRows, age, { seasonPerf }).score;
     } catch (e) { return null; }
-  }, [coach, tenureRows]);
+  }, [coach, tenureRows, seasonPerf]);
 
-  const xi = useMemo(() => buildXI(formation, squad, depthCount), [formation, squad, depthCount]);
+  const xi = useMemo(() => buildXI(formation, squad, depthCount, team.season), [formation, squad, depthCount, team]);
   const filled = xi.filter(s => s.starter).length;
   const rating = xiRating(xi);
 
