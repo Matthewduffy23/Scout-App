@@ -1,4 +1,4 @@
-// TeamReport.js v5 — Team All-in-One report. 1920x1080 PNG export.
+// TeamReport.js v6 — Team All-in-One report. 1920x1080 PNG export.
 //
 // v2: bigger team name; country flag + league logo beside the league name;
 //     mini coach profile in the header gap; XI is now formation-driven and
@@ -514,7 +514,7 @@ function xiPanelHtml(w, h, xi) {
       ? `<div style="position:absolute;left:50%;margin-left:-${FACE / 2}px;top:0;
                      width:${FACE}px;height:${FACE}px;border-radius:50%;
                      background-color:rgba(255,255,255,0.07);
-                     background-image:url('${img}');background-size:cover;
+                     background-image:url('${src(img)}');background-size:cover;
                      background-position:center top;
                      border:2px solid rgba(203,213,225,0.55);"></div>`
       : `<div style="position:absolute;left:50%;margin-left:-${FACE / 2}px;top:0;
@@ -617,7 +617,7 @@ function coachHtml(coach, team) {
                 display:flex;align-items:center;">
       <div style="width:88px;height:88px;border-radius:10px;flex-shrink:0;
                   background-color:rgba(255,255,255,0.06);
-                  ${photo ? `background-image:url('${photo}');` : ''}
+                  ${photo ? `background-image:url('${src(photo)}');` : ''}
                   background-size:cover;background-position:center 30%;
                   border:1px solid rgba(255,255,255,0.16);overflow:hidden;"></div>
       <div style="margin-left:14px;min-width:0;">
@@ -629,7 +629,7 @@ function coachHtml(coach, team) {
           ${iso ? `<div style="width:24px;height:15px;flex-shrink:0;background-size:cover;
                      background-position:center;border-radius:2px;
                      box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15);
-                     background-image:url('https://flagcdn.com/w40/${iso}.png');"></div>` : ''}
+                     background-image:url('${src(`https://flagcdn.com/w40/${iso}.png`)}');"></div>` : ''}
           <span style="font-size:13px;color:#aab4c8;${iso ? 'margin-left:7px;' : ''}">${esc(coach.nationality || '')}</span>
           ${facts.map(([k, v]) =>
             `<span style="font-size:12px;color:#6f7c92;margin-left:16px;">
@@ -657,7 +657,7 @@ function headerHtml(team, coach) {
                 box-shadow:inset 0 1px 0 rgba(255,255,255,0.08);"></div>
 
     ${crest ? `<div style="position:absolute;left:${PAD}px;top:21px;width:108px;height:108px;
-                background-image:url('${crest}');background-size:contain;
+                background-image:url('${src(crest)}');background-size:contain;
                 background-repeat:no-repeat;background-position:center;"></div>` : ''}
 
     <div style="position:absolute;left:${NAME_X}px;top:16px;width:${NAME_MAX_W}px;
@@ -670,10 +670,10 @@ function headerHtml(team, coach) {
       ${flag ? `<div style="width:27px;height:17px;flex-shrink:0;background-size:cover;
                   background-position:center;border-radius:2px;
                   box-shadow:inset 0 0 0 1px rgba(255,255,255,0.18);
-                  background-image:url('${flag}');"></div>` : ''}
+                  background-image:url('${src(flag)}');"></div>` : ''}
       ${logo ? `<div style="width:24px;height:24px;flex-shrink:0;background-size:contain;
                   background-repeat:no-repeat;background-position:center;
-                  background-image:url('${logo}');margin-left:9px;"></div>` : ''}
+                  background-image:url('${src(logo)}');margin-left:9px;"></div>` : ''}
       <span style="font-size:21px;font-weight:600;color:#dbe3f0;margin-left:9px;">${esc(league)}</span>
       ${team.season ? `<span style="font-size:19px;font-weight:500;color:#8fa0b8;margin-left:12px;">· ${esc(team.season)}</span>` : ''}
     </div>
@@ -709,8 +709,72 @@ function headerHtml(team, coach) {
     ${coachHtml(coach, team)}`;
 }
 
-function buildTeamReportElement(team, opts = {}) {
-  const { squad = [], formation = '4-3-3', coach = null } = opts;
+// ─── Image handling ────────────────────────────────────────────────────────
+// html-to-image fetches every remote image ITSELF and inlines it as a data URL,
+// once per toPng call — so the double-render pattern means two fetches for each
+// of ~16 images. A `new Image()` preload doesn't help, because those cache
+// entries aren't what html-to-image reuses.
+//
+// So: fetch everything once up front, convert to data URLs, and hand the render
+// a card with no remote references at all. Both passes then cost nothing.
+// Anything that fails falls back to its original URL — no worse than before.
+let IMG = {};
+const src = (url) => (url && IMG[url]) || url || '';
+
+export function cardImageUrls(team, squad, coach) {
+  const urls = [teamCrest(team.team), leagueLogo(team.league), leagueFlag(team.league)];
+  for (const p of squad) urls.push(photoUrl(p.name, p.team));
+  if (coach) {
+    const rawId = coach.fotmobId || '';
+    const fmId = typeof rawId === 'string' && rawId.includes('fotmob.com')
+      ? (rawId.match(/\/(\d+)\.png/) || [])[1] || null : (rawId || null);
+    urls.push(fmId ? `${FOTMOB_PHOTO_BASE}${fmId}.png` : (coach.photoDataUrl || coach.photoUrl || ''));
+    const iso = countryToIso2(coach.nationality || '');
+    if (iso) urls.push(`https://flagcdn.com/w40/${iso}.png`);
+  }
+  return [...new Set(urls.filter(u => u && !u.startsWith('data:')))];
+}
+
+function fetchAsDataUrl(url, timeoutMs) {
+  return new Promise(resolve => {
+    let settled = false;
+    const finish = (v) => { if (!settled) { settled = true; resolve(v); } };
+    setTimeout(() => finish(null), timeoutMs);
+    fetch(url, { mode: 'cors', cache: 'force-cache' })
+      .then(r => (r.ok ? r.blob() : null))
+      .then(b => {
+        if (!b) return finish(null);
+        const fr = new FileReader();
+        fr.onload = () => finish(fr.result);
+        fr.onerror = () => finish(null);
+        fr.readAsDataURL(b);
+      })
+      .catch(() => finish(null));
+  });
+}
+
+// Concurrency capped — 16 parallel requests to raw.githubusercontent is slower
+// than 6, and one stalled photo shouldn't hold up the rest.
+export async function preloadImages(urls, onProgress, timeoutMs = 4000, concurrency = 6) {
+  const map = {};
+  let done = 0;
+  const queue = urls.slice();
+  const worker = async () => {
+    while (queue.length) {
+      const url = queue.shift();
+      const data = await fetchAsDataUrl(url, timeoutMs);
+      if (data) map[url] = data;
+      done += 1;
+      if (onProgress) onProgress(done, urls.length);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.max(1, Math.min(concurrency, urls.length)) }, worker));
+  return map;
+}
+
+export function buildTeamReportElement(team, opts = {}) {
+  const { squad = [], formation = '4-3-3', coach = null, images = {} } = opts;
+  IMG = images || {};
 
   const container = document.createElement('div');
   container.style.position = 'fixed';
@@ -757,6 +821,8 @@ function buildTeamReportElement(team, opts = {}) {
 // ─── Modal ─────────────────────────────────────────────────────────────────
 export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], players = [], onClose }) {
   const [downloading, setDownloading] = useState(false);
+  const [progress, setProgress] = useState('');
+  const [error, setError] = useState('');
   const [formation, setFormation] = useState('4-3-3');
 
   // Player rows carry league in the '.' format ('England 1.'); team rows don't.
@@ -793,29 +859,39 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
   const partialSquadData = players.length > 0 && groupsPresent < 4;
 
   const handleDownload = async () => {
+    // EVERYTHING lives inside try/finally. Previously the preload and the
+    // element build sat outside it, so any throw skipped setDownloading(false)
+    // and the button stuck on "Generating…" with no error surfaced.
     setDownloading(true);
-    const { toPng } = await import('html-to-image');
-    // Warm the browser cache FIRST. With cacheBust on, html-to-image appends a
-    // unique param per call, so the warm-up render and the real render each
-    // re-fetched all ~15 images — 30 round trips per download. Preloading and
-    // turning cacheBust off means the second pass costs nothing.
-    await preloadImages(cardImageUrls(team, squad, coach));
-    const el = buildTeamReportElement(team, { squad, formation, coach });
+    setProgress('Loading images…');
+    let el = null;
     try {
+      const { toPng } = await import('html-to-image');
+      const urls = cardImageUrls(team, squad, coach);
+      const images = await preloadImages(urls, (d, t) => setProgress(`Images ${d}/${t}`));
+      setProgress('Rendering…');
+
+      el = buildTeamReportElement(team, { squad, formation, coach, images });
       const cardNode = el.querySelector('#tr-card-root') || el;
       const opts = {
         width: W, height: H, pixelRatio: 1, backgroundColor: BG,
         cacheBust: false, fontEmbedCSS: MONTSERRAT_EMBED_CSS,
         imagePlaceholder: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
       };
-      await toPng(cardNode, opts);
-      const dataUrl = await toPng(cardNode, opts);
+      await toPng(cardNode, opts);               // warm-up: settles fonts/layout
+      const dataUrl = await toPng(cardNode, opts); // real capture
       const a = document.createElement('a');
       a.download = `${String(team.team).replace(/\s+/g, '_')}_team_report.png`;
       a.href = dataUrl;
       a.click();
-    } catch (e) { console.error(e); }
-    finally { document.body.removeChild(el); setDownloading(false); }
+    } catch (e) {
+      console.error('[TeamReport] download failed:', e);
+      setError(String((e && e.message) || e));
+    } finally {
+      if (el && el.parentNode) el.parentNode.removeChild(el);
+      setDownloading(false);
+      setProgress('');
+    }
   };
 
   const note = { fontSize: 11.5, borderRadius: 8, padding: '8px 10px', marginBottom: 14, lineHeight: 1.45 };
@@ -895,11 +971,18 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
           </div>
         )}
 
+        {error && (
+          <div style={{ ...note, color: '#f87171', background: 'rgba(248,113,113,0.08)',
+                        border: '1px solid rgba(248,113,113,0.25)', textAlign: 'left' }}>
+            Download failed: {error}
+          </div>
+        )}
+
         <button onClick={handleDownload} disabled={downloading}
           style={{ width: '100%', padding: '10px 0', borderRadius: 8, border: 'none',
                    background: downloading ? '#1e2d45' : '#3b7de8', color: '#fff',
                    fontSize: 13, fontWeight: 700, cursor: downloading ? 'default' : 'pointer' }}>
-          {downloading ? 'Generating…' : '⬇ Download 1920×1080'}
+          {downloading ? (progress || 'Generating…') : '⬇ Download 1920×1080'}
         </button>
         <button onClick={onClose}
           style={{ width: '100%', marginTop: 10, padding: '8px 0', borderRadius: 8,
