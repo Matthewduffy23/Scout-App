@@ -993,7 +993,7 @@ function buildQuickCardElement(player, players, manual = {}) {
       <div style="position:absolute;left:248px;top:24px;width:560px;font-size:53.2px;font-weight:700;line-height:1.05;letter-spacing:-0.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${manual.nameOverride || player.name}</div>
       <div style="position:absolute;left:248px;top:90px;display:flex;align-items:center;">
         <span style="font-size:26.6px;font-weight:600;color:#fff;white-space:nowrap;">${manual.posLabelOverride || POSITION_LABELS[rawPosToken] || rawPosToken}</span>
-        ${(player.foot && player.foot !== 'unknown' && player.foot !== 'nan') ? `<span style="font-size:21.3px;color:#c0c0c0;white-space:nowrap;margin-left:36px;">${formatFoot(player.foot)}</span>` : ''}
+        ${(player.foot && player.foot !== 'unknown' && player.foot !== 'nan') ? `<span style="font-size:21.3px;color:#c0c0c0;white-space:nowrap;margin-left:30px;">${formatFoot(player.foot)}</span>` : ''}
       </div>
       <div style="position:absolute;left:248px;top:148px;display:flex;align-items:center;gap:10px;">
         ${countryToIso2(player.birthCountry) ? `<div style="width:36px;height:22px;flex-shrink:0;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(player.birthCountry)}.png');border-radius:2px;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15);"></div>` : ''}
@@ -1023,7 +1023,7 @@ function buildQuickCardElement(player, players, manual = {}) {
       <div style="position:absolute;left:${teamTextLeft}px;top:90px;width:266px;font-size:32px;font-weight:800;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${(manual.teamOverride || sdTeam).length >= 16 ? 'letter-spacing:-1px;' : ''}">${manual.teamOverride || sdTeam}</div>
       <div style="position:absolute;left:${teamTextLeft}px;top:150px;display:flex;align-items:center;">
         <span style="font-size:21px;font-weight:500;color:#fff;white-space:nowrap;">${leagueDisplayName}</span>
-        ${countryToIso2(leagueToCountry(sdLeague)) ? `<div style="width:32px;height:20px;flex-shrink:0;margin-left:33px;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(leagueToCountry(sdLeague))}.png');border-radius:2px;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15);"></div>` : ''}
+        ${countryToIso2(leagueToCountry(sdLeague)) ? `<div style="width:32px;height:20px;flex-shrink:0;margin-left:27px;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(leagueToCountry(sdLeague))}.png');border-radius:2px;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15);"></div>` : ''}
       </div>
       ${player.onLoan ? `<div style="position:absolute;left:${teamTextLeft}px;top:194px;font-size:21.3px;color:#d9d9d9;white-space:nowrap;">On Loan</div>` : ''}
 
