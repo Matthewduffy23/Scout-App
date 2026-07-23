@@ -1,4 +1,4 @@
-// TeamReport.js v3 — Team All-in-One report. 1920x1080 PNG export.
+// TeamReport.js v4 — Team All-in-One report. 1920x1080 PNG export.
 //
 // v2: bigger team name; country flag + league logo beside the league name;
 //     mini coach profile in the header gap; XI is now formation-driven and
@@ -45,11 +45,15 @@ const LEFT_H = ROW_3 + ROW_H - BODY_TOP; // 889
 // ("Wolverhampton Wanderers") can't run into the coach block.
 const NAME_X = PAD + 128;
 const NAME_MAX_W = 520;
-const COACH_X = 700;
-const COACH_W = 620;
-const OVR_CX = 1400;                     // centre of the OVR number
-const STAT_W = 96;
-const STAT_GAP = 10;                     // 4*96 + 3*10 = 414 -> 1482..1896
+// Order across the band: crest+name -> OVR/score card -> manager.
+const SCORE_X = 690;                     // score card left edge
+const SCORE_W = 566;                     // 690..1256
+const OVR_CX = SCORE_X + 74;             // centre of the OVR number
+const STAT_X = SCORE_X + 158;
+const STAT_W = 92;
+const STAT_GAP = 12;                     // 4*92 + 3*12 = 404 -> ends 1252
+const COACH_X = 1292;
+const COACH_W = 604;                     // 1292..1896
 
 // ─── Palette ───────────────────────────────────────────────────────────────
 const BG = '#0a0f1c';
@@ -61,6 +65,22 @@ const PANEL_SHADOW = '0 8px 24px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,25
 const PANEL_RADIUS = 14;
 const PANEL_PAD = 20;
 const TITLE_H = 34;
+
+// Continuous 0-100 ramp: red -> gold -> green. Used for XI scores, where a
+// smooth gradient reads better than the five hard bands scoreColor() applies
+// to the team-level numbers (those stay banded to match TeamIndex's table).
+const RAMP = [[0, [239, 68, 68]], [50, [251, 199, 1]], [100, [0, 191, 99]]];
+function gradeColor(v) {
+  if (v == null || isNaN(v)) return '#64748b';
+  const x = Math.max(0, Math.min(100, Number(v)));
+  let a = RAMP[0], b = RAMP[RAMP.length - 1];
+  for (let i = 0; i < RAMP.length - 1; i++) {
+    if (x >= RAMP[i][0] && x <= RAMP[i + 1][0]) { a = RAMP[i]; b = RAMP[i + 1]; break; }
+  }
+  const t = b[0] === a[0] ? 0 : (x - a[0]) / (b[0] - a[0]);
+  const c = [0, 1, 2].map(i => Math.round(a[1][i] + (b[1][i] - a[1][i]) * t));
+  return `rgb(${c[0]},${c[1]},${c[2]})`;
+}
 
 function scoreColor(v) {
   if (v == null) return '#475569';
@@ -115,9 +135,13 @@ function stub(w, h, note) {
 // centre-back to drop. Worth fixing in app.py too.
 // ───────────────────────────────────────────────────────────────────────────
 
-// First token of the raw position string, uppercased.
-const posTok = (p) => String(p.position || '').split(',')[0].trim().toUpperCase();
-const allToks = (p) => String(p.position || '').split(',').map(t => t.trim().toUpperCase()).filter(Boolean);
+// Wyscout emits numeric variants in some exports ("RCMF3", "LCMF3"), and canon()
+// below silently defaults ANY unrecognised token to 'CM' — so an unmapped winger
+// quietly becomes a central midfielder and its slot renders empty. Stripping the
+// trailing digits catches the common case; reportUnmappedTokens() surfaces the rest.
+const normTok = (t) => String(t || '').trim().toUpperCase().replace(/\d+$/, '');
+const posTok = (p) => normTok(String(p.position || '').split(',')[0]);
+const allToks = (p) => String(p.position || '').split(',').map(normTok).filter(Boolean);
 
 // Wyscout token -> slot label.
 const CANONICAL = {
@@ -132,6 +156,18 @@ const SIDE_PREF = {
   LCB: 'L', LCMF: 'L', LDMF: 'L', LB: 'L', LWB: 'L', LW: 'L', LWF: 'L', LAMF: 'L',
 };
 const canon = (t) => CANONICAL[t] || 'CM';
+
+// Any squad token with no CANONICAL entry. These are the ones silently collapsing
+// to 'CM', so if a slot is mysteriously empty this is the first place to look.
+export function reportUnmappedTokens(squad) {
+  const bad = {};
+  for (const p of squad) {
+    for (const t of allToks(p)) {
+      if (!CANONICAL[t]) (bad[t] = bad[t] || []).push(p.name);
+    }
+  }
+  return bad;
+}
 const sideOf = (p) => SIDE_PREF[posTok(p)] || 'N';
 
 // Slots are filled back-to-front in this order — specialists (GK, centre-backs)
@@ -367,6 +403,25 @@ export function buildXI(formationKey, squad) {
     }
   }
 
+  // Pass 3 — a slot still empty after both passes gets the best unassigned player
+  // whose ANY token canonically fits, ranked by minutes. Streamlit leaves these
+  // blank; filling them (and flagging out-of-position) is more useful on a card
+  // that has to stand on its own.
+  for (const label of PITCH_ORDER) {
+    const list = byLabel[label];
+    if (!list) continue;
+    for (const sl of list) {
+      if ((slotMap[sl.id] || []).length) continue;
+      const spare = squad
+        .filter(p => !assigned.has(p) && allToks(p).some(t => sl.accepts.includes(canon(t))))
+        .sort((a, b) => mins(b) - mins(a));
+      if (spare.length) {
+        slotMap[sl.id] = [spare[0]];
+        assigned.add(spare[0]);
+      }
+    }
+  }
+
   return slots.map(slot => {
     const list = slotMap[slot.id] || [];
     const starter = list[0] || null;
@@ -387,54 +442,58 @@ export function xiRating(xi) {
 }
 
 // ─── XI panel ──────────────────────────────────────────────────────────────
-const SLOT_W = 156;
-const SLOT_H = 104;
+const SLOT_W = 168;
+const SLOT_H = 118;
+const FACE = 62;
 function xiPanelHtml(w, h, xi) {
   const line = 'rgba(255,255,255,0.10)';
 
   const blocks = xi.map(({ slot, starter, oop, depth }) => {
-    // Streamlit coords are 0-100.
-    const cx = (slot.x / 100) * w, cy = (slot.y / 100) * h;
-    const left = Math.max(-6, Math.min(w - SLOT_W + 6, cx - SLOT_W / 2));
-    const top = Math.max(2, Math.min(h - SLOT_H, cy - 30));
+    const cx = (slot.x / 100) * w, cy = (slot.y / 100) * h;   // Streamlit coords are 0-100
+    const left = Math.max(-8, Math.min(w - SLOT_W + 8, cx - SLOT_W / 2));
+    const top = Math.max(2, Math.min(h - SLOT_H, cy - 34));
 
     const sc = starter ? starter.careerScore : null;
     const img = starter ? photoUrl(starter.name, starter.team) : '';
     const tok = starter ? String(starter.position || '').split(',')[0].trim() : '';
+    const age = starter && starter.age != null ? ` (${starter.age})` : '';
 
+    // Ring is neutral grey — colour lives in the score, so the two don't compete.
     const face = starter
-      ? `<div style="width:52px;height:52px;border-radius:50%;flex-shrink:0;
+      ? `<div style="position:absolute;left:50%;margin-left:-${FACE / 2}px;top:0;
+                     width:${FACE}px;height:${FACE}px;border-radius:50%;
                      background-color:rgba(255,255,255,0.07);
                      background-image:url('${img}');background-size:cover;
                      background-position:center top;
-                     border:2px solid ${scoreColor(sc)};"></div>`
-      : `<div style="width:52px;height:52px;border-radius:50%;flex-shrink:0;
+                     border:2px solid rgba(203,213,225,0.55);"></div>`
+      : `<div style="position:absolute;left:50%;margin-left:-${FACE / 2}px;top:0;
+                     width:${FACE}px;height:${FACE}px;border-radius:50%;
                      background:rgba(255,255,255,0.05);
                      border:1px dashed rgba(255,255,255,0.20);
                      display:flex;align-items:center;justify-content:center;
                      font-size:11px;font-weight:700;color:#475569;">${slot.label}</div>`;
 
-    // margin-left, not flex gap — gap renders unreliably through html-to-image.
+    // Score hangs off the photo's right edge, absolutely placed — so the name
+    // below can centre on the PHOTO rather than on photo+score combined.
     const score = sc == null ? '' :
-      `<div style="margin-left:7px;font-size:20px;font-weight:800;line-height:1;
-                   color:${scoreColor(sc)};">${fmt(sc)}</div>`;
+      `<div style="position:absolute;left:50%;margin-left:${FACE / 2 + 7}px;top:19px;
+                   font-size:22px;font-weight:800;line-height:1;
+                   color:${gradeColor(sc)};">${Math.round(sc)}</div>`;
 
-    // Out-of-position starters show their real primary token, same as the
-    // depth chart's "(RCB)" suffix.
     const oopTag = (starter && oop && tok)
       ? `<span style="color:#f18c31;font-weight:600;"> (${esc(tok)})</span>` : '';
 
     const depthNames = depth.map(d =>
-      `<div style="font-size:10.5px;color:#5c6b82;line-height:1.35;white-space:nowrap;
-                   overflow:hidden;text-overflow:ellipsis;">${esc(d.name)}</div>`).join('');
+      `<div style="font-size:11.5px;color:#8b98ad;line-height:1.4;white-space:nowrap;
+                   overflow:hidden;text-overflow:ellipsis;">${esc(d.name)}${d.age != null ? ` (${d.age})` : ''}</div>`).join('');
 
     return `
       <div style="position:absolute;left:${left}px;top:${top}px;width:${SLOT_W}px;">
-        <div style="display:flex;align-items:center;justify-content:center;">${face}${score}</div>
-        <div style="font-size:12px;font-weight:700;color:#dbe3f0;margin-top:5px;
+        <div style="position:relative;height:${FACE}px;">${face}${score}</div>
+        <div style="font-size:13.5px;font-weight:700;color:#eaf0f8;margin-top:6px;
                     text-align:center;white-space:nowrap;overflow:hidden;
-                    text-overflow:ellipsis;">${starter ? esc(starter.name) : '—'}${oopTag}</div>
-        <div style="margin-top:2px;text-align:center;">${depthNames}</div>
+                    text-overflow:ellipsis;">${starter ? esc(starter.name) : '—'}${age}${oopTag}</div>
+        <div style="margin-top:3px;text-align:center;">${depthNames}</div>
       </div>`;
   }).join('');
 
@@ -508,8 +567,8 @@ function coachHtml(coach, team) {
       <div style="width:88px;height:88px;border-radius:10px;flex-shrink:0;
                   background-color:rgba(255,255,255,0.06);
                   ${photo ? `background-image:url('${photo}');` : ''}
-                  background-size:cover;background-position:center top;
-                  border:1px solid rgba(255,255,255,0.16);"></div>
+                  background-size:cover;background-position:center 30%;
+                  border:1px solid rgba(255,255,255,0.16);overflow:hidden;"></div>
       <div style="margin-left:14px;min-width:0;">
         <div style="font-size:10px;font-weight:700;letter-spacing:0.16em;color:#7f8ca3;">MANAGER</div>
         <div style="font-size:24px;font-weight:700;color:#fff;margin-top:3px;
@@ -574,31 +633,32 @@ function headerHtml(team, coach) {
         League position ${team.pointsRank}${team.points != null ? ` &nbsp;·&nbsp; ${team.points} pts` : ''}
       </div>` : ''}
 
-    ${coachHtml(coach, team)}
+    <!-- SCORE CARD: OVR + the four style scores, one panel, ahead of the manager -->
+    <div style="position:absolute;left:${SCORE_X}px;top:26px;width:${SCORE_W}px;height:98px;
+                background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.11);
+                border-radius:12px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.07);"></div>
 
-    <div style="position:absolute;left:${OVR_CX - 90}px;top:36px;width:180px;text-align:center;">
-      <div style="font-size:54px;font-weight:900;line-height:1;color:${scoreColor(ovr)};">${fmt(ovr)}</div>
-      <div style="font-size:11px;font-weight:700;letter-spacing:0.16em;color:#8fa0b8;margin-top:6px;">OVERALL</div>
+    <div style="position:absolute;left:${OVR_CX - 70}px;top:38px;width:140px;text-align:center;">
+      <div style="font-size:46px;font-weight:900;line-height:1;color:${scoreColor(ovr)};">${fmt(ovr)}</div>
+      <div style="font-size:9.5px;font-weight:700;letter-spacing:0.18em;color:#94a3b8;margin-top:7px;">OVERALL</div>
     </div>
 
-    <div style="position:absolute;right:${PAD}px;top:42px;display:flex;align-items:flex-start;">
+    <!-- divider between OVR and the breakdown -->
+    <div style="position:absolute;left:${SCORE_X + 148}px;top:42px;width:1px;height:66px;
+                background:rgba(255,255,255,0.13);"></div>
+
+    <div style="position:absolute;left:${STAT_X}px;top:44px;display:flex;align-items:flex-start;">
       ${cells.map(([label, v], i) => `
         <div style="text-align:center;width:${STAT_W}px;${i ? `margin-left:${STAT_GAP}px;` : ''}">
-          <div style="font-size:27px;font-weight:800;line-height:1;color:${scoreColor(v)};">${fmt(v)}</div>
-          <div style="font-size:9.5px;font-weight:700;letter-spacing:0.10em;color:#8fa0b8;margin-top:7px;">${label}</div>
+          <div style="font-size:25px;font-weight:800;line-height:1;color:${scoreColor(v)};">${fmt(v)}</div>
+          <div style="font-size:9px;font-weight:700;letter-spacing:0.10em;color:#8fa0b8;margin-top:7px;">${label}</div>
         </div>`).join('')}
-    </div>`;
+    </div>
+
+    ${coachHtml(coach, team)}`;
 }
 
-// ─── Offscreen element builder ─────────────────────────────────────────────
-// "4-3-3 · XI 82.4" in the panel's top-right.
-function xiRatingLabel(xi, formation) {
-  const r = xiRating(xi);
-  return r == null ? formation
-    : `${formation} &nbsp;·&nbsp; XI <span style="color:${scoreColor(r)};">${fmt(r)}</span>`;
-}
-
-export function buildTeamReportElement(team, opts = {}) {
+function buildTeamReportElement(team, opts = {}) {
   const { squad = [], formation = '4-3-3', coach = null } = opts;
 
   const container = document.createElement('div');
@@ -672,6 +732,11 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
   const xi = useMemo(() => buildXI(formation, squad), [formation, squad]);
   const filled = xi.filter(s => s.starter).length;
   const rating = xiRating(xi);
+
+  // Surfaces any position token with no CANONICAL entry — the silent failure that
+  // makes a slot look broken, because canon() collapses unknowns to 'CM'.
+  const unmapped = useMemo(() => reportUnmappedTokens(squad), [squad]);
+  const unmappedKeys = Object.keys(unmapped);
 
   const groupsPresent = new Set(players.map(p => p && p.roleKey).filter(Boolean)).size;
   const partialSquadData = players.length > 0 && groupsPresent < 4;
@@ -754,6 +819,15 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
                         border: '1px solid rgba(251,199,1,0.25)' }}>
             Only {groupsPresent} position group{groupsPresent === 1 ? '' : 's'} loaded — the XI
             will be incomplete. Switch the position filter to "All" to load every group.
+          </div>
+        )}
+
+        {unmappedKeys.length > 0 && (
+          <div style={{ ...note, color: '#f87171', background: 'rgba(248,113,113,0.08)',
+                        border: '1px solid rgba(248,113,113,0.25)', textAlign: 'left' }}>
+            Unrecognised position token{unmappedKeys.length === 1 ? '' : 's'}:{' '}
+            <b>{unmappedKeys.join(', ')}</b> — these fall through to CM and can leave
+            a slot empty. Add them to CANONICAL in TeamReport.js.
           </div>
         )}
 
