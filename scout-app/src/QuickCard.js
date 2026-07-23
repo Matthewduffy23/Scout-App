@@ -1023,7 +1023,7 @@ function buildQuickCardElement(player, players, manual = {}) {
       <div style="position:absolute;left:${teamTextLeft}px;top:90px;width:275px;font-size:32px;font-weight:800;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${(manual.teamOverride || sdTeam).length >= 16 ? 'letter-spacing:-1px;' : ''}">${manual.teamOverride || sdTeam}</div>
       <div style="position:absolute;left:${teamTextLeft}px;top:150px;display:flex;align-items:center;">
         <span style="font-size:21px;font-weight:500;color:#fff;white-space:nowrap;">${leagueDisplayName}</span>
-        ${countryToIso2(leagueToCountry(sdLeague)) ? `<div style="width:32px;height:20px;flex-shrink:0;margin-left:27px;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(leagueToCountry(sdLeague))}.png');border-radius:2px;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15);"></div>` : ''}
+        ${countryToIso2(leagueToCountry(sdLeague)) ? `<div style="width:32px;height:20px;flex-shrink:0;margin-left:${manual.shiftTeamText ? 30 : 27}px;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(leagueToCountry(sdLeague))}.png');border-radius:2px;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15);"></div>` : ''}
       </div>
       ${player.onLoan ? `<div style="position:absolute;left:${teamTextLeft}px;top:194px;font-size:21.3px;color:#d9d9d9;white-space:nowrap;">On Loan</div>` : ''}
 
@@ -1031,7 +1031,7 @@ function buildQuickCardElement(player, players, manual = {}) {
       <div style="position:absolute;left:1188px;top:36px;width:2px;height:210px;background:rgba(255,255,255,0.14);"></div>
 
       <!-- INFO BOX -->
-      ${[['Height:', cmToFeet(player.height) || '—'], ['xValue:', manual.valueOverride || (player.xValue > 0 ? formatMV(player.xValue) : '—')], ['Contract:', (player.contractYear && player.contractYear !== 'nan') ? String(player.contractYear) : '—'], ['Agent:', manual.agentOverride || '—']].map(([k,v],i) => `
+      ${[['Height:', manual.heightOverride || cmToFeet(player.height) || '—'], ['xValue:', manual.valueOverride || (player.xValue > 0 ? formatMV(player.xValue) : '—')], ['Contract:', (player.contractYear && player.contractYear !== 'nan') ? String(player.contractYear) : '—'], ['Agent:', manual.agentOverride || '—']].map(([k,v],i) => `
         <div style="position:absolute;left:1208px;top:${50 + i*48}px;font-size:18px;font-weight:500;color:#9aa3b8;white-space:nowrap;">${k}</div>
         <div style="position:absolute;left:1353px;top:${50 + i*48}px;font-size:18px;font-weight:600;color:#fff;white-space:nowrap;">${truncateText(v, 20)}</div>`).join('')}
 
@@ -1128,6 +1128,7 @@ export default function QuickCardModal({ player, players, onClose }) {
   const [agentOverride, setAgentOverride] = useState('');
   const [nameOverride, setNameOverride] = useState('');
   const [valueOverride, setValueOverride] = useState('');
+  const [heightOverride, setHeightOverride] = useState('');
   const [teamOverride, setTeamOverride] = useState('');
   const [posLabelOverride, setPosLabelOverride] = useState('');
   const [uploadedPhotoDataUrl, setUploadedPhotoDataUrl] = useState('');
@@ -1163,7 +1164,7 @@ export default function QuickCardModal({ player, players, onClose }) {
   const handleDownload = async () => {
     setDownloading(true);
     const { toPng } = await import('html-to-image');
-    const el = buildQuickCardElement(player, players, { agentOverride, nameOverride, valueOverride, teamOverride, posLabelOverride, uploadedPhotoDataUrl, biography, halfTeamContext, showForecast, scoutStatus, showScorePills, headerColorOverride, showPitchPosition, useBestRoleCareer, seasonOverride, shiftTeamText });
+    const el = buildQuickCardElement(player, players, { agentOverride, nameOverride, valueOverride, heightOverride, teamOverride, posLabelOverride, uploadedPhotoDataUrl, biography, halfTeamContext, showForecast, scoutStatus, showScorePills, headerColorOverride, showPitchPosition, useBestRoleCareer, seasonOverride, shiftTeamText });
     try {
       const cardNode = el.querySelector('#qc-card-root') || el;
       const opts = {
@@ -1219,6 +1220,11 @@ export default function QuickCardModal({ player, players, onClose }) {
         <div style={{marginBottom:12}}>
           <label style={qcLabelStyle}>Agent</label>
           <input style={qcInputStyle} value={agentOverride} onChange={e=>setAgentOverride(e.target.value)} placeholder="—" />
+        </div>
+
+        <div style={{marginBottom:12}}>
+          <label style={qcLabelStyle}>Height</label>
+          <input style={qcInputStyle} value={heightOverride} onChange={e=>setHeightOverride(e.target.value)} placeholder={cmToFeet(player.height) || '—'} />
         </div>
 
         <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12,textAlign:'left'}}>
