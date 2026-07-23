@@ -772,6 +772,13 @@ export async function preloadImages(urls, onProgress, timeoutMs = 4000, concurre
   return map;
 }
 
+// "4-3-3 · XI 68.5" in the panel's top-right.
+function xiRatingLabel(xi, formation) {
+  const r = xiRating(xi);
+  return r == null ? formation
+    : `${formation} &nbsp;·&nbsp; XI <span style="color:${gradeColor(r)};">${fmt(r)}</span>`;
+}
+
 export function buildTeamReportElement(team, opts = {}) {
   const { squad = [], formation = '4-3-3', coach = null, images = {} } = opts;
   IMG = images || {};
