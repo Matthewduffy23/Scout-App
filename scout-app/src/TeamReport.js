@@ -1,4 +1,4 @@
-// TeamReport.js v10 — Team All-in-One report. 1920x1080 PNG export.
+// TeamReport.js v11 — Team All-in-One report. 1920x1080 PNG export.
 //
 // v2: bigger team name; country flag + league logo beside the league name;
 //     mini coach profile in the header gap; XI is now formation-driven and
@@ -36,18 +36,23 @@ const COL_W = 538;
 const COL_A_X = PAD + LEFT_W + GAP;      // 800
 const COL_B_X = COL_A_X + COL_W + GAP;   // 1358
 
-const ROW_H = 283;
-const ROW_1 = BODY_TOP;                  // 166
-const ROW_2 = ROW_1 + ROW_H + GAP;       // 469
-const ROW_3 = ROW_2 + ROW_H + GAP;       // 772
-const LEFT_H = ROW_3 + ROW_H - BODY_TOP; // 889
+// Rows are no longer equal: Radar + Style lead at the top and get the most
+// room, League Table + Weaknesses sit mid, Similar Teams + Key Players close
+// out smallest. 336 + 284 + 229 + two 20px gaps = 889, same total as before.
+const ROW1_H = 336;
+const ROW2_H = 284;
+const ROW3_H = 229;
+const ROW_1 = BODY_TOP;                        // 166
+const ROW_2 = ROW_1 + ROW1_H + GAP;            // 522
+const ROW_3 = ROW_2 + ROW2_H + GAP;            // 826
+const LEFT_H = ROW_3 + ROW3_H - BODY_TOP;      // 889
 
 // Header column stops. The team name is capped and ellipsised so long clubs
 // ("Wolverhampton Wanderers") can't run into the coach block.
 const NAME_X = PAD + 128;
 const NAME_MAX_W = 520;
 // Order across the band: crest+name -> OVR/score card -> manager.
-const SCORE_X = 676;                     // score card left edge
+const SCORE_X = 706;                     // score card left edge
 const SCORE_W = 512;                     // 676..1188
 const OVR_CX = SCORE_X + 66;             // centre of the OVR number
 const STAT_X = SCORE_X + 138;
@@ -91,6 +96,21 @@ function scoreColor(v) {
   if (v >= 35) return '#f18c31';
   return '#ef4444';
 }
+// Rank of this team within its league+season on a field, as {rank, size}.
+// Mirrors CoachCard's _rankIn so the header reads the same way as the coach card.
+function rankIn(allTeams, team, field, higherIsBetter = true) {
+  const pool = (allTeams || []).filter(t =>
+    String(t.league) === String(team.league) && String(t.season) === String(team.season)
+    && t[field] != null && !isNaN(Number(t[field])));
+  if (pool.length < 2) return null;
+  const sorted = pool.slice().sort((a, b) =>
+    higherIsBetter ? Number(b[field]) - Number(a[field]) : Number(a[field]) - Number(b[field]));
+  const i = sorted.findIndex(t => t.team === team.team);
+  return i < 0 ? null : { rank: i + 1, size: sorted.length };
+}
+// "10/24" with the denominator dimmed, same treatment as the quick card.
+const rankStr = (r) => r ? `${r.rank}<span style="color:#6b7385;font-weight:600;">/${r.size}</span>` : '—';
+
 const whole = (v) => (v == null || isNaN(v) ? '—' : String(Math.round(Number(v))));
 const fmt = (v, dp = 1) => (v == null || isNaN(v) ? '—' : Number(v).toFixed(dp));
 const esc = (s) => String(s == null ? '' : s)
@@ -603,19 +623,17 @@ function xiPanelHtml(w, h, xi) {
 // league pool, inverted where lower is better), same colour ramp, same geometry:
 // angles reversed, rotated so the first sits at 75 degrees, bars at 85% of the
 // slice, dotted rings at 25/50/75/90, brighter separators on the cardinals.
+// Nine metrics — Points, Expected Points and Long Passes dropped.
 const RADAR_METRICS = [
-  ['xG',                 'Attack',     'xG',                   false],
-  ['Goals',              'Attack',     'Goals Scored',         false],
-  ['Touches in Box',     'Attack',     'Touches in Box',       false],
-  ['xG Against',         'Defence',    'xG Against',           true],
-  ['Goals Against',      'Defence',    'Goals Against',        true],
-  ['PPDA',               'Pressing',   'PPDA',                 true],
-  ['Possession',         'Possession', 'Possession',           false],
-  ['Passes',             'Possession', 'Passes',               false],
-  ['Passes to Final 3rd','Possession', 'Passes to Final 3rd',  false],
-  ['Long Passes',        'Possession', 'Long Passes',          false],
-  ['Points',             null,         'points',               false],
-  ['Expected Points',    null,         'expectedPoints',       false],
+  ['XG',            'Attack',     'xG',                  false],
+  ['GOALS',         'Attack',     'Goals Scored',        false],
+  ['TOUCHES BOX',   'Attack',     'Touches in Box',      false],
+  ['XG AGAINST',    'Defence',    'xG Against',          true],
+  ['GOALS AGAINST', 'Defence',    'Goals Against',       true],
+  ['PPDA',          'Pressing',   'PPDA',                true],
+  ['POSSESSION',    'Possession', 'Possession',          false],
+  ['PASSES',        'Possession', 'Passes',              false],
+  ['PASSES F3',     'Possession', 'Passes to Final 3rd', false],
 ];
 
 // Raw value for a metric — metricGroups rows are [name, pct, raw]; the last two
@@ -660,11 +678,11 @@ function radarPanelHtml(w, h, team, allTeams) {
   const rows = radarPercentiles(team, allTeams);
   const N = rows.length;
 
-  // The panel is wide and short, so the dial takes a square block on the left
-  // (sized by height) and the twelve readings list down the right rather than
-  // leaving most of the panel empty.
-  const R = Math.floor((h - 4) / 2 / 1.34);          // room for the label ring
-  const cx = R * 1.34 + 2, cy = h / 2;
+  // Nine metrics in a taller tile means the labels go back on the ring like the
+  // matplotlib original, so the cramped truncated side list is gone.
+  const LABEL_R = 1.28;
+  const R = Math.floor(Math.min(h / 2 / LABEL_R, w / 2 / (LABEL_R + 0.42)));
+  const cx = w / 2, cy = h / 2;
 
   const angles = Array.from({ length: N }, (_, i) => (2 * Math.PI * i) / N).reverse();
   const shift = (75 * Math.PI / 180) - angles[0];
@@ -676,59 +694,47 @@ function radarPanelHtml(w, h, team, allTeams) {
     const a0 = ang - barW / 2, a1 = ang + barW / 2;
     const [x0, y0] = pt(a0, 0), [x1, y1] = pt(a0, r), [x2, y2] = pt(a1, r);
     return `<path d="M ${x0.toFixed(1)} ${y0.toFixed(1)} L ${x1.toFixed(1)} ${y1.toFixed(1)}
-             A ${r} ${r} 0 0 0 ${x2.toFixed(1)} ${y2.toFixed(1)} Z"
-             fill="${fill}" ${stroke ? `stroke="${stroke}" stroke-width="${sw}"` : ''}/>`;
+             A ${r.toFixed(1)} ${r.toFixed(1)} 0 0 0 ${x2.toFixed(1)} ${y2.toFixed(1)} Z"
+             fill="${fill}"${stroke ? ` stroke="${stroke}" stroke-width="${sw}"` : ''}/>`;
   };
-
   const rScale = (p) => (p / 100) * R;
+
   let svg = '';
-  rot.forEach(a => { svg += wedge(a, R, '#3a4152', null, 0); });            // track
-  rows.forEach(([, p], i) => {
-    svg += wedge(rot[i], rScale(p), radarColor(p), '#ffffff', 1.2);
-  });
+  rot.forEach(a => { svg += wedge(a, R, '#3a4152', null, 0); });
+  rows.forEach(([, p], i) => { svg += wedge(rot[i], rScale(p), radarColor(p), '#ffffff', 1.3); });
   [25, 50, 75, 90].forEach(rp => {
-    svg += `<circle cx="${cx}" cy="${cy}" r="${rScale(rp)}" fill="none"
-             stroke="#c9d2e0" stroke-opacity="0.45" stroke-width="0.9" stroke-dasharray="2 3"/>`;
+    svg += `<circle cx="${cx}" cy="${cy}" r="${rScale(rp).toFixed(1)}" fill="none"
+             stroke="#c9d2e0" stroke-opacity="0.4" stroke-width="0.9" stroke-dasharray="2 3"/>`;
   });
-  rot.forEach(a => {                                                        // separators
+  rot.forEach(a => {
     const sep = a - barW / 2;
-    const cross = [0, Math.PI / 2, Math.PI, 3 * Math.PI / 2].some(k => Math.abs(((sep % (2*Math.PI)) + 2*Math.PI) % (2*Math.PI) - k) < 0.01);
+    const norm = ((sep % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+    const cross = [0, Math.PI / 2, Math.PI, 3 * Math.PI / 2].some(k => Math.abs(norm - k) < 0.01);
     const [x1, y1] = pt(sep, 0), [x2, y2] = pt(sep, R);
     svg += `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}"
              stroke="#fff" stroke-opacity="${cross ? 1 : 0.25}" stroke-width="${cross ? 1.4 : 0.8}"/>`;
   });
-  rows.forEach(([, p], i) => {                                              // in-bar values
+  rows.forEach(([, p], i) => {
     if (p < 20) return;
-    const lr = rScale(p >= 30 ? p - 10 : p * 0.7);
-    const [x, y] = pt(rot[i], lr);
-    svg += `<text x="${x.toFixed(1)}" y="${(y + 3).toFixed(1)}" text-anchor="middle"
-             font-family="Montserrat,sans-serif" font-size="9" font-weight="700"
+    const [x, y] = pt(rot[i], rScale(p >= 30 ? p - 11 : p * 0.7));
+    svg += `<text x="${x.toFixed(1)}" y="${(y + 4).toFixed(1)}" text-anchor="middle"
+             font-family="Montserrat,sans-serif" font-size="11.5" font-weight="800"
              fill="#fff">${Math.round(p)}</text>`;
   });
+  rows.forEach(([label], i) => {
+    const [x, y] = pt(rot[i], R * LABEL_R);
+    // Anchor by side so long labels grow outward rather than over the dial.
+    const c = Math.cos(rot[i]);
+    const anchor = c > 0.25 ? 'start' : c < -0.25 ? 'end' : 'middle';
+    svg += `<text x="${x.toFixed(1)}" y="${(y + 3).toFixed(1)}" text-anchor="${anchor}"
+             font-family="Montserrat,sans-serif" font-size="9.5" font-weight="700"
+             fill="#c8d2e0" letter-spacing="0.04em">${label}</text>`;
+  });
 
-  // Readings list — two columns down the remaining width.
-  const listX = R * 2.68 + 14;
-  const colW = Math.floor((w - listX) / 2) - 6;
-  const list = rows.map(([label, p], i) => {
-    const col = i < 6 ? 0 : 1, row = i % 6;
-    return `
-      <div style="position:absolute;left:${listX + col * (colW + 12)}px;top:${row * 24 + 4}px;
-                  width:${colW}px;height:19px;">
-        <span style="position:absolute;left:0;top:3px;font-size:10px;font-weight:600;
-                     color:#8b98ad;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-                     max-width:${colW - 46}px;">${label}</span>
-        <span style="position:absolute;right:0;top:0;min-width:30px;text-align:center;
-                     padding:2px 7px;border-radius:10px;background:rgba(255,255,255,0.06);
-                     font-size:11px;font-weight:800;color:${radarColor(p)};">${Math.round(p)}</span>
-      </div>`;
-  }).join('');
-
-  return `<div style="position:absolute;inset:0;">
-      <svg width="${R * 2.7}" height="${h}" viewBox="0 0 ${R * 2.7} ${h}"
-           xmlns="http://www.w3.org/2000/svg" style="position:absolute;left:0;top:0;">${svg}</svg>
-      ${list}
-    </div>`;
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"
+           xmlns="http://www.w3.org/2000/svg" style="position:absolute;left:0;top:0;">${svg}</svg>`;
 }
+
 // Hexagon geometry lifted verbatim from CoachQuickCard.styleHexSvg so the team
 // card and the manager card read identically.
 //
@@ -744,7 +750,7 @@ function styleHexSvg(rows, maxWidth) {
     }).join(' ');
     return `<polygon points="${pts}" fill="${col}" opacity="${opacity}" stroke="#07090f" stroke-width="1.5"/>`;
   };
-  const rowH = 32, labelW = 148, numHex = 10, WD = R * 2, hexGap = 1;
+  const rowH = 40, labelW = 156, numHex = 10, WD = R * 2, hexGap = 1;
   const w = Math.min(maxWidth, labelW + numHex * WD + (numHex - 1) * hexGap + 6);
   const h = rows.length * rowH + 6;
   const body = rows.map(([disp, score], i) => {
@@ -757,7 +763,7 @@ function styleHexSvg(rows, maxWidth) {
       const on = d < filled;
       return hex(cx, y, on ? (1 - (d / numHex) * 0.4).toFixed(2) : 0.1, on ? col : '#dbe1ee');
     }).join('');
-    return `<text x="0" y="${y + 5}" font-family="Montserrat,sans-serif" font-size="13.5"
+    return `<text x="0" y="${y + 5}" font-family="Montserrat,sans-serif" font-size="15"
              font-weight="800" fill="#c8d2e0">${disp}</text>${hexes}`;
   }).join('');
   return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">${body}</svg>`;
@@ -883,7 +889,7 @@ function coachHtml(coach, team, coachScore) {
 }
 
 // ─── Header ────────────────────────────────────────────────────────────────
-function headerHtml(team, coach, coachScore) {
+function headerHtml(team, coach, coachScore, allTeams) {
   const crest = teamCrest(team.team);
   const league = leagueDisplayName(team.league);
   const logo = leagueLogo(team.league);
@@ -893,6 +899,10 @@ function headerHtml(team, coach, coachScore) {
     ['ATTACK', team.attack], ['DEFENCE', team.defence],
     ['POSSESSION', team.possession], ['PRESSING', team.pressing],
   ];
+  const ptsRank = team.pointsRank != null && team.leagueSize != null
+    ? { rank: team.pointsRank, size: team.leagueSize }
+    : rankIn(allTeams, team, 'points');
+  const xptsRank = rankIn(allTeams, team, 'expectedPoints');
 
   return `
     <div style="position:absolute;top:0;left:0;width:${W}px;height:${HEADER_H}px;
@@ -921,35 +931,40 @@ function headerHtml(team, coach, coachScore) {
       ${team.season ? `<span style="font-size:19px;font-weight:500;color:#8fa0b8;margin-left:12px;">· ${esc(team.season)}</span>` : ''}
     </div>
 
-    ${team.pointsRank != null ? `
-      <div style="position:absolute;left:${NAME_X}px;top:118px;width:${NAME_MAX_W}px;
-                  font-size:13.5px;font-weight:600;color:#7f8ca3;white-space:nowrap;">
-        League position ${team.pointsRank}${team.points != null ? ` &nbsp;·&nbsp; ${team.points} pts` : ''}
-      </div>` : ''}
-
-    <!-- SCORE CARD — pills, matching the manager chip treatment. -->
-    <div style="position:absolute;left:${SCORE_X}px;top:20px;width:${SCORE_W}px;height:110px;
+    <!-- SCORE CARD — pills, with league ranks for Pts / xPts underneath. -->
+    <div style="position:absolute;left:${SCORE_X}px;top:16px;width:${SCORE_W}px;height:118px;
                 background:rgba(255,255,255,0.055);border:1px solid rgba(255,255,255,0.12);
                 border-radius:14px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.08);"></div>
 
-    <div style="position:absolute;left:${SCORE_X + 16}px;top:32px;width:118px;text-align:center;">
-      <div style="display:inline-block;padding:6px 20px;border-radius:22px;
+    <div style="position:absolute;left:${SCORE_X + 16}px;top:26px;width:118px;text-align:center;">
+      <div style="display:inline-block;padding:5px 20px;border-radius:22px;
                   background:rgba(255,255,255,0.07);border:1px solid ${scoreColor(ovr)}55;
-                  font-size:38px;font-weight:900;line-height:1.05;color:${scoreColor(ovr)};">${whole(ovr)}</div>
-      <div style="font-size:9px;font-weight:700;letter-spacing:0.18em;color:#94a3b8;margin-top:10px;">OVERALL</div>
+                  font-size:36px;font-weight:900;line-height:1.05;color:${scoreColor(ovr)};">${whole(ovr)}</div>
+      <div style="font-size:9px;font-weight:700;letter-spacing:0.18em;color:#94a3b8;margin-top:8px;">OVERALL</div>
     </div>
 
-    <div style="position:absolute;left:${SCORE_X + 148}px;top:34px;width:1px;height:82px;
+    <div style="position:absolute;left:${SCORE_X + 148}px;top:28px;width:1px;height:74px;
                 background:rgba(255,255,255,0.14);"></div>
 
-    <div style="position:absolute;left:${SCORE_X + 168}px;top:36px;display:flex;align-items:flex-start;">
+    <div style="position:absolute;left:${SCORE_X + 168}px;top:28px;display:flex;align-items:flex-start;">
       ${cells.map(([label, v], i) => `
         <div style="width:76px;text-align:center;${i ? 'margin-left:9px;' : ''}">
-          <div style="display:inline-block;min-width:52px;padding:5px 0;border-radius:16px;
+          <div style="display:inline-block;min-width:50px;padding:4px 0;border-radius:16px;
                       background:rgba(255,255,255,0.07);border:1px solid ${scoreColor(v)}55;
-                      font-size:21px;font-weight:800;line-height:1.05;color:${scoreColor(v)};">${whole(v)}</div>
-          <div style="font-size:8.5px;font-weight:700;letter-spacing:0.09em;color:#8fa0b8;margin-top:9px;">${label}</div>
+                      font-size:20px;font-weight:800;line-height:1.05;color:${scoreColor(v)};">${whole(v)}</div>
+          <div style="font-size:8.5px;font-weight:700;letter-spacing:0.09em;color:#8fa0b8;margin-top:7px;">${label}</div>
         </div>`).join('')}
+    </div>
+
+    <!-- Pts / xPts league ranks, sharing the tile -->
+    <div style="position:absolute;left:${SCORE_X + 168}px;top:96px;display:flex;align-items:center;
+                white-space:nowrap;">
+      <span style="font-size:10px;font-weight:700;letter-spacing:0.09em;color:#8fa0b8;">PTS</span>
+      <span style="font-size:14px;font-weight:800;color:#dbe3f0;margin-left:8px;">${team.points != null ? team.points : '—'}</span>
+      <span style="font-size:12px;font-weight:700;color:#9aa6ba;margin-left:6px;">(${rankStr(ptsRank)})</span>
+      <span style="font-size:10px;font-weight:700;letter-spacing:0.09em;color:#8fa0b8;margin-left:26px;">xPTS</span>
+      <span style="font-size:14px;font-weight:800;color:#dbe3f0;margin-left:8px;">${team.expectedPoints != null ? Math.round(team.expectedPoints) : '—'}</span>
+      <span style="font-size:12px;font-weight:700;color:#9aa6ba;margin-left:6px;">(${rankStr(xptsRank)})</span>
     </div>
 
     ${coachHtml(coach, team, coachScore)}`;
@@ -1030,7 +1045,6 @@ export function buildTeamReportElement(team, opts = {}) {
   container.style.height = `${H}px`;
 
   const innerW = COL_W - PANEL_PAD * 2;
-  const innerH = ROW_H - PANEL_PAD * 2 - TITLE_H;
   const xiW = LEFT_W - PANEL_PAD * 2;
   const xiH = LEFT_H - PANEL_PAD * 2 - TITLE_H;
 
@@ -1040,24 +1054,25 @@ export function buildTeamReportElement(team, opts = {}) {
     <div id="tr-card-root" style="width:${W}px;height:${H}px;overflow:hidden;background:${BG};
          font-family:'Montserrat',sans-serif;color:#fff;position:relative;box-sizing:border-box;">
 
-      ${headerHtml(team, coach, coachScore)}
+      ${headerHtml(team, coach, coachScore, allTeams)}
 
       ${panel({ x: PAD, y: BODY_TOP, w: LEFT_W, h: LEFT_H,
                 title: 'XI + Depth', right: formation, body: xiPanelHtml(xiW, xiH, xi) })}
 
-      ${panel({ x: COL_A_X, y: ROW_1, w: COL_W, h: ROW_H,
-                title: 'Performance Radar', body: radarPanelHtml(innerW, innerH, team, allTeams) })}
-      ${panel({ x: COL_A_X, y: ROW_2, w: COL_W, h: ROW_H,
-                title: 'Style', right: team.style || '', body: stylePanelHtml(innerW, innerH, team) })}
-      ${panel({ x: COL_A_X, y: ROW_3, w: COL_W, h: ROW_H,
-                title: 'Similar Teams', body: similarTeamsPanelHtml(innerW, innerH) })}
+      ${panel({ x: COL_A_X, y: ROW_1, w: COL_W, h: ROW1_H,
+                title: 'Performance Radar', body: radarPanelHtml(innerW, ROW1_H - PANEL_PAD * 2 - TITLE_H, team, allTeams) })}
+      ${panel({ x: COL_B_X, y: ROW_1, w: COL_W, h: ROW1_H,
+                title: 'Style', body: stylePanelHtml(innerW, ROW1_H - PANEL_PAD * 2 - TITLE_H, team) })}
 
-      ${panel({ x: COL_B_X, y: ROW_1, w: COL_W, h: ROW_H,
-                title: 'League Table', body: leagueTablePanelHtml(innerW, innerH) })}
-      ${panel({ x: COL_B_X, y: ROW_2, w: COL_W, h: ROW_H,
-                title: 'Key Players', body: keyPlayersPanelHtml(innerW, innerH) })}
-      ${panel({ x: COL_B_X, y: ROW_3, w: COL_W, h: ROW_H,
-                title: 'Weaknesses', body: weaknessesPanelHtml(innerW, innerH) })}
+      ${panel({ x: COL_A_X, y: ROW_2, w: COL_W, h: ROW2_H,
+                title: 'League Table', body: leagueTablePanelHtml(innerW, ROW2_H - PANEL_PAD * 2 - TITLE_H) })}
+      ${panel({ x: COL_B_X, y: ROW_2, w: COL_W, h: ROW2_H,
+                title: 'Weaknesses', body: weaknessesPanelHtml(innerW, ROW2_H - PANEL_PAD * 2 - TITLE_H) })}
+
+      ${panel({ x: COL_A_X, y: ROW_3, w: COL_W, h: ROW3_H,
+                title: 'Similar Teams', body: similarTeamsPanelHtml(innerW, ROW3_H - PANEL_PAD * 2 - TITLE_H) })}
+      ${panel({ x: COL_B_X, y: ROW_3, w: COL_W, h: ROW3_H,
+                title: 'Key Players', body: keyPlayersPanelHtml(innerW, ROW3_H - PANEL_PAD * 2 - TITLE_H) })}
     </div>`;
 
   document.body.appendChild(container);
