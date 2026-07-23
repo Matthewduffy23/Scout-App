@@ -1020,7 +1020,7 @@ function buildQuickCardElement(player, players, manual = {}) {
 
   <!-- CREST / TEAM / LEAGUE -->
       ${crest ? `<div style="position:absolute;left:${sdTeam.length >= 12 ? 720 : 740}px;top:22px;width:155px;height:210px;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${crest}');filter:drop-shadow(0 1px 2px rgba(0,0,0,0.3));"></div>` : ''}
-      <div style="position:absolute;left:${teamTextLeft}px;top:90px;width:266px;font-size:32px;font-weight:800;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${(manual.teamOverride || sdTeam).length >= 16 ? 'letter-spacing:-1px;' : ''}">${manual.teamOverride || sdTeam}</div>
+      <div style="position:absolute;left:${teamTextLeft}px;top:90px;width:275px;font-size:32px;font-weight:800;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${(manual.teamOverride || sdTeam).length >= 16 ? 'letter-spacing:-1px;' : ''}">${manual.teamOverride || sdTeam}</div>
       <div style="position:absolute;left:${teamTextLeft}px;top:150px;display:flex;align-items:center;">
         <span style="font-size:21px;font-weight:500;color:#fff;white-space:nowrap;">${leagueDisplayName}</span>
         ${countryToIso2(leagueToCountry(sdLeague)) ? `<div style="width:32px;height:20px;flex-shrink:0;margin-left:27px;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(leagueToCountry(sdLeague))}.png');border-radius:2px;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15);"></div>` : ''}
