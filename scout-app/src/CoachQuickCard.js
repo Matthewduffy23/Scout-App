@@ -194,7 +194,7 @@ function teamContextHtml(tc, ageVal, agePct) {
   const n = parts.length;
   if (!n) return `<div style="font-size:13px;color:#5e6678;margin-bottom:8px;">No context entered.</div>`;
   // Fill the tile: 4 rows sit top-aligned with a fixed gap; fewer rows spread out to fill the height.
-  const layout = n >= 4 ? 'justify-content:flex-start;gap:20px;' : 'justify-content:space-between;';
+  const layout = n >= 4 ? 'justify-content:flex-start;gap:12px;' : 'justify-content:space-between;';
   return `<div style="flex:1;min-height:0;display:flex;flex-direction:column;${layout}">${parts.join('')}</div>`;
 }
 
@@ -534,7 +534,7 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
 
       ${teamCrestUrl(latest.team) ? `<div style="position:absolute;left:740px;top:22px;width:155px;height:210px;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${teamCrestUrl(latest.team)}');filter:drop-shadow(0 1px 2px rgba(0,0,0,0.3));"></div>` : ''}
       <div style="position:absolute;left:915px;top:90px;width:266px;font-size:32px;font-weight:800;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${overrides.teamOverride || latest.team || ''}</div>
-      <div style="position:absolute;left:915px;top:144px;display:flex;align-items:center;">
+      <div style="position:absolute;left:915px;top:140px;display:flex;align-items:center;">
         <span style="font-size:21px;font-weight:500;color:#fff;white-space:nowrap;">${latest.league || ''}</span>
         ${leagueIso2 ? `<div style="width:32px;height:20px;flex-shrink:0;margin-left:24px;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${leagueIso2}.png');border-radius:2px;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15);"></div>` : ''}
       </div>
