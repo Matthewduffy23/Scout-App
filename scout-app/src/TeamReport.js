@@ -1,4 +1,4 @@
-// TeamReport.js v8 — Team All-in-One report. 1920x1080 PNG export.
+// TeamReport.js v10 — Team All-in-One report. 1920x1080 PNG export.
 //
 // v2: bigger team name; country flag + league logo beside the league name;
 //     mini coach profile in the header gap; XI is now formation-driven and
@@ -53,8 +53,8 @@ const OVR_CX = SCORE_X + 66;             // centre of the OVR number
 const STAT_X = SCORE_X + 138;
 const STAT_W = 84;                       // 4*84 + 3*10 = 366 -> ends 1180
 const STAT_GAP = 10;
-const COACH_X = 1216;
-const COACH_W = 680;                     // 1216..1896
+const COACH_X = 1268;                    // nudged right off the score card
+const COACH_W = 628;                     // 1268..1896
 
 // ─── Palette ───────────────────────────────────────────────────────────────
 const BG = '#0a0f1c';
@@ -598,8 +598,194 @@ function xiPanelHtml(w, h, xi) {
 }
 
 // ─── Remaining panel stubs ─────────────────────────────────────────────────
-function radarPanelHtml(w, h) { return stub(w, h, 'radar from t.metricGroups percentiles'); }
-function stylePanelHtml(w, h) { return stub(w, h, 'hexagon from t.attributes (7 keys, not 6)'); }
+// ─── PERFORMANCE RADAR — port of Team HQ "Feature Y" (team_hq.py §5) ──────
+// Same twelve metrics, same percentile rule ((s <= v).mean()*100 within the
+// league pool, inverted where lower is better), same colour ramp, same geometry:
+// angles reversed, rotated so the first sits at 75 degrees, bars at 85% of the
+// slice, dotted rings at 25/50/75/90, brighter separators on the cardinals.
+const RADAR_METRICS = [
+  ['xG',                 'Attack',     'xG',                   false],
+  ['Goals',              'Attack',     'Goals Scored',         false],
+  ['Touches in Box',     'Attack',     'Touches in Box',       false],
+  ['xG Against',         'Defence',    'xG Against',           true],
+  ['Goals Against',      'Defence',    'Goals Against',        true],
+  ['PPDA',               'Pressing',   'PPDA',                 true],
+  ['Possession',         'Possession', 'Possession',           false],
+  ['Passes',             'Possession', 'Passes',               false],
+  ['Passes to Final 3rd','Possession', 'Passes to Final 3rd',  false],
+  ['Long Passes',        'Possession', 'Long Passes',          false],
+  ['Points',             null,         'points',               false],
+  ['Expected Points',    null,         'expectedPoints',       false],
+];
+
+// Raw value for a metric — metricGroups rows are [name, pct, raw]; the last two
+// metrics are plain fields on the team row.
+function rawMetric(t, group, name) {
+  if (!group) { const v = Number(t[name]); return isNaN(v) ? null : v; }
+  const rows = t.metricGroups && t.metricGroups[group];
+  if (!Array.isArray(rows)) return null;
+  const hit = rows.find(r => r && r[0] === name);
+  if (!hit) return null;
+  const v = Number(hit[2]);
+  return isNaN(v) ? null : v;
+}
+
+// Percentiles are recomputed from raw values against the league pool rather than
+// reusing metricGroups' stored pct, so the inversion rule matches Feature Y
+// exactly instead of depending on how build_teams.py stored it.
+export function radarPercentiles(team, allTeams) {
+  const pool = (allTeams || []).filter(t =>
+    String(t.league) === String(team.league) && String(t.season) === String(team.season));
+  return RADAR_METRICS.map(([label, group, name, invert]) => {
+    const v = rawMetric(team, group, name);
+    if (v == null) return [label, 50];
+    const vals = pool.map(t => rawMetric(t, group, name)).filter(x => x != null);
+    if (vals.length < 2) return [label, 50];
+    const p = (vals.filter(x => x <= v).length / vals.length) * 100;
+    return [label, Math.max(0, Math.min(100, invert ? 100 - p : p))];
+  });
+}
+
+// Feature Y's seven-stop ramp, linearly interpolated.
+const RADAR_RAMP = ['#be2a3e', '#e25f48', '#f88f4d', '#f4d166', '#90b960', '#4b9b5f', '#22763f'];
+function radarColor(p) {
+  const x = Math.max(0, Math.min(100, p)) / 100 * (RADAR_RAMP.length - 1);
+  const i = Math.min(RADAR_RAMP.length - 2, Math.floor(x)), t = x - i;
+  const hex = (c) => [1, 3, 5].map(k => parseInt(c.slice(k, k + 2), 16));
+  const a = hex(RADAR_RAMP[i]), b = hex(RADAR_RAMP[i + 1]);
+  return `rgb(${[0,1,2].map(k => Math.round(a[k] + (b[k] - a[k]) * t)).join(',')})`;
+}
+
+function radarPanelHtml(w, h, team, allTeams) {
+  const rows = radarPercentiles(team, allTeams);
+  const N = rows.length;
+
+  // The panel is wide and short, so the dial takes a square block on the left
+  // (sized by height) and the twelve readings list down the right rather than
+  // leaving most of the panel empty.
+  const R = Math.floor((h - 4) / 2 / 1.34);          // room for the label ring
+  const cx = R * 1.34 + 2, cy = h / 2;
+
+  const angles = Array.from({ length: N }, (_, i) => (2 * Math.PI * i) / N).reverse();
+  const shift = (75 * Math.PI / 180) - angles[0];
+  const rot = angles.map(a => ((a + shift) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI));
+  const barW = (2 * Math.PI / N) * 0.85;
+
+  const pt = (ang, r) => [cx + r * Math.cos(ang), cy - r * Math.sin(ang)];
+  const wedge = (ang, r, fill, stroke, sw) => {
+    const a0 = ang - barW / 2, a1 = ang + barW / 2;
+    const [x0, y0] = pt(a0, 0), [x1, y1] = pt(a0, r), [x2, y2] = pt(a1, r);
+    return `<path d="M ${x0.toFixed(1)} ${y0.toFixed(1)} L ${x1.toFixed(1)} ${y1.toFixed(1)}
+             A ${r} ${r} 0 0 0 ${x2.toFixed(1)} ${y2.toFixed(1)} Z"
+             fill="${fill}" ${stroke ? `stroke="${stroke}" stroke-width="${sw}"` : ''}/>`;
+  };
+
+  const rScale = (p) => (p / 100) * R;
+  let svg = '';
+  rot.forEach(a => { svg += wedge(a, R, '#3a4152', null, 0); });            // track
+  rows.forEach(([, p], i) => {
+    svg += wedge(rot[i], rScale(p), radarColor(p), '#ffffff', 1.2);
+  });
+  [25, 50, 75, 90].forEach(rp => {
+    svg += `<circle cx="${cx}" cy="${cy}" r="${rScale(rp)}" fill="none"
+             stroke="#c9d2e0" stroke-opacity="0.45" stroke-width="0.9" stroke-dasharray="2 3"/>`;
+  });
+  rot.forEach(a => {                                                        // separators
+    const sep = a - barW / 2;
+    const cross = [0, Math.PI / 2, Math.PI, 3 * Math.PI / 2].some(k => Math.abs(((sep % (2*Math.PI)) + 2*Math.PI) % (2*Math.PI) - k) < 0.01);
+    const [x1, y1] = pt(sep, 0), [x2, y2] = pt(sep, R);
+    svg += `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}"
+             stroke="#fff" stroke-opacity="${cross ? 1 : 0.25}" stroke-width="${cross ? 1.4 : 0.8}"/>`;
+  });
+  rows.forEach(([, p], i) => {                                              // in-bar values
+    if (p < 20) return;
+    const lr = rScale(p >= 30 ? p - 10 : p * 0.7);
+    const [x, y] = pt(rot[i], lr);
+    svg += `<text x="${x.toFixed(1)}" y="${(y + 3).toFixed(1)}" text-anchor="middle"
+             font-family="Montserrat,sans-serif" font-size="9" font-weight="700"
+             fill="#fff">${Math.round(p)}</text>`;
+  });
+
+  // Readings list — two columns down the remaining width.
+  const listX = R * 2.68 + 14;
+  const colW = Math.floor((w - listX) / 2) - 6;
+  const list = rows.map(([label, p], i) => {
+    const col = i < 6 ? 0 : 1, row = i % 6;
+    return `
+      <div style="position:absolute;left:${listX + col * (colW + 12)}px;top:${row * 24 + 4}px;
+                  width:${colW}px;height:19px;">
+        <span style="position:absolute;left:0;top:3px;font-size:10px;font-weight:600;
+                     color:#8b98ad;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+                     max-width:${colW - 46}px;">${label}</span>
+        <span style="position:absolute;right:0;top:0;min-width:30px;text-align:center;
+                     padding:2px 7px;border-radius:10px;background:rgba(255,255,255,0.06);
+                     font-size:11px;font-weight:800;color:${radarColor(p)};">${Math.round(p)}</span>
+      </div>`;
+  }).join('');
+
+  return `<div style="position:absolute;inset:0;">
+      <svg width="${R * 2.7}" height="${h}" viewBox="0 0 ${R * 2.7} ${h}"
+           xmlns="http://www.w3.org/2000/svg" style="position:absolute;left:0;top:0;">${svg}</svg>
+      ${list}
+    </div>`;
+}
+// Hexagon geometry lifted verbatim from CoachQuickCard.styleHexSvg so the team
+// card and the manager card read identically.
+//
+// NOTE: t.attributes is a list of attribute NAMES (tags like "Possession"), not
+// 0-100 values, so it can't drive this. The numbers come from the season's own
+// percentiles instead — the four headline splits plus two metricGroups entries.
+function styleHexSvg(rows, maxWidth) {
+  const R = 11;
+  const hex = (cx, cy, opacity, col) => {
+    const pts = Array.from({ length: 6 }, (_, i) => {
+      const a = Math.PI / 180 * (60 * i - 30);
+      return `${(cx + R * Math.cos(a)).toFixed(1)},${(cy + R * Math.sin(a)).toFixed(1)}`;
+    }).join(' ');
+    return `<polygon points="${pts}" fill="${col}" opacity="${opacity}" stroke="#07090f" stroke-width="1.5"/>`;
+  };
+  const rowH = 32, labelW = 148, numHex = 10, WD = R * 2, hexGap = 1;
+  const w = Math.min(maxWidth, labelW + numHex * WD + (numHex - 1) * hexGap + 6);
+  const h = rows.length * rowH + 6;
+  const body = rows.map(([disp, score], i) => {
+    const sc = Math.round(score || 0);
+    const filled = Math.max(0, Math.min(numHex, Math.round(sc / 10)));
+    const col = gradeColor(sc);
+    const y = i * rowH + rowH / 2 + 2;
+    const hexes = Array.from({ length: numHex }, (_, d) => {
+      const cx = labelW + d * (WD + hexGap) + WD / 2;
+      const on = d < filled;
+      return hex(cx, y, on ? (1 - (d / numHex) * 0.4).toFixed(2) : 0.1, on ? col : '#dbe1ee');
+    }).join('');
+    return `<text x="0" y="${y + 5}" font-family="Montserrat,sans-serif" font-size="13.5"
+             font-weight="800" fill="#c8d2e0">${disp}</text>${hexes}`;
+  }).join('');
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">${body}</svg>`;
+}
+
+// Percentile for a metricGroups entry: metricGroups[group] = [[name, pct, raw], ...]
+function mgPct(team, group, name) {
+  const rows = team.metricGroups && team.metricGroups[group];
+  if (!Array.isArray(rows)) return null;
+  const hit = rows.find(r => r && r[0] === name);
+  return hit ? Number(hit[1]) : null;
+}
+
+function styleRowsFor(team) {
+  return [
+    ['Possession', mgPct(team, 'Possession', 'Possession') ?? team.possession],
+    ['Pressing',   team.pressing],
+    ['Attacking',  team.attack],
+    ['Defensive',  team.defence],
+    ['Long Ball',  mgPct(team, 'Possession', 'Long Passes')],
+    ['Passing',    mgPct(team, 'Possession', 'Passing Accuracy %')],
+  ].map(([l, v]) => [l, v == null || isNaN(v) ? 0 : Number(v)])
+   .sort((a, b) => b[1] - a[1]);
+}
+
+function stylePanelHtml(w, h, team) {
+  return `<div style="position:absolute;left:0;top:2px;">${styleHexSvg(styleRowsFor(team), w)}</div>`;
+}
 function similarTeamsPanelHtml(w, h) { return stub(w, h, 'from t.similarTeams'); }
 function leagueTablePanelHtml(w, h) { return stub(w, h, 'rows around t.pointsRank'); }
 function keyPlayersPanelHtml(w, h) { return stub(w, h, 'top squad players by careerScore'); }
@@ -640,12 +826,19 @@ function coachHtml(coach, team, coachScore) {
   const formation = (Array.isArray(coach.formations) ? coach.formations[0] : coach.formation) || '';
   const seasonsHere = (coach.tenures || []).filter(t => t.team === team.team).length;
 
+  // "Since" is the start of their spell here, derived from the earliest saved
+  // tenure at this club — NOT coach.contract, which is the contract end year.
+  const clubSeasons = (coach.tenures || [])
+    .filter(t => t.team === team.team)
+    .map(t => String(t.season))
+    .sort();
+  const sinceYear = clubSeasons.length ? clubSeasons[0].slice(0, 4) : '';
+
   const facts = [
     formation ? ['Formation', formation] : null,
-    seasonsHere ? ['At club', `${seasonsHere} szn${seasonsHere !== 1 ? 's' : ''}`] : null,
-    // Relabelled from "Contract" — same coach.contract field, so typing "2025-"
-    // in the Coaches panel renders as "Since: 2025-".
-    coach.contract ? ['Since', coach.contract] : null,
+    sinceYear ? ['Since', sinceYear] : null,
+
+    coach.contract ? ['Contract', coach.contract] : null,
   ].filter(Boolean);
 
   // The pale band at the top of the photo was never a crop problem — FotMob
@@ -734,38 +927,30 @@ function headerHtml(team, coach, coachScore) {
         League position ${team.pointsRank}${team.points != null ? ` &nbsp;·&nbsp; ${team.points} pts` : ''}
       </div>` : ''}
 
-    <!-- SCORE CARD. Four tiny stacked columns forced the eye to read each number
-         separately; as labelled rows with full-width bars the splits compare
-         instantly and the labels get room to breathe. -->
+    <!-- SCORE CARD — pills, matching the manager chip treatment. -->
     <div style="position:absolute;left:${SCORE_X}px;top:20px;width:${SCORE_W}px;height:110px;
                 background:rgba(255,255,255,0.055);border:1px solid rgba(255,255,255,0.12);
                 border-radius:14px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.08);"></div>
 
-    <div style="position:absolute;left:${SCORE_X + 14}px;top:34px;width:112px;text-align:center;">
-      <div style="font-size:50px;font-weight:900;line-height:1;color:${scoreColor(ovr)};">${whole(ovr)}</div>
-      <div style="width:56px;height:3px;border-radius:2px;margin:10px auto 0;
-                  background:${scoreColor(ovr)};"></div>
-      <div style="font-size:9px;font-weight:700;letter-spacing:0.18em;color:#94a3b8;margin-top:9px;">OVERALL</div>
+    <div style="position:absolute;left:${SCORE_X + 16}px;top:32px;width:118px;text-align:center;">
+      <div style="display:inline-block;padding:6px 20px;border-radius:22px;
+                  background:rgba(255,255,255,0.07);border:1px solid ${scoreColor(ovr)}55;
+                  font-size:38px;font-weight:900;line-height:1.05;color:${scoreColor(ovr)};">${whole(ovr)}</div>
+      <div style="font-size:9px;font-weight:700;letter-spacing:0.18em;color:#94a3b8;margin-top:10px;">OVERALL</div>
     </div>
 
-    <div style="position:absolute;left:${SCORE_X + 140}px;top:34px;width:1px;height:82px;
+    <div style="position:absolute;left:${SCORE_X + 148}px;top:34px;width:1px;height:82px;
                 background:rgba(255,255,255,0.14);"></div>
 
-    ${cells.map(([label, v], i) => {
-      const pct = Math.max(0, Math.min(100, Number(v) || 0));
-      return `
-      <div style="position:absolute;left:${SCORE_X + 160}px;top:${34 + i * 21}px;
-                  width:${SCORE_W - 176}px;height:16px;">
-        <span style="position:absolute;left:0;top:3px;font-size:9.5px;font-weight:700;
-                     letter-spacing:0.08em;color:#8fa0b8;">${label}</span>
-        <div style="position:absolute;left:86px;right:34px;top:5px;height:6px;
-                    background:rgba(255,255,255,0.09);border-radius:3px;overflow:hidden;">
-          <div style="width:${pct}%;height:100%;background:${scoreColor(v)};border-radius:3px;"></div>
-        </div>
-        <span style="position:absolute;right:0;top:0;font-size:15px;font-weight:800;
-                     color:${scoreColor(v)};">${whole(v)}</span>
-      </div>`;
-    }).join('')}
+    <div style="position:absolute;left:${SCORE_X + 168}px;top:36px;display:flex;align-items:flex-start;">
+      ${cells.map(([label, v], i) => `
+        <div style="width:76px;text-align:center;${i ? 'margin-left:9px;' : ''}">
+          <div style="display:inline-block;min-width:52px;padding:5px 0;border-radius:16px;
+                      background:rgba(255,255,255,0.07);border:1px solid ${scoreColor(v)}55;
+                      font-size:21px;font-weight:800;line-height:1.05;color:${scoreColor(v)};">${whole(v)}</div>
+          <div style="font-size:8.5px;font-weight:700;letter-spacing:0.09em;color:#8fa0b8;margin-top:9px;">${label}</div>
+        </div>`).join('')}
+    </div>
 
     ${coachHtml(coach, team, coachScore)}`;
 }
@@ -834,7 +1019,7 @@ export async function preloadImages(urls, onProgress, timeoutMs = 4000, concurre
 }
 
 export function buildTeamReportElement(team, opts = {}) {
-  const { squad = [], formation = '4-3-3', coach = null, images = {}, depthCount = 2, coachScore = null } = opts;
+  const { squad = [], formation = '4-3-3', coach = null, images = {}, depthCount = 2, coachScore = null, allTeams = [] } = opts;
   IMG = images || {};
 
   const container = document.createElement('div');
@@ -861,9 +1046,9 @@ export function buildTeamReportElement(team, opts = {}) {
                 title: 'XI + Depth', right: formation, body: xiPanelHtml(xiW, xiH, xi) })}
 
       ${panel({ x: COL_A_X, y: ROW_1, w: COL_W, h: ROW_H,
-                title: 'Performance Radar', body: radarPanelHtml(innerW, innerH) })}
+                title: 'Performance Radar', body: radarPanelHtml(innerW, innerH, team, allTeams) })}
       ${panel({ x: COL_A_X, y: ROW_2, w: COL_W, h: ROW_H,
-                title: 'Style', body: stylePanelHtml(innerW, innerH) })}
+                title: 'Style', right: team.style || '', body: stylePanelHtml(innerW, innerH, team) })}
       ${panel({ x: COL_A_X, y: ROW_3, w: COL_W, h: ROW_H,
                 title: 'Similar Teams', body: similarTeamsPanelHtml(innerW, innerH) })}
 
@@ -986,7 +1171,7 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
       const images = await preloadImages(urls, (d, t) => setProgress(`Images ${d}/${t}`));
       setProgress('Rendering…');
 
-      el = buildTeamReportElement(team, { squad, formation, coach, images, depthCount, coachScore });
+      el = buildTeamReportElement(team, { squad, formation, coach, images, depthCount, coachScore, allTeams });
       const cardNode = el.querySelector('#tr-card-root') || el;
       const opts = {
         width: W, height: H, pixelRatio: 1, backgroundColor: BG,
