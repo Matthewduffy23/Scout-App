@@ -283,7 +283,10 @@ export function buildTeamReportElement(team, players = []) {
 }
 
 // ─── Modal ─────────────────────────────────────────────────────────────────
-export default function TeamReport({ team, players = [], onClose }) {
+// allTeamSeasons: this club's history, already grouped by teamCountry so promoted/
+//   relegated sides merge but same-named foreign clubs don't. For trend panels.
+// allTeams: every team row — the League Table panel needs its league-mates.
+export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], players = [], onClose }) {
   const [downloading, setDownloading] = useState(false);
 
   // Guard for the mobile lazy-load path in App.js: on mobile `all` holds ONE

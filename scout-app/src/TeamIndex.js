@@ -1,4 +1,5 @@
-// TeamIndex.js v9 - Most Improved toggle: sidebar control sorts by adjusted season-on-season
+// TeamIndex.js v10 - Adds REPORT button per row -> TeamReport (Team All-in-One 1920x1080 export).
+// v9 - Most Improved toggle: sidebar control sorts by adjusted season-on-season
 // score delta for Overall/Attack/Defence/Possession/Pressing. Division-change correction:
 // delta is multiplied by (prev_ls / curr_ls) so promoted teams (harder context) aren't
 // penalised and relegated teams (easier context) aren't artificially inflated. Only available
@@ -9,6 +10,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import TeamCard from './TeamCard';
 import CoachPanel from './CoachPanel';
+import TeamReport from './TeamReport';
 import { LEAGUE_STRENGTHS, ALL_LEAGUES, DEFAULT_LEAGUES, HIDDEN_LEAGUES, YOUTH_LEAGUES,
          PRESET_LEAGUES, COUNTRY_TO_REGION, GBE_LEAGUE_BANDS, leagueToRegion, leagueToBand } from './constants';
 
@@ -113,6 +115,7 @@ export default function TeamIndex({ players = [] }) {
   const [loading, setLoading] = useState(true);
   const [selTeam, setSelTeam] = useState(null);
   const [showCoaches, setShowCoaches] = useState(false);
+  const [reportTeam, setReportTeam] = useState(null); // Team All-in-One report (TeamReport.js)
 
   useEffect(() => {
     fetch('/teams_final.json').then(r => r.ok ? r.json() : []).catch(() => [])
@@ -755,7 +758,18 @@ export default function TeamIndex({ players = [] }) {
                         <td style={T.td}>
                           {teamCrest(t.team) && <img src={teamCrest(t.team)} alt="" style={{ width: 20, height: 20, objectFit: 'contain' }} onError={e => { e.target.style.display = 'none'; }} />}
                         </td>
-                        <td style={{ ...T.td, fontWeight: 700 }}>{t.team}</td>
+                        <td style={{ ...T.td, fontWeight: 700 }}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+                            {t.team}
+                            {/* Opens TeamReport. stopPropagation is required — the whole <tr>
+                                already has an onClick that opens TeamCard. */}
+                            <button
+                              title="Team Report (1920x1080 export)"
+                              onClick={e => { e.stopPropagation(); setReportTeam({ ...t, crest: teamCrest(t.team), avgXValue: avgXV, totalMV: totMV, mvPerf }); }}
+                              style={{ marginLeft: 8, padding: '1px 6px', borderRadius: 4, border: '1px solid #1e2d45', background: 'transparent', color: '#64748b', fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
+                            >REPORT</button>
+                          </span>
+                        </td>
                         <td style={T.td}>{t.league}</td>
                         <td style={T.td}>
                           <span style={{ display: 'inline-block', padding: '2px 6px', borderRadius: 8, background: t.style ? styleColor(t.style).bg : '#0e1e38', color: t.style ? styleColor(t.style).color : '#93c5fd', fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap' }}>{t.style || '—'}</span>
@@ -813,6 +827,15 @@ export default function TeamIndex({ players = [] }) {
           allTeams={all}
           allPlayers={players}
           onClose={() => setShowCoaches(false)}
+        />
+      )}
+      {reportTeam && (
+        <TeamReport
+          team={reportTeam}
+          allTeamSeasons={all.filter(t => t.team === reportTeam.team && teamCountry(t.league) === teamCountry(reportTeam.league)).map(t => ({ ...t, crest: undefined }))}
+          allTeams={all}
+          players={players}
+          onClose={() => setReportTeam(null)}
         />
       )}
     </div>
