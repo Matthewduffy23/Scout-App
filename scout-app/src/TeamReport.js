@@ -1,4 +1,4 @@
-// TeamReport.js v31 — Team All-in-One report. 1920x1080 PNG export.
+// TeamReport.js v32 — Team All-in-One report. 1920x1080 PNG export.
 //
 // v2: bigger team name; country flag + league logo beside the league name;
 //     mini coach profile in the header gap; XI is now formation-driven and
@@ -1455,7 +1455,7 @@ function weaknessesPanelHtml(w, h, team, allTeams, xi, depthList, upgradeList, s
   // 32 normally; tightened only when the "Also" row is in play, so the default
   // panel keeps the spacing it had rather than compressing for a row that isn't there.
   const hasExtras = Array.isArray(extraAreas) && extraAreas.some(x => x && x.name);
-  const rowH = hasExtras ? 25 : 32;
+  const rowH = hasExtras ? 24 : 32;
   const bars = metrics.map(([name, p], i) => `
     <div style="position:absolute;left:0;top:${i * rowH}px;width:${w}px;height:${rowH - 8}px;">
       <!-- left+right gives a definite width; left+max-width made this
@@ -1472,7 +1472,10 @@ function weaknessesPanelHtml(w, h, team, allTeams, xi, depthList, upgradeList, s
       </div>
     </div>`).join('');
 
-  const colTop = metrics.length * rowH + 4;
+  // +12 rather than +4: the squad columns were sitting right under the last
+  // metric bar. Both groups now share the same label-to-pill gap (7px) and the
+  // same gap from what's above them (14px).
+  const colTop = metrics.length * rowH + (hasExtras ? 12 : 4);
   const colW = Math.floor((w - 16) / 2);
   // 3 keeps each column to a single line; a 4th wrapped and pushed the panel
   // past its height once the objective row was added. Overflow shows as "+N".
@@ -1495,8 +1498,8 @@ function weaknessesPanelHtml(w, h, team, allTeams, xi, depthList, upgradeList, s
   const extras = (extraAreas || []).filter(x => x && x.name).slice(0, 4);
   const extrasHtml = !extras.length ? '' : `
     <div style="position:absolute;left:0;top:${colTop + 55}px;width:${w}px;">
-      <div style="font-size:8.5px;font-weight:700;letter-spacing:0.14em;color:#6f7c92;">OTHER FACTORS</div>
-      <div style="margin-top:9px;">
+      <div style="font-size:8.5px;font-weight:700;letter-spacing:0.14em;color:#6f7c92;">OTHER</div>
+      <div style="margin-top:7px;">
         ${extras.map(x => {
           const c = SEVERITY_COLOUR[x.severity] || SEVERITY_COLOUR.medium;
           // nowrap: "Trading Assets" was breaking onto a second line inside its
@@ -1712,6 +1715,21 @@ function headerHtml(team, coach, coachScore, allTeams, headerColour, rawOverall,
     }
     const oc = OBJECTIVE_COLOUR[objective] || '#94a3b8';
     const out = OUTCOME_STYLE[objectiveOutcome] || null;
+    const g = objectiveGap(objective, team.pointsRank, leagueSizeLate);
+    const ord = (n) => {
+      const v = Number(n); if (!v) return '—';
+      const t = v % 10, h = v % 100;
+      return v + ((t === 1 && h !== 11) ? 'st' : (t === 2 && h !== 12) ? 'nd' : (t === 3 && h !== 13) ? 'rd' : 'th');
+    };
+    const gapInfo = !g ? null : {
+      from: ord(team.pointsRank), to: ord(g.target), colour: g.colour,
+      // An arrow only makes sense when there's ground to make up. Already past
+      // the target and "13th -> 17th" reads like they need to drop, so it
+      // becomes a static "target 17th" instead.
+      met: g.gap === 0,
+      // Full bar when they're there; empties as the gap widens, 10+ = floor.
+      fill: Math.max(6, 100 - Math.min(100, (g.gap / 10) * 100)).toFixed(0),
+    };
     if (!bits.length && !objective) return '';
     return `
       <div style="display:flex;align-items:baseline;white-space:nowrap;">
@@ -1732,7 +1750,24 @@ function headerHtml(team, coach, coachScore, allTeams, headerColour, rawOverall,
           ${out ? `<span style="display:inline-flex;align-items:center;justify-content:center;
                 margin-left:6px;width:14px;height:14px;border-radius:50%;background:${out.c}22;
                 border:1px solid ${out.c}66;font-size:8px;font-weight:800;
-                color:${out.c};line-height:1;vertical-align:middle;">${out.g}</span>` : ''}` : ''}
+                color:${out.c};line-height:1;vertical-align:middle;">${out.g}</span>` : ''}
+          ${gapInfo ? `
+            <!-- Distance to the objective: current position, an arrow, the
+                 position the objective implies. Self-explanatory without a
+                 legend, and the colour carries the size of the job. -->
+            <span style="margin-left:12px;font-size:9.5px;font-weight:700;
+                         color:${ink.muted};vertical-align:middle;">${gapInfo.from}</span>
+            <span style="margin-left:5px;font-size:9.5px;font-weight:700;
+                         color:${gapInfo.colour};vertical-align:middle;">${gapInfo.met ? '·' : '→'}</span>
+            <span style="margin-left:5px;font-size:9.5px;font-weight:800;
+                         color:${gapInfo.colour};vertical-align:middle;">${
+                           gapInfo.met ? `target ${gapInfo.to}` : gapInfo.to}</span>
+            <span style="display:inline-block;margin-left:7px;width:38px;height:3px;
+                         border-radius:2px;background:${ink.track};vertical-align:middle;
+                         overflow:hidden;">
+              <span style="display:block;width:${gapInfo.fill}%;height:100%;
+                           background:${gapInfo.colour};border-radius:2px;"></span>
+            </span>` : ''}` : ''}
       </div>`;
   })();
 
