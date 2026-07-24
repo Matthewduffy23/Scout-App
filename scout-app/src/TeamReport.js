@@ -1,4 +1,4 @@
-// TeamReport.js v30 — Team All-in-One report. 1920x1080 PNG export.
+// TeamReport.js v31 — Team All-in-One report. 1920x1080 PNG export.
 //
 // v2: bigger team name; country flag + league logo beside the league name;
 //     mini coach profile in the header gap; XI is now formation-driven and
@@ -1455,7 +1455,7 @@ function weaknessesPanelHtml(w, h, team, allTeams, xi, depthList, upgradeList, s
   // 32 normally; tightened only when the "Also" row is in play, so the default
   // panel keeps the spacing it had rather than compressing for a row that isn't there.
   const hasExtras = Array.isArray(extraAreas) && extraAreas.some(x => x && x.name);
-  const rowH = hasExtras ? 29 : 32;
+  const rowH = hasExtras ? 25 : 32;
   const bars = metrics.map(([name, p], i) => `
     <div style="position:absolute;left:0;top:${i * rowH}px;width:${w}px;height:${rowH - 8}px;">
       <!-- left+right gives a definite width; left+max-width made this
@@ -1494,13 +1494,16 @@ function weaknessesPanelHtml(w, h, team, allTeams, xi, depthList, upgradeList, s
   // by severity rather than measured, so they read as judgement not data.
   const extras = (extraAreas || []).filter(x => x && x.name).slice(0, 4);
   const extrasHtml = !extras.length ? '' : `
-    <div style="position:absolute;left:0;top:${colTop + 44}px;width:${w}px;">
-      <div style="font-size:8.5px;font-weight:700;letter-spacing:0.14em;color:#6f7c92;">ALSO</div>
-      <div style="margin-top:7px;">
+    <div style="position:absolute;left:0;top:${colTop + 55}px;width:${w}px;">
+      <div style="font-size:8.5px;font-weight:700;letter-spacing:0.14em;color:#6f7c92;">OTHER FACTORS</div>
+      <div style="margin-top:9px;">
         ${extras.map(x => {
           const c = SEVERITY_COLOUR[x.severity] || SEVERITY_COLOUR.medium;
-          return `<span style="display:inline-block;font-size:10.5px;font-weight:700;
-                    padding:3px 9px;border-radius:10px;margin-right:5px;margin-bottom:4px;
+          // nowrap: "Trading Assets" was breaking onto a second line inside its
+          // own pill and blowing the row height out.
+          return `<span style="display:inline-block;font-size:10px;font-weight:700;
+                    padding:4px 10px;border-radius:11px;margin-right:6px;
+                    white-space:nowrap;line-height:1.1;
                     background:${c}1e;border:1px solid ${c}59;color:${c};">${esc(x.name)}</span>`;
         }).join('')}
       </div>
@@ -1714,7 +1717,7 @@ function headerHtml(team, coach, coachScore, allTeams, headerColour, rawOverall,
       <div style="display:flex;align-items:baseline;white-space:nowrap;">
         ${bits.map(([k, v, rk], i) => `
           <span style="${i ? 'margin-left:22px;' : ''}font-size:7.5px;font-weight:700;
-                       letter-spacing:0.13em;color:${ink.muted};">${k}</span>
+                       letter-spacing:0.13em;color:${ink.muted};">${k}:</span>
           <!-- fixed-width value column, right-aligned, so "27.7" and "£49m" end
                on the same edge and their ranks line up beneath each other -->
           <span style="display:inline-block;width:46px;text-align:right;margin-left:8px;
@@ -1724,7 +1727,7 @@ function headerHtml(team, coach, coachScore, allTeams, headerColour, rawOverall,
         `).join('')}
         ${objective ? `
           <span style="${bits.length ? 'margin-left:14px;' : ''}font-size:7.5px;font-weight:700;
-                       letter-spacing:0.13em;color:${ink.muted};">OBJECTIVE</span>
+                       letter-spacing:0.13em;color:${ink.muted};">OBJECTIVE:</span>
           <span style="margin-left:8px;font-size:9.5px;font-weight:700;color:${oc};">${esc(objective)}</span>
           ${out ? `<span style="display:inline-flex;align-items:center;justify-content:center;
                 margin-left:6px;width:14px;height:14px;border-radius:50%;background:${out.c}22;
