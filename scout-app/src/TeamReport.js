@@ -1,4 +1,4 @@
-// TeamReport.js v25 — Team All-in-One report. 1920x1080 PNG export.
+// TeamReport.js v26 — Team All-in-One report. 1920x1080 PNG export.
 //
 // v2: bigger team name; country flag + league logo beside the league name;
 //     mini coach profile in the header gap; XI is now formation-driven and
@@ -718,7 +718,7 @@ const SLOT_W = 196;
 const SLOT_H = 138;
 const FACE = 62;
 function xiPanelHtml(w, h, xi, opts = {}) {
-  const { hideScores = false, showContract = false, season = null } = opts;
+  const { hideScores = false, metaMode = 'age', season = null } = opts;
   const line = 'rgba(255,255,255,0.10)';
 
   const blocks = xi.map(({ slot, starter, oop, depth }) => {
@@ -730,9 +730,9 @@ function xiPanelHtml(w, h, xi, opts = {}) {
     const img = starter ? photoUrl(starter.name, starter.team) : '';
     const tok = starter ? String(starter.position || '').split(',')[0].trim() : '';
     // Age (or contract years remaining) in a dimmer grey so the name reads first.
-    const meta = !starter ? ''
-      : showContract
-        ? (contractLeft(starter, season) ? contractLeft(starter, season) : '')
+    const meta = (!starter || metaMode === 'none') ? ''
+      : metaMode === 'contract'
+        ? contractLeft(starter, season)
         : (starter.age != null ? String(starter.age) : '');
     const age = meta ? ` <span style="color:#7c8798;font-weight:600;">(${meta})</span>` : '';
 
@@ -768,8 +768,11 @@ function xiPanelHtml(w, h, xi, opts = {}) {
     const depthNames = depth.map(d =>
       `<div style="font-size:12.5px;color:#93a1b5;line-height:1.42;white-space:nowrap;
                    overflow:hidden;text-overflow:ellipsis;">${d.onLoan ? LOAN_TAG_SM : ''}${esc(d.name)}${
-        (() => { const mv = showContract ? contractLeft(d, season) : (d.age != null ? String(d.age) : '');
-                 return mv ? ` (${mv})` : ''; })()}</div>`).join('');
+        (() => {
+          if (metaMode === 'none') return '';
+          const mv = metaMode === 'contract' ? contractLeft(d, season) : (d.age != null ? String(d.age) : '');
+          return mv ? ` (${mv})` : '';
+        })()}</div>`).join('');
 
     return `
       <div style="position:absolute;left:${left}px;top:${top}px;width:${SLOT_W}px;">
@@ -1557,26 +1560,26 @@ function coachHtml(coach, team, coachScore, hideManagerScore = false, ink = head
                  vertical-align:middle;">${whole(coachScore)}</span>`;
 
   return `
-    <div style="position:absolute;left:${COACH_X}px;top:20px;width:${COACH_W}px;height:112px;">
-      <div style="position:absolute;left:0;top:4px;width:88px;height:88px;border-radius:11px;
+    <div style="position:absolute;left:${COACH_X}px;top:20px;width:${COACH_W}px;height:114px;">
+      <div style="position:absolute;left:0;top:4px;width:94px;height:94px;border-radius:11px;
                   background-color:#151b2e;${photoCss}
                   background-repeat:no-repeat;
                   border:1px solid rgba(255,255,255,0.16);"></div>
 
-      <div style="position:absolute;left:102px;top:0px;width:${COACH_W - 102}px;">
+      <div style="position:absolute;left:110px;top:4px;width:${COACH_W - 110}px;">
         <div style="font-size:9.5px;font-weight:700;letter-spacing:0.16em;color:${ink.muted};">MANAGER</div>
-        <div style="margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-          <span style="font-size:21px;font-weight:700;color:${ink.primary};vertical-align:middle;">${esc(coach.name || '')}</span>${scoreChip}
+        <div style="margin-top:4px;white-space:nowrap;">
+          <span style="font-size:25px;font-weight:700;color:${ink.primary};vertical-align:middle;">${esc(coach.name || '')}</span>${scoreChip}
         </div>
         <div style="display:flex;align-items:center;margin-top:7px;white-space:nowrap;">
           ${iso ? `<div style="width:24px;height:15px;flex-shrink:0;background-size:cover;
                      background-position:center;border-radius:2px;
                      box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15);
                      background-image:url('${src(`https://flagcdn.com/w40/${iso}.png`)}');"></div>` : ''}
-          <span style="font-size:11px;color:${ink.soft};${iso ? 'margin-left:6px;' : ''}">${esc(coach.nationality || '')}</span>
+          <span style="font-size:12.5px;color:${ink.soft};${iso ? 'margin-left:7px;' : ''}">${esc(coach.nationality || '')}</span>
           ${facts.map(([k, v]) =>
-            `<span style="font-size:11px;color:#6f7c92;margin-left:14px;">
-               ${k}: <span style="color:${ink.soft};font-weight:600;">${esc(v)}</span></span>`).join('')}
+            `<span style="font-size:11.5px;color:${ink.muted};margin-left:18px;">
+               ${k}: <span style="color:${ink.secondary};font-weight:600;">${esc(v)}</span></span>`).join('')}
         </div>
         ${clubFacts ? `<div style="margin-top:9px;">${clubFacts}</div>` : ''}
       </div>
@@ -1618,25 +1621,22 @@ function headerHtml(team, coach, coachScore, allTeams, headerColour, rawOverall,
     const out = OUTCOME_STYLE[objectiveOutcome] || null;
     if (!bits.length && !objective) return '';
     return `
-      <div style="white-space:nowrap;">
-        <div style="display:flex;align-items:center;">
-          ${bits.map(([k, v, rk], i) => `
-            <span style="${i ? 'margin-left:18px;' : ''}font-size:7px;font-weight:700;
-                         letter-spacing:0.13em;color:${ink.muted};">${k}</span>
-            <span style="margin-left:5px;font-size:10.5px;font-weight:700;color:${ink.soft};">${v}</span>
-            ${rk ? `<span style="margin-left:4px;font-size:7.5px;font-weight:600;color:${ink.muted};">${rankStr(rk)}</span>` : ''}
-          `).join('')}
-        </div>
+      <div style="display:flex;align-items:center;white-space:nowrap;">
+        ${bits.map(([k, v, rk], i) => `
+          <span style="${i ? 'margin-left:18px;' : ''}font-size:7.5px;font-weight:700;
+                       letter-spacing:0.13em;color:${ink.muted};">${k}</span>
+          <span style="margin-left:6px;font-size:11px;font-weight:700;color:${ink.soft};">${v}</span>
+          ${rk ? `<span style="margin-left:4px;font-size:8px;font-weight:600;color:${ink.muted};">${rankStr(rk)}</span>` : ''}
+        `).join('')}
         ${objective ? `
-          <div style="display:flex;align-items:center;margin-top:7px;">
-            <span style="display:inline-block;padding:2px 10px;border-radius:10px;
-                  background:${oc}1c;border:1px solid ${oc}55;
-                  font-size:9.5px;font-weight:800;color:${oc};">${esc(objective)}</span>
-            ${out ? `<span style="display:inline-flex;align-items:center;justify-content:center;
-                  margin-left:7px;width:16px;height:16px;border-radius:50%;
-                  background:${out.c}22;border:1px solid ${out.c}66;
-                  font-size:9px;font-weight:800;color:${out.c};line-height:1;">${out.g}</span>` : ''}
-          </div>` : ''}
+          <span style="${bits.length ? 'margin-left:18px;' : ''}display:inline-block;padding:2px 10px;
+                border-radius:10px;background:${oc}1c;border:1px solid ${oc}55;
+                font-size:9.5px;font-weight:800;color:${oc};">${esc(objective)}</span>` : ''}
+        ${(objective && out) ? `
+          <span style="display:inline-flex;align-items:center;justify-content:center;margin-left:6px;
+                width:15px;height:15px;border-radius:50%;background:${out.c}22;
+                border:1px solid ${out.c}66;font-size:8.5px;font-weight:800;
+                color:${out.c};line-height:1;">${out.g}</span>` : ''}
       </div>`;
   })();
 
@@ -1662,7 +1662,7 @@ function headerHtml(team, coach, coachScore, allTeams, headerColour, rawOverall,
                 white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(displayName)}</div>
 
     <!-- country flag + league logo + league name + season, one nowrap row -->
-    <div style="position:absolute;left:${NAME_X}px;top:86px;display:flex;align-items:center;
+    <div style="position:absolute;left:${NAME_X}px;top:83px;display:flex;align-items:center;
                 white-space:nowrap;">
       ${flag ? `<div style="width:27px;height:17px;flex-shrink:0;background-size:cover;
                   background-position:center;border-radius:2px;
@@ -1677,7 +1677,7 @@ function headerHtml(team, coach, coachScore, allTeams, headerColour, rawOverall,
 
     <!-- League standing sits with the club identity, not with the style scores —
          it's a fact about the season rather than a measure of how they play. -->
-    <div style="position:absolute;left:${NAME_X}px;top:116px;display:flex;align-items:center;
+    <div style="position:absolute;left:${NAME_X}px;top:117px;display:flex;align-items:center;
                 white-space:nowrap;">
       <span style="font-size:8px;font-weight:700;letter-spacing:0.14em;color:${ink.muted};">PTS</span>
       <span style="font-size:13px;font-weight:800;color:${ink.secondary};margin-left:7px;">${rankStr(ptsRank)}</span>
@@ -1790,7 +1790,7 @@ export function buildTeamReportElement(team, opts = {}) {
     xiOverridePool = null,
     hidePlayerScores = false,
     hideManagerScore = false,
-    showContractYears = false,
+    metaMode = 'age',        // 'age' | 'contract' | 'none'
     purchaseValue = '', purchaseRank = null, objective = '', teamNameOverride = '',
     objectiveOutcome = '',
   } = opts;
@@ -1819,7 +1819,7 @@ export function buildTeamReportElement(team, opts = {}) {
                    purchaseValue, purchaseRank, objective, teamNameOverride, objectiveOutcome)}
 
       ${panel({ x: PAD, y: BODY_TOP, w: LEFT_W, h: LEFT_H,
-                title: 'XI + Depth', right: formation, body: xiPanelHtml(xiW, xiH, xi, { hideScores: hidePlayerScores, showContract: showContractYears, season: team.season }) })}
+                title: 'XI + Depth', right: formation, body: xiPanelHtml(xiW, xiH, xi, { hideScores: hidePlayerScores, metaMode, season: team.season }) })}
 
       ${panel({ x: COL_A_X, y: ROW_1, w: COL_W, h: ROW1_H,
                 title: 'Performance', body: radarPanelHtml(innerW, ROW1_H - PANEL_PAD * 2 - TITLE_H, team, allTeams) })}
@@ -2140,7 +2140,7 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
   const [objectiveOutcome, setObjectiveOutcome] = useState('');
   const [hidePlayerScores, setHidePlayerScores] = useState(false);
   const [hideManagerScore, setHideManagerScore] = useState(false);
-  const [showContractYears, setShowContractYears] = useState(false);
+  const [metaMode, setMetaMode] = useState('age');   // beside player names
   const [xiSearchAll, setXiSearchAll] = useState(false);
   const [depthSel, setDepthSel] = useState(null);          // null = auto
   const [upgradeSel, setUpgradeSel] = useState(null);
@@ -2245,7 +2245,7 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
     teamNameOverride,
     depthList: depthSel, upgradeList: upgradeSel,
     xiSlotLists: xiLists, xiOverridePool: xiPool,
-    hidePlayerScores, hideManagerScore, showContractYears,
+    hidePlayerScores, hideManagerScore, metaMode,
     purchaseValue: purchaseValue.trim(),
     purchaseRank: purchaseRank ? Number(purchaseRank) : null,
     objective, objectiveOutcome,
@@ -2350,9 +2350,22 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
                 })}
               </div>
             </div>
+            <div style={UI.block}>
+              <span style={UI.label}>Beside player names</span>
+              <div style={{ display: 'flex' }}>
+                {[['age', 'Age'], ['contract', 'Contract'], ['none', 'Nothing']].map(([v, lbl], i) => (
+                  <button key={v} onClick={() => setMetaMode(v)}
+                    style={{ flex: 1, padding: '5px 0', marginLeft: i ? 6 : 0, borderRadius: 5,
+                             border: `1px solid ${metaMode === v ? '#3b7de8' : '#1e2d45'}`,
+                             background: metaMode === v ? '#0e2040' : 'transparent',
+                             color: metaMode === v ? '#60a5fa' : '#94a3b8',
+                             fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>{lbl}</button>
+                ))}
+              </div>
+            </div>
+
             {[['Hide player scores', hidePlayerScores, setHidePlayerScores],
               ['Hide manager score', hideManagerScore, setHideManagerScore],
-              ['Show contract years left instead of age', showContractYears, setShowContractYears]
              ].map(([lbl, val, setter]) => (
               <div key={lbl} onClick={() => setter(v => !v)}
                    style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', marginBottom: 7 }}>
