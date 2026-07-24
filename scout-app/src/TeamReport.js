@@ -1,4 +1,4 @@
-// TeamReport.js v18 — Team All-in-One report. 1920x1080 PNG export.
+// TeamReport.js v19 — Team All-in-One report. 1920x1080 PNG export.
 //
 // v2: bigger team name; country flag + league logo beside the league name;
 //     mini coach profile in the header gap; XI is now formation-driven and
@@ -62,6 +62,16 @@ const COACH_X = 1268;                    // nudged right off the score card
 const COACH_W = 628;                     // 1268..1896
 
 // ─── Palette ───────────────────────────────────────────────────────────────
+// Generic head-and-shoulders, inlined as a data URI so it needs no network and
+// survives the html-to-image pass. Layered UNDER the photo: if the photo 404s
+// html-to-image swaps in a transparent placeholder and this shows through.
+const SILHOUETTE = "data:image/svg+xml;utf8," + encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">' +
+  '<rect width="64" height="64" fill="#1a2233"/>' +
+  '<circle cx="32" cy="24" r="11" fill="#39445c"/>' +
+  '<path d="M10 62c0-12 10-19 22-19s22 7 22 19z" fill="#39445c"/>' +
+  '</svg>');
+
 const ACCENT_PINK = '#ff66c4';   // same accent as QuickCard / CoachCard
 const BG = '#0a0f1c';
 const HEADER_L = 'rgb(23,26,77)';
@@ -252,6 +262,16 @@ const NEIGHBOURS = {
 // Slots are filled back-to-front in this order — specialists (GK, centre-backs)
 // claim their players before the generalist slots get a look in.
 const PITCH_ORDER = ['GK','LCB','CB','RCB','LB','RB','LWB','RWB','CM','DM','AM','LW','RW','ST'];
+
+// Does a player's primary token suit this slot label, natively or via the
+// adjacency tiers? Used to sort the manual picker so sensible names come first.
+export function slotFitRank(p, label) {
+  const c = canon(posTok(p));
+  if (c === label) return 0;
+  const tiers = NEIGHBOURS[label] || [];
+  for (let i = 0; i < tiers.length; i++) if (tiers[i].includes(c)) return i + 1;
+  return 99;
+}
 
 const FORMATIONS = {
   '4-2-3-1': [
@@ -598,7 +618,7 @@ export function xiRating(xi) {
 }
 
 // ─── XI panel ──────────────────────────────────────────────────────────────
-const SLOT_W = 176;
+const SLOT_W = 196;
 const SLOT_H = 138;
 const FACE = 62;
 function xiPanelHtml(w, h, xi, opts = {}) {
@@ -624,9 +644,11 @@ function xiPanelHtml(w, h, xi, opts = {}) {
     const face = starter
       ? `<div style="position:absolute;left:50%;margin-left:-${FACE / 2}px;top:0;
                      width:${FACE}px;height:${FACE}px;border-radius:50%;
-                     background-color:rgba(255,255,255,0.07);
-                     background-image:url('${src(img)}');background-size:cover;
-                     background-position:center top;
+                     background-color:#1a2233;
+                     background-image:url('${src(img)}'), url('${SILHOUETTE}');
+                     background-size:cover, cover;
+                     background-position:center top, center top;
+                     background-repeat:no-repeat, no-repeat;
                      border:1.5px solid rgba(190,203,224,0.26);
                      box-shadow:0 0 0 3px rgba(255,255,255,0.035);"></div>`
       : `<div style="position:absolute;left:50%;margin-left:-${FACE / 2}px;top:0;
@@ -643,8 +665,9 @@ function xiPanelHtml(w, h, xi, opts = {}) {
                    font-size:22px;font-weight:800;line-height:1;
                    color:${gradeColor(sc)};">${Math.round(sc)}</div>`;
 
-    const oopTag = (starter && oop && tok)
-      ? `<span style="color:#f18c31;font-weight:600;"> (${esc(tok)})</span>` : '';
+    // Out-of-position tag removed — it pushed the name into truncation and the
+    // pitch position already conveys where the player is being used.
+    const oopTag = '';
 
     const depthNames = depth.map(d =>
       `<div style="font-size:12.5px;color:#93a1b5;line-height:1.42;white-space:nowrap;
@@ -655,7 +678,7 @@ function xiPanelHtml(w, h, xi, opts = {}) {
     return `
       <div style="position:absolute;left:${left}px;top:${top}px;width:${SLOT_W}px;">
         <div style="position:relative;height:${FACE}px;">${face}${score}</div>
-        <div style="font-size:15px;font-weight:700;color:#eaf0f8;margin-top:6px;
+        <div style="font-size:14.5px;font-weight:700;color:#eaf0f8;margin-top:6px;
                     text-align:center;white-space:nowrap;overflow:hidden;
                     text-overflow:ellipsis;">${starter ? esc(starter.name) : '—'}${age}${oopTag}</div>
         <div style="margin-top:3px;text-align:center;">${depthNames}</div>
@@ -1074,7 +1097,7 @@ export function contractLeft(p, season) {
   const end = seasonEndYear(season);
   if (!cy || !end || isNaN(cy)) return '';
   const d = cy - end;
-  return d <= 0 ? 'Exp' : `+${d}`;
+  return `+${Math.max(0, d)}`;
 }
 
 export const playerKey = (p) => `${p && p.name}|${p && p.team}`;
@@ -1109,10 +1132,12 @@ function keyPlayersPanelHtml(w, h, rows, showClub = false, hideScores = false) {
                   background:rgba(255,255,255,0.035);border:1px solid rgba(255,255,255,0.07);
                   border-radius:9px;">
         <div style="position:absolute;left:10px;top:50%;margin-top:-16px;width:32px;height:32px;
-                    border-radius:50%;background-color:rgba(255,255,255,0.07);
-                    background-image:url('${src(photoUrl(p.name, p.team))}');
-                    background-size:cover;background-position:center top;
-                    border:1.5px solid rgba(203,213,225,0.5);"></div>
+                    border-radius:50%;background-color:#1a2233;
+                    background-image:url('${src(photoUrl(p.name, p.team))}'), url('${SILHOUETTE}');
+                    background-size:cover, cover;
+                    background-position:center top, center top;
+                    background-repeat:no-repeat, no-repeat;
+                    border:1.5px solid rgba(190,203,224,0.26);"></div>
         <!-- text box ends exactly where the pills begin — previously it was a
              fixed max-width guess, which is why names were ellipsising early -->
         <div style="position:absolute;left:50px;right:${VALS_W + 20}px;top:50%;margin-top:-15px;">
@@ -1587,7 +1612,7 @@ export function buildTeamReportElement(team, opts = {}) {
       ${panel({ x: COL_B_X, y: ROW_2, w: COL_W, h: ROW2_H,
                 title: 'Weaknesses', body: weaknessesPanelHtml(innerW, ROW2_H - PANEL_PAD * 2 - TITLE_H, team, allTeams, xi, depthList, upgradeList) })}
 
-      ${bottomMode === 'summary'
+      ${bottomMode !== 'similar'
         ? `${panel({ x: COL_A_X, y: ROW_3, w: COL_W, h: ROW3_H,
                      title: keyTitle, body: keyPlayersPanelHtml(innerW, ROW3_H - PANEL_PAD * 2 - TITLE_H, players3, keyShowClub, hidePlayerScores) })}
            ${panel({ x: COL_B_X, y: ROW_3, w: COL_W, h: ROW3_H,
@@ -1600,6 +1625,116 @@ export function buildTeamReportElement(team, opts = {}) {
 
   document.body.appendChild(container);
   return container;
+}
+
+// Per-slot XI editor. Replaces the eleven dropdowns: each row shows who's in the
+// slot with a clear button, and clicking it opens a search filtered to players
+// who actually suit that position (best fits first). Choosing someone already in
+// another slot SWAPS the two rather than leaving a hole.
+function XiSlotEditor({ xi, pool, overrides, setOverrides, teamName }) {
+  const [openSlot, setOpenSlot] = useState(null);
+  const [q, setQ] = useState('');
+  const [anyPos, setAnyPos] = useState(false);
+
+  const slotOf = useMemo(() => {
+    const m = {};
+    xi.forEach(s => { if (s.starter) m[playerKey(s.starter)] = s.slot.id; });
+    return m;
+  }, [xi]);
+
+  const assign = (slotId, p) => {
+    const key = playerKey(p);
+    const from = slotOf[key];
+    setOverrides(o => {
+      const next = { ...o };
+      // Swap: whoever is currently in the target slot takes the other slot.
+      if (from && from !== slotId) {
+        const occupant = xi.find(s => s.slot.id === slotId);
+        if (occupant && occupant.starter) next[from] = playerKey(occupant.starter);
+        else delete next[from];
+      }
+      next[slotId] = key;
+      return next;
+    });
+    setOpenSlot(null); setQ('');
+  };
+
+  const clear = (slotId) => setOverrides(o => { const n = { ...o }; delete n[slotId]; return n; });
+
+  return (
+    <div>
+      {xi.map(({ slot, starter }) => {
+        const open = openSlot === slot.id;
+        const manual = !!overrides[slot.id];
+        const t = q.trim().toLowerCase();
+        const results = !open ? [] : pool
+          .filter(p => !t || String(p.name).toLowerCase().includes(t) || String(p.team || '').toLowerCase().includes(t))
+          .map(p => ({ p, fit: slotFitRank(p, slot.label) }))
+          .filter(x => anyPos || t ? true : x.fit < 99)
+          .sort((a, b) => a.fit - b.fit
+            || (b.p.minutesLatest || 0) - (a.p.minutesLatest || 0)
+            || (b.p.careerScore || 0) - (a.p.careerScore || 0))
+          .slice(0, 8);
+
+        return (
+          <div key={slot.id} style={{ marginBottom: 4 }}>
+            <div style={{ display: 'flex', alignItems: 'center',
+                          background: open ? '#0e2040' : '#0d1220',
+                          border: `1px solid ${manual ? '#3b7de8' : '#1e2d45'}`,
+                          borderRadius: 6, padding: '5px 8px' }}>
+              <span style={{ width: 40, flexShrink: 0, fontSize: 10, fontWeight: 800,
+                             color: manual ? '#60a5fa' : '#6f7c92' }}>{slot.label}</span>
+              <span onClick={() => { setOpenSlot(open ? null : slot.id); setQ(''); }}
+                    style={{ flex: 1, minWidth: 0, cursor: 'pointer', fontSize: 11.5,
+                             color: starter ? '#e2e8f4' : '#55617a', whiteSpace: 'nowrap',
+                             overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {starter ? starter.name : 'Empty'}
+                {starter && starter.team !== teamName &&
+                  <span style={{ color: '#64748b' }}> · {starter.team}</span>}
+              </span>
+              {starter && <span style={{ fontSize: 10.5, fontWeight: 800, color: '#8b98ad', marginLeft: 6 }}>
+                {starter.careerScore != null ? Math.round(starter.careerScore) : '—'}</span>}
+              {manual && (
+                <button onClick={() => clear(slot.id)} title="Back to auto"
+                  style={{ marginLeft: 7, background: 'transparent', border: 'none', color: '#64748b',
+                           cursor: 'pointer', fontSize: 13, lineHeight: 1, padding: 0 }}>×</button>
+              )}
+            </div>
+            {open && (
+              <div style={{ border: '1px solid #16233a', borderTop: 'none',
+                            borderRadius: '0 0 6px 6px', padding: '7px 8px', background: '#080e19' }}>
+                <input autoFocus value={q} onChange={e => setQ(e.target.value)}
+                  placeholder={`Search for ${slot.label}…`} style={{ ...UI.input, fontSize: 11 }} />
+                <div onClick={() => setAnyPos(v => !v)}
+                     style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', margin: '6px 0 2px' }}>
+                  <div style={{ width: 12, height: 12, borderRadius: 3, flexShrink: 0,
+                                border: `1px solid ${anyPos ? '#3b7de8' : '#1e2d45'}`,
+                                background: anyPos ? '#3b7de8' : 'transparent' }} />
+                  <span style={{ fontSize: 10, color: '#64748b', marginLeft: 6 }}>Any position</span>
+                </div>
+                {results.map(({ p, fit }) => (
+                  <div key={playerKey(p)} onClick={() => assign(slot.id, p)}
+                       style={{ display: 'flex', alignItems: 'center', cursor: 'pointer',
+                                padding: '4px 2px', borderBottom: '1px solid #101a2c' }}>
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 11, color: '#c8d2e0',
+                                   whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {p.name}
+                      <span style={{ color: '#55617a' }}> · {String(p.position || '').split(',')[0].trim()}</span>
+                      {p.team !== teamName && <span style={{ color: '#64748b' }}> · {p.team}</span>}
+                    </span>
+                    {fit === 0 && <span style={{ fontSize: 8.5, color: '#22c55e', marginLeft: 6 }}>NAT</span>}
+                    <span style={{ fontSize: 10.5, fontWeight: 700, color: '#8b98ad', marginLeft: 7 }}>
+                      {p.careerScore != null ? Math.round(p.careerScore) : '—'}</span>
+                  </div>
+                ))}
+                {!results.length && <div style={UI.note}>No match — try "Any position".</div>}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 // ─── Modal ─────────────────────────────────────────────────────────────────
@@ -1710,7 +1845,6 @@ function PlayerPicker({ pool, picked, onPick, onRemove, max = 3, placeholder }) 
     </div>
   );
 }
-
 // ─── Modal ─────────────────────────────────────────────────────────────────
 export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], players = [], onClose }) {
   const [downloading, setDownloading] = useState(false);
@@ -1801,20 +1935,7 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
   }, [coach, tenureRows, seasonPerf]);
 
   const xiPool = xiSearchAll ? players : squad;
-  // A <select> with ~83k options would hang the browser, so the "other clubs"
-  // list is the squad plus the highest-rated players elsewhere, and anyone
-  // already picked stays in regardless of rank.
-  const xiSelectPool = useMemo(() => {
-    if (!xiSearchAll) return squad;
-    const picked = new Set(Object.values(xiOverrides || {}));
-    const inSquad = new Set(squad.map(playerKey));
-    const rest = players
-      .filter(p => !inSquad.has(playerKey(p)))
-      .sort((a, b) => (b.careerScore || 0) - (a.careerScore || 0));
-    const keep = rest.filter(p => picked.has(playerKey(p)));
-    const top = rest.filter(p => !picked.has(playerKey(p))).slice(0, 300);
-    return [...squad, ...keep, ...top];
-  }, [xiSearchAll, players, squad, xiOverrides]);
+
   const xi = useMemo(() => buildXI(formation, squad, depthCount, team.season, xiOverrides, xiPool),
                      [formation, squad, depthCount, team, xiOverrides, xiPool]);
   const filled = xi.filter(s => s.starter).length;
@@ -1904,10 +2025,20 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
           <Section title="Layout & panels" open={openSection === 'layout'} onToggle={() => toggleSection('layout')}>
             <div style={UI.block}>
               <span style={UI.label}>Bottom row</span>
-              <select value={bottomMode} onChange={e => setBottomMode(e.target.value)} style={UI.select}>
+              <select
+                value={bottomMode === 'similar' ? 'similar' : (keyMode === 'recruit' ? 'recruit' : 'summary')}
+                onChange={e => {
+                  const v = e.target.value;
+                  if (v === 'similar') { setBottomMode('similar'); }
+                  else if (v === 'recruit') { setBottomMode('summary'); setKeyMode('recruit'); }
+                  else { setBottomMode('summary'); if (keyMode === 'recruit') setKeyMode('auto'); }
+                }}
+                style={UI.select}>
                 <option value="similar">Similar Teams + Key Players</option>
                 <option value="summary">Key Players + Summary</option>
+                <option value="recruit">Recruitment Recommendations + Summary</option>
               </select>
+              <div style={UI.note}>Summary always sits bottom-right.</div>
             </div>
             {bottomMode === 'summary' && (
               <div style={UI.block}>
@@ -1989,7 +2120,7 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
               </div>
             </div>
             <div style={UI.block}>
-              <span style={UI.label}>Manual XI — override any slot</span>
+              <span style={UI.label}>Manual XI</span>
               <div onClick={() => setXiSearchAll(v => !v)}
                    style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', marginBottom: 8 }}>
                 <div style={{ width: 14, height: 14, borderRadius: 3, flexShrink: 0,
@@ -2002,30 +2133,14 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
                   Include players from other clubs
                 </span>
               </div>
-              {xi.map(({ slot, starter }) => (
-                <div key={slot.id} style={{ display: 'flex', alignItems: 'center', marginBottom: 5 }}>
-                  <span style={{ width: 42, flexShrink: 0, fontSize: 10, fontWeight: 700,
-                                 color: xiOverrides[slot.id] ? '#60a5fa' : '#6f7c92' }}>{slot.label}</span>
-                  <select value={xiOverrides[slot.id] || ''}
-                    onChange={e => setXiOverrides(o => {
-                      const next = { ...o };
-                      if (e.target.value) next[slot.id] = e.target.value; else delete next[slot.id];
-                      return next;
-                    })}
-                    style={{ ...UI.select, fontSize: 11, padding: '4px 6px' }}>
-                    <option value="">{starter ? `Auto — ${starter.name}` : 'Auto — empty'}</option>
-                    {(xiSearchAll ? xiSelectPool : squad).map(p => (
-                      <option key={playerKey(p)} value={playerKey(p)}>
-                        {p.name}{p.position ? ` (${String(p.position).split(',')[0].trim()})` : ''}
-                        {xiSearchAll && p.team !== team.team ? ` — ${p.team}` : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ))}
+              <XiSlotEditor xi={xi} pool={xiPool} overrides={xiOverrides}
+                            setOverrides={setXiOverrides} teamName={team.team} />
+              <div style={UI.note}>
+                Click a slot to search. Picking someone already in the XI swaps the two.
+              </div>
               {!!Object.keys(xiOverrides).length && (
                 <button onClick={() => setXiOverrides({})}
-                  style={{ marginTop: 4, background: 'transparent', border: '1px solid #1e2d45',
+                  style={{ marginTop: 7, background: 'transparent', border: '1px solid #1e2d45',
                            borderRadius: 5, color: '#94a3b8', fontSize: 10.5, padding: '4px 9px',
                            cursor: 'pointer' }}>Reset all to auto</button>
               )}
