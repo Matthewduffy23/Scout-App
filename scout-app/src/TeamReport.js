@@ -1,4 +1,4 @@
-// TeamReport.js v21 — Team All-in-One report. 1920x1080 PNG export.
+// TeamReport.js v22 — Team All-in-One report. 1920x1080 PNG export.
 //
 // v2: bigger team name; country flag + league logo beside the league name;
 //     mini coach profile in the header gap; XI is now formation-driven and
@@ -50,20 +50,16 @@ const LEFT_H = ROW_3 + ROW3_H - BODY_TOP;      // 889
 // Header column stops. The team name is capped and ellipsised so long clubs
 // ("Wolverhampton Wanderers") can't run into the coach block.
 const NAME_X = PAD + 128;
-// Four zones spanning the full band, no dead gap between them:
-//   identity 24-590 | scores 606-1046 | club facts 1062-1300 | manager 1316-1896
-// (24 + 566 + 16 + 440 + 16 + 238 + 16 + 580 + 24 = 1920)
-const NAME_MAX_W = 438;                  // ends at 590
-const SCORE_X = 606;
-const SCORE_W = 440;
-const OVR_CX = SCORE_X + 58;
-const STAT_X = SCORE_X + 122;
-const STAT_CW = 145;                     // 2x2 grid cell
-const STAT_CGAP = 12;                    // 122 + 145 + 12 + 145 = 424 < 440
-const FACTS_X = 1062;
-const FACTS_W = 238;
-const COACH_X = 1316;
-const COACH_W = 580;
+// The identity zone only needs room for the name and league row, so the other
+// three sections shift left and sit as a cluster:
+//   identity 24-470 | scores 486-946 | facts 962-1240 | manager 1256-1896
+const NAME_MAX_W = 318;                  // ends at 470
+const SCORE_X = 486;
+const SCORE_W = 460;
+const FACTS_X = 962;
+const FACTS_W = 278;
+const COACH_X = 1256;
+const COACH_W = 640;
 
 // ─── Palette ───────────────────────────────────────────────────────────────
 // Generic head-and-shoulders, inlined as a data URI so it needs no network and
@@ -87,34 +83,41 @@ const HEADER_R = 'rgb(17,22,42)';
 // Six common club colours, each with a light and a dark variant. The previous
 // set all faded to a similar navy because fadeHexToBG pulls hard toward the card
 // background; the dark variants use a lighter fade so they stay distinguishable.
+// Curated so every swatch is visibly different AFTER fadeHexToBG — several of
+// the previous set (Indigo vs Blue Dark, Maroon vs Red Dark) collapsed to the
+// same band once faded. `light: true` flips the header text to dark, which White
+// and Silver need or the white type vanishes.
 export const HEADER_COLOURS = {
-  'Default':      { hex: null,      fade: [0.62, 0.93] },
-  'Blue Light':   { hex: '#3b82f6', fade: [0.55, 0.90] },
-  'Blue Dark':    { hex: '#1e3a8a', fade: [0.30, 0.78] },
-  'Red Light':    { hex: '#ef4444', fade: [0.55, 0.90] },
-  'Red Dark':     { hex: '#7f1d1d', fade: [0.30, 0.78] },
-  'Green Light':  { hex: '#22c55e', fade: [0.55, 0.90] },
-  'Green Dark':   { hex: '#14532d', fade: [0.30, 0.78] },
-  'Purple Light': { hex: '#a855f7', fade: [0.55, 0.90] },
-  'Purple Dark':  { hex: '#4c1d95', fade: [0.30, 0.78] },
-  'Amber Light':  { hex: '#f59e0b', fade: [0.55, 0.90] },
-  'Amber Dark':   { hex: '#78350f', fade: [0.30, 0.78] },
-  'Teal Light':   { hex: '#14b8a6', fade: [0.55, 0.90] },
-  'Teal Dark':    { hex: '#134e4a', fade: [0.30, 0.78] },
-  'Sky Light':    { hex: '#38bdf8', fade: [0.55, 0.90] },
-  'Sky Dark':     { hex: '#075985', fade: [0.30, 0.78] },
-  'Pink Light':   { hex: '#ff66c4', fade: [0.55, 0.90] },
-  'Pink Dark':    { hex: '#831843', fade: [0.30, 0.78] },
-  'Lime Light':   { hex: '#a3e635', fade: [0.58, 0.91] },
-  'Lime Dark':    { hex: '#3f6212', fade: [0.30, 0.78] },
-  'Maroon':       { hex: '#5b1420', fade: [0.26, 0.76] },
-  'Forest':       { hex: '#065f46', fade: [0.28, 0.77] },
-  'Indigo':       { hex: '#312e81', fade: [0.28, 0.77] },
-  'Bronze':       { hex: '#92400e', fade: [0.30, 0.78] },
-  'Mono Light':   { hex: '#94a3b8', fade: [0.60, 0.92] },
-  'Mono Dark':    { hex: '#1e293b', fade: [0.25, 0.75] },
+  'Default': { hex: null,      fade: [0.62, 0.93] },
+  'Navy':    { hex: '#1e3a8a', fade: [0.30, 0.78] },
+  'Royal':   { hex: '#3b82f6', fade: [0.52, 0.88] },
+  'Sky':     { hex: '#38bdf8', fade: [0.52, 0.88] },
+  'Teal':    { hex: '#14b8a6', fade: [0.52, 0.88] },
+  'Forest':  { hex: '#065f46', fade: [0.26, 0.76] },
+  'Green':   { hex: '#22c55e', fade: [0.52, 0.88] },
+  'Lime':    { hex: '#a3e635', fade: [0.56, 0.90] },
+  'Amber':   { hex: '#f59e0b', fade: [0.52, 0.88] },
+  'Orange':  { hex: '#ea580c', fade: [0.44, 0.85] },
+  'Red':     { hex: '#ef4444', fade: [0.50, 0.87] },
+  'Maroon':  { hex: '#7f1d1d', fade: [0.24, 0.74] },
+  'Pink':    { hex: '#ff66c4', fade: [0.52, 0.88] },
+  'Purple':  { hex: '#a855f7', fade: [0.50, 0.87] },
+  'Violet':  { hex: '#4c1d95', fade: [0.26, 0.76] },
+  'Bronze':  { hex: '#92400e', fade: [0.28, 0.77] },
+  'Slate':   { hex: '#475569', fade: [0.40, 0.82] },
+  'Black':   { hex: '#000000', fade: [0.10, 0.55] },
+  'Silver':  { hex: '#cbd5e1', fade: [0.05, 0.30], light: true },
+  'White':   { hex: '#ffffff', fade: [0.02, 0.22], light: true },
 };
 export const HEADER_COLOUR_NAMES = Object.keys(HEADER_COLOURS);
+
+// Text palette for the band. A light header needs dark type or the white text
+// disappears; everything else keeps the original colours.
+function headerInk(spec) {
+  return (spec && spec.light)
+    ? { primary: '#0b1220', secondary: '#25324a', muted: '#3d4a5e', soft: '#46536b', rule: 'rgba(0,0,0,0.14)' }
+    : { primary: '#fff', secondary: '#dbe3f0', muted: '#8fa0b8', soft: '#7f8ca3', rule: 'rgba(255,255,255,0.14)' };
+}
 
 function headerGradient(spec) {
   const def = `linear-gradient(to right, ${HEADER_L} 0%, ${HEADER_R} 100%)`;
@@ -1040,6 +1043,10 @@ function leagueTablePanelHtml(w, h, team, allTeams) {
 
 // Season objective — a fixed list so it's scannable and can carry a colour,
 // rather than free text that reads differently every card.
+// Either bottom slot can hold any of these.
+export const BOTTOM_PANELS = ['Similar Teams', 'Key Players', 'Recruitment Recommendations',
+                              'Summary', 'Possible Departures', 'None'];
+
 export const OBJECTIVES = [
   'Title Challenge', 'European Places', 'Promotion', 'Play-offs',
   'Upper Mid-Table', 'Mid-Table', 'Consolidate', 'Avoid Relegation', 'Rebuild',
@@ -1346,6 +1353,68 @@ function weaknessesPanelHtml(w, h, team, allTeams, xi, depthList, upgradeList) {
   </div>`;
 }
 
+// Departures default to the squad's shortest contracts — the players actually
+// at risk — but the list is editable, since it's a judgement call.
+export function likelyDepartures(squad, season, n = 3) {
+  return squad
+    .filter(p => p && p.contractYear)
+    .map(p => ({ p, left: Number(p.contractYear) - (seasonEndYear(season) || 0) }))
+    .filter(x => !isNaN(x.left))
+    .sort((a, b) => a.left - b.left || (b.p.careerScore || 0) - (a.p.careerScore || 0))
+    .slice(0, n)
+    .map(x => x.p);
+}
+
+function departuresPanelHtml(w, h, rows, season) {
+  if (!rows || !rows.length) {
+    return `<div style="position:absolute;inset:0;display:flex;align-items:center;
+             justify-content:center;font-size:12px;color:#55617a;">No departures flagged.</div>`;
+  }
+  const rowH = Math.floor((h - 4) / 3);
+  return rows.slice(0, 3).map((p, i) => {
+    const left = contractLeft(p, season);
+    const urgent = left === '+0';
+    const pos = String(p.position || '').split(',')[0].trim();
+    return `
+      <div style="position:absolute;left:0;top:${i * rowH + 2}px;width:${w}px;height:${rowH - 6}px;
+                  background:rgba(255,255,255,0.035);border:1px solid rgba(255,255,255,0.07);
+                  border-radius:9px;">
+        <div style="position:absolute;left:10px;top:50%;margin-top:-16px;width:32px;height:32px;
+                    border-radius:50%;background-color:#1a2233;
+                    background-image:url('${src(photoUrl(p.name, p.team))}'), url('${SILHOUETTE}');
+                    background-size:cover, cover;background-position:center top, center top;
+                    background-repeat:no-repeat, no-repeat;
+                    border:1.5px solid rgba(190,203,224,0.26);"></div>
+        <div style="position:absolute;left:50px;right:96px;top:50%;margin-top:-15px;">
+          <div style="font-size:13.5px;font-weight:700;color:#eaf0f8;line-height:1.15;white-space:nowrap;
+                      overflow:hidden;text-overflow:ellipsis;">${esc(p.name)}<span
+                style="color:#7c8798;font-weight:600;"> ${p.age != null ? p.age : '—'}</span></div>
+          <div style="font-size:10px;color:#8b98ad;margin-top:4px;line-height:1.15;white-space:nowrap;
+                      overflow:hidden;text-overflow:ellipsis;">${esc(pos)}${
+            p.marketValue ? `<span style="color:#6f7c92;"> · </span><span style="color:#93a1b5;">${formatMoney(p.marketValue)}</span>` : ''}</div>
+        </div>
+        <div style="position:absolute;right:11px;top:50%;margin-top:-13px;width:76px;text-align:center;
+                    padding:4px 0;border-radius:13px;
+                    background:${urgent ? 'rgba(239,68,68,0.14)' : 'rgba(255,255,255,0.06)'};
+                    border:1px solid ${urgent ? 'rgba(239,68,68,0.5)' : 'rgba(255,255,255,0.13)'};">
+          <span style="font-size:12px;font-weight:800;color:${urgent ? '#f87171' : '#c3ccdd'};">
+            ${p.contractYear ? esc(String(p.contractYear)) : '—'}</span>
+          <span style="font-size:10px;font-weight:700;color:${urgent ? '#f87171' : '#8b98ad'};margin-left:5px;">${left}</span>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// Compact money for the departures row — the squad-value formatter lives in
+// constants.js and isn't imported here.
+function formatMoney(v) {
+  const n = Number(v);
+  if (!n || isNaN(n)) return '';
+  if (n >= 1e6) return `£${(n / 1e6).toFixed(n >= 1e7 ? 0 : 1)}m`;
+  if (n >= 1e3) return `£${Math.round(n / 1e3)}k`;
+  return `£${Math.round(n)}`;
+}
+
 // ─── Coach lookup ──────────────────────────────────────────────────────────
 export function listSavedCoaches() {
   try { return loadCoaches() || []; } catch (e) { return []; }
@@ -1363,7 +1432,7 @@ export function findCoachForTeam(team) {
   return coaches.find(c => (c.tenures || []).some(t => t.team === team.team)) || null;
 }
 
-function coachHtml(coach, team, coachScore, hideManagerScore = false) {
+function coachHtml(coach, team, coachScore, hideManagerScore = false, ink = headerInk(null)) {
   if (!coach) {
     return `
       <div style="position:absolute;left:${COACH_X}px;top:64px;width:${COACH_W}px;
@@ -1419,9 +1488,9 @@ function coachHtml(coach, team, coachScore, hideManagerScore = false) {
                   border:1px solid rgba(255,255,255,0.16);"></div>
 
       <div style="position:absolute;left:110px;top:6px;width:${COACH_W - 110}px;">
-        <div style="font-size:9.5px;font-weight:700;letter-spacing:0.16em;color:#7f8ca3;">MANAGER</div>
+        <div style="font-size:9.5px;font-weight:700;letter-spacing:0.16em;color:${ink.muted};">MANAGER</div>
         <div style="margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-          <span style="font-size:24px;font-weight:700;color:#fff;vertical-align:middle;">${esc(coach.name || '')}</span>${scoreChip}
+          <span style="font-size:23px;font-weight:700;color:${ink.primary};vertical-align:middle;">${esc(coach.name || '')}</span>${scoreChip}
         </div>
         <div style="display:flex;align-items:center;margin-top:7px;white-space:nowrap;">
           ${iso ? `<div style="width:24px;height:15px;flex-shrink:0;background-size:cover;
@@ -1439,13 +1508,16 @@ function coachHtml(coach, team, coachScore, hideManagerScore = false) {
 
 // ─── Header ────────────────────────────────────────────────────────────────
 function headerHtml(team, coach, coachScore, allTeams, headerColour, rawOverall, hideManagerScore,
-                    purchaseValue, purchaseRank, objective) {
+                    purchaseValue, purchaseRank, objective, teamNameOverride) {
+  const displayName = (teamNameOverride && teamNameOverride.trim()) || team.team;
   const crest = teamCrest(team.team);
   const league = leagueDisplayName(team.league);
   const logo = leagueLogo(team.league);
   const flag = leagueFlag(team.league);
   // completeScore is league-weighted; overall is the raw within-league score.
   // Same pair TeamIndex's "Raw Score (not league weighted)" toggle switches on.
+  const spec = headerColour;
+  const ink = headerInk(spec);
   const ovr = rawOverall ? (team.overall ?? team.completeScore) : team.completeScore;
   const cells = [
     ['ATTACK', team.attack], ['DEFENCE', team.defence],
@@ -1470,8 +1542,8 @@ function headerHtml(team, coach, coachScore, allTeams, headerColour, rawOverall,
                 background-repeat:no-repeat;background-position:center;"></div>` : ''}
 
     <div style="position:absolute;left:${NAME_X}px;top:16px;width:${NAME_MAX_W}px;
-                font-size:58px;font-weight:800;letter-spacing:-0.8px;line-height:1.02;
-                white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(team.team)}</div>
+                font-size:52px;font-weight:800;letter-spacing:-0.8px;line-height:1.02;color:${ink.primary};
+                white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(displayName)}</div>
 
     <!-- country flag + league logo + league name + season, one nowrap row -->
     <div style="position:absolute;left:${NAME_X}px;top:86px;display:flex;align-items:center;
@@ -1483,123 +1555,90 @@ function headerHtml(team, coach, coachScore, allTeams, headerColour, rawOverall,
       ${logo ? `<div style="width:24px;height:24px;flex-shrink:0;background-size:contain;
                   background-repeat:no-repeat;background-position:center;
                   background-image:url('${src(logo)}');margin-left:9px;"></div>` : ''}
-      <span style="font-size:21px;font-weight:600;color:#dbe3f0;margin-left:9px;">${esc(league)}</span>
-      ${team.season ? `<span style="font-size:19px;font-weight:500;color:#8fa0b8;margin-left:12px;">· ${esc(team.season)}</span>` : ''}
+      <span style="font-size:20px;font-weight:600;color:${ink.secondary};margin-left:9px;">${esc(league)}</span>
+      ${team.season ? `<span style="font-size:18px;font-weight:500;color:${ink.muted};margin-left:12px;">· ${esc(team.season)}</span>` : ''}
     </div>
 
-    <!-- SCORE CARD. Five equal pills gave OVERALL no more weight than the
-         splits and left the labels fighting for room. Now: a ring gauge for
-         OVERALL (its own visual language, reads instantly), the four splits as
-         a 2x2 grid with room for full labels and a bar each, and the league
-         ranks on a divided footer instead of bolted underneath. -->
-    <div style="position:absolute;left:${SCORE_X}px;top:16px;width:${SCORE_W}px;height:118px;
-                background:rgba(255,255,255,0.055);border:1px solid rgba(255,255,255,0.12);
-                border-radius:14px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.08);"></div>
+    <!-- SCORES. Ring gauge replaced by pills: five values of the same kind read
+         better as one consistent row than as a gauge plus a grid of bars. OVR
+         carries more weight through size and a solid border rather than a
+         different shape. -->
+    <div style="position:absolute;left:${SCORE_X}px;top:18px;width:${SCORE_W}px;height:114px;
+                background:${spec && spec.light ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.055)'};
+                border:1px solid ${spec && spec.light ? 'rgba(0,0,0,0.10)' : 'rgba(255,255,255,0.12)'};
+                border-radius:14px;"></div>
 
-    ${(() => {
-      const RC = 36, CIRC = 2 * Math.PI * RC;
-      const pct = Math.max(0, Math.min(100, Number(ovr) || 0));
-      const cxr = SCORE_X + 58, cyr = 60;
-      return `
-      <svg width="88" height="88" viewBox="0 0 88 88"
-           style="position:absolute;left:${cxr - 44}px;top:${cyr - 44}px;">
-        <circle cx="44" cy="44" r="${RC}" fill="none" stroke="rgba(255,255,255,0.10)" stroke-width="7"/>
-        <circle cx="44" cy="44" r="${RC}" fill="none" stroke="${scoreColor(ovr)}" stroke-width="7"
-                stroke-linecap="round" stroke-dasharray="${(CIRC * pct / 100).toFixed(1)} ${CIRC.toFixed(1)}"
-                transform="rotate(-90 44 44)"/>
-        <text x="44" y="50" text-anchor="middle" font-family="Montserrat,sans-serif"
-              font-size="27" font-weight="900" fill="${scoreColor(ovr)}">${whole(ovr)}</text>
-      </svg>
-      <div style="position:absolute;left:${cxr - 50}px;top:${cyr + 48}px;width:100px;text-align:center;
-                  font-size:8.5px;font-weight:700;letter-spacing:0.2em;color:#94a3b8;">OVERALL</div>`;
-    })()}
+    <div style="position:absolute;left:${SCORE_X + 18}px;top:30px;width:96px;text-align:center;">
+      <div style="display:inline-block;min-width:88px;padding:7px 0;border-radius:19px;
+                  background:${scoreColor(ovr)}1f;border:2px solid ${scoreColor(ovr)};
+                  font-size:31px;font-weight:900;line-height:1;color:${scoreColor(ovr)};">${whole(ovr)}</div>
+      <div style="font-size:8.5px;font-weight:700;letter-spacing:0.16em;color:${ink.muted};margin-top:9px;">OVERALL</div>
+    </div>
 
-    <div style="position:absolute;left:${SCORE_X + 110}px;top:26px;width:1px;height:76px;
-                background:rgba(255,255,255,0.14);"></div>
+    <div style="position:absolute;left:${SCORE_X + 128}px;top:32px;width:1px;height:60px;
+                background:${ink.rule};"></div>
 
-    ${cells.map(([label, v], i) => {
-      const col = i % 2, row = Math.floor(i / 2);
-      const cw = STAT_CW, ch = 38;
-      return `
-      <div style="position:absolute;left:${STAT_X + col * (cw + STAT_CGAP)}px;top:${24 + row * ch}px;
-                  width:${cw}px;height:${ch - 6}px;">
-        <span style="position:absolute;left:0;top:2px;font-size:9px;font-weight:700;
-                     letter-spacing:0.1em;color:#8fa0b8;white-space:nowrap;">${label}</span>
-        <span style="position:absolute;right:0;top:-2px;font-size:19px;font-weight:800;
-                     color:${scoreColor(v)};">${whole(v)}</span>
-        <div style="position:absolute;left:0;right:0;top:19px;height:4px;border-radius:2px;
-                    background:rgba(255,255,255,0.09);overflow:hidden;">
-          <div style="width:${Math.max(0, Math.min(100, Number(v) || 0))}%;height:100%;
-                      background:${scoreColor(v)};border-radius:2px;"></div>
-        </div>
-      </div>`;
-    }).join('')}
+    <div style="position:absolute;left:${SCORE_X + 148}px;top:32px;display:flex;align-items:flex-start;">
+      ${cells.map(([label, v], i) => `
+        <div style="width:70px;text-align:center;${i ? 'margin-left:8px;' : ''}">
+          <div style="display:inline-block;min-width:52px;padding:5px 0;border-radius:15px;
+                      background:${scoreColor(v)}1a;border:1px solid ${scoreColor(v)}88;
+                      font-size:19px;font-weight:800;line-height:1;color:${scoreColor(v)};">${whole(v)}</div>
+          <div style="font-size:7.5px;font-weight:700;letter-spacing:0.08em;color:${ink.muted};margin-top:8px;">${label}</div>
+        </div>`).join('')}
+    </div>
 
-    <div style="position:absolute;left:${STAT_X}px;top:100px;width:${SCORE_W - 134}px;
-                height:1px;background:rgba(255,255,255,0.10);"></div>
-    <div style="position:absolute;left:${STAT_X}px;top:107px;display:flex;align-items:center;
+    <div style="position:absolute;left:${SCORE_X + 18}px;top:98px;width:${SCORE_W - 36}px;
+                height:1px;background:${ink.rule};"></div>
+    <div style="position:absolute;left:${SCORE_X + 18}px;top:106px;display:flex;align-items:center;
                 white-space:nowrap;">
-      <span style="font-size:9px;font-weight:700;letter-spacing:0.1em;color:#8fa0b8;">PTS</span>
-      <span style="font-size:14px;font-weight:800;color:#dbe3f0;margin-left:8px;">${rankStr(ptsRank)}</span>
-      <span style="font-size:9px;font-weight:700;letter-spacing:0.1em;color:#8fa0b8;margin-left:28px;">xPTS</span>
-      <span style="font-size:14px;font-weight:800;color:#dbe3f0;margin-left:8px;">${rankStr(xptsRank)}</span>
+      <span style="font-size:8.5px;font-weight:700;letter-spacing:0.11em;color:${ink.muted};">PTS</span>
+      <span style="font-size:13px;font-weight:800;color:${ink.secondary};margin-left:7px;">${rankStr(ptsRank)}</span>
+      <span style="font-size:8.5px;font-weight:700;letter-spacing:0.11em;color:${ink.muted};margin-left:24px;">xPTS</span>
+      <span style="font-size:13px;font-weight:800;color:${ink.secondary};margin-left:7px;">${rankStr(xptsRank)}</span>
     </div>
 
-    <!-- CLUB FACTS — its own card in the band, matching the score card's chrome.
-         Each row carries a rank bar so position in the league reads at a glance
-         rather than having to parse "4/20". Bars are deliberately neutral in
-         colour: a young squad or a big budget isn't good or bad on its own. -->
-    <div style="position:absolute;left:${FACTS_X}px;top:16px;width:${FACTS_W}px;height:118px;
-                background:rgba(255,255,255,0.055);border:1px solid rgba(255,255,255,0.12);
-                border-radius:14px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.08);"></div>
-
+    <!-- CLUB FACTS — no card. Three loud boxes in one band was the problem; as
+         quiet type with hairline rank bars this reads as supporting detail
+         rather than competing with the scores. -->
     ${(() => {
       const rows = [];
       if (team.avgAge != null && !isNaN(team.avgAge)) {
         rows.push(['AVG AGE', Number(team.avgAge).toFixed(1), ageRank]);
       }
       if (purchaseValue) {
-        rows.push(['SQUAD VALUE', purchaseValue,
+        rows.push(['SQUAD COST', purchaseValue,
           (purchaseRank && leagueSize) ? { rank: purchaseRank, size: leagueSize } : null]);
       }
-      const IX = FACTS_X + 15, IW = FACTS_W - 30;
       const body = rows.map(([lbl, val, rk], i) => {
-        const pctFill = rk ? Math.max(4, ((rk.size - rk.rank + 1) / rk.size) * 100) : 0;
+        const fill = rk ? Math.max(4, ((rk.size - rk.rank + 1) / rk.size) * 100) : 0;
         return `
-        <div style="position:absolute;left:${IX}px;top:${24 + i * 33}px;width:${IW}px;height:27px;">
-          <span style="position:absolute;left:0;top:1px;font-size:8px;font-weight:700;
-                       letter-spacing:0.12em;color:#8fa0b8;">${lbl}</span>
-          <span style="position:absolute;right:0;top:-3px;font-size:16px;font-weight:800;
-                       color:#e8eef8;">${val}</span>
+        <div style="position:absolute;left:${FACTS_X}px;top:${26 + i * 32}px;width:${FACTS_W}px;height:26px;">
+          <span style="position:absolute;left:0;top:3px;font-size:8px;font-weight:700;
+                       letter-spacing:0.13em;color:${ink.muted};">${lbl}</span>
+          <span style="position:absolute;left:96px;top:-1px;font-size:15px;font-weight:800;
+                       color:${ink.secondary};">${val}</span>
           ${rk ? `
-            <div style="position:absolute;left:0;right:34px;top:17px;height:4px;border-radius:2px;
-                        background:rgba(255,255,255,0.09);overflow:hidden;">
-              <div style="width:${pctFill.toFixed(0)}%;height:100%;background:#6b8fd4;
-                          border-radius:2px;"></div>
-            </div>
-            <span style="position:absolute;right:0;top:13px;font-size:9.5px;font-weight:700;
-                         color:#9aa6ba;">${rankStr(rk)}</span>` : ''}
+            <span style="position:absolute;right:0;top:2px;font-size:9.5px;font-weight:700;
+                         color:${ink.muted};">${rankStr(rk)}</span>
+            <div style="position:absolute;left:96px;right:36px;top:19px;height:2px;border-radius:1px;
+                        background:${spec && spec.light ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.12)'};">
+              <div style="width:${fill.toFixed(0)}%;height:100%;border-radius:1px;
+                          background:${spec && spec.light ? 'rgba(0,0,0,0.42)' : 'rgba(255,255,255,0.45)'};"></div>
+            </div>` : ''}
         </div>`;
       }).join('');
 
-      const objTop = 24 + rows.length * 33 + 2;
       const oc = OBJECTIVE_COLOUR[objective] || '#94a3b8';
       const obj = objective ? `
-        <div style="position:absolute;left:${IX}px;top:${objTop}px;width:${IW}px;height:24px;
-                    border-radius:12px;background:${oc}1e;border:1px solid ${oc}55;
-                    display:flex;align-items:center;justify-content:center;">
-          <span style="font-size:11px;font-weight:800;letter-spacing:0.03em;
-                       color:${oc};white-space:nowrap;">${esc(objective)}</span>
-        </div>` : '';
-
-      if (!rows.length && !objective) {
-        return `<div style="position:absolute;left:${IX}px;top:56px;width:${IW}px;text-align:center;
-                 font-size:10.5px;color:#55617a;">No club facts set.</div>`;
-      }
+        <div style="position:absolute;left:${FACTS_X}px;top:${26 + rows.length * 32 + 2}px;
+                    display:inline-block;padding:3px 12px;border-radius:11px;
+                    background:${oc}1c;border:1px solid ${oc}5a;
+                    font-size:10.5px;font-weight:800;color:${oc};white-space:nowrap;">${esc(objective)}</div>` : '';
       return body + obj;
     })()}
 
-    ${coachHtml(coach, team, coachScore, hideManagerScore)}`;
+    ${coachHtml(coach, team, coachScore, hideManagerScore, ink)}`;
 }
 
 // ─── Image handling ────────────────────────────────────────────────────────
@@ -1675,18 +1714,19 @@ export async function preloadImages(urls, onProgress, timeoutMs = 4000, concurre
 
 export function buildTeamReportElement(team, opts = {}) {
   const { squad = [], formation = '4-3-3', coach = null, images = {}, depthCount = 2, coachScore = null, allTeams = [], headerColour = null, rawOverall = false,
-    bottomMode = 'similar',        // 'similar' | 'summary'
+    bottomLeft = 'Similar Teams',
+    bottomRight = 'Key Players',
     summaryText = '',
-    keyRows = null,                // explicit Key Players / Recruitment list
-    keyTitle = 'Key Players',
-    keyShowClub = false,
+    keyRows = null,                // explicit Key Players list
+    recruitRows = [],              // Recruitment Recommendations list
+    departureRows = null,          // null = auto (shortest contracts)
     depthList = null, upgradeList = null,
     xiSlotLists = null,
     xiOverridePool = null,
     hidePlayerScores = false,
     hideManagerScore = false,
     showContractYears = false,
-    purchaseValue = '', purchaseRank = null, objective = '',
+    purchaseValue = '', purchaseRank = null, objective = '', teamNameOverride = '',
   } = opts;
   IMG = images || {};
 
@@ -1703,13 +1743,14 @@ export function buildTeamReportElement(team, opts = {}) {
 
   const xi = buildXI(formation, squad, depthCount, team.season, null, xiOverridePool, xiSlotLists);
   const players3 = keyRows || topPlayers(squad, 3);
+  const departures = departureRows || likelyDepartures(squad, team.season, 3);
 
   container.innerHTML = `
     <div id="tr-card-root" style="width:${W}px;height:${H}px;overflow:hidden;background:${BG};
          font-family:'Montserrat',sans-serif;color:#fff;position:relative;box-sizing:border-box;">
 
       ${headerHtml(team, coach, coachScore, allTeams, headerColour, rawOverall, hideManagerScore,
-                   purchaseValue, purchaseRank, objective)}
+                   purchaseValue, purchaseRank, objective, teamNameOverride)}
 
       ${panel({ x: PAD, y: BODY_TOP, w: LEFT_W, h: LEFT_H,
                 title: 'XI + Depth', right: formation, body: xiPanelHtml(xiW, xiH, xi, { hideScores: hidePlayerScores, showContract: showContractYears, season: team.season }) })}
@@ -1724,15 +1765,24 @@ export function buildTeamReportElement(team, opts = {}) {
       ${panel({ x: COL_B_X, y: ROW_2, w: COL_W, h: ROW2_H,
                 title: 'Weaknesses', body: weaknessesPanelHtml(innerW, ROW2_H - PANEL_PAD * 2 - TITLE_H, team, allTeams, xi, depthList, upgradeList) })}
 
-      ${bottomMode !== 'similar'
-        ? `${panel({ x: COL_A_X, y: ROW_3, w: COL_W, h: ROW3_H,
-                     title: keyTitle, body: keyPlayersPanelHtml(innerW, ROW3_H - PANEL_PAD * 2 - TITLE_H, players3, keyShowClub, hidePlayerScores) })}
-           ${panel({ x: COL_B_X, y: ROW_3, w: COL_W, h: ROW3_H,
-                     title: 'Summary', body: summaryPanelHtml(innerW, ROW3_H - PANEL_PAD * 2 - TITLE_H, summaryText) })}`
-        : `${panel({ x: COL_A_X, y: ROW_3, w: COL_W, h: ROW3_H,
-                     title: 'Similar Teams', body: similarTeamsPanelHtml(innerW, ROW3_H - PANEL_PAD * 2 - TITLE_H, team, allTeams) })}
-           ${panel({ x: COL_B_X, y: ROW_3, w: COL_W, h: ROW3_H,
-                     title: keyTitle, body: keyPlayersPanelHtml(innerW, ROW3_H - PANEL_PAD * 2 - TITLE_H, players3, keyShowClub, hidePlayerScores) })}`}
+      ${[['A', COL_A_X, bottomLeft], ['B', COL_B_X, bottomRight]].map(([, x, kind]) => {
+        const ih = ROW3_H - PANEL_PAD * 2 - TITLE_H;
+        if (kind === 'None') return '';
+        if (kind === 'Similar Teams')
+          return panel({ x, y: ROW_3, w: COL_W, h: ROW3_H, title: 'Similar Teams',
+                         body: similarTeamsPanelHtml(innerW, ih, team, allTeams) });
+        if (kind === 'Summary')
+          return panel({ x, y: ROW_3, w: COL_W, h: ROW3_H, title: 'Summary',
+                         body: summaryPanelHtml(innerW, ih, summaryText) });
+        if (kind === 'Possible Departures')
+          return panel({ x, y: ROW_3, w: COL_W, h: ROW3_H, title: 'Possible Departures',
+                         body: departuresPanelHtml(innerW, ih, departures, team.season) });
+        if (kind === 'Recruitment Recommendations')
+          return panel({ x, y: ROW_3, w: COL_W, h: ROW3_H, title: 'Recruitment Recommendations',
+                         body: keyPlayersPanelHtml(innerW, ih, recruitRows, true, hidePlayerScores) });
+        return panel({ x, y: ROW_3, w: COL_W, h: ROW3_H, title: 'Key Players',
+                       body: keyPlayersPanelHtml(innerW, ih, players3, false, hidePlayerScores) });
+      }).join('')}
     </div>`;
 
   document.body.appendChild(container);
@@ -2009,7 +2059,10 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
   const [depthCount, setDepthCount] = useState(2);
   const [headerColourName, setHeaderColourName] = useState('Default');
   const [rawOverall, setRawOverall] = useState(false);
-  const [bottomMode, setBottomMode] = useState('similar');
+  const [bottomLeft, setBottomLeft] = useState('Similar Teams');
+  const [bottomRight, setBottomRight] = useState('Key Players');
+  const [departureKeys, setDepartureKeys] = useState(null);
+  const [teamNameOverride, setTeamNameOverride] = useState('');
   const [summaryText, setSummaryText] = useState('');
   const [keyMode, setKeyMode] = useState('auto');          // auto | manual | recruit
   const [manualKeys, setManualKeys] = useState([]);
@@ -2106,10 +2159,10 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
   const manualPicked = useMemo(() => findByKeys(squad, manualKeys), [squad, manualKeys]);
   const recruitPicked = useMemo(() => findByKeys(players, recruitKeys), [players, recruitKeys]);
 
-  const keyRows = keyMode === 'manual' ? manualPicked
-                : keyMode === 'recruit' ? recruitPicked
-                : topPlayers(squad, 3);
-  const keyTitle = keyMode === 'recruit' ? 'Recruitment Recommendations' : 'Key Players';
+  const keyRows = keyMode === 'manual' ? manualPicked : topPlayers(squad, 3);
+  const autoDepartures = useMemo(() => likelyDepartures(squad, team.season, 3), [squad, team]);
+  const departurePicked = departureKeys === null ? autoDepartures : findByKeys(squad, departureKeys);
+  const shown = [bottomLeft, bottomRight];
 
   const unmapped = useMemo(() => reportUnmappedTokens(squad), [squad]);
   const unmappedKeys = Object.keys(unmapped);
@@ -2120,8 +2173,9 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
   const buildOpts = () => ({
     squad, formation, coach, depthCount, coachScore, allTeams,
     headerColour: HEADER_COLOURS[headerColourName], rawOverall,
-    bottomMode, summaryText,
-    keyRows, keyTitle, keyShowClub: keyMode === 'recruit',
+    bottomLeft, bottomRight, summaryText,
+    keyRows, recruitRows: recruitPicked, departureRows: departurePicked,
+    teamNameOverride,
     depthList: depthSel, upgradeList: upgradeSel,
     xiSlotLists: xiLists, xiOverridePool: xiPool,
     hidePlayerScores, hideManagerScore, showContractYears,
@@ -2137,7 +2191,8 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
       const { toPng } = await import('html-to-image');
       const outsiders = findByKeys(players, Object.values(xiLists || {}).flat())
         .filter(p => !squad.includes(p));
-      const urls = cardImageUrls(team, squad, coach, allTeams, [...(keyRows || []), ...outsiders]);
+      const urls = cardImageUrls(team, squad, coach, allTeams,
+        [...(keyRows || []), ...recruitPicked, ...departurePicked, ...outsiders]);
       const images = await preloadImages(urls, (d, t) => setProgress(`Images ${d}/${t}`));
       setProgress('Rendering…');
       el = buildTeamReportElement(team, { ...buildOpts(), images });
@@ -2183,22 +2238,24 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
           <Section title="Layout & panels" open={openSection === 'layout'} onToggle={() => toggleSection('layout')}>
             <div style={UI.block}>
               <span style={UI.label}>Bottom row</span>
-              <select
-                value={bottomMode === 'similar' ? 'similar' : (keyMode === 'recruit' ? 'recruit' : 'summary')}
-                onChange={e => {
-                  const v = e.target.value;
-                  if (v === 'similar') { setBottomMode('similar'); }
-                  else if (v === 'recruit') { setBottomMode('summary'); setKeyMode('recruit'); }
-                  else { setBottomMode('summary'); if (keyMode === 'recruit') setKeyMode('auto'); }
-                }}
-                style={UI.select}>
-                <option value="similar">Similar Teams + Key Players</option>
-                <option value="summary">Key Players + Summary</option>
-                <option value="recruit">Recruitment Recommendations + Summary</option>
-              </select>
-              <div style={UI.note}>Summary always sits bottom-right.</div>
+              <div style={{ display: 'flex' }}>
+                <select value={bottomLeft} onChange={e => setBottomLeft(e.target.value)}
+                        style={{ ...UI.select, flex: 1 }}>
+                  {BOTTOM_PANELS.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+                <select value={bottomRight} onChange={e => setBottomRight(e.target.value)}
+                        style={{ ...UI.select, flex: 1, marginLeft: 6 }}>
+                  {BOTTOM_PANELS.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
+              <div style={UI.note}>Left and right can each hold any panel.</div>
             </div>
-            {bottomMode === 'summary' && (
+            <div style={UI.block}>
+              <span style={UI.label}>Club name on card</span>
+              <input value={teamNameOverride} onChange={e => setTeamNameOverride(e.target.value)}
+                     placeholder={team.team} style={UI.input} />
+            </div>
+            {shown.includes('Summary') && (
               <div style={UI.block}>
                 <span style={UI.label}>Summary</span>
                 <textarea value={summaryText} rows={5}
@@ -2356,13 +2413,12 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
             </div>
           </Section>
 
-          <Section title={keyTitle} open={openSection === 'key'} onToggle={() => toggleSection('key')}>
+          <Section title="Bottom panels" open={openSection === 'key'} onToggle={() => toggleSection('key')}>
             <div style={UI.block}>
               <span style={UI.label}>Mode</span>
               <select value={keyMode} onChange={e => setKeyMode(e.target.value)} style={UI.select}>
-                <option value="auto">Key Players — top 3 by score</option>
-                <option value="manual">Key Players — pick manually</option>
-                <option value="recruit">Recruitment Recommendations</option>
+                <option value="auto">Top 3 by score</option>
+                <option value="manual">Pick manually</option>
               </select>
             </div>
             {keyMode === 'manual' && (
@@ -2374,14 +2430,32 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
                   onRemove={p => setManualKeys(k => k.filter(x => x !== playerKey(p)))} />
               </div>
             )}
-            {keyMode === 'recruit' && (
+            {shown.includes('Recruitment Recommendations') && (
               <div style={UI.block}>
-                <span style={UI.label}>Pick up to 3 from all players</span>
+                <span style={UI.label}>Recruitment — up to 3 from all players</span>
                 <PlayerPicker pool={players} picked={recruitPicked} max={3}
                   placeholder="Search all players…"
                   onPick={p => setRecruitKeys(k => [...k, playerKey(p)])}
                   onRemove={p => setRecruitKeys(k => k.filter(x => x !== playerKey(p)))} />
                 <div style={UI.note}>{players.length.toLocaleString()} players searchable.</div>
+              </div>
+            )}
+            {shown.includes('Possible Departures') && (
+              <div style={{ ...UI.block, marginTop: 4 }}>
+                <span style={UI.label}>
+                  Departures {departureKeys === null && <span style={{ color: '#475569' }}>(auto — shortest contracts)</span>}
+                </span>
+                <PlayerPicker pool={squad} picked={departurePicked} max={3}
+                  placeholder="Search squad…"
+                  onPick={p => setDepartureKeys(k => [...(k === null ? autoDepartures.map(playerKey) : k), playerKey(p)])}
+                  onRemove={p => setDepartureKeys(k => (k === null ? autoDepartures.map(playerKey) : k)
+                    .filter(x => x !== playerKey(p)))} />
+                {departureKeys !== null && (
+                  <button onClick={() => setDepartureKeys(null)}
+                    style={{ marginTop: 5, background: 'transparent', border: '1px solid #1e2d45',
+                             borderRadius: 5, color: '#94a3b8', fontSize: 10.5, padding: '4px 9px',
+                             cursor: 'pointer' }}>Back to auto</button>
+                )}
               </div>
             )}
           </Section>
