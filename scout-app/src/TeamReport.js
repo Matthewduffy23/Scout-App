@@ -1,4 +1,4 @@
-// TeamReport.js v29 — Team All-in-One report. 1920x1080 PNG export.
+// TeamReport.js v30 — Team All-in-One report. 1920x1080 PNG export.
 //
 // v2: bigger team name; country flag + league logo beside the league name;
 //     mini coach profile in the header gap; XI is now formation-driven and
@@ -944,7 +944,7 @@ function styleHexSvg(rows, maxWidth, maxHeight) {
       return hex(cx, y, on ? (1 - (d / numHex) * 0.4).toFixed(2) : 0.1, on ? col : '#dbe1ee');
     }).join('');
     return `<text x="0" y="${y + 5}" font-family="Montserrat,sans-serif" font-size="14"
-             font-weight="600" fill="#aab6c8">${disp}</text>${hexes}`;
+             font-weight="600" fill="#ffffff">${disp}</text>${hexes}`;
   }).join('');
   return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">${body}</svg>`;
 }
@@ -1045,10 +1045,14 @@ export function leagueWindow(team, allTeams, size = 5) {
       return (a.pointsRank || 0) - (b.pointsRank || 0);
     });
   if (!pool.length) return { rows: [], pinnedTop: null, total: 0 };
-  const idx = pool.findIndex(t => t.team === team.team);
-  if (idx < 0) return { rows: pool.slice(0, size), pinnedTop: null, total: pool.length };
-  const start = Math.max(0, Math.min(idx - Math.floor(size / 2), pool.length - size));
-  return { rows: pool.slice(start, start + size), pinnedTop: start > 0 ? pool[0] : null, total: pool.length };
+  // Stored pointsRank leaves ties sharing a number (three sides all showing 13),
+  // so the displayed position comes from this sorted order instead — points, then
+  // goal difference, then goals scored.
+  const ranked = pool.map((t, i) => ({ ...t, pointsRank: i + 1 }));
+  const idx = ranked.findIndex(t => t.team === team.team);
+  if (idx < 0) return { rows: ranked.slice(0, size), pinnedTop: null, total: ranked.length };
+  const start = Math.max(0, Math.min(idx - Math.floor(size / 2), ranked.length - size));
+  return { rows: ranked.slice(start, start + size), pinnedTop: start > 0 ? ranked[0] : null, total: ranked.length };
 }
 function pinnedRows(h) { return h >= 190 ? 5 : 4; }
 
@@ -1156,6 +1160,13 @@ export function objectiveGap(objective, pointsRank, leagueSize) {
   const band = CHANGE_BANDS.find(b => gap <= b.max);
   return { gap, target, label: band.label, colour: band.colour };
 }
+
+// Judgement calls that no metric captures. Each is off by default; when switched
+// on it carries a severity that drives the colour.
+export const EXTRA_AREAS = ['Shape Flexibility', 'Contracts', 'Trading Assets',
+                            'Athleticism', 'Physicality'];
+export const SEVERITIES = ['low', 'medium', 'high'];
+const SEVERITY_COLOUR = { low: '#fbc701', medium: '#f59e0b', high: '#ef4444' };
 
 export const OBJECTIVE_OUTCOMES = ['', 'Achieved', 'Partial', 'Missed'];
 const OUTCOME_STYLE = {
@@ -1428,7 +1439,7 @@ export function uncoveredSlots(xi) {
   return xi.filter(s => s.starter && (!s.depth || !s.depth.length)).map(s => s.slot.label);
 }
 
-function weaknessesPanelHtml(w, h, team, allTeams, xi, depthList, upgradeList, setPieces, objective) {
+function weaknessesPanelHtml(w, h, team, allTeams, xi, depthList, upgradeList, setPieces, extraAreas) {
   let metrics = weakestMetrics(team, allTeams, 4);
   // A set-piece rating at or below the cutoff replaces the mildest of the four —
   // it's a real weakness and deserves the slot more than the least-bad metric.
@@ -1441,39 +1452,12 @@ function weaknessesPanelHtml(w, h, team, allTeams, xi, depthList, upgradeList, s
     ? upgradeList.map(k => ({ k }))
     : improveSlots(xi, team.season, 4);
 
-  // Objective row leads the panel: the target and the size of the job, then the
-  // specific things to fix beneath it. Metric rows lose 4px each to make room.
-  const gap = objectiveGap(objective, team.pointsRank, leagueSizeFor(team, allTeams));
-  const OBJ_H = gap ? 34 : 0;
-  const objRow = !gap ? '' : (() => {
-    const oc = OBJECTIVE_COLOUR[objective] || '#94a3b8';
-    // Bar runs full when on target and empties as the gap grows; 10+ places is
-    // treated as the floor, matching the Major Rebuild band.
-    const fill = Math.max(4, 100 - Math.min(100, (gap.gap / 10) * 100));
-    const detail = gap.gap === 0 ? 'Objective met' : `${gap.gap} place${gap.gap === 1 ? '' : 's'} short`;
-    return `
-      <div style="position:absolute;left:0;top:0;width:${w}px;height:26px;">
-        <span style="position:absolute;left:0;top:0;font-size:7.5px;font-weight:700;
-                     letter-spacing:0.13em;color:#6f7c92;">VS OBJECTIVE</span>
-        <span style="position:absolute;left:76px;top:-2px;font-size:11.5px;font-weight:700;
-                     color:${oc};">${esc(objective)}</span>
-        <span style="position:absolute;right:0;top:-2px;font-size:11.5px;font-weight:800;
-                     color:${gap.colour};">${gap.label}</span>
-        <span style="position:absolute;right:0;top:13px;font-size:8.5px;font-weight:600;
-                     color:#6f7c92;">${detail}</span>
-        <div style="position:absolute;left:76px;right:118px;top:15px;height:4px;border-radius:2px;
-                    background:rgba(255,255,255,0.08);overflow:hidden;">
-          <div style="width:${fill.toFixed(0)}%;height:100%;background:${gap.colour};
-                      border-radius:2px;"></div>
-        </div>
-      </div>
-      <div style="position:absolute;left:0;top:29px;width:${w}px;height:1px;
-                  background:rgba(255,255,255,0.08);"></div>`;
-  })();
-
-  const rowH = 28;
+  // 32 normally; tightened only when the "Also" row is in play, so the default
+  // panel keeps the spacing it had rather than compressing for a row that isn't there.
+  const hasExtras = Array.isArray(extraAreas) && extraAreas.some(x => x && x.name);
+  const rowH = hasExtras ? 29 : 32;
   const bars = metrics.map(([name, p], i) => `
-    <div style="position:absolute;left:0;top:${OBJ_H + i * rowH}px;width:${w}px;height:${rowH - 8}px;">
+    <div style="position:absolute;left:0;top:${i * rowH}px;width:${w}px;height:${rowH - 8}px;">
       <!-- left+right gives a definite width; left+max-width made this
            shrink-to-fit and ellipsise far earlier than the max-width -->
       <span style="position:absolute;left:0;right:40px;top:0;font-size:11.5px;font-weight:600;
@@ -1488,7 +1472,7 @@ function weaknessesPanelHtml(w, h, team, allTeams, xi, depthList, upgradeList, s
       </div>
     </div>`).join('');
 
-  const colTop = OBJ_H + metrics.length * rowH + 4;
+  const colTop = metrics.length * rowH + 4;
   const colW = Math.floor((w - 16) / 2);
   // 3 keeps each column to a single line; a 4th wrapped and pushed the panel
   // past its height once the objective row was added. Overflow shows as "+N".
@@ -1506,8 +1490,23 @@ function weaknessesPanelHtml(w, h, team, allTeams, xi, depthList, upgradeList, s
     ? improve.map(x => pill(x.k, '#f87171')).join('')
     : `<span style="font-size:11px;color:#8b98ad;">No clear weak link</span>`;
 
+  // Hand-picked areas sit on their own row beneath the squad columns, coloured
+  // by severity rather than measured, so they read as judgement not data.
+  const extras = (extraAreas || []).filter(x => x && x.name).slice(0, 4);
+  const extrasHtml = !extras.length ? '' : `
+    <div style="position:absolute;left:0;top:${colTop + 44}px;width:${w}px;">
+      <div style="font-size:8.5px;font-weight:700;letter-spacing:0.14em;color:#6f7c92;">ALSO</div>
+      <div style="margin-top:7px;">
+        ${extras.map(x => {
+          const c = SEVERITY_COLOUR[x.severity] || SEVERITY_COLOUR.medium;
+          return `<span style="display:inline-block;font-size:10.5px;font-weight:700;
+                    padding:3px 9px;border-radius:10px;margin-right:5px;margin-bottom:4px;
+                    background:${c}1e;border:1px solid ${c}59;color:${c};">${esc(x.name)}</span>`;
+        }).join('')}
+      </div>
+    </div>`;
+
   return `<div style="position:absolute;inset:0;">
-    ${objRow}
     ${bars}
     <div style="position:absolute;left:0;top:${colTop}px;width:${colW}px;">
       <div style="font-size:8.5px;font-weight:700;letter-spacing:0.14em;color:#6f7c92;">DEPTH</div>
@@ -1517,6 +1516,7 @@ function weaknessesPanelHtml(w, h, team, allTeams, xi, depthList, upgradeList, s
       <div style="font-size:8.5px;font-weight:700;letter-spacing:0.14em;color:#6f7c92;">XI UPGRADE</div>
       <div style="margin-top:7px;">${improvePills}</div>
     </div>
+    ${extrasHtml}
   </div>`;
 }
 
@@ -1885,6 +1885,7 @@ export function buildTeamReportElement(team, opts = {}) {
     hideManagerScore = false,
     metaMode = 'age',        // 'age' | 'contract' | 'none'
     setPieces = null,        // averaged 1-10 rating, already x10
+    extraAreas = [],         // [{ name, severity }]
     purchaseValue = '', purchaseRank = null, objective = '', teamNameOverride = '',
     objectiveOutcome = '',
   } = opts;
@@ -1924,7 +1925,7 @@ export function buildTeamReportElement(team, opts = {}) {
                 title: 'League Table', body: leagueTablePanelHtml(innerW, ROW2_H - PANEL_PAD * 2 - TITLE_H, team, allTeams) })}
       ${panel({ x: COL_B_X, y: ROW_2, w: COL_W, h: ROW2_H,
                 title: 'Areas to Improve',
-                body: weaknessesPanelHtml(innerW, ROW2_H - PANEL_PAD * 2 - TITLE_H, team, allTeams, xi, depthList, upgradeList, setPieces, objective) })}
+                body: weaknessesPanelHtml(innerW, ROW2_H - PANEL_PAD * 2 - TITLE_H, team, allTeams, xi, depthList, upgradeList, setPieces, extraAreas) })}
 
       ${[['A', COL_A_X, bottomLeft], ['B', COL_B_X, bottomRight]].map(([, x, kind]) => {
         const ih = ROW3_H - PANEL_PAD * 2 - TITLE_H;
@@ -2238,6 +2239,7 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
   const [metaMode, setMetaMode] = useState('age');   // beside player names
   const [spAtt, setSpAtt] = useState('');
   const [spDef, setSpDef] = useState('');
+  const [extraAreas, setExtraAreas] = useState({});   // { name: severity }
   const [xiSearchAll, setXiSearchAll] = useState(false);
   const [depthSel, setDepthSel] = useState(null);          // null = auto
   const [upgradeSel, setUpgradeSel] = useState(null);
@@ -2344,6 +2346,7 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
     xiSlotLists: xiLists, xiOverridePool: xiPool,
     hidePlayerScores, hideManagerScore, metaMode,
     setPieces: setPieceScore(spAtt, spDef),
+    extraAreas: Object.keys(extraAreas).map(name => ({ name, severity: extraAreas[name] })),
     purchaseValue: purchaseValue.trim(),
     purchaseRank: purchaseRank ? Number(purchaseRank) : null,
     objective, objectiveOutcome,
@@ -2598,6 +2601,42 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
                 </button>
               )}
             </div>
+            <div style={UI.block}>
+              <span style={UI.label}>Also flag (max 4)</span>
+              {EXTRA_AREAS.map(name => {
+                const sev = extraAreas[name];
+                return (
+                  <div key={name} style={{ display: 'flex', alignItems: 'center', marginBottom: 5 }}>
+                    <div onClick={() => setExtraAreas(m => {
+                           const n = { ...m };
+                           if (n[name]) delete n[name]; else n[name] = 'medium';
+                           return n;
+                         })}
+                         style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', flex: 1 }}>
+                      <div style={{ width: 13, height: 13, borderRadius: 3, flexShrink: 0,
+                                    border: `1px solid ${sev ? '#3b7de8' : '#1e2d45'}`,
+                                    background: sev ? '#3b7de8' : 'transparent',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {sev && <span style={{ color: '#fff', fontSize: 8 }}>✓</span>}
+                      </div>
+                      <span style={{ fontSize: 11, color: sev ? '#e2e8f4' : '#94a3b8', marginLeft: 8 }}>{name}</span>
+                    </div>
+                    {sev && (
+                      <div style={{ display: 'flex' }}>
+                        {[['low', '#fbc701'], ['medium', '#f59e0b'], ['high', '#ef4444']].map(([lvl, col]) => (
+                          <button key={lvl} title={lvl}
+                            onClick={() => setExtraAreas(m => ({ ...m, [name]: lvl }))}
+                            style={{ width: 18, height: 18, marginLeft: 4, borderRadius: 4, padding: 0,
+                                     cursor: 'pointer', background: sev === lvl ? col : 'transparent',
+                                     border: `1px solid ${sev === lvl ? col : '#1e2d45'}` }} />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
             <div style={UI.block}>
               <span style={UI.label}>XI Upgrade {upgradeSel === null && <span style={{ color: '#475569' }}>(auto)</span>}</span>
               <Chips options={slotLabels} selected={upgradeSel === null ? autoUpgrade : upgradeSel}
