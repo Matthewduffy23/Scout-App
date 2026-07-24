@@ -57,7 +57,10 @@ const NAME_MAX_W = 288;
 const RULE_1 = 456;
 const RULE_2 = 1338;                     // between the wheels and the manager
 const WHEEL_X = 474;
-const WHEEL_W = 864;
+const WHEEL_W = 460;                     // 3 wheels: Overall, Attack, Defence
+const RULE_MID = 962;
+const TREND_X = 984;
+const TREND_W = 344;                     // 984..1328
 const COACH_X = 1358;                    // = COL_B_X
 const COACH_W = 538;
 
@@ -171,6 +174,74 @@ function scoreWheel({ cx, cy, r, stroke, value, label, colour, ink, big }) {
     <div style="position:absolute;left:${cx - 60}px;top:${cy + size / 2 + 6}px;width:120px;
                 text-align:center;font-size:8px;font-weight:700;letter-spacing:0.15em;
                 color:${ink.muted};">${label}</div>`;
+}
+
+// Five-season line of the club's overall score. Deliberately quiet — thin line,
+// small dots, only the current season labelled — because it's context for the
+// wheels rather than a headline. allTeamSeasons is already grouped by country,
+// so a promoted/relegated side stays one continuous line across tiers.
+function trendChart({ x, y, w, h, seasons, ink, rawOverall }) {
+  const val = (t) => {
+    const v = rawOverall ? (t.overall ?? t.completeScore) : t.completeScore;
+    return v == null || isNaN(v) ? null : Number(v);
+  };
+  const rows = (seasons || [])
+    .filter(t => t && t.season && val(t) != null)
+    .sort((a, b) => String(a.season) < String(b.season) ? -1 : 1)
+    .slice(-5);
+
+  const label = `<div style="position:absolute;left:${x}px;top:${y + h + 6}px;width:${w}px;
+      font-size:8px;font-weight:700;letter-spacing:0.16em;color:${ink.muted};">5-SEASON TREND</div>`;
+
+  if (rows.length < 2) {
+    return `<div style="position:absolute;left:${x}px;top:${y + 18}px;width:${w}px;
+        font-size:10.5px;color:${ink.muted};">Not enough season history.</div>${label}`;
+  }
+
+  const vals = rows.map(val);
+  // Pad the range so a flat run doesn't render as a straight line on the floor.
+  const lo = Math.min(...vals), hi = Math.max(...vals);
+  const pad = Math.max(4, (hi - lo) * 0.35);
+  const min = Math.max(0, lo - pad), max = Math.min(100, hi + pad) || 100;
+  const span = (max - min) || 1;
+
+  const VAL_W = 46;                    // room for the current figure on the right
+  const plotW = w - VAL_W;
+  const px = (i) => (rows.length === 1 ? 0 : (i / (rows.length - 1)) * (plotW - 10)) + 4;
+  const py = (v) => h - ((v - min) / span) * (h - 8) - 4;
+
+  const pts = vals.map((v, i) => [px(i), py(v)]);
+  const line = pts.map(([a, b], i) => `${i ? 'L' : 'M'} ${a.toFixed(1)} ${b.toFixed(1)}`).join(' ');
+  const last = vals[vals.length - 1];
+  const first = vals[0];
+  const dir = last - first;
+  const dirCol = Math.abs(dir) < 1 ? ink.muted : dir > 0 ? '#22c55e' : '#ef4444';
+
+  const dots = pts.map(([a, b], i) => {
+    const cur = i === pts.length - 1;
+    return `<circle cx="${a.toFixed(1)}" cy="${b.toFixed(1)}" r="${cur ? 3.4 : 2}"
+             fill="${cur ? scoreColor(last) : ink.muted}"
+             ${cur ? `stroke="${scoreColor(last)}" stroke-opacity="0.3" stroke-width="4"` : ''}/>`;
+  }).join('');
+
+  return `
+    <svg width="${plotW}" height="${h}" viewBox="0 0 ${plotW} ${h}"
+         style="position:absolute;left:${x}px;top:${y}px;">
+      <path d="${line}" fill="none" stroke="${ink.muted}" stroke-opacity="0.55"
+            stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+      ${dots}
+    </svg>
+    <div style="position:absolute;left:${x + plotW + 6}px;top:${y + 6}px;width:${VAL_W - 6}px;">
+      <div style="font-size:17px;font-weight:800;line-height:1;color:${scoreColor(last)};">${whole(last)}</div>
+      <div style="font-size:9px;font-weight:700;color:${dirCol};margin-top:4px;">${
+        Math.abs(dir) < 1 ? '—' : `${dir > 0 ? '+' : ''}${dir.toFixed(0)}`}</div>
+    </div>
+    <div style="position:absolute;left:${x}px;top:${y + h + 6}px;width:${w}px;display:flex;
+                justify-content:space-between;font-size:8px;font-weight:700;
+                letter-spacing:0.1em;color:${ink.muted};">
+      <span>${esc(String(rows[0].season))}</span>
+      <span>${esc(String(rows[rows.length - 1].season))}</span>
+    </div>`;
 }
 
 function headerGradient(spec) {
@@ -1684,7 +1755,7 @@ function coachHtml(coach, team, coachScore, hideManagerScore = false, ink = head
 
 // ─── Header ────────────────────────────────────────────────────────────────
 function headerHtml(team, coach, coachScore, allTeams, headerColour, rawOverall, hideManagerScore,
-                    purchaseValue, purchaseRank, objective, teamNameOverride, objectiveOutcome) {
+                    purchaseValue, purchaseRank, objective, teamNameOverride, objectiveOutcome, allTeamSeasons) {
   const displayName = (teamNameOverride && teamNameOverride.trim()) || team.team;
   const crest = teamCrest(team.team);
   const league = leagueDisplayName(team.league);
@@ -1791,16 +1862,26 @@ function headerHtml(team, coach, coachScore, allTeams, headerColour, rawOverall,
     <!-- FIVE WHEELS. One repeated shape across the whole span reads as a single
          system; OVERALL is bigger and sits first so the hierarchy still holds. -->
     ${(() => {
-      const all = [['OVERALL', ovr, true], ...cells.map(([l, v]) => [l, v, false])];
+      // Possession and Pressing are dropped: they're style descriptors and both
+      // already appear as Style rows, so as wheels they duplicated that panel.
+      // What's left — Overall, Attack, Defence — is the quality axis.
+      const all = [['OVERALL', ovr, true],
+                   ...cells.filter(([l]) => l === 'ATTACK' || l === 'DEFENCE').map(([l, v]) => [l, v, false])];
       const step = WHEEL_W / all.length;
       return all.map(([label, v, big], i) => scoreWheel({
         cx: WHEEL_X + step * i + step / 2,
         cy: 66,
-        r: big ? 36 : 27,       // ~10% larger, same cy so it stays centred
+        r: big ? 36 : 28,
         stroke: big ? 7.5 : 6,
         value: v, label, colour: scoreColor(v), ink, big,
       })).join('');
     })()}
+
+    <div style="position:absolute;left:${RULE_MID}px;top:34px;width:1px;height:82px;
+                background:${ink.rule};"></div>
+
+    ${trendChart({ x: TREND_X, y: 30, w: TREND_W, h: 62,
+                   seasons: allTeamSeasons, ink, rawOverall })}
 
     ${coachHtml(coach, team, coachScore, hideManagerScore, ink, clubFactsHtml)}`;
 }
@@ -1892,6 +1973,7 @@ export function buildTeamReportElement(team, opts = {}) {
     metaMode = 'age',        // 'age' | 'contract' | 'none'
     setPieces = null,        // averaged 1-10 rating, already x10
     extraAreas = [],         // [{ name, severity }]
+    allTeamSeasons = [],     // this club's season history, for the trend line
     purchaseValue = '', purchaseRank = null, objective = '', teamNameOverride = '',
     objectiveOutcome = '',
   } = opts;
@@ -1917,7 +1999,7 @@ export function buildTeamReportElement(team, opts = {}) {
          font-family:'Montserrat',sans-serif;color:#fff;position:relative;box-sizing:border-box;">
 
       ${headerHtml(team, coach, coachScore, allTeams, headerColour, rawOverall, hideManagerScore,
-                   purchaseValue, purchaseRank, objective, teamNameOverride, objectiveOutcome)}
+                   purchaseValue, purchaseRank, objective, teamNameOverride, objectiveOutcome, allTeamSeasons)}
 
       ${panel({ x: PAD, y: BODY_TOP, w: LEFT_W, h: LEFT_H,
                 title: 'XI + Depth', right: formation, body: xiPanelHtml(xiW, xiH, xi, { hideScores: hidePlayerScores, metaMode, season: team.season }) })}
@@ -2353,6 +2435,7 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
     hidePlayerScores, hideManagerScore, metaMode,
     setPieces: setPieceScore(spAtt, spDef),
     extraAreas: Object.keys(extraAreas).map(name => ({ name, severity: extraAreas[name] })),
+    allTeamSeasons,
     purchaseValue: purchaseValue.trim(),
     purchaseRank: purchaseRank ? Number(purchaseRank) : null,
     objective, objectiveOutcome,
