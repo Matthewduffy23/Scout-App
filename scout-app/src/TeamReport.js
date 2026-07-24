@@ -1,4 +1,4 @@
-// TeamReport.js v12 — Team All-in-One report. 1920x1080 PNG export.
+// TeamReport.js v14 — Team All-in-One report. 1920x1080 PNG export.
 //
 // v2: bigger team name; country flag + league logo beside the league name;
 //     mini coach profile in the header gap; XI is now formation-driven and
@@ -62,6 +62,7 @@ const COACH_X = 1268;                    // nudged right off the score card
 const COACH_W = 628;                     // 1268..1896
 
 // ─── Palette ───────────────────────────────────────────────────────────────
+const ACCENT_PINK = '#ff66c4';   // same accent as QuickCard / CoachCard
 const BG = '#0a0f1c';
 const HEADER_L = 'rgb(23,26,77)';
 const HEADER_R = 'rgb(17,22,42)';
@@ -125,7 +126,7 @@ function panel({ x, y, w, h, title, right = '', body }) {
                 box-sizing:border-box;padding:${PANEL_PAD}px;overflow:hidden;">
       <div style="height:${TITLE_H}px;position:relative;">
         <span style="font-size:15px;font-weight:700;letter-spacing:0.12em;
-                     text-transform:uppercase;color:#94a3b8;">${title}</span>
+                     text-transform:uppercase;color:${ACCENT_PINK};">${title}</span>
         ${right ? `<span style="position:absolute;right:0;top:1px;font-size:13px;
                      font-weight:700;color:#64748b;letter-spacing:0.06em;">${right}</span>` : ''}
       </div>
@@ -681,7 +682,10 @@ function radarPanelHtml(w, h, team, allTeams) {
   // Nine metrics in a taller tile means the labels go back on the ring like the
   // matplotlib original, so the cramped truncated side list is gone.
   const LABEL_R = 1.28;
-  const R = Math.floor(Math.min(h / 2 / LABEL_R, w / 2 / (LABEL_R + 0.42)));
+  // Labels sit at LABEL_R and need their own text height on top, or the bottom
+  // one ("GOALS AGAINST") clips against the tile edge.
+  const LABEL_PAD = 12;
+  const R = Math.floor(Math.min((h / 2 - LABEL_PAD) / LABEL_R, w / 2 / (LABEL_R + 0.42)));
   const cx = w / 2, cy = h / 2;
 
   const angles = Array.from({ length: N }, (_, i) => (2 * Math.PI * i) / N).reverse();
@@ -787,89 +791,93 @@ function stylePanelHtml(w, h, team) {
 }
 // t.similarTeams may hold plain names or objects — resolve either against the
 // full team list so the row gets a crest, league and score regardless.
+// TeamCard.js renders these straight from the data:
+//   {s.team} / {s.league} / {s.similarity}%
+// so `similarity` is precomputed in build_teams.py and already on a 0-100 scale.
+// Take team and league from the ENTRY, not from a lookup — a club can appear in
+// more than one league/season and TeamCard shows the entry's own values.
+// allTeams is only consulted as a fallback for entries that are plain strings.
 export function resolveSimilarTeams(team, allTeams, n = 3) {
   const raw = Array.isArray(team.similarTeams) ? team.similarTeams : [];
   const out = [];
   for (const entry of raw) {
     if (out.length >= n) break;
-    const name = typeof entry === 'string' ? entry : (entry && (entry.team || entry.name));
+    if (entry && typeof entry === 'object') {
+      if (!entry.team || entry.team === team.team) continue;
+      out.push({ team: entry.team, league: entry.league || '', __sim: entry.similarity ?? null });
+      continue;
+    }
+    // Legacy/plain-string form: no similarity available, fall back to the row.
+    const name = entry;
     if (!name || name === team.team) continue;
-    const league = typeof entry === 'object' && entry ? entry.league : null;
-    const row = allTeams.find(t => t.team === name && (!league || t.league === league)
-                                   && String(t.season) === String(team.season))
-             || allTeams.find(t => t.team === name)
-             || { team: name, league: league || '', completeScore: (entry && entry.score) ?? null };
-    out.push(row);
+    const row = (allTeams || []).find(t => t.team === name && String(t.season) === String(team.season))
+             || (allTeams || []).find(t => t.team === name);
+    out.push({ team: name, league: row ? row.league : '', __sim: null,
+               completeScore: row ? row.completeScore : null });
   }
   return out;
 }
 
-function similarTeamsPanelHtml(w, h, team, allTeams) {
-  const rows = resolveSimilarTeams(team, allTeams, 3);
-  if (!rows.length) {
-    return `<div style="position:absolute;inset:0;display:flex;align-items:center;
-             justify-content:center;font-size:12px;color:#55617a;">No similar teams in the data.</div>`;
-  }
-  const rowH = Math.floor((h - 4) / 3);
-  return rows.map((t, i) => {
-    const crest = teamCrest(t.team);
-    const sc = t.completeScore;
-    return `
-      <div style="position:absolute;left:0;top:${i * rowH + 2}px;width:${w}px;height:${rowH - 6}px;
-                  background:rgba(255,255,255,0.035);border:1px solid rgba(255,255,255,0.07);
-                  border-radius:9px;">
-        ${crest ? `<div style="position:absolute;left:12px;top:50%;margin-top:-15px;width:30px;height:30px;
-                     background-image:url('${src(crest)}');background-size:contain;
-                     background-repeat:no-repeat;background-position:center;"></div>` : ''}
-        <div style="position:absolute;left:54px;top:50%;margin-top:-16px;">
-          <div style="font-size:14px;font-weight:700;color:#eaf0f8;white-space:nowrap;
-                      overflow:hidden;text-overflow:ellipsis;max-width:${w - 130}px;">${esc(t.team)}</div>
-          <div style="font-size:10.5px;color:#8b98ad;margin-top:3px;">${esc(leagueDisplayName(t.league))}</div>
-        </div>
-        ${sc == null ? '' : `<div style="position:absolute;right:12px;top:50%;margin-top:-13px;
-             min-width:44px;text-align:center;padding:4px 0;border-radius:14px;
-             background:rgba(255,255,255,0.06);border:1px solid ${scoreColor(sc)}44;
-             font-size:16px;font-weight:800;color:${scoreColor(sc)};">${whole(sc)}</div>`}
-      </div>`;
-  }).join('');
+// TeamCard's exact thresholds, so a match reads the same colour on both.
+function similarityColor(v) {
+  return v >= 70 ? '#22c55e' : v >= 50 ? '#f59e0b' : '#64748b';
 }
+
+// ─── League table ──────────────────────────────────────────────────────────
 // The full table won't fit and mostly isn't relevant — show the window around
-// this team so its position reads in context, with top spot pinned if it's out
-// of view (the gap to the leaders is usually the first thing you want).
+// this team so its position reads in context, with the leader pinned above when
+// they're out of view (the gap to the top is usually the first thing you want).
 export function leagueWindow(team, allTeams, size = 5) {
-  const pool = allTeams
+  const pool = (allTeams || [])
     .filter(t => String(t.league) === String(team.league)
               && String(t.season) === String(team.season) && t.pointsRank != null)
     .sort((a, b) => a.pointsRank - b.pointsRank);
   if (!pool.length) return { rows: [], pinnedTop: null, total: 0 };
   const idx = pool.findIndex(t => t.team === team.team);
   if (idx < 0) return { rows: pool.slice(0, size), pinnedTop: null, total: pool.length };
-  let start = Math.max(0, Math.min(idx - Math.floor(size / 2), pool.length - size));
-  const rows = pool.slice(start, start + size);
-  const pinnedTop = start > 0 ? pool[0] : null;
-  return { rows, pinnedTop, total: pool.length };
+  const start = Math.max(0, Math.min(idx - Math.floor(size / 2), pool.length - size));
+  return { rows: pool.slice(start, start + size), pinnedTop: start > 0 ? pool[0] : null, total: pool.length };
+}
+function pinnedRows(h) { return h >= 190 ? 5 : 4; }
+
+// Column stops measured from the right edge, so the club name takes whatever's
+// left and truncates rather than colliding with the numbers.
+const TCOL = { pts: 6, xpts: 44, gd: 92, l: 150, d: 178, w: 206, pl: 234 };
+const TNAME_LEFT = 74;
+
+function tableCell(right, wdt, text, style) {
+  return `<span style="position:absolute;right:${right}px;top:50%;margin-top:-8px;width:${wdt}px;
+           text-align:${right === TCOL.gd ? 'center' : 'right'};${style}">${text}</span>`;
 }
 
 function tableRowHtml(t, team, w, top, rowH, dim) {
   const me = t.team === team.team;
   const crest = teamCrest(t.team);
+  const pl = (Number(t.wins) || 0) + (Number(t.draws) || 0) + (Number(t.losses) || 0);
+  const num = (v) => (v == null || isNaN(v) ? '—' : Math.round(Number(v)));
+  const cell = `font-size:11.5px;font-weight:600;color:${me ? '#dbe7ff' : '#8b98ad'};`;
   return `
     <div style="position:absolute;left:0;top:${top}px;width:${w}px;height:${rowH - 4}px;
                 background:${me ? 'rgba(59,125,232,0.16)' : 'rgba(255,255,255,0.03)'};
                 border:1px solid ${me ? 'rgba(96,165,250,0.45)' : 'rgba(255,255,255,0.06)'};
                 border-radius:7px;opacity:${dim ? 0.62 : 1};">
-      <span style="position:absolute;left:12px;top:50%;margin-top:-8px;width:22px;text-align:center;
-                   font-size:13px;font-weight:800;color:${me ? '#93c5fd' : '#8b98ad'};">${t.pointsRank}</span>
-      ${crest ? `<div style="position:absolute;left:44px;top:50%;margin-top:-11px;width:22px;height:22px;
+      <span style="position:absolute;left:9px;top:50%;margin-top:-8px;width:20px;text-align:center;
+                   font-size:12.5px;font-weight:800;color:${me ? '#93c5fd' : '#8b98ad'};">${t.pointsRank}</span>
+      ${crest ? `<div style="position:absolute;left:38px;top:50%;margin-top:-10px;width:21px;height:21px;
                    background-image:url('${src(crest)}');background-size:contain;
                    background-repeat:no-repeat;background-position:center;"></div>` : ''}
-      <span style="position:absolute;left:76px;top:50%;margin-top:-8px;font-size:13px;
+      <span style="position:absolute;left:${TNAME_LEFT}px;top:50%;margin-top:-8px;font-size:12.5px;
                    font-weight:${me ? 700 : 600};color:${me ? '#fff' : '#c8d2e0'};white-space:nowrap;
-                   overflow:hidden;text-overflow:ellipsis;max-width:${w - 200}px;">${esc(t.team)}</span>
-      <span style="position:absolute;right:74px;top:50%;margin-top:-8px;width:44px;text-align:right;
-                   font-size:12px;color:#8b98ad;">${t.expectedPoints != null ? Math.round(t.expectedPoints) : '—'}</span>
-      <span style="position:absolute;right:14px;top:50%;margin-top:-9px;width:44px;text-align:right;
-                   font-size:15px;font-weight:800;color:${me ? '#fff' : '#dbe3f0'};">${t.points != null ? Math.round(t.points) : '—'}</span>
+                   overflow:hidden;text-overflow:ellipsis;
+                   max-width:${w - TNAME_LEFT - TCOL.pl - 26}px;">${esc(t.team)}</span>
+      ${tableCell(TCOL.pl,   22, pl || '—', cell)}
+      ${tableCell(TCOL.w,    22, num(t.wins), cell)}
+      ${tableCell(TCOL.d,    22, num(t.draws), cell)}
+      ${tableCell(TCOL.l,    22, num(t.losses), cell)}
+      ${tableCell(TCOL.gd,   52, `${num(t.goalsFor)}<span style="color:#6b7385;">-</span>${num(t.goalsAgainst)}`, cell)}
+      ${tableCell(TCOL.xpts, 34, num(t.expectedPoints), 'font-size:11.5px;font-weight:600;color:#8b98ad;')}
+      ${tableCell(TCOL.pts,  32, num(t.points),
+          `font-size:14.5px;font-weight:800;color:${me ? '#fff' : '#dbe3f0'};`)}
     </div>`;
 }
 
@@ -879,20 +887,64 @@ function leagueTablePanelHtml(w, h, team, allTeams) {
     return `<div style="position:absolute;inset:0;display:flex;align-items:center;
              justify-content:center;font-size:12px;color:#55617a;">No table data for this league.</div>`;
   }
-  const HEAD = 18;
+  const HEAD = 17;
   const list = pinnedTop ? [pinnedTop, ...rows] : rows;
   const rowH = Math.floor((h - HEAD) / list.length);
+  const hs = 'font-size:8.5px;font-weight:700;letter-spacing:0.08em;color:#6f7c92;';
   const head = `
     <div style="position:absolute;left:0;top:0;width:${w}px;height:${HEAD}px;">
-      <span style="position:absolute;right:74px;top:0;width:44px;text-align:right;font-size:8.5px;
-                   font-weight:700;letter-spacing:0.1em;color:#6f7c92;">xPTS</span>
-      <span style="position:absolute;right:14px;top:0;width:44px;text-align:right;font-size:8.5px;
-                   font-weight:700;letter-spacing:0.1em;color:#6f7c92;">PTS</span>
+      <span style="position:absolute;right:${TCOL.pl}px;top:0;width:22px;text-align:right;${hs}">PL</span>
+      <span style="position:absolute;right:${TCOL.w}px;top:0;width:22px;text-align:right;${hs}">W</span>
+      <span style="position:absolute;right:${TCOL.d}px;top:0;width:22px;text-align:right;${hs}">D</span>
+      <span style="position:absolute;right:${TCOL.l}px;top:0;width:22px;text-align:right;${hs}">L</span>
+      <span style="position:absolute;right:${TCOL.gd}px;top:0;width:52px;text-align:center;${hs}">+/-</span>
+      <span style="position:absolute;right:${TCOL.xpts}px;top:0;width:34px;text-align:right;${hs}">xPTS</span>
+      <span style="position:absolute;right:${TCOL.pts}px;top:0;width:32px;text-align:right;${hs}">PTS</span>
     </div>`;
   return head + list.map((t, i) =>
     tableRowHtml(t, team, w, HEAD + i * rowH, rowH, pinnedTop && i === 0)).join('');
 }
-function pinnedRows(h) { return h >= 190 ? 5 : 4; }
+
+function similarTeamsPanelHtml(w, h, team, allTeams) {
+  const rows = resolveSimilarTeams(team, allTeams, 3);
+  if (!rows.length) {
+    return `<div style="position:absolute;inset:0;display:flex;align-items:center;
+             justify-content:center;font-size:12px;color:#55617a;">No similar teams in the data.</div>`;
+  }
+  const rowH = Math.floor((h - 4) / 3);
+  const VAL_W = 50;
+  return rows.map((t, i) => {
+    const sim = t.__sim;
+    const col = sim != null ? similarityColor(sim) : scoreColor(t.completeScore);
+    const crest = teamCrest(t.team);
+    const val = sim != null
+      ? `<div style="font-size:15px;font-weight:800;color:${col};">${Math.round(sim)}%</div>
+         <div style="font-size:8px;color:#55617a;margin-top:2px;">match</div>`
+      : (t.completeScore == null ? '' :
+         `<div style="font-size:15px;font-weight:800;color:${col};">${whole(t.completeScore)}</div>`);
+    return `
+      <div style="position:absolute;left:0;top:${i * rowH + 2}px;width:${w}px;height:${rowH - 6}px;
+                  background:rgba(255,255,255,0.035);border:1px solid rgba(255,255,255,0.07);
+                  border-radius:9px;">
+        <span style="position:absolute;left:10px;top:50%;margin-top:-6px;font-size:10px;
+                     font-weight:700;color:#475569;">#${i + 1}</span>
+        ${crest ? `<div style="position:absolute;left:32px;top:50%;margin-top:-13px;width:26px;height:26px;
+                     background-image:url('${src(crest)}');background-size:contain;
+                     background-repeat:no-repeat;background-position:center;"></div>` : ''}
+        <!-- right edge stops where the value column starts, so names truncate
+             instead of running under it -->
+        <div style="position:absolute;left:68px;right:${VAL_W + 18}px;top:50%;margin-top:-15px;">
+          <div style="font-size:13px;font-weight:700;color:#eaf0f8;line-height:1.15;white-space:nowrap;
+                      overflow:hidden;text-overflow:ellipsis;">${esc(t.team)}</div>
+          <div style="font-size:10px;color:#8b98ad;margin-top:4px;line-height:1.15;white-space:nowrap;
+                      overflow:hidden;text-overflow:ellipsis;">${esc(leagueDisplayName(t.league))}</div>
+        </div>
+        <div style="position:absolute;right:12px;top:50%;margin-top:-15px;width:${VAL_W}px;
+                    text-align:right;">${val}</div>
+      </div>`;
+  }).join('');
+}
+
 export function topPlayers(squad, n = 3) {
   return squad.slice()
     .filter(p => p && p.careerScore != null)
@@ -907,43 +959,92 @@ function keyPlayersPanelHtml(w, h, squad) {
              justify-content:center;font-size:12px;color:#55617a;">No squad data.</div>`;
   }
   const rowH = Math.floor((h - 4) / 3);
+  const PILL_W = 38, PILL_GAP = 5;
+  const VALS_W = PILL_W * 2 + PILL_GAP;
   return rows.map((p, i) => {
     const sc = p.careerScore;
     const pot = p.potentialScore != null ? p.potentialScore : p.careerScore;
+    const pos = String(p.position || '').split(',')[0].trim();
     return `
       <div style="position:absolute;left:0;top:${i * rowH + 2}px;width:${w}px;height:${rowH - 6}px;
                   background:rgba(255,255,255,0.035);border:1px solid rgba(255,255,255,0.07);
                   border-radius:9px;">
-        <div style="position:absolute;left:11px;top:50%;margin-top:-17px;width:34px;height:34px;
+        <div style="position:absolute;left:10px;top:50%;margin-top:-16px;width:32px;height:32px;
                     border-radius:50%;background-color:rgba(255,255,255,0.07);
                     background-image:url('${src(photoUrl(p.name, p.team))}');
                     background-size:cover;background-position:center top;
                     border:1.5px solid rgba(203,213,225,0.5);"></div>
-        <div style="position:absolute;left:56px;top:50%;margin-top:-16px;">
-          <div style="font-size:14px;font-weight:700;color:#eaf0f8;white-space:nowrap;
-                      overflow:hidden;text-overflow:ellipsis;max-width:${w - 180}px;">${esc(p.name)}<span
-                style="color:#7c8798;font-weight:600;"> (${p.age != null ? p.age : '—'})</span></div>
-          <div style="font-size:10.5px;color:#8b98ad;margin-top:3px;">${esc(String(p.position || '').split(',')[0].trim())}</div>
+        <!-- text box ends exactly where the pills begin — previously it was a
+             fixed max-width guess, which is why names were ellipsising early -->
+        <div style="position:absolute;left:50px;right:${VALS_W + 20}px;top:50%;margin-top:-15px;">
+          <div style="font-size:13.5px;font-weight:700;color:#eaf0f8;line-height:1.15;white-space:nowrap;
+                      overflow:hidden;text-overflow:ellipsis;">${esc(p.name)}<span
+                style="color:#7c8798;font-weight:600;"> ${p.age != null ? p.age : '—'}</span></div>
+          <div style="font-size:10px;color:#8b98ad;margin-top:4px;line-height:1.15;">${esc(pos)}</div>
         </div>
-        <div style="position:absolute;right:12px;top:50%;margin-top:-16px;text-align:center;">
-          <span style="display:inline-block;min-width:42px;padding:4px 0;border-radius:13px;
-                       background:rgba(255,255,255,0.06);border:1px solid ${gradeColor(sc)}44;
-                       font-size:15px;font-weight:800;color:${gradeColor(sc)};">${Math.round(sc)}</span>
-          <span style="display:inline-block;min-width:42px;padding:4px 0;border-radius:13px;
-                       margin-left:6px;background:rgba(255,255,255,0.03);
-                       border:1px dashed ${gradeColor(pot)}55;
-                       font-size:15px;font-weight:800;color:${gradeColor(pot)};">${Math.round(pot)}</span>
-          <div style="font-size:8px;font-weight:700;letter-spacing:0.1em;color:#6f7c92;margin-top:4px;">
-            NOW &nbsp;&nbsp;&nbsp; POT
+        <div style="position:absolute;right:10px;top:50%;margin-top:-15px;width:${VALS_W}px;display:flex;">
+          <div style="width:${PILL_W}px;text-align:center;">
+            <div style="padding:3px 0;border-radius:11px;background:rgba(255,255,255,0.06);
+                        border:1px solid ${gradeColor(sc)}44;font-size:14px;font-weight:800;
+                        color:${gradeColor(sc)};">${Math.round(sc)}</div>
+            <div style="font-size:7.5px;font-weight:700;letter-spacing:0.09em;color:#6f7c92;margin-top:4px;">NOW</div>
+          </div>
+          <div style="width:${PILL_W}px;text-align:center;margin-left:${PILL_GAP}px;">
+            <div style="padding:3px 0;border-radius:11px;background:rgba(255,255,255,0.03);
+                        border:1px dashed ${gradeColor(pot)}55;font-size:14px;font-weight:800;
+                        color:${gradeColor(pot)};">${Math.round(pot)}</div>
+            <div style="font-size:7.5px;font-weight:700;letter-spacing:0.09em;color:#6f7c92;margin-top:4px;">POT</div>
           </div>
         </div>
       </div>`;
   }).join('');
 }
+
 // Every metricGroups entry, percentiled against the league the same way the
 // radar does it (recomputed from raw, inverted where lower is better) so
 // "Goals Against" can't show up as a strength by accident.
 const WEAKNESS_INVERT = new Set(['xG Against', 'Goals Against', 'Shots Against', 'PPDA']);
+
+// Wyscout metric names read like a stats export; these are the plain-English
+// equivalents for the card. Anything not listed falls through unchanged.
+const METRIC_PLAIN = {
+  'xG': 'Creating Chances',
+  'Shots': 'Shot Attempts',
+  'Touches in Box': 'Attacking Territory',
+  'Goals Against': 'Conceding Goals',
+  'xG Against': 'Conceding Chances',
+  'Defensive Duel Win %': 'Winning Duels',
+  'Defensive Duels Win %': 'Winning Duels',
+  'Aerial Duel Success %': 'Winning Aerials',
+  'Shots Against': 'Allowing Opposition Shots',
+  'Possession': 'Game Control',
+  'Passing Accuracy %': 'Retention',
+  'Passes to Final 3rd': 'Getting Ball Into Key Areas',
+  'Progressive Passes': 'Ball Progression',
+};
+const plainMetric = (n) => METRIC_PLAIN[n] || n;
+
+// A starter is flagged for improvement when this season's score sits clearly
+// below the rest of the XI. Relative rather than absolute, so it still works
+// for a Championship side and a Premier League one.
+const IMPROVE_GAP = 4;
+const IMPROVE_FLOOR = 45;
+
+// Score for the season shown on the card, falling back to career.
+function seasonScore(p, season) {
+  const hit = Array.isArray(p && p.sh) ? p.sh.find(x => String(x.s) === String(season)) : null;
+  return hit && hit.sc != null ? Number(hit.sc) : (p && p.careerScore != null ? Number(p.careerScore) : null);
+}
+
+// Weakest starting slots — the squad-quality counterpart to the metric bars.
+export function improveSlots(xi, season, max = 4) {
+  const rated = xi.filter(s => s.starter).map(s => ({ k: s.slot.label, v: seasonScore(s.starter, season) }))
+                  .filter(x => x.v != null);
+  if (rated.length < 4) return [];
+  const avg = rated.reduce((a, b) => a + b.v, 0) / rated.length;
+  const cut = Math.min(avg - IMPROVE_GAP, IMPROVE_FLOOR + 20);
+  return rated.filter(x => x.v < cut).sort((a, b) => a.v - b.v).slice(0, max);
+}
 
 export function weakestMetrics(team, allTeams, n = 4) {
   const pool = allTeams.filter(t => String(t.league) === String(team.league)
@@ -960,7 +1061,7 @@ export function weakestMetrics(team, allTeams, n = 4) {
       const vals = pool.map(t => rawMetric(t, g, name)).filter(x => x != null);
       if (vals.length < 2) continue;
       const p = (vals.filter(x => x <= v).length / vals.length) * 100;
-      out.push([name, WEAKNESS_INVERT.has(name) ? 100 - p : p]);
+      out.push([plainMetric(name), WEAKNESS_INVERT.has(name) ? 100 - p : p]);
     }
   }
   return out.sort((a, b) => a[1] - b[1]).slice(0, n);
@@ -974,56 +1075,60 @@ export function uncoveredSlots(xi) {
 function weaknessesPanelHtml(w, h, team, allTeams, xi) {
   const metrics = weakestMetrics(team, allTeams, 4);
   const thinAll = uncoveredSlots(xi);
-  // A very thin squad can leave every slot uncovered; 11 pills would overflow
-  // the tile, so cap the list and count the rest.
-  const THIN_CAP = 6;
-  const thin = thinAll.slice(0, THIN_CAP);
-  const thinMore = thinAll.length - thin.length;
-  const barTop = 4;
-  const rowH = 34;
+  const improve = improveSlots(xi, team.season, 4);
 
+  const rowH = 32;
   const bars = metrics.map(([name, p], i) => `
-    <div style="position:absolute;left:0;top:${barTop + i * rowH}px;width:${w}px;height:${rowH - 8}px;">
+    <div style="position:absolute;left:0;top:${i * rowH}px;width:${w}px;height:${rowH - 8}px;">
       <span style="position:absolute;left:0;top:0;font-size:11.5px;font-weight:600;color:#c8d2e0;
-                   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:${w - 56}px;">${esc(name)}</span>
+                   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+                   max-width:${w - 44}px;">${esc(name)}</span>
       <span style="position:absolute;right:0;top:-1px;font-size:13px;font-weight:800;
                    color:${radarColor(p)};">${Math.round(p)}</span>
-      <div style="position:absolute;left:0;right:0;top:18px;height:5px;border-radius:3px;
+      <div style="position:absolute;left:0;right:0;top:17px;height:5px;border-radius:3px;
                   background:rgba(255,255,255,0.08);overflow:hidden;">
         <div style="width:${Math.max(2, Math.min(100, p))}%;height:100%;
                     background:${radarColor(p)};border-radius:3px;"></div>
       </div>
     </div>`).join('');
 
-  const thinTop = barTop + metrics.length * rowH + 6;
-  const thinHtml = `
-    <div style="position:absolute;left:0;top:${thinTop}px;width:${w}px;">
-      <div style="font-size:8.5px;font-weight:700;letter-spacing:0.14em;color:#6f7c92;">NO COVER</div>
-      <div style="margin-top:7px;">
-        ${thin.length
-          ? thin.map((k, i) => `<span style="display:inline-block;font-size:11px;font-weight:700;
-              padding:3px 9px;border-radius:11px;background:rgba(241,140,49,0.12);
-              border:1px solid rgba(241,140,49,0.35);color:#f6a75c;${i ? 'margin-left:6px;' : ''}">${k}</span>`).join('')
-          : `<span style="font-size:11.5px;color:#8b98ad;">Every starting slot has cover.</span>`}
-        ${thinMore > 0 ? `<span style="font-size:11px;font-weight:700;color:#8b98ad;margin-left:8px;">+${thinMore}</span>` : ''}
-      </div>
-    </div>`;
+  const colTop = metrics.length * rowH + 6;
+  const colW = Math.floor((w - 16) / 2);
+  const CAP = 4;
+  const pill = (text, tone) => `<span style="display:inline-block;font-size:10.5px;font-weight:700;
+      padding:3px 8px;border-radius:10px;margin-right:5px;margin-bottom:5px;
+      background:${tone}1e;border:1px solid ${tone}59;color:${tone};">${text}</span>`;
 
-  if (!metrics.length && !thin.length) {
-    return `<div style="position:absolute;inset:0;display:flex;align-items:center;
-             justify-content:center;font-size:12px;color:#55617a;">Not enough league data.</div>`;
-  }
-  return `<div style="position:absolute;inset:0;">${bars}${thinHtml}</div>`;
+  const depthPills = thinAll.length
+    ? thinAll.slice(0, CAP).map(k => pill(k, '#f6a75c')).join('')
+      + (thinAll.length > CAP ? `<span style="font-size:10.5px;font-weight:700;color:#8b98ad;">+${thinAll.length - CAP}</span>` : '')
+    : `<span style="font-size:11px;color:#8b98ad;">All slots covered</span>`;
+
+  const improvePills = improve.length
+    ? improve.map(x => pill(`${x.k} <span style="opacity:0.75;">${Math.round(x.v)}</span>`, '#f87171')).join('')
+    : `<span style="font-size:11px;color:#8b98ad;">No clear weak link</span>`;
+
+  return `<div style="position:absolute;inset:0;">
+    ${bars}
+    <div style="position:absolute;left:0;top:${colTop}px;width:${colW}px;">
+      <div style="font-size:8.5px;font-weight:700;letter-spacing:0.14em;color:#6f7c92;">DEPTH</div>
+      <div style="margin-top:7px;">${depthPills}</div>
+    </div>
+    <div style="position:absolute;left:${colW + 16}px;top:${colTop}px;width:${colW}px;">
+      <div style="font-size:8.5px;font-weight:700;letter-spacing:0.14em;color:#6f7c92;">IMPROVE</div>
+      <div style="margin-top:7px;">${improvePills}</div>
+    </div>
+  </div>`;
 }
 
 // ─── Coach lookup ──────────────────────────────────────────────────────────
-// Exact team+league+season match against saved tenures — the same rule
-// CoachPanel's resolveTenureRows() uses. Falls back to any tenure at this club
-// so a coach saved against last season still resolves.
 export function listSavedCoaches() {
   try { return loadCoaches() || []; } catch (e) { return []; }
 }
 
+// Exact team+league+season match against saved tenures — the same rule
+// CoachPanel's resolveTenureRows() uses. Falls back to any tenure at this club
+// so a coach saved against last season still resolves.
 export function findCoachForTeam(team) {
   let coaches = [];
   try { coaches = loadCoaches() || []; } catch (e) { return null; }
