@@ -176,72 +176,154 @@ function scoreWheel({ cx, cy, r, stroke, value, label, colour, ink, big }) {
                 color:${ink.muted};">${label}</div>`;
 }
 
-// Five-season line of the club's overall score. Deliberately quiet — thin line,
-// small dots, only the current season labelled — because it's context for the
-// wheels rather than a headline. allTeamSeasons is already grouped by country,
-// so a promoted/relegated side stays one continuous line across tiers.
-function trendChart({ x, y, w, h, seasons, ink, rawOverall }) {
-  const val = (t) => {
-    const v = rawOverall ? (t.overall ?? t.completeScore) : t.completeScore;
-    return v == null || isNaN(v) ? null : Number(v);
-  };
-  const rows = (seasons || [])
-    .filter(t => t && t.season && val(t) != null)
-    .sort((a, b) => String(a.season) < String(b.season) ? -1 : 1)
-    .slice(-5);
+// ─── Season trend: league ladder position ─────────────────────────────────
+// Plotting the overall score said little a scout couldn't already see. Where the
+// club actually finished, on a ladder that spans divisions, shows the trajectory:
+// 1st in Spain 2 sits directly below 20th in Spain 1, so promotion and relegation
+// read as the steps they are rather than as unexplained jumps.
 
-  const label = `<div style="position:absolute;left:${x}px;top:${y + h + 6}px;width:${w}px;
-      font-size:8px;font-weight:700;letter-spacing:0.16em;color:${ink.muted};">5-SEASON TREND</div>`;
+const leagueTier = (l) => {
+  const m = String(l || '').trim().match(/(\d+)\.?$/);
+  return m ? Number(m[1]) : 1;
+};
+const leagueCountry = (l) => String(l || '').trim().replace(/\s+\d+\.?$/, '').toLowerCase();
+
+// "2021-22" -> "21-22". Single-year labels are left alone.
+export function seasonShort(sn) {
+  const t = String(sn || '').trim();
+  const m = t.match(/^(\d{2})(\d{2})\s*[-/]\s*(\d{2,4})$/);
+  return m ? `${m[2]}-${String(m[3]).slice(-2)}` : t;
+}
+
+// Position on a combined national ladder. Divisions above this one are stacked
+// on top, so tier 2 position 1 lands just below the bottom of tier 1. Sizes come
+// from the data where the division is present; 20 is the fallback when a tier
+// isn't tracked, which keeps the shape right even if the offset isn't exact.
+export function ladderPosition(row, allTeams) {
+  const rank = Number(row && row.pointsRank);
+  if (!rank || isNaN(rank)) return null;
+  const country = leagueCountry(row.league);
+  const tier = leagueTier(row.league);
+  let offset = 0;
+  for (let t = 1; t < tier; t++) {
+    const n = (allTeams || []).filter(x =>
+      leagueCountry(x.league) === country && leagueTier(x.league) === t
+      && String(x.season) === String(row.season)).length;
+    offset += n || 20;
+  }
+  return offset + rank;
+}
+
+// Catmull-Rom through the points, converted to cubic beziers — a straight
+// polyline looked mechanical at this size.
+function smoothPath(pts) {
+  if (pts.length < 2) return '';
+  if (pts.length === 2) return `M ${pts[0][0]} ${pts[0][1]} L ${pts[1][0]} ${pts[1][1]}`;
+  let d = `M ${pts[0][0].toFixed(1)} ${pts[0][1].toFixed(1)}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || p2;
+    const c1x = p1[0] + (p2[0] - p0[0]) / 6, c1y = p1[1] + (p2[1] - p0[1]) / 6;
+    const c2x = p2[0] - (p3[0] - p1[0]) / 6, c2y = p2[1] - (p3[1] - p1[1]) / 6;
+    d += ` C ${c1x.toFixed(1)} ${c1y.toFixed(1)}, ${c2x.toFixed(1)} ${c2y.toFixed(1)}, ${p2[0].toFixed(1)} ${p2[1].toFixed(1)}`;
+  }
+  return d;
+}
+
+function trendChart({ x, y, w, h, seasons, allTeams, ink }) {
+  const rows = (seasons || [])
+    .filter(t => t && t.season && ladderPosition(t, allTeams) != null)
+    .sort((a, b) => String(a.season) < String(b.season) ? -1 : 1)
+    .slice(-5)
+    .map(t => ({ ...t, pos: ladderPosition(t, allTeams), tier: leagueTier(t.league) }));
+
+  const caption = `<div style="position:absolute;left:${x}px;top:${y + h + 16}px;width:${w}px;
+      font-size:7.5px;font-weight:700;letter-spacing:0.16em;color:${ink.muted};">LEAGUE FINISH</div>`;
 
   if (rows.length < 2) {
     return `<div style="position:absolute;left:${x}px;top:${y + 18}px;width:${w}px;
-        font-size:10.5px;color:${ink.muted};">Not enough season history.</div>${label}`;
+        font-size:10.5px;color:${ink.muted};">Not enough season history.</div>${caption}`;
   }
 
-  const vals = rows.map(val);
-  // Pad the range so a flat run doesn't render as a straight line on the floor.
-  const lo = Math.min(...vals), hi = Math.max(...vals);
-  const pad = Math.max(4, (hi - lo) * 0.35);
-  const min = Math.max(0, lo - pad), max = Math.min(100, hi + pad) || 100;
-  const span = (max - min) || 1;
+  // Crop to the range actually used rather than the whole pyramid, with a little
+  // padding so the best and worst finishes aren't pinned to the edges.
+  const vals = rows.map(r => r.pos);
+  const best = Math.min(...vals), worst = Math.max(...vals);
+  const pad = Math.max(2, Math.round((worst - best) * 0.25));
+  const top = Math.max(1, best - pad), bot = worst + pad;
+  const span = (bot - top) || 1;
 
-  const VAL_W = 46;                    // room for the current figure on the right
+  const VAL_W = 40;
   const plotW = w - VAL_W;
-  const px = (i) => (rows.length === 1 ? 0 : (i / (rows.length - 1)) * (plotW - 10)) + 4;
-  const py = (v) => h - ((v - min) / span) * (h - 8) - 4;
+  const px = (i) => 4 + (i / (rows.length - 1)) * (plotW - 12);
+  const py = (v) => 6 + ((v - top) / span) * (h - 14);   // 1st at the top
 
-  const pts = vals.map((v, i) => [px(i), py(v)]);
-  const line = pts.map(([a, b], i) => `${i ? 'L' : 'M'} ${a.toFixed(1)} ${b.toFixed(1)}`).join(' ');
-  const last = vals[vals.length - 1];
-  const first = vals[0];
-  const dir = last - first;
-  const dirCol = Math.abs(dir) < 1 ? ink.muted : dir > 0 ? '#22c55e' : '#ef4444';
+  const pts = rows.map((r, i) => [px(i), py(r.pos)]);
+  const last = rows[rows.length - 1];
+  const first = rows[0];
+  const move = first.pos - last.pos;                      // + = climbed the ladder
+  const moveCol = move === 0 ? ink.muted : move > 0 ? '#22c55e' : '#ef4444';
+
+  const area = `${smoothPath(pts)} L ${pts[pts.length - 1][0].toFixed(1)} ${h} L ${pts[0][0].toFixed(1)} ${h} Z`;
 
   const dots = pts.map(([a, b], i) => {
     const cur = i === pts.length - 1;
-    return `<circle cx="${a.toFixed(1)}" cy="${b.toFixed(1)}" r="${cur ? 3.4 : 2}"
-             fill="${cur ? scoreColor(last) : ink.muted}"
-             ${cur ? `stroke="${scoreColor(last)}" stroke-opacity="0.3" stroke-width="4"` : ''}/>`;
+    return `<circle cx="${a.toFixed(1)}" cy="${b.toFixed(1)}" r="${cur ? 3.2 : 2.1}"
+             fill="${cur ? '#e8eef8' : ink.muted}"
+             ${cur ? 'stroke="#e8eef8" stroke-opacity="0.25" stroke-width="4"' : ''}/>`;
   }).join('');
+
+  // A tier change between two seasons gets a marker on the segment between them.
+  const moves = rows.slice(1).map((r, i) => {
+    const prev = rows[i];
+    if (r.tier === prev.tier) return null;
+    const up = r.tier < prev.tier;
+    const mx = (pts[i][0] + pts[i + 1][0]) / 2;
+    const my = (pts[i][1] + pts[i + 1][1]) / 2;
+    return { mx, my, up };
+  }).filter(Boolean);
+
+  const moveMarks = moves.map(mk => `
+    <line x1="${mk.mx.toFixed(1)}" y1="4" x2="${mk.mx.toFixed(1)}" y2="${h - 2}"
+          stroke="${mk.up ? '#22c55e' : '#ef4444'}" stroke-opacity="0.35"
+          stroke-width="1" stroke-dasharray="2 2"/>`).join('');
+
+  const moveLabels = moves.map(mk => `
+    <div style="position:absolute;left:${(x + mk.mx - 34).toFixed(0)}px;top:${(y + h - 13).toFixed(0)}px;
+                width:68px;text-align:center;font-size:6.5px;font-weight:800;
+                letter-spacing:0.1em;color:${mk.up ? '#22c55e' : '#ef4444'};">${
+      mk.up ? 'PROMOTED' : 'RELEGATED'}</div>`).join('');
 
   return `
     <svg width="${plotW}" height="${h}" viewBox="0 0 ${plotW} ${h}"
          style="position:absolute;left:${x}px;top:${y}px;">
-      <path d="${line}" fill="none" stroke="${ink.muted}" stroke-opacity="0.55"
-            stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+      <defs>
+        <linearGradient id="trFill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#8fa0b8" stop-opacity="0.20"/>
+          <stop offset="100%" stop-color="#8fa0b8" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      <path d="${area}" fill="url(#trFill)" stroke="none"/>
+      ${moveMarks}
+      <path d="${smoothPath(pts)}" fill="none" stroke="#c3ccdd" stroke-opacity="0.75"
+            stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
       ${dots}
     </svg>
-    <div style="position:absolute;left:${x + plotW + 6}px;top:${y + 6}px;width:${VAL_W - 6}px;">
-      <div style="font-size:17px;font-weight:800;line-height:1;color:${scoreColor(last)};">${whole(last)}</div>
-      <div style="font-size:9px;font-weight:700;color:${dirCol};margin-top:4px;">${
-        Math.abs(dir) < 1 ? '—' : `${dir > 0 ? '+' : ''}${dir.toFixed(0)}`}</div>
+    ${moveLabels}
+    <div style="position:absolute;left:${x + plotW + 8}px;top:${y + 8}px;width:${VAL_W - 8}px;">
+      <div style="font-size:16px;font-weight:800;line-height:1;color:${ink.secondary};">${last.pos}${
+        last.pos % 10 === 1 && last.pos % 100 !== 11 ? 'st'
+        : last.pos % 10 === 2 && last.pos % 100 !== 12 ? 'nd'
+        : last.pos % 10 === 3 && last.pos % 100 !== 13 ? 'rd' : 'th'}</div>
+      <div style="font-size:9px;font-weight:700;color:${moveCol};margin-top:4px;">${
+        move === 0 ? '—' : `${move > 0 ? '▲' : '▼'}${Math.abs(move)}`}</div>
     </div>
-    <div style="position:absolute;left:${x}px;top:${y + h + 6}px;width:${w}px;display:flex;
-                justify-content:space-between;font-size:8px;font-weight:700;
-                letter-spacing:0.1em;color:${ink.muted};">
-      <span>${esc(String(rows[0].season))}</span>
-      <span>${esc(String(rows[rows.length - 1].season))}</span>
-    </div>`;
+    <div style="position:absolute;left:${x}px;top:${y + h + 4}px;width:${plotW}px;display:flex;
+                justify-content:space-between;font-size:7.5px;font-weight:700;
+                letter-spacing:0.08em;color:${ink.muted};">
+      <span>${esc(seasonShort(first.season))}</span>
+      <span>${esc(seasonShort(last.season))}</span>
+    </div>
+    ${caption}`;
 }
 
 function headerGradient(spec) {
@@ -1880,8 +1962,8 @@ function headerHtml(team, coach, coachScore, allTeams, headerColour, rawOverall,
     <div style="position:absolute;left:${RULE_MID}px;top:34px;width:1px;height:82px;
                 background:${ink.rule};"></div>
 
-    ${trendChart({ x: TREND_X, y: 30, w: TREND_W, h: 62,
-                   seasons: allTeamSeasons, ink, rawOverall })}
+    ${trendChart({ x: TREND_X, y: 26, w: TREND_W, h: 62,
+                   seasons: allTeamSeasons, allTeams, ink })}
 
     ${coachHtml(coach, team, coachScore, hideManagerScore, ink, clubFactsHtml)}`;
 }
