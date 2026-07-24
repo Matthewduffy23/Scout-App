@@ -1,4 +1,4 @@
-// TeamReport.js v27 — Team All-in-One report. 1920x1080 PNG export.
+// TeamReport.js v29 — Team All-in-One report. 1920x1080 PNG export.
 //
 // v2: bigger team name; country flag + league logo beside the league name;
 //     mini coach profile in the header gap; XI is now formation-driven and
@@ -943,8 +943,8 @@ function styleHexSvg(rows, maxWidth, maxHeight) {
       const on = d < filled;
       return hex(cx, y, on ? (1 - (d / numHex) * 0.4).toFixed(2) : 0.1, on ? col : '#dbe1ee');
     }).join('');
-    return `<text x="0" y="${y + 5}" font-family="Montserrat,sans-serif" font-size="15"
-             font-weight="800" fill="#c8d2e0">${disp}</text>${hexes}`;
+    return `<text x="0" y="${y + 5}" font-family="Montserrat,sans-serif" font-size="14"
+             font-weight="600" fill="#aab6c8">${disp}</text>${hexes}`;
   }).join('');
   return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">${body}</svg>`;
 }
@@ -1023,6 +1023,11 @@ function similarityColor(v) {
 // The full table won't fit and mostly isn't relevant — show the window around
 // this team so its position reads in context, with the leader pinned above when
 // they're out of view (the gap to the top is usually the first thing you want).
+export function leagueSizeFor(team, allTeams) {
+  return (allTeams || []).filter(t => String(t.league) === String(team.league)
+                                   && String(t.season) === String(team.season)).length || null;
+}
+
 export function leagueWindow(team, allTeams, size = 5) {
   const pool = (allTeams || [])
     .filter(t => String(t.league) === String(team.league)
@@ -1120,6 +1125,38 @@ export const BOTTOM_PANELS = ['Similar Teams', 'Key Players', 'Recruitment Recom
                               'Summary', 'Possible Departures', 'None'];
 
 // Did they hit it? Rendered as a small badge beside the objective.
+// Where each objective expects a side to finish, as a fraction of the league
+// (or an absolute position where the target is a specific place). Comparing that
+// to actual position gives both the gap and how big a job closing it is.
+const OBJECTIVE_TARGET = {
+  'Title Challenge':  { abs: 1 },
+  'Promotion':        { abs: 2 },
+  'European Places':  { frac: 0.20 },
+  'Play-offs':        { frac: 0.30 },
+  'Upper Mid-Table':  { frac: 0.35 },
+  'Mid-Table':        { frac: 0.50 },
+  'Consolidate':      { frac: 0.65 },
+  'Avoid Relegation': { frac: 0.85 },
+  'Rebuild':          null,
+};
+const CHANGE_BANDS = [
+  { max: 0,        label: 'On Target',   colour: '#22c55e' },
+  { max: 2,        label: 'Minor Work',  colour: '#84cc16' },
+  { max: 5,        label: 'Moderate',    colour: '#fbc701' },
+  { max: 9,        label: 'Significant', colour: '#f59e0b' },
+  { max: Infinity, label: 'Major Rebuild', colour: '#ef4444' },
+];
+
+// { gap, label, colour } — gap is places short of the objective (0 = met/beaten).
+export function objectiveGap(objective, pointsRank, leagueSize) {
+  const t = OBJECTIVE_TARGET[objective];
+  if (!t || pointsRank == null || !leagueSize) return null;
+  const target = t.abs != null ? t.abs : Math.max(1, Math.round(t.frac * leagueSize));
+  const gap = Math.max(0, Number(pointsRank) - target);
+  const band = CHANGE_BANDS.find(b => gap <= b.max);
+  return { gap, target, label: band.label, colour: band.colour };
+}
+
 export const OBJECTIVE_OUTCOMES = ['', 'Achieved', 'Partial', 'Missed'];
 const OUTCOME_STYLE = {
   Achieved: { c: '#22c55e', g: '✓' },
@@ -1391,7 +1428,7 @@ export function uncoveredSlots(xi) {
   return xi.filter(s => s.starter && (!s.depth || !s.depth.length)).map(s => s.slot.label);
 }
 
-function weaknessesPanelHtml(w, h, team, allTeams, xi, depthList, upgradeList, setPieces) {
+function weaknessesPanelHtml(w, h, team, allTeams, xi, depthList, upgradeList, setPieces, objective) {
   let metrics = weakestMetrics(team, allTeams, 4);
   // A set-piece rating at or below the cutoff replaces the mildest of the four —
   // it's a real weakness and deserves the slot more than the least-bad metric.
@@ -1404,9 +1441,39 @@ function weaknessesPanelHtml(w, h, team, allTeams, xi, depthList, upgradeList, s
     ? upgradeList.map(k => ({ k }))
     : improveSlots(xi, team.season, 4);
 
-  const rowH = 32;
+  // Objective row leads the panel: the target and the size of the job, then the
+  // specific things to fix beneath it. Metric rows lose 4px each to make room.
+  const gap = objectiveGap(objective, team.pointsRank, leagueSizeFor(team, allTeams));
+  const OBJ_H = gap ? 34 : 0;
+  const objRow = !gap ? '' : (() => {
+    const oc = OBJECTIVE_COLOUR[objective] || '#94a3b8';
+    // Bar runs full when on target and empties as the gap grows; 10+ places is
+    // treated as the floor, matching the Major Rebuild band.
+    const fill = Math.max(4, 100 - Math.min(100, (gap.gap / 10) * 100));
+    const detail = gap.gap === 0 ? 'Objective met' : `${gap.gap} place${gap.gap === 1 ? '' : 's'} short`;
+    return `
+      <div style="position:absolute;left:0;top:0;width:${w}px;height:26px;">
+        <span style="position:absolute;left:0;top:0;font-size:7.5px;font-weight:700;
+                     letter-spacing:0.13em;color:#6f7c92;">VS OBJECTIVE</span>
+        <span style="position:absolute;left:76px;top:-2px;font-size:11.5px;font-weight:700;
+                     color:${oc};">${esc(objective)}</span>
+        <span style="position:absolute;right:0;top:-2px;font-size:11.5px;font-weight:800;
+                     color:${gap.colour};">${gap.label}</span>
+        <span style="position:absolute;right:0;top:13px;font-size:8.5px;font-weight:600;
+                     color:#6f7c92;">${detail}</span>
+        <div style="position:absolute;left:76px;right:118px;top:15px;height:4px;border-radius:2px;
+                    background:rgba(255,255,255,0.08);overflow:hidden;">
+          <div style="width:${fill.toFixed(0)}%;height:100%;background:${gap.colour};
+                      border-radius:2px;"></div>
+        </div>
+      </div>
+      <div style="position:absolute;left:0;top:29px;width:${w}px;height:1px;
+                  background:rgba(255,255,255,0.08);"></div>`;
+  })();
+
+  const rowH = 28;
   const bars = metrics.map(([name, p], i) => `
-    <div style="position:absolute;left:0;top:${i * rowH}px;width:${w}px;height:${rowH - 8}px;">
+    <div style="position:absolute;left:0;top:${OBJ_H + i * rowH}px;width:${w}px;height:${rowH - 8}px;">
       <!-- left+right gives a definite width; left+max-width made this
            shrink-to-fit and ellipsise far earlier than the max-width -->
       <span style="position:absolute;left:0;right:40px;top:0;font-size:11.5px;font-weight:600;
@@ -1421,11 +1488,13 @@ function weaknessesPanelHtml(w, h, team, allTeams, xi, depthList, upgradeList, s
       </div>
     </div>`).join('');
 
-  const colTop = metrics.length * rowH + 6;
+  const colTop = OBJ_H + metrics.length * rowH + 4;
   const colW = Math.floor((w - 16) / 2);
-  const CAP = 4;
+  // 3 keeps each column to a single line; a 4th wrapped and pushed the panel
+  // past its height once the objective row was added. Overflow shows as "+N".
+  const CAP = 3;
   const pill = (text, tone) => `<span style="display:inline-block;font-size:10.5px;font-weight:700;
-      padding:3px 8px;border-radius:10px;margin-right:5px;margin-bottom:5px;
+      padding:3px 8px;border-radius:10px;margin-right:5px;margin-bottom:4px;
       background:${tone}1e;border:1px solid ${tone}59;color:${tone};">${text}</span>`;
 
   const depthPills = thinAll.length
@@ -1438,6 +1507,7 @@ function weaknessesPanelHtml(w, h, team, allTeams, xi, depthList, upgradeList, s
     : `<span style="font-size:11px;color:#8b98ad;">No clear weak link</span>`;
 
   return `<div style="position:absolute;inset:0;">
+    ${objRow}
     ${bars}
     <div style="position:absolute;left:0;top:${colTop}px;width:${colW}px;">
       <div style="font-size:8.5px;font-weight:700;letter-spacing:0.14em;color:#6f7c92;">DEPTH</div>
@@ -1641,21 +1711,25 @@ function headerHtml(team, coach, coachScore, allTeams, headerColour, rawOverall,
     const out = OUTCOME_STYLE[objectiveOutcome] || null;
     if (!bits.length && !objective) return '';
     return `
-      <div style="display:flex;align-items:center;white-space:nowrap;">
+      <div style="display:flex;align-items:baseline;white-space:nowrap;">
         ${bits.map(([k, v, rk], i) => `
-          <span style="${i ? 'margin-left:20px;' : ''}font-size:7.5px;font-weight:700;
+          <span style="${i ? 'margin-left:22px;' : ''}font-size:7.5px;font-weight:700;
                        letter-spacing:0.13em;color:${ink.muted};">${k}</span>
-          <span style="margin-left:7px;font-size:11px;font-weight:700;color:${ink.soft};">${v}</span>
-          ${rk ? `<span style="margin-left:8px;font-size:8.5px;font-weight:600;color:${ink.muted};">${rankStr(rk)}</span>` : ''}
+          <!-- fixed-width value column, right-aligned, so "27.7" and "£49m" end
+               on the same edge and their ranks line up beneath each other -->
+          <span style="display:inline-block;width:46px;text-align:right;margin-left:8px;
+                       font-size:11.5px;font-weight:700;color:${ink.soft};">${v}</span>
+          <span style="display:inline-block;width:38px;text-align:left;margin-left:6px;
+                       font-size:8.5px;font-weight:600;color:${ink.muted};">${rk ? rankStr(rk) : ''}</span>
         `).join('')}
         ${objective ? `
-          <span style="${bits.length ? 'margin-left:20px;' : ''}font-size:7.5px;font-weight:700;
+          <span style="${bits.length ? 'margin-left:14px;' : ''}font-size:7.5px;font-weight:700;
                        letter-spacing:0.13em;color:${ink.muted};">OBJECTIVE</span>
-          <span style="margin-left:7px;font-size:9.5px;font-weight:700;color:${oc};">${esc(objective)}</span>
+          <span style="margin-left:8px;font-size:9.5px;font-weight:700;color:${oc};">${esc(objective)}</span>
           ${out ? `<span style="display:inline-flex;align-items:center;justify-content:center;
                 margin-left:6px;width:14px;height:14px;border-radius:50%;background:${out.c}22;
                 border:1px solid ${out.c}66;font-size:8px;font-weight:800;
-                color:${out.c};line-height:1;">${out.g}</span>` : ''}` : ''}
+                color:${out.c};line-height:1;vertical-align:middle;">${out.g}</span>` : ''}` : ''}
       </div>`;
   })();
 
@@ -1849,7 +1923,8 @@ export function buildTeamReportElement(team, opts = {}) {
       ${panel({ x: COL_A_X, y: ROW_2, w: COL_W, h: ROW2_H,
                 title: 'League Table', body: leagueTablePanelHtml(innerW, ROW2_H - PANEL_PAD * 2 - TITLE_H, team, allTeams) })}
       ${panel({ x: COL_B_X, y: ROW_2, w: COL_W, h: ROW2_H,
-                title: 'Weaknesses', body: weaknessesPanelHtml(innerW, ROW2_H - PANEL_PAD * 2 - TITLE_H, team, allTeams, xi, depthList, upgradeList, setPieces) })}
+                title: 'Areas to Improve',
+                body: weaknessesPanelHtml(innerW, ROW2_H - PANEL_PAD * 2 - TITLE_H, team, allTeams, xi, depthList, upgradeList, setPieces, objective) })}
 
       ${[['A', COL_A_X, bottomLeft], ['B', COL_B_X, bottomRight]].map(([, x, kind]) => {
         const ih = ROW3_H - PANEL_PAD * 2 - TITLE_H;
