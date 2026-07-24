@@ -1,4 +1,4 @@
-// TeamReport.js v14 — Team All-in-One report. 1920x1080 PNG export.
+// TeamReport.js v15 — Team All-in-One report. 1920x1080 PNG export.
 //
 // v2: bigger team name; country flag + league logo beside the league name;
 //     mini coach profile in the header gap; XI is now formation-driven and
@@ -20,7 +20,7 @@ import {
   leagueLogo, leagueFlag, photoUrl,
 } from './cardAssets';
 import { loadCoaches } from './coachStorage';
-import { FOTMOB_PHOTO_BASE, countryToIso2, computeAge } from './CoachCard';
+import { FOTMOB_PHOTO_BASE, countryToIso2, computeAge, fadeHexToBG } from './CoachCard';
 import { computeCoachScore } from './CoachQuickCard';
 
 // ─── Canvas geometry ───────────────────────────────────────────────────────
@@ -50,10 +50,10 @@ const LEFT_H = ROW_3 + ROW3_H - BODY_TOP;      // 889
 // Header column stops. The team name is capped and ellipsised so long clubs
 // ("Wolverhampton Wanderers") can't run into the coach block.
 const NAME_X = PAD + 128;
-const NAME_MAX_W = 520;
+const NAME_MAX_W = 476;                  // ends at 628, clear of SCORE_X (648)
 // Order across the band: crest+name -> OVR/score card -> manager.
 const SCORE_X = 648;                     // score card left edge
-const SCORE_W = 512;                     // 676..1188
+const SCORE_W = 500;                     // 648..1148
 const OVR_CX = SCORE_X + 66;             // centre of the OVR number
 const STAT_X = SCORE_X + 138;
 const STAT_W = 84;                       // 4*84 + 3*10 = 366 -> ends 1180
@@ -66,6 +66,32 @@ const ACCENT_PINK = '#ff66c4';   // same accent as QuickCard / CoachCard
 const BG = '#0a0f1c';
 const HEADER_L = 'rgb(23,26,77)';
 const HEADER_R = 'rgb(17,22,42)';
+
+// Header colour options, same swatch set as QuickCard. Each is faded toward the
+// card background exactly like CoachQuickCard does with a club colour, so the
+// band keeps its depth instead of turning into a flat block.
+export const HEADER_COLOURS = {
+  Default: null,
+  Blue:   '#1d4ed8',
+  Navy:   '#172a77',
+  Purple: '#1800ad',
+  Pink:   '#ff66c4',
+  Red:    '#ff3131',
+  Orange: '#ff914d',
+  Green:  '#00bf63',
+  Slate:  '#334155',
+  Black:  '#0a0a0a',
+};
+export const HEADER_COLOUR_NAMES = Object.keys(HEADER_COLOURS);
+
+function headerGradient(hex) {
+  if (!hex) return `linear-gradient(to right, ${HEADER_L} 0%, ${HEADER_R} 100%)`;
+  try {
+    return `linear-gradient(to right, ${fadeHexToBG(hex, 0.62)} 0%, ${fadeHexToBG(hex, 0.93)} 100%)`;
+  } catch (e) {
+    return `linear-gradient(to right, ${HEADER_L} 0%, ${HEADER_R} 100%)`;
+  }
+}
 const PANEL_BG = 'linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.025))';
 const PANEL_BORDER = 'rgba(255,255,255,0.13)';
 const PANEL_SHADOW = '0 8px 24px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.06)';
@@ -127,7 +153,7 @@ function panel({ x, y, w, h, title, right = '', body }) {
       <div style="height:${TITLE_H}px;position:relative;">
         <span style="font-size:15px;font-weight:700;letter-spacing:0.12em;
                      text-transform:uppercase;color:${ACCENT_PINK};">${title}</span>
-        ${right ? `<span style="position:absolute;right:0;top:1px;font-size:13px;
+        ${right ? `<span style="position:absolute;right:0;top:1px;font-size:13px;white-space:nowrap;
                      font-weight:700;color:#64748b;letter-spacing:0.06em;">${right}</span>` : ''}
       </div>
       <div style="height:${h - PANEL_PAD * 2 - TITLE_H}px;position:relative;">${body}</div>
@@ -831,7 +857,18 @@ export function leagueWindow(team, allTeams, size = 5) {
   const pool = (allTeams || [])
     .filter(t => String(t.league) === String(team.league)
               && String(t.season) === String(team.season) && t.pointsRank != null)
-    .sort((a, b) => a.pointsRank - b.pointsRank);
+    // Level on points is common; the stored pointsRank doesn't break those ties,
+    // so order by goal difference then goals scored, the way a real table does.
+    .sort((a, b) => {
+      const pd = (Number(b.points) || 0) - (Number(a.points) || 0);
+      if (pd) return pd;
+      const gd = (a2 => a2)((Number(b.goalsFor) || 0) - (Number(b.goalsAgainst) || 0))
+               - ((Number(a.goalsFor) || 0) - (Number(a.goalsAgainst) || 0));
+      if (gd) return gd;
+      const gf = (Number(b.goalsFor) || 0) - (Number(a.goalsFor) || 0);
+      if (gf) return gf;
+      return (a.pointsRank || 0) - (b.pointsRank || 0);
+    });
   if (!pool.length) return { rows: [], pinnedTop: null, total: 0 };
   const idx = pool.findIndex(t => t.team === team.team);
   if (idx < 0) return { rows: pool.slice(0, size), pinnedTop: null, total: pool.length };
@@ -842,8 +879,9 @@ function pinnedRows(h) { return h >= 190 ? 5 : 4; }
 
 // Column stops measured from the right edge, so the club name takes whatever's
 // left and truncates rather than colliding with the numbers.
-const TCOL = { pts: 6, xpts: 44, gd: 92, l: 150, d: 178, w: 206, pl: 234 };
-const TNAME_LEFT = 74;
+// Narrower numeric columns buy ~50px back for the club name.
+const TCOL = { pts: 4, xpts: 38, gd: 80, l: 132, d: 156, w: 180, pl: 204 };
+const TNAME_LEFT = 68;
 
 function tableCell(right, wdt, text, style) {
   return `<span style="position:absolute;right:${right}px;top:50%;margin-top:-8px;width:${wdt}px;
@@ -866,17 +904,17 @@ function tableRowHtml(t, team, w, top, rowH, dim) {
       ${crest ? `<div style="position:absolute;left:38px;top:50%;margin-top:-10px;width:21px;height:21px;
                    background-image:url('${src(crest)}');background-size:contain;
                    background-repeat:no-repeat;background-position:center;"></div>` : ''}
-      <span style="position:absolute;left:${TNAME_LEFT}px;top:50%;margin-top:-8px;font-size:12.5px;
+      <span style="position:absolute;left:${TNAME_LEFT}px;right:${TCOL.pl + 22}px;top:50%;
+                   margin-top:-8px;font-size:12.5px;
                    font-weight:${me ? 700 : 600};color:${me ? '#fff' : '#c8d2e0'};white-space:nowrap;
-                   overflow:hidden;text-overflow:ellipsis;
-                   max-width:${w - TNAME_LEFT - TCOL.pl - 26}px;">${esc(t.team)}</span>
-      ${tableCell(TCOL.pl,   22, pl || '—', cell)}
-      ${tableCell(TCOL.w,    22, num(t.wins), cell)}
-      ${tableCell(TCOL.d,    22, num(t.draws), cell)}
-      ${tableCell(TCOL.l,    22, num(t.losses), cell)}
-      ${tableCell(TCOL.gd,   52, `${num(t.goalsFor)}<span style="color:#6b7385;">-</span>${num(t.goalsAgainst)}`, cell)}
-      ${tableCell(TCOL.xpts, 34, num(t.expectedPoints), 'font-size:11.5px;font-weight:600;color:#8b98ad;')}
-      ${tableCell(TCOL.pts,  32, num(t.points),
+                   overflow:hidden;text-overflow:ellipsis;">${esc(t.team)}</span>
+      ${tableCell(TCOL.pl,   20, pl || '—', cell)}
+      ${tableCell(TCOL.w,    20, num(t.wins), cell)}
+      ${tableCell(TCOL.d,    20, num(t.draws), cell)}
+      ${tableCell(TCOL.l,    20, num(t.losses), cell)}
+      ${tableCell(TCOL.gd,   46, `${num(t.goalsFor)}<span style="color:#6b7385;">-</span>${num(t.goalsAgainst)}`, cell)}
+      ${tableCell(TCOL.xpts, 30, num(t.expectedPoints), 'font-size:11.5px;font-weight:600;color:#8b98ad;')}
+      ${tableCell(TCOL.pts,  30, num(t.points),
           `font-size:14.5px;font-weight:800;color:${me ? '#fff' : '#dbe3f0'};`)}
     </div>`;
 }
@@ -893,13 +931,13 @@ function leagueTablePanelHtml(w, h, team, allTeams) {
   const hs = 'font-size:8.5px;font-weight:700;letter-spacing:0.08em;color:#6f7c92;';
   const head = `
     <div style="position:absolute;left:0;top:0;width:${w}px;height:${HEAD}px;">
-      <span style="position:absolute;right:${TCOL.pl}px;top:0;width:22px;text-align:right;${hs}">PL</span>
-      <span style="position:absolute;right:${TCOL.w}px;top:0;width:22px;text-align:right;${hs}">W</span>
-      <span style="position:absolute;right:${TCOL.d}px;top:0;width:22px;text-align:right;${hs}">D</span>
-      <span style="position:absolute;right:${TCOL.l}px;top:0;width:22px;text-align:right;${hs}">L</span>
-      <span style="position:absolute;right:${TCOL.gd}px;top:0;width:52px;text-align:center;${hs}">+/-</span>
-      <span style="position:absolute;right:${TCOL.xpts}px;top:0;width:34px;text-align:right;${hs}">xPTS</span>
-      <span style="position:absolute;right:${TCOL.pts}px;top:0;width:32px;text-align:right;${hs}">PTS</span>
+      <span style="position:absolute;right:${TCOL.pl}px;top:0;width:20px;text-align:right;${hs}">PL</span>
+      <span style="position:absolute;right:${TCOL.w}px;top:0;width:20px;text-align:right;${hs}">W</span>
+      <span style="position:absolute;right:${TCOL.d}px;top:0;width:20px;text-align:right;${hs}">D</span>
+      <span style="position:absolute;right:${TCOL.l}px;top:0;width:20px;text-align:right;${hs}">L</span>
+      <span style="position:absolute;right:${TCOL.gd}px;top:0;width:46px;text-align:center;${hs}">+/-</span>
+      <span style="position:absolute;right:${TCOL.xpts}px;top:0;width:30px;text-align:right;${hs}">xPTS</span>
+      <span style="position:absolute;right:${TCOL.pts}px;top:0;width:30px;text-align:right;${hs}">PTS</span>
     </div>`;
   return head + list.map((t, i) =>
     tableRowHtml(t, team, w, HEAD + i * rowH, rowH, pinnedTop && i === 0)).join('');
@@ -918,8 +956,9 @@ function similarTeamsPanelHtml(w, h, team, allTeams) {
     const col = sim != null ? similarityColor(sim) : scoreColor(t.completeScore);
     const crest = teamCrest(t.team);
     const val = sim != null
-      ? `<div style="font-size:15px;font-weight:800;color:${col};">${Math.round(sim)}%</div>
-         <div style="font-size:8px;color:#55617a;margin-top:2px;">match</div>`
+      ? `<div style="font-size:15px;font-weight:800;color:${col};line-height:1.05;">${Math.round(sim)}%</div>
+         <div style="font-size:7.5px;font-weight:600;letter-spacing:0.06em;color:#55617a;
+                     margin-top:3px;line-height:1;">match</div>`
       : (t.completeScore == null ? '' :
          `<div style="font-size:15px;font-weight:800;color:${col};">${whole(t.completeScore)}</div>`);
     return `
@@ -939,8 +978,10 @@ function similarTeamsPanelHtml(w, h, team, allTeams) {
           <div style="font-size:10px;color:#8b98ad;margin-top:4px;line-height:1.15;white-space:nowrap;
                       overflow:hidden;text-overflow:ellipsis;">${esc(leagueDisplayName(t.league))}</div>
         </div>
-        <div style="position:absolute;right:12px;top:50%;margin-top:-15px;width:${VAL_W}px;
-                    text-align:right;">${val}</div>
+        <!-- centred, not right-aligned: "match" is narrower than the figure so
+             right-aligning left the two visually off-axis -->
+        <div style="position:absolute;right:10px;top:50%;margin-top:-15px;width:${VAL_W}px;
+                    text-align:center;">${val}</div>
       </div>`;
   }).join('');
 }
@@ -987,13 +1028,13 @@ function keyPlayersPanelHtml(w, h, squad) {
             <div style="padding:3px 0;border-radius:11px;background:rgba(255,255,255,0.06);
                         border:1px solid ${gradeColor(sc)}44;font-size:14px;font-weight:800;
                         color:${gradeColor(sc)};">${Math.round(sc)}</div>
-            <div style="font-size:7.5px;font-weight:700;letter-spacing:0.09em;color:#6f7c92;margin-top:4px;">NOW</div>
+            <div style="font-size:7px;font-weight:700;letter-spacing:0.06em;color:#6f7c92;margin-top:4px;">OVR</div>
           </div>
           <div style="width:${PILL_W}px;text-align:center;margin-left:${PILL_GAP}px;">
             <div style="padding:3px 0;border-radius:11px;background:rgba(255,255,255,0.03);
                         border:1px dashed ${gradeColor(pot)}55;font-size:14px;font-weight:800;
                         color:${gradeColor(pot)};">${Math.round(pot)}</div>
-            <div style="font-size:7.5px;font-weight:700;letter-spacing:0.09em;color:#6f7c92;margin-top:4px;">POT</div>
+            <div style="font-size:7px;font-weight:700;letter-spacing:0.06em;color:#6f7c92;margin-top:4px;">POT</div>
           </div>
         </div>
       </div>`;
@@ -1080,9 +1121,11 @@ function weaknessesPanelHtml(w, h, team, allTeams, xi) {
   const rowH = 32;
   const bars = metrics.map(([name, p], i) => `
     <div style="position:absolute;left:0;top:${i * rowH}px;width:${w}px;height:${rowH - 8}px;">
-      <span style="position:absolute;left:0;top:0;font-size:11.5px;font-weight:600;color:#c8d2e0;
-                   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-                   max-width:${w - 44}px;">${esc(name)}</span>
+      <!-- left+right gives a definite width; left+max-width made this
+           shrink-to-fit and ellipsise far earlier than the max-width -->
+      <span style="position:absolute;left:0;right:40px;top:0;font-size:11.5px;font-weight:600;
+                   color:#c8d2e0;white-space:nowrap;overflow:hidden;
+                   text-overflow:ellipsis;">${esc(name)}</span>
       <span style="position:absolute;right:0;top:-1px;font-size:13px;font-weight:800;
                    color:${radarColor(p)};">${Math.round(p)}</span>
       <div style="position:absolute;left:0;right:0;top:17px;height:5px;border-radius:3px;
@@ -1105,7 +1148,7 @@ function weaknessesPanelHtml(w, h, team, allTeams, xi) {
     : `<span style="font-size:11px;color:#8b98ad;">All slots covered</span>`;
 
   const improvePills = improve.length
-    ? improve.map(x => pill(`${x.k} <span style="opacity:0.75;">${Math.round(x.v)}</span>`, '#f87171')).join('')
+    ? improve.map(x => pill(x.k, '#f87171')).join('')
     : `<span style="font-size:11px;color:#8b98ad;">No clear weak link</span>`;
 
   return `<div style="position:absolute;inset:0;">
@@ -1213,7 +1256,7 @@ function coachHtml(coach, team, coachScore) {
 }
 
 // ─── Header ────────────────────────────────────────────────────────────────
-function headerHtml(team, coach, coachScore, allTeams) {
+function headerHtml(team, coach, coachScore, allTeams, headerColour) {
   const crest = teamCrest(team.team);
   const league = leagueDisplayName(team.league);
   const logo = leagueLogo(team.league);
@@ -1230,7 +1273,7 @@ function headerHtml(team, coach, coachScore, allTeams) {
 
   return `
     <div style="position:absolute;top:0;left:0;width:${W}px;height:${HEADER_H}px;
-                background:linear-gradient(to right, ${HEADER_L} 0%, ${HEADER_R} 100%);
+                background:${headerGradient(headerColour)};
                 box-shadow:inset 0 1px 0 rgba(255,255,255,0.08);"></div>
 
     ${crest ? `<div style="position:absolute;left:${PAD}px;top:21px;width:108px;height:108px;
@@ -1255,38 +1298,62 @@ function headerHtml(team, coach, coachScore, allTeams) {
       ${team.season ? `<span style="font-size:19px;font-weight:500;color:#8fa0b8;margin-left:12px;">· ${esc(team.season)}</span>` : ''}
     </div>
 
-    <!-- SCORE CARD — pills, with league ranks for Pts / xPts underneath. -->
+    <!-- SCORE CARD. Five equal pills gave OVERALL no more weight than the
+         splits and left the labels fighting for room. Now: a ring gauge for
+         OVERALL (its own visual language, reads instantly), the four splits as
+         a 2x2 grid with room for full labels and a bar each, and the league
+         ranks on a divided footer instead of bolted underneath. -->
     <div style="position:absolute;left:${SCORE_X}px;top:16px;width:${SCORE_W}px;height:118px;
                 background:rgba(255,255,255,0.055);border:1px solid rgba(255,255,255,0.12);
                 border-radius:14px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.08);"></div>
 
-    <div style="position:absolute;left:${SCORE_X + 16}px;top:26px;width:118px;text-align:center;">
-      <div style="display:inline-block;padding:5px 20px;border-radius:22px;
-                  background:rgba(255,255,255,0.07);border:1px solid ${scoreColor(ovr)}55;
-                  font-size:36px;font-weight:900;line-height:1.05;color:${scoreColor(ovr)};">${whole(ovr)}</div>
-      <div style="font-size:9px;font-weight:700;letter-spacing:0.18em;color:#94a3b8;margin-top:8px;">OVERALL</div>
-    </div>
+    ${(() => {
+      const RC = 36, CIRC = 2 * Math.PI * RC;
+      const pct = Math.max(0, Math.min(100, Number(ovr) || 0));
+      const cxr = SCORE_X + 62, cyr = 60;
+      return `
+      <svg width="88" height="88" viewBox="0 0 88 88"
+           style="position:absolute;left:${cxr - 44}px;top:${cyr - 44}px;">
+        <circle cx="44" cy="44" r="${RC}" fill="none" stroke="rgba(255,255,255,0.10)" stroke-width="7"/>
+        <circle cx="44" cy="44" r="${RC}" fill="none" stroke="${scoreColor(ovr)}" stroke-width="7"
+                stroke-linecap="round" stroke-dasharray="${(CIRC * pct / 100).toFixed(1)} ${CIRC.toFixed(1)}"
+                transform="rotate(-90 44 44)"/>
+        <text x="44" y="50" text-anchor="middle" font-family="Montserrat,sans-serif"
+              font-size="27" font-weight="900" fill="${scoreColor(ovr)}">${whole(ovr)}</text>
+      </svg>
+      <div style="position:absolute;left:${cxr - 50}px;top:${cyr + 48}px;width:100px;text-align:center;
+                  font-size:8.5px;font-weight:700;letter-spacing:0.2em;color:#94a3b8;">OVERALL</div>`;
+    })()}
 
-    <div style="position:absolute;left:${SCORE_X + 148}px;top:28px;width:1px;height:74px;
+    <div style="position:absolute;left:${SCORE_X + 122}px;top:26px;width:1px;height:76px;
                 background:rgba(255,255,255,0.14);"></div>
 
-    <div style="position:absolute;left:${SCORE_X + 168}px;top:28px;display:flex;align-items:flex-start;">
-      ${cells.map(([label, v], i) => `
-        <div style="width:76px;text-align:center;${i ? 'margin-left:9px;' : ''}">
-          <div style="display:inline-block;min-width:50px;padding:4px 0;border-radius:16px;
-                      background:rgba(255,255,255,0.07);border:1px solid ${scoreColor(v)}55;
-                      font-size:20px;font-weight:800;line-height:1.05;color:${scoreColor(v)};">${whole(v)}</div>
-          <div style="font-size:8.5px;font-weight:700;letter-spacing:0.09em;color:#8fa0b8;margin-top:7px;">${label}</div>
-        </div>`).join('')}
-    </div>
+    ${cells.map(([label, v], i) => {
+      const col = i % 2, row = Math.floor(i / 2);
+      const cw = 168, ch = 38;
+      return `
+      <div style="position:absolute;left:${SCORE_X + 142 + col * (cw + 14)}px;top:${24 + row * ch}px;
+                  width:${cw}px;height:${ch - 6}px;">
+        <span style="position:absolute;left:0;top:2px;font-size:9px;font-weight:700;
+                     letter-spacing:0.1em;color:#8fa0b8;white-space:nowrap;">${label}</span>
+        <span style="position:absolute;right:0;top:-2px;font-size:19px;font-weight:800;
+                     color:${scoreColor(v)};">${whole(v)}</span>
+        <div style="position:absolute;left:0;right:0;top:19px;height:4px;border-radius:2px;
+                    background:rgba(255,255,255,0.09);overflow:hidden;">
+          <div style="width:${Math.max(0, Math.min(100, Number(v) || 0))}%;height:100%;
+                      background:${scoreColor(v)};border-radius:2px;"></div>
+        </div>
+      </div>`;
+    }).join('')}
 
-    <!-- Pts / xPts league ranks, sharing the tile -->
-    <div style="position:absolute;left:${SCORE_X + 168}px;top:96px;display:flex;align-items:center;
+    <div style="position:absolute;left:${SCORE_X + 142}px;top:100px;width:${SCORE_W - 156}px;
+                height:1px;background:rgba(255,255,255,0.10);"></div>
+    <div style="position:absolute;left:${SCORE_X + 142}px;top:107px;display:flex;align-items:center;
                 white-space:nowrap;">
-      <span style="font-size:10px;font-weight:700;letter-spacing:0.09em;color:#8fa0b8;">PTS</span>
-      <span style="font-size:15px;font-weight:800;color:#dbe3f0;margin-left:9px;">${rankStr(ptsRank)}</span>
-      <span style="font-size:10px;font-weight:700;letter-spacing:0.09em;color:#8fa0b8;margin-left:30px;">xPTS</span>
-      <span style="font-size:15px;font-weight:800;color:#dbe3f0;margin-left:9px;">${rankStr(xptsRank)}</span>
+      <span style="font-size:9px;font-weight:700;letter-spacing:0.1em;color:#8fa0b8;">PTS</span>
+      <span style="font-size:14px;font-weight:800;color:#dbe3f0;margin-left:8px;">${rankStr(ptsRank)}</span>
+      <span style="font-size:9px;font-weight:700;letter-spacing:0.1em;color:#8fa0b8;margin-left:28px;">xPTS</span>
+      <span style="font-size:14px;font-weight:800;color:#dbe3f0;margin-left:8px;">${rankStr(xptsRank)}</span>
     </div>
 
     ${coachHtml(coach, team, coachScore)}`;
@@ -1362,7 +1429,7 @@ export async function preloadImages(urls, onProgress, timeoutMs = 4000, concurre
 }
 
 export function buildTeamReportElement(team, opts = {}) {
-  const { squad = [], formation = '4-3-3', coach = null, images = {}, depthCount = 2, coachScore = null, allTeams = [] } = opts;
+  const { squad = [], formation = '4-3-3', coach = null, images = {}, depthCount = 2, coachScore = null, allTeams = [], headerColour = null } = opts;
   IMG = images || {};
 
   const container = document.createElement('div');
@@ -1382,7 +1449,7 @@ export function buildTeamReportElement(team, opts = {}) {
     <div id="tr-card-root" style="width:${W}px;height:${H}px;overflow:hidden;background:${BG};
          font-family:'Montserrat',sans-serif;color:#fff;position:relative;box-sizing:border-box;">
 
-      ${headerHtml(team, coach, coachScore, allTeams)}
+      ${headerHtml(team, coach, coachScore, allTeams, headerColour)}
 
       ${panel({ x: PAD, y: BODY_TOP, w: LEFT_W, h: LEFT_H,
                 title: 'XI + Depth', right: formation, body: xiPanelHtml(xiW, xiH, xi) })}
@@ -1414,6 +1481,7 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
   const [error, setError] = useState('');
   const [formation, setFormation] = useState('4-3-3');
   const [depthCount, setDepthCount] = useState(2);
+  const [headerColourName, setHeaderColourName] = useState('Default');
 
   // Player rows carry league in the '.' format ('England 1.'); team rows don't.
   // Compare on the normalised form or every squad comes back empty.
@@ -1514,7 +1582,7 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
       const images = await preloadImages(urls, (d, t) => setProgress(`Images ${d}/${t}`));
       setProgress('Rendering…');
 
-      el = buildTeamReportElement(team, { squad, formation, coach, images, depthCount, coachScore, allTeams });
+      el = buildTeamReportElement(team, { squad, formation, coach, images, depthCount, coachScore, allTeams, headerColour: HEADER_COLOURS[headerColourName] });
       const cardNode = el.querySelector('#tr-card-root') || el;
       const opts = {
         width: W, height: H, pixelRatio: 1, backgroundColor: BG,
@@ -1560,6 +1628,24 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
                      fontSize: 11.5, cursor: 'pointer' }}>
             {FORMATION_NAMES.map(f => <option key={f} value={f}>{f}</option>)}
           </select>
+        </div>
+
+        <div style={{ textAlign: 'left', marginBottom: 12 }}>
+          <span style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase',
+                         letterSpacing: '.04em', display: 'block', marginBottom: 6 }}>Header colour</span>
+          <div style={{ display: 'flex', flexWrap: 'wrap' }}>
+            {HEADER_COLOUR_NAMES.map((n, i) => {
+              const hex = HEADER_COLOURS[n];
+              const on = headerColourName === n;
+              return (
+                <button key={n} title={n} onClick={() => setHeaderColourName(n)}
+                  style={{ width: 26, height: 26, borderRadius: 6, marginLeft: i ? 6 : 0, marginBottom: 6,
+                           cursor: 'pointer', padding: 0,
+                           border: on ? '2px solid #60a5fa' : '1px solid #1e2d45',
+                           background: hex || 'linear-gradient(135deg,rgb(23,26,77),rgb(17,22,42))' }} />
+              );
+            })}
+          </div>
         </div>
 
         <div style={{ textAlign: 'left', marginBottom: 12 }}>
