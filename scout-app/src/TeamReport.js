@@ -1,4 +1,4 @@
-// TeamReport.js v22 — Team All-in-One report. 1920x1080 PNG export.
+// TeamReport.js v23 — Team All-in-One report. 1920x1080 PNG export.
 //
 // v2: bigger team name; country flag + league logo beside the league name;
 //     mini coach profile in the header gap; XI is now formation-driven and
@@ -50,16 +50,19 @@ const LEFT_H = ROW_3 + ROW3_H - BODY_TOP;      // 889
 // Header column stops. The team name is capped and ellipsised so long clubs
 // ("Wolverhampton Wanderers") can't run into the coach block.
 const NAME_X = PAD + 128;
-// The identity zone only needs room for the name and league row, so the other
-// three sections shift left and sit as a cluster:
-//   identity 24-470 | scores 486-946 | facts 962-1240 | manager 1256-1896
-const NAME_MAX_W = 318;                  // ends at 470
-const SCORE_X = 486;
-const SCORE_W = 460;
-const FACTS_X = 962;
-const FACTS_W = 278;
-const COACH_X = 1256;
-const COACH_W = 640;
+// Four zones divided by hairline rules rather than nested cards — boxes inside a
+// box is what made the band feel assembled rather than designed.
+//   identity 24-470 | rule 478 | scores 494-960 | rule 968 | facts 984-1246 | rule 1254 | manager 1270-1896
+const NAME_MAX_W = 318;
+const RULE_1 = 478;
+const SCORE_X = 494;
+const SCORE_W = 466;
+const RULE_2 = 968;
+const FACTS_X = 984;
+const FACTS_W = 262;
+const RULE_3 = 1254;
+const COACH_X = 1270;
+const COACH_W = 626;
 
 // ─── Palette ───────────────────────────────────────────────────────────────
 // Generic head-and-shoulders, inlined as a data URI so it needs no network and
@@ -72,7 +75,8 @@ const SILHOUETTE = "data:image/svg+xml;utf8," + encodeURIComponent(
   '<path d="M10 62c0-12 10-19 22-19s22 7 22 19z" fill="#39445c"/>' +
   '</svg>');
 
-const ACCENT_PINK = '#ff66c4';   // same accent as QuickCard / CoachCard
+const ACCENT_PINK = '#ff66c4';
+const LOAN_YELLOW = '#fbc701';   // loan players, starter or depth   // same accent as QuickCard / CoachCard
 const BG = '#0a0f1c';
 const HEADER_L = 'rgb(23,26,77)';
 const HEADER_R = 'rgb(17,22,42)';
@@ -115,8 +119,33 @@ export const HEADER_COLOUR_NAMES = Object.keys(HEADER_COLOURS);
 // disappears; everything else keeps the original colours.
 function headerInk(spec) {
   return (spec && spec.light)
-    ? { primary: '#0b1220', secondary: '#25324a', muted: '#3d4a5e', soft: '#46536b', rule: 'rgba(0,0,0,0.14)' }
-    : { primary: '#fff', secondary: '#dbe3f0', muted: '#8fa0b8', soft: '#7f8ca3', rule: 'rgba(255,255,255,0.14)' };
+    ? { primary: '#0b1220', secondary: '#25324a', muted: '#55627a', soft: '#46536b',
+        rule: 'rgba(0,0,0,0.13)', track: 'rgba(0,0,0,0.10)' }
+    : { primary: '#fff', secondary: '#dbe3f0', muted: '#8fa0b8', soft: '#7f8ca3',
+        rule: 'rgba(255,255,255,0.13)', track: 'rgba(255,255,255,0.10)' };
+}
+
+// ONE row language for every measured value in the band — style scores, average
+// age, squad cost. Label left on a fixed column, track bar, value right. Sharing
+// the geometry is what makes the header read as designed rather than as three
+// separate widgets that happen to sit next to each other.
+function statRow({ x, y, w, label, value, pct, colour, ink, rank, labelW = 74, valueW = 42 }) {
+  const barL = x + labelW;
+  const barR = x + w - valueW - 10;
+  const fill = Math.max(0, Math.min(100, Number(pct) || 0));
+  return `
+    <div style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:18px;">
+      <span style="position:absolute;left:0;top:4px;font-size:8px;font-weight:700;
+                   letter-spacing:0.13em;color:${ink.muted};white-space:nowrap;">${label}</span>
+      <div style="position:absolute;left:${labelW}px;right:${valueW + 10}px;top:6px;height:5px;
+                  border-radius:3px;background:${ink.track};overflow:hidden;">
+        <div style="width:${fill.toFixed(0)}%;height:100%;background:${colour};border-radius:3px;"></div>
+      </div>
+      <span style="position:absolute;right:0;top:0;width:${valueW}px;text-align:right;
+                   font-size:15px;font-weight:800;color:${colour};line-height:1.15;">${value}</span>
+      ${rank ? `<span style="position:absolute;right:0;top:16px;width:${valueW}px;text-align:right;
+                   font-size:8px;font-weight:700;color:${ink.muted};">${rank}</span>` : ''}
+    </div>`;
 }
 
 function headerGradient(spec) {
@@ -712,7 +741,7 @@ function xiPanelHtml(w, h, xi, opts = {}) {
     const oopTag = '';
 
     const depthNames = depth.map(d =>
-      `<div style="font-size:12.5px;color:#93a1b5;line-height:1.42;white-space:nowrap;
+      `<div style="font-size:12.5px;color:${d.onLoan ? LOAN_YELLOW : '#93a1b5'};line-height:1.42;white-space:nowrap;
                    overflow:hidden;text-overflow:ellipsis;">${esc(d.name)}${
         (() => { const mv = showContract ? contractLeft(d, season) : (d.age != null ? String(d.age) : '');
                  return mv ? ` (${mv})` : ''; })()}</div>`).join('');
@@ -720,7 +749,7 @@ function xiPanelHtml(w, h, xi, opts = {}) {
     return `
       <div style="position:absolute;left:${left}px;top:${top}px;width:${SLOT_W}px;">
         <div style="position:relative;height:${FACE}px;">${face}${score}</div>
-        <div style="font-size:14.5px;font-weight:700;color:#eaf0f8;margin-top:6px;
+        <div style="font-size:14.5px;font-weight:700;color:${starter && starter.onLoan ? LOAN_YELLOW : '#eaf0f8'};margin-top:6px;
                     text-align:center;white-space:nowrap;overflow:hidden;
                     text-overflow:ellipsis;">${starter ? esc(starter.name) : '—'}${age}${oopTag}</div>
         <div style="margin-top:3px;text-align:center;">${depthNames}</div>
@@ -1158,6 +1187,18 @@ export function contractLeft(p, season) {
   return `+${Math.max(0, d)}`;
 }
 
+// Accent-insensitive matching: "plzen" finds "Plzeň", "munchen" finds "München".
+// NFD handles most diacritics; the explicit map covers the ones it can't
+// decompose (ø, ł, đ, ß...), matching the treatment photoUrl already uses.
+const FOLD_MAP = { 'ø':'o','œ':'oe','æ':'ae','å':'a','ß':'ss','ł':'l','đ':'d','ð':'d',
+                   'þ':'th','ı':'i','ħ':'h','ŧ':'t','ĸ':'k','ŉ':'n' };
+export function fold(str) {
+  let t = String(str || '').toLowerCase();
+  for (const k of Object.keys(FOLD_MAP)) if (t.includes(k)) t = t.split(k).join(FOLD_MAP[k]);
+  return t.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+export const foldIncludes = (hay, needle) => fold(hay).includes(fold(needle));
+
 export const playerKey = (p) => `${p && p.name}|${p && p.team}`;
 export function findByKeys(pool, keys) {
   if (!Array.isArray(keys) || !keys.length) return [];
@@ -1391,7 +1432,8 @@ function departuresPanelHtml(w, h, rows, season) {
                 style="color:#7c8798;font-weight:600;"> ${p.age != null ? p.age : '—'}</span></div>
           <div style="font-size:10px;color:#8b98ad;margin-top:4px;line-height:1.15;white-space:nowrap;
                       overflow:hidden;text-overflow:ellipsis;">${esc(pos)}${
-            p.marketValue ? `<span style="color:#6f7c92;"> · </span><span style="color:#93a1b5;">${formatMoney(p.marketValue)}</span>` : ''}</div>
+            p.marketValue ? `<span style="color:#6f7c92;"> · </span><span style="color:#93a1b5;">${formatMoney(p.marketValue)}</span>` : ''}${
+            p.xValue ? `<span style="color:#6f7c92;"> · xV </span><span style="color:#93c5fd;">${formatMoney(p.xValue)}</span>` : ''}</div>
         </div>
         <div style="position:absolute;right:11px;top:50%;margin-top:-13px;width:76px;text-align:center;
                     padding:4px 0;border-radius:13px;
@@ -1559,48 +1601,42 @@ function headerHtml(team, coach, coachScore, allTeams, headerColour, rawOverall,
       ${team.season ? `<span style="font-size:18px;font-weight:500;color:${ink.muted};margin-left:12px;">· ${esc(team.season)}</span>` : ''}
     </div>
 
-    <!-- SCORES. Ring gauge replaced by pills: five values of the same kind read
-         better as one consistent row than as a gauge plus a grid of bars. OVR
-         carries more weight through size and a solid border rather than a
-         different shape. -->
-    <div style="position:absolute;left:${SCORE_X}px;top:18px;width:${SCORE_W}px;height:114px;
-                background:${spec && spec.light ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.055)'};
-                border:1px solid ${spec && spec.light ? 'rgba(0,0,0,0.10)' : 'rgba(255,255,255,0.12)'};
-                border-radius:14px;"></div>
+    <!-- Zone rules -->
+    ${[RULE_1, RULE_2, RULE_3].map(x =>
+      `<div style="position:absolute;left:${x}px;top:30px;width:1px;height:90px;
+                   background:${ink.rule};"></div>`).join('')}
 
-    <div style="position:absolute;left:${SCORE_X + 18}px;top:30px;width:96px;text-align:center;">
-      <div style="display:inline-block;min-width:88px;padding:7px 0;border-radius:19px;
-                  background:${scoreColor(ovr)}1f;border:2px solid ${scoreColor(ovr)};
-                  font-size:31px;font-weight:900;line-height:1;color:${scoreColor(ovr)};">${whole(ovr)}</div>
-      <div style="font-size:8.5px;font-weight:700;letter-spacing:0.16em;color:${ink.muted};margin-top:9px;">OVERALL</div>
+    <!-- SCORES. OVERALL is the hero — one large number with its own scale bar —
+         and the four style scores sit beside it as rows in the shared language.
+         No pills, no gauge, no card: hierarchy comes from type size, and
+         comparison from bars that all start on the same left edge. -->
+    <div style="position:absolute;left:${SCORE_X}px;top:26px;width:104px;">
+      <div style="font-size:46px;font-weight:900;line-height:1;color:${scoreColor(ovr)};
+                  letter-spacing:-1px;">${whole(ovr)}</div>
+      <div style="margin-top:9px;height:5px;border-radius:3px;background:${ink.track};overflow:hidden;">
+        <div style="width:${Math.max(0, Math.min(100, Number(ovr) || 0)).toFixed(0)}%;height:100%;
+                    background:${scoreColor(ovr)};border-radius:3px;"></div>
+      </div>
+      <div style="font-size:8px;font-weight:700;letter-spacing:0.2em;color:${ink.muted};margin-top:8px;">OVERALL</div>
     </div>
 
-    <div style="position:absolute;left:${SCORE_X + 128}px;top:32px;width:1px;height:60px;
-                background:${ink.rule};"></div>
+    ${cells.map(([label, v], i) => statRow({
+      x: SCORE_X + 124, y: 26 + i * 22, w: SCORE_W - 124,
+      label, value: whole(v), pct: v, colour: scoreColor(v), ink,
+    })).join('')}
 
-    <div style="position:absolute;left:${SCORE_X + 148}px;top:32px;display:flex;align-items:flex-start;">
-      ${cells.map(([label, v], i) => `
-        <div style="width:70px;text-align:center;${i ? 'margin-left:8px;' : ''}">
-          <div style="display:inline-block;min-width:52px;padding:5px 0;border-radius:15px;
-                      background:${scoreColor(v)}1a;border:1px solid ${scoreColor(v)}88;
-                      font-size:19px;font-weight:800;line-height:1;color:${scoreColor(v)};">${whole(v)}</div>
-          <div style="font-size:7.5px;font-weight:700;letter-spacing:0.08em;color:${ink.muted};margin-top:8px;">${label}</div>
-        </div>`).join('')}
-    </div>
-
-    <div style="position:absolute;left:${SCORE_X + 18}px;top:98px;width:${SCORE_W - 36}px;
-                height:1px;background:${ink.rule};"></div>
-    <div style="position:absolute;left:${SCORE_X + 18}px;top:106px;display:flex;align-items:center;
+    <div style="position:absolute;left:${SCORE_X + 124}px;top:118px;display:flex;align-items:center;
                 white-space:nowrap;">
-      <span style="font-size:8.5px;font-weight:700;letter-spacing:0.11em;color:${ink.muted};">PTS</span>
-      <span style="font-size:13px;font-weight:800;color:${ink.secondary};margin-left:7px;">${rankStr(ptsRank)}</span>
-      <span style="font-size:8.5px;font-weight:700;letter-spacing:0.11em;color:${ink.muted};margin-left:24px;">xPTS</span>
-      <span style="font-size:13px;font-weight:800;color:${ink.secondary};margin-left:7px;">${rankStr(xptsRank)}</span>
+      <span style="font-size:8px;font-weight:700;letter-spacing:0.13em;color:${ink.muted};">PTS</span>
+      <span style="font-size:12px;font-weight:800;color:${ink.secondary};margin-left:7px;">${rankStr(ptsRank)}</span>
+      <span style="font-size:8px;font-weight:700;letter-spacing:0.13em;color:${ink.muted};margin-left:22px;">xPTS</span>
+      <span style="font-size:12px;font-weight:800;color:${ink.secondary};margin-left:7px;">${rankStr(xptsRank)}</span>
     </div>
 
-    <!-- CLUB FACTS — no card. Three loud boxes in one band was the problem; as
-         quiet type with hairline rank bars this reads as supporting detail
-         rather than competing with the scores. -->
+    <!-- CLUB FACTS — same row language, so the band reads as one system. The
+         bars show league position (1st = full) rather than the raw value, and
+         stay neutral: a young squad or a big budget isn't good or bad by itself.
+         The objective is a pill because it's categorical, not measured. -->
     ${(() => {
       const rows = [];
       if (team.avgAge != null && !isNaN(team.avgAge)) {
@@ -1610,31 +1646,26 @@ function headerHtml(team, coach, coachScore, allTeams, headerColour, rawOverall,
         rows.push(['SQUAD COST', purchaseValue,
           (purchaseRank && leagueSize) ? { rank: purchaseRank, size: leagueSize } : null]);
       }
-      const body = rows.map(([lbl, val, rk], i) => {
-        const fill = rk ? Math.max(4, ((rk.size - rk.rank + 1) / rk.size) * 100) : 0;
-        return `
-        <div style="position:absolute;left:${FACTS_X}px;top:${26 + i * 32}px;width:${FACTS_W}px;height:26px;">
-          <span style="position:absolute;left:0;top:3px;font-size:8px;font-weight:700;
-                       letter-spacing:0.13em;color:${ink.muted};">${lbl}</span>
-          <span style="position:absolute;left:96px;top:-1px;font-size:15px;font-weight:800;
-                       color:${ink.secondary};">${val}</span>
-          ${rk ? `
-            <span style="position:absolute;right:0;top:2px;font-size:9.5px;font-weight:700;
-                         color:${ink.muted};">${rankStr(rk)}</span>
-            <div style="position:absolute;left:96px;right:36px;top:19px;height:2px;border-radius:1px;
-                        background:${spec && spec.light ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.12)'};">
-              <div style="width:${fill.toFixed(0)}%;height:100%;border-radius:1px;
-                          background:${spec && spec.light ? 'rgba(0,0,0,0.42)' : 'rgba(255,255,255,0.45)'};"></div>
-            </div>` : ''}
-        </div>`;
-      }).join('');
+      const body = rows.map(([lbl, val, rk], i) => statRow({
+        x: FACTS_X, y: 28 + i * 34, w: FACTS_W,
+        label: lbl, value: val, colour: ink.secondary, ink,
+        pct: rk ? ((rk.size - rk.rank + 1) / rk.size) * 100 : 0,
+        rank: rk ? rankStr(rk) : '',
+        labelW: 70, valueW: 62,
+      })).join('');
 
       const oc = OBJECTIVE_COLOUR[objective] || '#94a3b8';
       const obj = objective ? `
-        <div style="position:absolute;left:${FACTS_X}px;top:${26 + rows.length * 32 + 2}px;
-                    display:inline-block;padding:3px 12px;border-radius:11px;
+        <div style="position:absolute;left:${FACTS_X}px;top:${30 + rows.length * 34}px;
+                    display:inline-block;padding:4px 13px;border-radius:12px;
                     background:${oc}1c;border:1px solid ${oc}5a;
-                    font-size:10.5px;font-weight:800;color:${oc};white-space:nowrap;">${esc(objective)}</div>` : '';
+                    font-size:10.5px;font-weight:800;letter-spacing:0.02em;
+                    color:${oc};white-space:nowrap;">${esc(objective)}</div>` : '';
+
+      if (!rows.length && !objective) {
+        return `<div style="position:absolute;left:${FACTS_X}px;top:64px;width:${FACTS_W}px;
+                 font-size:10.5px;color:${ink.muted};">No club facts set.</div>`;
+      }
       return body + obj;
     })()}
 
@@ -1840,7 +1871,7 @@ function XiSlotEditor({ xi, pool, lists, setLists, teamName }) {
         const t = q.trim().toLowerCase();
         const results = !open ? [] : pool
           .filter(p => !keys.includes(playerKey(p)))
-          .filter(p => !t || String(p.name).toLowerCase().includes(t) || String(p.team || '').toLowerCase().includes(t))
+          .filter(p => !t || foldIncludes(p.name, t) || foldIncludes(p.team || '', t))
           .map(p => ({ p, fit: slotFitRank(p, slot.label) }))
           .filter(x => (anyPos || t) ? true : x.fit < 99)
           .sort((a, b) => a.fit - b.fit
@@ -1996,7 +2027,7 @@ function PlayerPicker({ pool, picked, onPick, onRemove, max = 3, placeholder }) 
     const out = [];
     for (const p of pool) {
       if (!p || !p.name) continue;
-      if (String(p.name).toLowerCase().includes(t) || String(p.team || '').toLowerCase().includes(t)) {
+      if (foldIncludes(p.name, t) || foldIncludes(p.team || '', t)) {
         out.push(p);
         if (out.length >= 40) break;
       }
