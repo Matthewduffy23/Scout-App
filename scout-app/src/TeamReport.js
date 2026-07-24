@@ -1,4 +1,4 @@
-// TeamReport.js v23 — Team All-in-One report. 1920x1080 PNG export.
+// TeamReport.js v24 — Team All-in-One report. 1920x1080 PNG export.
 //
 // v2: bigger team name; country flag + league logo beside the league name;
 //     mini coach profile in the header gap; XI is now formation-driven and
@@ -50,19 +50,17 @@ const LEFT_H = ROW_3 + ROW3_H - BODY_TOP;      // 889
 // Header column stops. The team name is capped and ellipsised so long clubs
 // ("Wolverhampton Wanderers") can't run into the coach block.
 const NAME_X = PAD + 128;
-// Four zones divided by hairline rules rather than nested cards — boxes inside a
-// box is what made the band feel assembled rather than designed.
-//   identity 24-470 | rule 478 | scores 494-960 | rule 968 | facts 984-1246 | rule 1254 | manager 1270-1896
-const NAME_MAX_W = 318;
-const RULE_1 = 478;
-const SCORE_X = 494;
-const SCORE_W = 466;
-const RULE_2 = 968;
-const FACTS_X = 984;
-const FACTS_W = 262;
-const RULE_3 = 1254;
-const COACH_X = 1270;
-const COACH_W = 626;
+// Three zones, no cluster: the five score wheels take the middle span, and the
+// manager block runs all the way to the right margin with the club facts tucked
+// in beneath his details.
+//   identity 24-440 | rule 456 | wheels 474-1174 | rule 1192 | manager 1210-1896
+const NAME_MAX_W = 288;
+const RULE_1 = 456;
+const WHEEL_X = 474;
+const WHEEL_W = 700;
+const RULE_2 = 1192;
+const COACH_X = 1210;
+const COACH_W = 686;
 
 // ─── Palette ───────────────────────────────────────────────────────────────
 // Generic head-and-shoulders, inlined as a data URI so it needs no network and
@@ -76,7 +74,10 @@ const SILHOUETTE = "data:image/svg+xml;utf8," + encodeURIComponent(
   '</svg>');
 
 const ACCENT_PINK = '#ff66c4';
-const LOAN_YELLOW = '#fbc701';   // loan players, starter or depth   // same accent as QuickCard / CoachCard
+// Loan players get a quiet "(L)" rather than a coloured name — colour on the
+// name competes with the score, and the marker reads at any position in the list.
+const LOAN_TAG = '<span style="color:#6f7c92;font-weight:600;">(L) </span>';
+const LOAN_TAG_SM = '<span style="color:#5c6b82;font-weight:600;">(L) </span>';   // same accent as QuickCard / CoachCard
 const BG = '#0a0f1c';
 const HEADER_L = 'rgb(23,26,77)';
 const HEADER_R = 'rgb(17,22,42)';
@@ -146,6 +147,31 @@ function statRow({ x, y, w, label, value, pct, colour, ink, rank, labelW = 74, v
       ${rank ? `<span style="position:absolute;right:0;top:16px;width:${valueW}px;text-align:right;
                    font-size:8px;font-weight:700;color:${ink.muted};">${rank}</span>` : ''}
     </div>`;
+}
+
+// Circular gauge. Five of these in a row give the band a single, repeated shape
+// instead of a hero-plus-rows split — closer to a broadcast graphic, and the
+// arcs are directly comparable at a glance.
+function scoreWheel({ cx, cy, r, stroke, value, label, colour, ink, big }) {
+  const c = 2 * Math.PI * r;
+  const pct = Math.max(0, Math.min(100, Number(value) || 0));
+  const size = r * 2 + stroke + 2;
+  return `
+    <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}"
+         style="position:absolute;left:${cx - size / 2}px;top:${cy - size / 2}px;">
+      <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none"
+              stroke="${ink.track}" stroke-width="${stroke}"/>
+      <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none"
+              stroke="${colour}" stroke-width="${stroke}" stroke-linecap="round"
+              stroke-dasharray="${(c * pct / 100).toFixed(1)} ${c.toFixed(1)}"
+              transform="rotate(-90 ${size / 2} ${size / 2})"/>
+      <text x="${size / 2}" y="${size / 2 + (big ? 9 : 7)}" text-anchor="middle"
+            font-family="Montserrat,sans-serif" font-size="${big ? 26 : 20}"
+            font-weight="900" fill="${colour}">${whole(value)}</text>
+    </svg>
+    <div style="position:absolute;left:${cx - 60}px;top:${cy + size / 2 + 6}px;width:120px;
+                text-align:center;font-size:8px;font-weight:700;letter-spacing:0.15em;
+                color:${ink.muted};">${label}</div>`;
 }
 
 function headerGradient(spec) {
@@ -741,17 +767,17 @@ function xiPanelHtml(w, h, xi, opts = {}) {
     const oopTag = '';
 
     const depthNames = depth.map(d =>
-      `<div style="font-size:12.5px;color:${d.onLoan ? LOAN_YELLOW : '#93a1b5'};line-height:1.42;white-space:nowrap;
-                   overflow:hidden;text-overflow:ellipsis;">${esc(d.name)}${
+      `<div style="font-size:12.5px;color:#93a1b5;line-height:1.42;white-space:nowrap;
+                   overflow:hidden;text-overflow:ellipsis;">${d.onLoan ? LOAN_TAG_SM : ''}${esc(d.name)}${
         (() => { const mv = showContract ? contractLeft(d, season) : (d.age != null ? String(d.age) : '');
                  return mv ? ` (${mv})` : ''; })()}</div>`).join('');
 
     return `
       <div style="position:absolute;left:${left}px;top:${top}px;width:${SLOT_W}px;">
         <div style="position:relative;height:${FACE}px;">${face}${score}</div>
-        <div style="font-size:14.5px;font-weight:700;color:${starter && starter.onLoan ? LOAN_YELLOW : '#eaf0f8'};margin-top:6px;
+        <div style="font-size:14.5px;font-weight:700;color:#eaf0f8;margin-top:6px;
                     text-align:center;white-space:nowrap;overflow:hidden;
-                    text-overflow:ellipsis;">${starter ? esc(starter.name) : '—'}${age}${oopTag}</div>
+                    text-overflow:ellipsis;">${starter && starter.onLoan ? LOAN_TAG : ''}${starter ? esc(starter.name) : '—'}${age}${oopTag}</div>
         <div style="margin-top:3px;text-align:center;">${depthNames}</div>
       </div>`;
   }).join('');
@@ -1474,12 +1500,13 @@ export function findCoachForTeam(team) {
   return coaches.find(c => (c.tenures || []).some(t => t.team === team.team)) || null;
 }
 
-function coachHtml(coach, team, coachScore, hideManagerScore = false, ink = headerInk(null)) {
+function coachHtml(coach, team, coachScore, hideManagerScore = false, ink = headerInk(null), clubFacts = '') {
   if (!coach) {
+    // No manager saved: the club facts still belong here rather than vanishing.
     return `
-      <div style="position:absolute;left:${COACH_X}px;top:64px;width:${COACH_W}px;
-                  font-size:13px;color:#55617a;">
-        No coach saved for this club — pick one in the Manager dropdown.
+      <div style="position:absolute;left:${COACH_X}px;top:44px;width:${COACH_W}px;">
+        <div style="font-size:12.5px;color:${ink.muted};">No manager saved for this club.</div>
+        ${clubFacts ? `<div style="margin-top:14px;">${clubFacts}</div>` : ''}
       </div>`;
   }
   const rawId = coach.fotmobId || '';
@@ -1523,13 +1550,13 @@ function coachHtml(coach, team, coachScore, hideManagerScore = false, ink = head
                  vertical-align:middle;">${whole(coachScore)}</span>`;
 
   return `
-    <div style="position:absolute;left:${COACH_X}px;top:24px;width:${COACH_W}px;height:102px;">
-      <div style="position:absolute;left:0;top:2px;width:94px;height:94px;border-radius:11px;
+    <div style="position:absolute;left:${COACH_X}px;top:20px;width:${COACH_W}px;height:112px;">
+      <div style="position:absolute;left:0;top:6px;width:94px;height:94px;border-radius:11px;
                   background-color:#151b2e;${photoCss}
                   background-repeat:no-repeat;
                   border:1px solid rgba(255,255,255,0.16);"></div>
 
-      <div style="position:absolute;left:110px;top:6px;width:${COACH_W - 110}px;">
+      <div style="position:absolute;left:110px;top:0px;width:${COACH_W - 110}px;">
         <div style="font-size:9.5px;font-weight:700;letter-spacing:0.16em;color:${ink.muted};">MANAGER</div>
         <div style="margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
           <span style="font-size:23px;font-weight:700;color:${ink.primary};vertical-align:middle;">${esc(coach.name || '')}</span>${scoreChip}
@@ -1544,6 +1571,7 @@ function coachHtml(coach, team, coachScore, hideManagerScore = false, ink = head
             `<span style="font-size:11px;color:#6f7c92;margin-left:14px;">
                ${k}: <span style="color:#c3ccdd;font-weight:600;">${esc(v)}</span></span>`).join('')}
         </div>
+        ${clubFacts ? `<div style="margin-top:9px;">${clubFacts}</div>` : ''}
       </div>
     </div>`;
 }
@@ -1560,19 +1588,48 @@ function headerHtml(team, coach, coachScore, allTeams, headerColour, rawOverall,
   // Same pair TeamIndex's "Raw Score (not league weighted)" toggle switches on.
   const spec = headerColour;
   const ink = headerInk(spec);
+  const ageRankLate = rankIn(allTeams, team, 'avgAge', false);
+  const leagueSizeLate = (allTeams || []).filter(t =>
+    String(t.league) === String(team.league) && String(t.season) === String(team.season)).length || null;
   const ovr = rawOverall ? (team.overall ?? team.completeScore) : team.completeScore;
   const cells = [
     ['ATTACK', team.attack], ['DEFENCE', team.defence],
     ['POSSESSION', team.possession], ['PRESSING', team.pressing],
   ];
+  // Club facts render as one quiet line inside the manager block — same zone, no
+  // divider, deliberately lower contrast than his name so it reads as context.
+  const clubFactsHtml = (() => {
+    const bits = [];
+    if (team.avgAge != null && !isNaN(team.avgAge)) {
+      bits.push(['AVG AGE', Number(team.avgAge).toFixed(1), ageRankLate]);
+    }
+    if (purchaseValue) {
+      bits.push(['SQUAD COST', purchaseValue,
+        (purchaseRank && leagueSizeLate) ? { rank: purchaseRank, size: leagueSizeLate } : null]);
+    }
+    const oc = OBJECTIVE_COLOUR[objective] || '#94a3b8';
+    if (!bits.length && !objective) return '';
+    return `
+      <div style="display:flex;align-items:center;white-space:nowrap;">
+        ${bits.map(([k, v, rk], i) => `
+          <span style="${i ? 'margin-left:20px;' : ''}font-size:7.5px;font-weight:700;
+                       letter-spacing:0.13em;color:${ink.muted};">${k}</span>
+          <span style="margin-left:6px;font-size:12.5px;font-weight:800;color:${ink.secondary};">${v}</span>
+          ${rk ? `<span style="margin-left:4px;font-size:8.5px;font-weight:700;color:${ink.muted};">${rankStr(rk)}</span>` : ''}
+        `).join('')}
+        ${objective ? `<span style="${bits.length ? 'margin-left:20px;' : ''}display:inline-block;
+              padding:2px 10px;border-radius:10px;background:${oc}1c;border:1px solid ${oc}55;
+              font-size:9.5px;font-weight:800;color:${oc};">${esc(objective)}</span>` : ''}
+      </div>`;
+  })();
+
   const ptsRank = team.pointsRank != null && team.leagueSize != null
     ? { rank: team.pointsRank, size: team.leagueSize }
     : rankIn(allTeams, team, 'points');
   const xptsRank = rankIn(allTeams, team, 'expectedPoints');
   // Youngest = 1. Not a value judgement — it's the trajectory signal.
-  const ageRank = rankIn(allTeams, team, 'avgAge', false);
-  const leagueSize = (ptsRank && ptsRank.size) || (allTeams || []).filter(t =>
-    String(t.league) === String(team.league) && String(t.season) === String(team.season)).length || null;
+  const ageRank = ageRankLate;
+  const leagueSize = leagueSizeLate;
 
   return `
     <div style="position:absolute;top:0;left:0;width:${W}px;height:${HEADER_H}px;
@@ -1601,75 +1658,33 @@ function headerHtml(team, coach, coachScore, allTeams, headerColour, rawOverall,
       ${team.season ? `<span style="font-size:18px;font-weight:500;color:${ink.muted};margin-left:12px;">· ${esc(team.season)}</span>` : ''}
     </div>
 
-    <!-- Zone rules -->
-    ${[RULE_1, RULE_2, RULE_3].map(x =>
-      `<div style="position:absolute;left:${x}px;top:30px;width:1px;height:90px;
+    ${[RULE_1, RULE_2].map(x =>
+      `<div style="position:absolute;left:${x}px;top:28px;width:1px;height:94px;
                    background:${ink.rule};"></div>`).join('')}
 
-    <!-- SCORES. OVERALL is the hero — one large number with its own scale bar —
-         and the four style scores sit beside it as rows in the shared language.
-         No pills, no gauge, no card: hierarchy comes from type size, and
-         comparison from bars that all start on the same left edge. -->
-    <div style="position:absolute;left:${SCORE_X}px;top:26px;width:104px;">
-      <div style="font-size:46px;font-weight:900;line-height:1;color:${scoreColor(ovr)};
-                  letter-spacing:-1px;">${whole(ovr)}</div>
-      <div style="margin-top:9px;height:5px;border-radius:3px;background:${ink.track};overflow:hidden;">
-        <div style="width:${Math.max(0, Math.min(100, Number(ovr) || 0)).toFixed(0)}%;height:100%;
-                    background:${scoreColor(ovr)};border-radius:3px;"></div>
-      </div>
-      <div style="font-size:8px;font-weight:700;letter-spacing:0.2em;color:${ink.muted};margin-top:8px;">OVERALL</div>
-    </div>
+    <!-- FIVE WHEELS. One repeated shape across the whole span reads as a single
+         system; OVERALL is bigger and sits first so the hierarchy still holds. -->
+    ${(() => {
+      const all = [['OVERALL', ovr, true], ...cells.map(([l, v]) => [l, v, false])];
+      const step = WHEEL_W / all.length;
+      return all.map(([label, v, big], i) => scoreWheel({
+        cx: WHEEL_X + step * i + step / 2,
+        cy: 62,
+        r: big ? 33 : 27,
+        stroke: big ? 7 : 6,
+        value: v, label, colour: scoreColor(v), ink, big,
+      })).join('');
+    })()}
 
-    ${cells.map(([label, v], i) => statRow({
-      x: SCORE_X + 124, y: 26 + i * 22, w: SCORE_W - 124,
-      label, value: whole(v), pct: v, colour: scoreColor(v), ink,
-    })).join('')}
-
-    <div style="position:absolute;left:${SCORE_X + 124}px;top:118px;display:flex;align-items:center;
-                white-space:nowrap;">
+    <div style="position:absolute;left:${WHEEL_X}px;top:120px;width:${WHEEL_W}px;
+                display:flex;align-items:center;justify-content:center;white-space:nowrap;">
       <span style="font-size:8px;font-weight:700;letter-spacing:0.13em;color:${ink.muted};">PTS</span>
       <span style="font-size:12px;font-weight:800;color:${ink.secondary};margin-left:7px;">${rankStr(ptsRank)}</span>
-      <span style="font-size:8px;font-weight:700;letter-spacing:0.13em;color:${ink.muted};margin-left:22px;">xPTS</span>
+      <span style="font-size:8px;font-weight:700;letter-spacing:0.13em;color:${ink.muted};margin-left:26px;">xPTS</span>
       <span style="font-size:12px;font-weight:800;color:${ink.secondary};margin-left:7px;">${rankStr(xptsRank)}</span>
     </div>
 
-    <!-- CLUB FACTS — same row language, so the band reads as one system. The
-         bars show league position (1st = full) rather than the raw value, and
-         stay neutral: a young squad or a big budget isn't good or bad by itself.
-         The objective is a pill because it's categorical, not measured. -->
-    ${(() => {
-      const rows = [];
-      if (team.avgAge != null && !isNaN(team.avgAge)) {
-        rows.push(['AVG AGE', Number(team.avgAge).toFixed(1), ageRank]);
-      }
-      if (purchaseValue) {
-        rows.push(['SQUAD COST', purchaseValue,
-          (purchaseRank && leagueSize) ? { rank: purchaseRank, size: leagueSize } : null]);
-      }
-      const body = rows.map(([lbl, val, rk], i) => statRow({
-        x: FACTS_X, y: 28 + i * 34, w: FACTS_W,
-        label: lbl, value: val, colour: ink.secondary, ink,
-        pct: rk ? ((rk.size - rk.rank + 1) / rk.size) * 100 : 0,
-        rank: rk ? rankStr(rk) : '',
-        labelW: 70, valueW: 62,
-      })).join('');
-
-      const oc = OBJECTIVE_COLOUR[objective] || '#94a3b8';
-      const obj = objective ? `
-        <div style="position:absolute;left:${FACTS_X}px;top:${30 + rows.length * 34}px;
-                    display:inline-block;padding:4px 13px;border-radius:12px;
-                    background:${oc}1c;border:1px solid ${oc}5a;
-                    font-size:10.5px;font-weight:800;letter-spacing:0.02em;
-                    color:${oc};white-space:nowrap;">${esc(objective)}</div>` : '';
-
-      if (!rows.length && !objective) {
-        return `<div style="position:absolute;left:${FACTS_X}px;top:64px;width:${FACTS_W}px;
-                 font-size:10.5px;color:${ink.muted};">No club facts set.</div>`;
-      }
-      return body + obj;
-    })()}
-
-    ${coachHtml(coach, team, coachScore, hideManagerScore, ink)}`;
+    ${coachHtml(coach, team, coachScore, hideManagerScore, ink, clubFactsHtml)}`;
 }
 
 // ─── Image handling ────────────────────────────────────────────────────────
