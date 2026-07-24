@@ -1,4 +1,4 @@
-// TeamReport.js v11 — Team All-in-One report. 1920x1080 PNG export.
+// TeamReport.js v12 — Team All-in-One report. 1920x1080 PNG export.
 //
 // v2: bigger team name; country flag + league logo beside the league name;
 //     mini coach profile in the header gap; XI is now formation-driven and
@@ -52,7 +52,7 @@ const LEFT_H = ROW_3 + ROW3_H - BODY_TOP;      // 889
 const NAME_X = PAD + 128;
 const NAME_MAX_W = 520;
 // Order across the band: crest+name -> OVR/score card -> manager.
-const SCORE_X = 706;                     // score card left edge
+const SCORE_X = 648;                     // score card left edge
 const SCORE_W = 512;                     // 676..1188
 const OVR_CX = SCORE_X + 66;             // centre of the OVR number
 const STAT_X = SCORE_X + 138;
@@ -714,20 +714,13 @@ function radarPanelHtml(w, h, team, allTeams) {
     svg += `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}"
              stroke="#fff" stroke-opacity="${cross ? 1 : 0.25}" stroke-width="${cross ? 1.4 : 0.8}"/>`;
   });
-  rows.forEach(([, p], i) => {
-    if (p < 20) return;
-    const [x, y] = pt(rot[i], rScale(p >= 30 ? p - 11 : p * 0.7));
-    svg += `<text x="${x.toFixed(1)}" y="${(y + 4).toFixed(1)}" text-anchor="middle"
-             font-family="Montserrat,sans-serif" font-size="11.5" font-weight="800"
-             fill="#fff">${Math.round(p)}</text>`;
-  });
   rows.forEach(([label], i) => {
     const [x, y] = pt(rot[i], R * LABEL_R);
     // Anchor by side so long labels grow outward rather than over the dial.
     const c = Math.cos(rot[i]);
     const anchor = c > 0.25 ? 'start' : c < -0.25 ? 'end' : 'middle';
     svg += `<text x="${x.toFixed(1)}" y="${(y + 3).toFixed(1)}" text-anchor="${anchor}"
-             font-family="Montserrat,sans-serif" font-size="9.5" font-weight="700"
+             font-family="Montserrat,sans-serif" font-size="8.5" font-weight="700"
              fill="#c8d2e0" letter-spacing="0.04em">${label}</text>`;
   });
 
@@ -792,10 +785,236 @@ function styleRowsFor(team) {
 function stylePanelHtml(w, h, team) {
   return `<div style="position:absolute;left:0;top:2px;">${styleHexSvg(styleRowsFor(team), w)}</div>`;
 }
-function similarTeamsPanelHtml(w, h) { return stub(w, h, 'from t.similarTeams'); }
-function leagueTablePanelHtml(w, h) { return stub(w, h, 'rows around t.pointsRank'); }
-function keyPlayersPanelHtml(w, h) { return stub(w, h, 'top squad players by careerScore'); }
-function weaknessesPanelHtml(w, h) { return stub(w, h, 'lowest metricGroups pcts + thin positions'); }
+// t.similarTeams may hold plain names or objects — resolve either against the
+// full team list so the row gets a crest, league and score regardless.
+export function resolveSimilarTeams(team, allTeams, n = 3) {
+  const raw = Array.isArray(team.similarTeams) ? team.similarTeams : [];
+  const out = [];
+  for (const entry of raw) {
+    if (out.length >= n) break;
+    const name = typeof entry === 'string' ? entry : (entry && (entry.team || entry.name));
+    if (!name || name === team.team) continue;
+    const league = typeof entry === 'object' && entry ? entry.league : null;
+    const row = allTeams.find(t => t.team === name && (!league || t.league === league)
+                                   && String(t.season) === String(team.season))
+             || allTeams.find(t => t.team === name)
+             || { team: name, league: league || '', completeScore: (entry && entry.score) ?? null };
+    out.push(row);
+  }
+  return out;
+}
+
+function similarTeamsPanelHtml(w, h, team, allTeams) {
+  const rows = resolveSimilarTeams(team, allTeams, 3);
+  if (!rows.length) {
+    return `<div style="position:absolute;inset:0;display:flex;align-items:center;
+             justify-content:center;font-size:12px;color:#55617a;">No similar teams in the data.</div>`;
+  }
+  const rowH = Math.floor((h - 4) / 3);
+  return rows.map((t, i) => {
+    const crest = teamCrest(t.team);
+    const sc = t.completeScore;
+    return `
+      <div style="position:absolute;left:0;top:${i * rowH + 2}px;width:${w}px;height:${rowH - 6}px;
+                  background:rgba(255,255,255,0.035);border:1px solid rgba(255,255,255,0.07);
+                  border-radius:9px;">
+        ${crest ? `<div style="position:absolute;left:12px;top:50%;margin-top:-15px;width:30px;height:30px;
+                     background-image:url('${src(crest)}');background-size:contain;
+                     background-repeat:no-repeat;background-position:center;"></div>` : ''}
+        <div style="position:absolute;left:54px;top:50%;margin-top:-16px;">
+          <div style="font-size:14px;font-weight:700;color:#eaf0f8;white-space:nowrap;
+                      overflow:hidden;text-overflow:ellipsis;max-width:${w - 130}px;">${esc(t.team)}</div>
+          <div style="font-size:10.5px;color:#8b98ad;margin-top:3px;">${esc(leagueDisplayName(t.league))}</div>
+        </div>
+        ${sc == null ? '' : `<div style="position:absolute;right:12px;top:50%;margin-top:-13px;
+             min-width:44px;text-align:center;padding:4px 0;border-radius:14px;
+             background:rgba(255,255,255,0.06);border:1px solid ${scoreColor(sc)}44;
+             font-size:16px;font-weight:800;color:${scoreColor(sc)};">${whole(sc)}</div>`}
+      </div>`;
+  }).join('');
+}
+// The full table won't fit and mostly isn't relevant — show the window around
+// this team so its position reads in context, with top spot pinned if it's out
+// of view (the gap to the leaders is usually the first thing you want).
+export function leagueWindow(team, allTeams, size = 5) {
+  const pool = allTeams
+    .filter(t => String(t.league) === String(team.league)
+              && String(t.season) === String(team.season) && t.pointsRank != null)
+    .sort((a, b) => a.pointsRank - b.pointsRank);
+  if (!pool.length) return { rows: [], pinnedTop: null, total: 0 };
+  const idx = pool.findIndex(t => t.team === team.team);
+  if (idx < 0) return { rows: pool.slice(0, size), pinnedTop: null, total: pool.length };
+  let start = Math.max(0, Math.min(idx - Math.floor(size / 2), pool.length - size));
+  const rows = pool.slice(start, start + size);
+  const pinnedTop = start > 0 ? pool[0] : null;
+  return { rows, pinnedTop, total: pool.length };
+}
+
+function tableRowHtml(t, team, w, top, rowH, dim) {
+  const me = t.team === team.team;
+  const crest = teamCrest(t.team);
+  return `
+    <div style="position:absolute;left:0;top:${top}px;width:${w}px;height:${rowH - 4}px;
+                background:${me ? 'rgba(59,125,232,0.16)' : 'rgba(255,255,255,0.03)'};
+                border:1px solid ${me ? 'rgba(96,165,250,0.45)' : 'rgba(255,255,255,0.06)'};
+                border-radius:7px;opacity:${dim ? 0.62 : 1};">
+      <span style="position:absolute;left:12px;top:50%;margin-top:-8px;width:22px;text-align:center;
+                   font-size:13px;font-weight:800;color:${me ? '#93c5fd' : '#8b98ad'};">${t.pointsRank}</span>
+      ${crest ? `<div style="position:absolute;left:44px;top:50%;margin-top:-11px;width:22px;height:22px;
+                   background-image:url('${src(crest)}');background-size:contain;
+                   background-repeat:no-repeat;background-position:center;"></div>` : ''}
+      <span style="position:absolute;left:76px;top:50%;margin-top:-8px;font-size:13px;
+                   font-weight:${me ? 700 : 600};color:${me ? '#fff' : '#c8d2e0'};white-space:nowrap;
+                   overflow:hidden;text-overflow:ellipsis;max-width:${w - 200}px;">${esc(t.team)}</span>
+      <span style="position:absolute;right:74px;top:50%;margin-top:-8px;width:44px;text-align:right;
+                   font-size:12px;color:#8b98ad;">${t.expectedPoints != null ? Math.round(t.expectedPoints) : '—'}</span>
+      <span style="position:absolute;right:14px;top:50%;margin-top:-9px;width:44px;text-align:right;
+                   font-size:15px;font-weight:800;color:${me ? '#fff' : '#dbe3f0'};">${t.points != null ? Math.round(t.points) : '—'}</span>
+    </div>`;
+}
+
+function leagueTablePanelHtml(w, h, team, allTeams) {
+  const { rows, pinnedTop } = leagueWindow(team, allTeams, pinnedRows(h));
+  if (!rows.length) {
+    return `<div style="position:absolute;inset:0;display:flex;align-items:center;
+             justify-content:center;font-size:12px;color:#55617a;">No table data for this league.</div>`;
+  }
+  const HEAD = 18;
+  const list = pinnedTop ? [pinnedTop, ...rows] : rows;
+  const rowH = Math.floor((h - HEAD) / list.length);
+  const head = `
+    <div style="position:absolute;left:0;top:0;width:${w}px;height:${HEAD}px;">
+      <span style="position:absolute;right:74px;top:0;width:44px;text-align:right;font-size:8.5px;
+                   font-weight:700;letter-spacing:0.1em;color:#6f7c92;">xPTS</span>
+      <span style="position:absolute;right:14px;top:0;width:44px;text-align:right;font-size:8.5px;
+                   font-weight:700;letter-spacing:0.1em;color:#6f7c92;">PTS</span>
+    </div>`;
+  return head + list.map((t, i) =>
+    tableRowHtml(t, team, w, HEAD + i * rowH, rowH, pinnedTop && i === 0)).join('');
+}
+function pinnedRows(h) { return h >= 190 ? 5 : 4; }
+export function topPlayers(squad, n = 3) {
+  return squad.slice()
+    .filter(p => p && p.careerScore != null)
+    .sort((a, b) => b.careerScore - a.careerScore)
+    .slice(0, n);
+}
+
+function keyPlayersPanelHtml(w, h, squad) {
+  const rows = topPlayers(squad, 3);
+  if (!rows.length) {
+    return `<div style="position:absolute;inset:0;display:flex;align-items:center;
+             justify-content:center;font-size:12px;color:#55617a;">No squad data.</div>`;
+  }
+  const rowH = Math.floor((h - 4) / 3);
+  return rows.map((p, i) => {
+    const sc = p.careerScore;
+    const pot = p.potentialScore != null ? p.potentialScore : p.careerScore;
+    return `
+      <div style="position:absolute;left:0;top:${i * rowH + 2}px;width:${w}px;height:${rowH - 6}px;
+                  background:rgba(255,255,255,0.035);border:1px solid rgba(255,255,255,0.07);
+                  border-radius:9px;">
+        <div style="position:absolute;left:11px;top:50%;margin-top:-17px;width:34px;height:34px;
+                    border-radius:50%;background-color:rgba(255,255,255,0.07);
+                    background-image:url('${src(photoUrl(p.name, p.team))}');
+                    background-size:cover;background-position:center top;
+                    border:1.5px solid rgba(203,213,225,0.5);"></div>
+        <div style="position:absolute;left:56px;top:50%;margin-top:-16px;">
+          <div style="font-size:14px;font-weight:700;color:#eaf0f8;white-space:nowrap;
+                      overflow:hidden;text-overflow:ellipsis;max-width:${w - 180}px;">${esc(p.name)}<span
+                style="color:#7c8798;font-weight:600;"> (${p.age != null ? p.age : '—'})</span></div>
+          <div style="font-size:10.5px;color:#8b98ad;margin-top:3px;">${esc(String(p.position || '').split(',')[0].trim())}</div>
+        </div>
+        <div style="position:absolute;right:12px;top:50%;margin-top:-16px;text-align:center;">
+          <span style="display:inline-block;min-width:42px;padding:4px 0;border-radius:13px;
+                       background:rgba(255,255,255,0.06);border:1px solid ${gradeColor(sc)}44;
+                       font-size:15px;font-weight:800;color:${gradeColor(sc)};">${Math.round(sc)}</span>
+          <span style="display:inline-block;min-width:42px;padding:4px 0;border-radius:13px;
+                       margin-left:6px;background:rgba(255,255,255,0.03);
+                       border:1px dashed ${gradeColor(pot)}55;
+                       font-size:15px;font-weight:800;color:${gradeColor(pot)};">${Math.round(pot)}</span>
+          <div style="font-size:8px;font-weight:700;letter-spacing:0.1em;color:#6f7c92;margin-top:4px;">
+            NOW &nbsp;&nbsp;&nbsp; POT
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+// Every metricGroups entry, percentiled against the league the same way the
+// radar does it (recomputed from raw, inverted where lower is better) so
+// "Goals Against" can't show up as a strength by accident.
+const WEAKNESS_INVERT = new Set(['xG Against', 'Goals Against', 'Shots Against', 'PPDA']);
+
+export function weakestMetrics(team, allTeams, n = 4) {
+  const pool = allTeams.filter(t => String(t.league) === String(team.league)
+                                 && String(t.season) === String(team.season));
+  const out = [];
+  const groups = team.metricGroups || {};
+  for (const g of Object.keys(groups)) {
+    const rows = Array.isArray(groups[g]) ? groups[g] : [];
+    for (const r of rows) {
+      if (!r || r[0] == null) continue;
+      const name = r[0];
+      const v = Number(r[2]);
+      if (isNaN(v)) continue;
+      const vals = pool.map(t => rawMetric(t, g, name)).filter(x => x != null);
+      if (vals.length < 2) continue;
+      const p = (vals.filter(x => x <= v).length / vals.length) * 100;
+      out.push([name, WEAKNESS_INVERT.has(name) ? 100 - p : p]);
+    }
+  }
+  return out.sort((a, b) => a[1] - b[1]).slice(0, n);
+}
+
+// Starting slots with no cover behind them — the squad-shape half of "weakness".
+export function uncoveredSlots(xi) {
+  return xi.filter(s => s.starter && (!s.depth || !s.depth.length)).map(s => s.slot.label);
+}
+
+function weaknessesPanelHtml(w, h, team, allTeams, xi) {
+  const metrics = weakestMetrics(team, allTeams, 4);
+  const thinAll = uncoveredSlots(xi);
+  // A very thin squad can leave every slot uncovered; 11 pills would overflow
+  // the tile, so cap the list and count the rest.
+  const THIN_CAP = 6;
+  const thin = thinAll.slice(0, THIN_CAP);
+  const thinMore = thinAll.length - thin.length;
+  const barTop = 4;
+  const rowH = 34;
+
+  const bars = metrics.map(([name, p], i) => `
+    <div style="position:absolute;left:0;top:${barTop + i * rowH}px;width:${w}px;height:${rowH - 8}px;">
+      <span style="position:absolute;left:0;top:0;font-size:11.5px;font-weight:600;color:#c8d2e0;
+                   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:${w - 56}px;">${esc(name)}</span>
+      <span style="position:absolute;right:0;top:-1px;font-size:13px;font-weight:800;
+                   color:${radarColor(p)};">${Math.round(p)}</span>
+      <div style="position:absolute;left:0;right:0;top:18px;height:5px;border-radius:3px;
+                  background:rgba(255,255,255,0.08);overflow:hidden;">
+        <div style="width:${Math.max(2, Math.min(100, p))}%;height:100%;
+                    background:${radarColor(p)};border-radius:3px;"></div>
+      </div>
+    </div>`).join('');
+
+  const thinTop = barTop + metrics.length * rowH + 6;
+  const thinHtml = `
+    <div style="position:absolute;left:0;top:${thinTop}px;width:${w}px;">
+      <div style="font-size:8.5px;font-weight:700;letter-spacing:0.14em;color:#6f7c92;">NO COVER</div>
+      <div style="margin-top:7px;">
+        ${thin.length
+          ? thin.map((k, i) => `<span style="display:inline-block;font-size:11px;font-weight:700;
+              padding:3px 9px;border-radius:11px;background:rgba(241,140,49,0.12);
+              border:1px solid rgba(241,140,49,0.35);color:#f6a75c;${i ? 'margin-left:6px;' : ''}">${k}</span>`).join('')
+          : `<span style="font-size:11.5px;color:#8b98ad;">Every starting slot has cover.</span>`}
+        ${thinMore > 0 ? `<span style="font-size:11px;font-weight:700;color:#8b98ad;margin-left:8px;">+${thinMore}</span>` : ''}
+      </div>
+    </div>`;
+
+  if (!metrics.length && !thin.length) {
+    return `<div style="position:absolute;inset:0;display:flex;align-items:center;
+             justify-content:center;font-size:12px;color:#55617a;">Not enough league data.</div>`;
+  }
+  return `<div style="position:absolute;inset:0;">${bars}${thinHtml}</div>`;
+}
 
 // ─── Coach lookup ──────────────────────────────────────────────────────────
 // Exact team+league+season match against saved tenures — the same rule
@@ -960,11 +1179,9 @@ function headerHtml(team, coach, coachScore, allTeams) {
     <div style="position:absolute;left:${SCORE_X + 168}px;top:96px;display:flex;align-items:center;
                 white-space:nowrap;">
       <span style="font-size:10px;font-weight:700;letter-spacing:0.09em;color:#8fa0b8;">PTS</span>
-      <span style="font-size:14px;font-weight:800;color:#dbe3f0;margin-left:8px;">${team.points != null ? team.points : '—'}</span>
-      <span style="font-size:12px;font-weight:700;color:#9aa6ba;margin-left:6px;">(${rankStr(ptsRank)})</span>
-      <span style="font-size:10px;font-weight:700;letter-spacing:0.09em;color:#8fa0b8;margin-left:26px;">xPTS</span>
-      <span style="font-size:14px;font-weight:800;color:#dbe3f0;margin-left:8px;">${team.expectedPoints != null ? Math.round(team.expectedPoints) : '—'}</span>
-      <span style="font-size:12px;font-weight:700;color:#9aa6ba;margin-left:6px;">(${rankStr(xptsRank)})</span>
+      <span style="font-size:15px;font-weight:800;color:#dbe3f0;margin-left:9px;">${rankStr(ptsRank)}</span>
+      <span style="font-size:10px;font-weight:700;letter-spacing:0.09em;color:#8fa0b8;margin-left:30px;">xPTS</span>
+      <span style="font-size:15px;font-weight:800;color:#dbe3f0;margin-left:9px;">${rankStr(xptsRank)}</span>
     </div>
 
     ${coachHtml(coach, team, coachScore)}`;
@@ -982,8 +1199,14 @@ function headerHtml(team, coach, coachScore, allTeams) {
 let IMG = {};
 const src = (url) => (url && IMG[url]) || url || '';
 
-export function cardImageUrls(team, squad, coach) {
+export function cardImageUrls(team, squad, coach, allTeams = []) {
   const urls = [teamCrest(team.team), leagueLogo(team.league), leagueFlag(team.league)];
+  // Similar-team crests, so they're inlined like everything else.
+  for (const t of resolveSimilarTeams(team, allTeams, 3)) urls.push(teamCrest(t.team));
+  // League-table crests.
+  const lw = leagueWindow(team, allTeams, 5);
+  for (const t of lw.rows) urls.push(teamCrest(t.team));
+  if (lw.pinnedTop) urls.push(teamCrest(lw.pinnedTop.team));
   for (const p of squad) urls.push(photoUrl(p.name, p.team));
   if (coach) {
     const rawId = coach.fotmobId || '';
@@ -1060,19 +1283,19 @@ export function buildTeamReportElement(team, opts = {}) {
                 title: 'XI + Depth', right: formation, body: xiPanelHtml(xiW, xiH, xi) })}
 
       ${panel({ x: COL_A_X, y: ROW_1, w: COL_W, h: ROW1_H,
-                title: 'Performance Radar', body: radarPanelHtml(innerW, ROW1_H - PANEL_PAD * 2 - TITLE_H, team, allTeams) })}
+                title: 'Performance', body: radarPanelHtml(innerW, ROW1_H - PANEL_PAD * 2 - TITLE_H, team, allTeams) })}
       ${panel({ x: COL_B_X, y: ROW_1, w: COL_W, h: ROW1_H,
                 title: 'Style', body: stylePanelHtml(innerW, ROW1_H - PANEL_PAD * 2 - TITLE_H, team) })}
 
       ${panel({ x: COL_A_X, y: ROW_2, w: COL_W, h: ROW2_H,
-                title: 'League Table', body: leagueTablePanelHtml(innerW, ROW2_H - PANEL_PAD * 2 - TITLE_H) })}
+                title: 'League Table', body: leagueTablePanelHtml(innerW, ROW2_H - PANEL_PAD * 2 - TITLE_H, team, allTeams) })}
       ${panel({ x: COL_B_X, y: ROW_2, w: COL_W, h: ROW2_H,
-                title: 'Weaknesses', body: weaknessesPanelHtml(innerW, ROW2_H - PANEL_PAD * 2 - TITLE_H) })}
+                title: 'Weaknesses', body: weaknessesPanelHtml(innerW, ROW2_H - PANEL_PAD * 2 - TITLE_H, team, allTeams, xi) })}
 
       ${panel({ x: COL_A_X, y: ROW_3, w: COL_W, h: ROW3_H,
-                title: 'Similar Teams', body: similarTeamsPanelHtml(innerW, ROW3_H - PANEL_PAD * 2 - TITLE_H) })}
+                title: 'Similar Teams', body: similarTeamsPanelHtml(innerW, ROW3_H - PANEL_PAD * 2 - TITLE_H, team, allTeams) })}
       ${panel({ x: COL_B_X, y: ROW_3, w: COL_W, h: ROW3_H,
-                title: 'Key Players', body: keyPlayersPanelHtml(innerW, ROW3_H - PANEL_PAD * 2 - TITLE_H) })}
+                title: 'Key Players', body: keyPlayersPanelHtml(innerW, ROW3_H - PANEL_PAD * 2 - TITLE_H, squad) })}
     </div>`;
 
   document.body.appendChild(container);
@@ -1182,7 +1405,7 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
     let el = null;
     try {
       const { toPng } = await import('html-to-image');
-      const urls = cardImageUrls(team, squad, coach);
+      const urls = cardImageUrls(team, squad, coach, allTeams);
       const images = await preloadImages(urls, (d, t) => setProgress(`Images ${d}/${t}`));
       setProgress('Rendering…');
 
