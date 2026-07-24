@@ -1,4 +1,4 @@
-// TeamReport.js v17 — Team All-in-One report. 1920x1080 PNG export.
+// TeamReport.js v18 — Team All-in-One report. 1920x1080 PNG export.
 //
 // v2: bigger team name; country flag + league logo beside the league name;
 //     mini coach profile in the header gap; XI is now formation-driven and
@@ -442,7 +442,9 @@ export function seasonMinutes(p, season) {
 
 // overrides: { [slot.id]: playerKey } — a manual pick wins over the auto choice
 // and is removed from every other slot so nobody appears twice.
-export function buildXI(formationKey, squad, depthCount = 2, season = null, overrides = null) {
+// overridePool lets a manual pick come from OUTSIDE the squad — useful for
+// showing a target in the XI before he's signed.
+export function buildXI(formationKey, squad, depthCount = 2, season = null, overrides = null, overridePool = null) {
   const slots = FORMATIONS[formationKey] || FORMATIONS['4-3-3'];
   const mins = (p) => Number(p.minutesLatest || 0);
 
@@ -554,7 +556,7 @@ export function buildXI(formationKey, squad, depthCount = 2, season = null, over
   // Apply manual overrides last: pin the chosen player to the slot, then strip
   // them from anywhere else they'd been placed.
   if (overrides && Object.keys(overrides).length) {
-    const byKey = new Map(squad.map(p => [playerKey(p), p]));
+    const byKey = new Map((overridePool || squad).map(p => [playerKey(p), p]));
     for (const slotId of Object.keys(overrides)) {
       const p = byKey.get(overrides[slotId]);
       if (!p) continue;
@@ -599,7 +601,8 @@ export function xiRating(xi) {
 const SLOT_W = 176;
 const SLOT_H = 138;
 const FACE = 62;
-function xiPanelHtml(w, h, xi) {
+function xiPanelHtml(w, h, xi, opts = {}) {
+  const { hideScores = false, showContract = false, season = null } = opts;
   const line = 'rgba(255,255,255,0.10)';
 
   const blocks = xi.map(({ slot, starter, oop, depth }) => {
@@ -610,9 +613,12 @@ function xiPanelHtml(w, h, xi) {
     const sc = starter ? starter.careerScore : null;
     const img = starter ? photoUrl(starter.name, starter.team) : '';
     const tok = starter ? String(starter.position || '').split(',')[0].trim() : '';
-    // Age sits in a dimmer grey so the name reads first.
-    const age = starter && starter.age != null
-      ? ` <span style="color:#7c8798;font-weight:600;">(${starter.age})</span>` : '';
+    // Age (or contract years remaining) in a dimmer grey so the name reads first.
+    const meta = !starter ? ''
+      : showContract
+        ? (contractLeft(starter, season) ? contractLeft(starter, season) : '')
+        : (starter.age != null ? String(starter.age) : '');
+    const age = meta ? ` <span style="color:#7c8798;font-weight:600;">(${meta})</span>` : '';
 
     // Ring is neutral grey — colour lives in the score, so the two don't compete.
     const face = starter
@@ -621,7 +627,8 @@ function xiPanelHtml(w, h, xi) {
                      background-color:rgba(255,255,255,0.07);
                      background-image:url('${src(img)}');background-size:cover;
                      background-position:center top;
-                     border:2px solid rgba(203,213,225,0.55);"></div>`
+                     border:1.5px solid rgba(190,203,224,0.26);
+                     box-shadow:0 0 0 3px rgba(255,255,255,0.035);"></div>`
       : `<div style="position:absolute;left:50%;margin-left:-${FACE / 2}px;top:0;
                      width:${FACE}px;height:${FACE}px;border-radius:50%;
                      background:rgba(255,255,255,0.05);
@@ -631,7 +638,7 @@ function xiPanelHtml(w, h, xi) {
 
     // Score hangs off the photo's right edge, absolutely placed — so the name
     // below can centre on the PHOTO rather than on photo+score combined.
-    const score = sc == null ? '' :
+    const score = (sc == null || hideScores) ? '' :
       `<div style="position:absolute;left:50%;margin-left:${FACE / 2 + 7}px;top:19px;
                    font-size:22px;font-weight:800;line-height:1;
                    color:${gradeColor(sc)};">${Math.round(sc)}</div>`;
@@ -641,7 +648,9 @@ function xiPanelHtml(w, h, xi) {
 
     const depthNames = depth.map(d =>
       `<div style="font-size:12.5px;color:#93a1b5;line-height:1.42;white-space:nowrap;
-                   overflow:hidden;text-overflow:ellipsis;">${esc(d.name)}${d.age != null ? ` (${d.age})` : ''}</div>`).join('');
+                   overflow:hidden;text-overflow:ellipsis;">${esc(d.name)}${
+        (() => { const mv = showContract ? contractLeft(d, season) : (d.age != null ? String(d.age) : '');
+                 return mv ? ` (${mv})` : ''; })()}</div>`).join('');
 
     return `
       <div style="position:absolute;left:${left}px;top:${top}px;width:${SLOT_W}px;">
@@ -1049,6 +1058,25 @@ export function bestRole(p) {
 }
 
 // Stable identity for manual selections. Name alone collides across clubs.
+// Season label -> the calendar year it ends in. '2025-26' -> 2026, '2026' -> 2026.
+export function seasonEndYear(season) {
+  const t = String(season || '').trim();
+  const m = t.match(/^(\d{4})\s*[-/]\s*(\d{2,4})$/);
+  if (m) return m[2].length === 2 ? Number(m[1].slice(0, 2) + m[2]) : Number(m[2]);
+  const y = t.match(/(\d{4})/);
+  return y ? Number(y[1]) : null;
+}
+
+// "+1" for a deal running one season beyond the current one, "Exp" for the
+// season it runs out. Returns '' when there's no contract data.
+export function contractLeft(p, season) {
+  const cy = Number(p && p.contractYear);
+  const end = seasonEndYear(season);
+  if (!cy || !end || isNaN(cy)) return '';
+  const d = cy - end;
+  return d <= 0 ? 'Exp' : `+${d}`;
+}
+
 export const playerKey = (p) => `${p && p.name}|${p && p.team}`;
 export function findByKeys(pool, keys) {
   if (!Array.isArray(keys) || !keys.length) return [];
@@ -1063,7 +1091,7 @@ export function topPlayers(squad, n = 3) {
     .slice(0, n);
 }
 
-function keyPlayersPanelHtml(w, h, rows, showClub = false) {
+function keyPlayersPanelHtml(w, h, rows, showClub = false, hideScores = false) {
   if (!rows || !rows.length) {
     return `<div style="position:absolute;inset:0;display:flex;align-items:center;
              justify-content:center;font-size:12px;color:#55617a;">No players selected.</div>`;
@@ -1095,20 +1123,23 @@ function keyPlayersPanelHtml(w, h, rows, showClub = false) {
                       overflow:hidden;text-overflow:ellipsis;">${esc(pos)}${role ? `<span style="color:#6f7c92;"> · </span><span style="color:#93a1b5;">${esc(role)}</span>` : ''}${
             showClub && p.team ? `<span style="color:#6f7c92;"> · </span><span style="color:#8b98ad;">${esc(p.team)}</span>` : ''}</div>
         </div>
-        <div style="position:absolute;right:10px;top:50%;margin-top:-15px;width:${VALS_W}px;display:flex;">
+        ${hideScores ? '' : `
+        <!-- lifted 3px and captions a size down: they were sitting on the row's
+             bottom edge while still crowding the pills above -->
+        <div style="position:absolute;right:10px;top:50%;margin-top:-18px;width:${VALS_W}px;display:flex;">
           <div style="width:${PILL_W}px;text-align:center;">
             <div style="padding:3px 0;border-radius:11px;background:rgba(255,255,255,0.06);
-                        border:1px solid ${gradeColor(sc)}44;font-size:14px;font-weight:800;
+                        border:1px solid ${gradeColor(sc)}44;font-size:13px;font-weight:800;
                         color:${gradeColor(sc)};">${Math.round(sc)}</div>
-            <div style="font-size:7px;font-weight:700;letter-spacing:0.06em;color:#6f7c92;margin-top:4px;">OVR</div>
+            <div style="font-size:6px;font-weight:700;letter-spacing:0.06em;color:#6f7c92;margin-top:3px;">OVR</div>
           </div>
           <div style="width:${PILL_W}px;text-align:center;margin-left:${PILL_GAP}px;">
             <div style="padding:3px 0;border-radius:11px;background:rgba(255,255,255,0.03);
-                        border:1px dashed ${gradeColor(pot)}55;font-size:14px;font-weight:800;
+                        border:1px dashed ${gradeColor(pot)}55;font-size:13px;font-weight:800;
                         color:${gradeColor(pot)};">${Math.round(pot)}</div>
-            <div style="font-size:7px;font-weight:700;letter-spacing:0.06em;color:#6f7c92;margin-top:4px;">POT</div>
+            <div style="font-size:6px;font-weight:700;letter-spacing:0.06em;color:#6f7c92;margin-top:3px;">POT</div>
           </div>
-        </div>
+        </div>`}
       </div>`;
   }).join('');
 }
@@ -1256,7 +1287,7 @@ export function findCoachForTeam(team) {
   return coaches.find(c => (c.tenures || []).some(t => t.team === team.team)) || null;
 }
 
-function coachHtml(coach, team, coachScore) {
+function coachHtml(coach, team, coachScore, hideManagerScore = false) {
   if (!coach) {
     return `
       <div style="position:absolute;left:${COACH_X}px;top:64px;width:${COACH_W}px;
@@ -1298,7 +1329,7 @@ function coachHtml(coach, team, coachScore) {
     : '';
 
   // Subtle, inline with the name — not a separate headline number.
-  const scoreChip = coachScore == null ? '' : `
+  const scoreChip = (coachScore == null || hideManagerScore) ? '' : `
     <span style="display:inline-block;margin-left:12px;padding:2px 9px;border-radius:11px;
                  background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.13);
                  font-size:15px;font-weight:800;color:${gradeColor(coachScore)};
@@ -1331,7 +1362,7 @@ function coachHtml(coach, team, coachScore) {
 }
 
 // ─── Header ────────────────────────────────────────────────────────────────
-function headerHtml(team, coach, coachScore, allTeams, headerColour, rawOverall) {
+function headerHtml(team, coach, coachScore, allTeams, headerColour, rawOverall, hideManagerScore) {
   const crest = teamCrest(team.team);
   const league = leagueDisplayName(team.league);
   const logo = leagueLogo(team.league);
@@ -1433,7 +1464,7 @@ function headerHtml(team, coach, coachScore, allTeams, headerColour, rawOverall)
       <span style="font-size:14px;font-weight:800;color:#dbe3f0;margin-left:8px;">${rankStr(xptsRank)}</span>
     </div>
 
-    ${coachHtml(coach, team, coachScore)}`;
+    ${coachHtml(coach, team, coachScore, hideManagerScore)}`;
 }
 
 // ─── Image handling ────────────────────────────────────────────────────────
@@ -1516,6 +1547,10 @@ export function buildTeamReportElement(team, opts = {}) {
     keyShowClub = false,
     depthList = null, upgradeList = null,
     xiOverrides = null,
+    xiOverridePool = null,
+    hidePlayerScores = false,
+    hideManagerScore = false,
+    showContractYears = false,
   } = opts;
   IMG = images || {};
 
@@ -1530,17 +1565,17 @@ export function buildTeamReportElement(team, opts = {}) {
   const xiW = LEFT_W - PANEL_PAD * 2;
   const xiH = LEFT_H - PANEL_PAD * 2 - TITLE_H;
 
-  const xi = buildXI(formation, squad, depthCount, team.season, xiOverrides);
+  const xi = buildXI(formation, squad, depthCount, team.season, xiOverrides, xiOverridePool);
   const players3 = keyRows || topPlayers(squad, 3);
 
   container.innerHTML = `
     <div id="tr-card-root" style="width:${W}px;height:${H}px;overflow:hidden;background:${BG};
          font-family:'Montserrat',sans-serif;color:#fff;position:relative;box-sizing:border-box;">
 
-      ${headerHtml(team, coach, coachScore, allTeams, headerColour, rawOverall)}
+      ${headerHtml(team, coach, coachScore, allTeams, headerColour, rawOverall, hideManagerScore)}
 
       ${panel({ x: PAD, y: BODY_TOP, w: LEFT_W, h: LEFT_H,
-                title: 'XI + Depth', right: formation, body: xiPanelHtml(xiW, xiH, xi) })}
+                title: 'XI + Depth', right: formation, body: xiPanelHtml(xiW, xiH, xi, { hideScores: hidePlayerScores, showContract: showContractYears, season: team.season }) })}
 
       ${panel({ x: COL_A_X, y: ROW_1, w: COL_W, h: ROW1_H,
                 title: 'Performance', body: radarPanelHtml(innerW, ROW1_H - PANEL_PAD * 2 - TITLE_H, team, allTeams) })}
@@ -1554,13 +1589,13 @@ export function buildTeamReportElement(team, opts = {}) {
 
       ${bottomMode === 'summary'
         ? `${panel({ x: COL_A_X, y: ROW_3, w: COL_W, h: ROW3_H,
-                     title: keyTitle, body: keyPlayersPanelHtml(innerW, ROW3_H - PANEL_PAD * 2 - TITLE_H, players3, keyShowClub) })}
+                     title: keyTitle, body: keyPlayersPanelHtml(innerW, ROW3_H - PANEL_PAD * 2 - TITLE_H, players3, keyShowClub, hidePlayerScores) })}
            ${panel({ x: COL_B_X, y: ROW_3, w: COL_W, h: ROW3_H,
                      title: 'Summary', body: summaryPanelHtml(innerW, ROW3_H - PANEL_PAD * 2 - TITLE_H, summaryText) })}`
         : `${panel({ x: COL_A_X, y: ROW_3, w: COL_W, h: ROW3_H,
                      title: 'Similar Teams', body: similarTeamsPanelHtml(innerW, ROW3_H - PANEL_PAD * 2 - TITLE_H, team, allTeams) })}
            ${panel({ x: COL_B_X, y: ROW_3, w: COL_W, h: ROW3_H,
-                     title: keyTitle, body: keyPlayersPanelHtml(innerW, ROW3_H - PANEL_PAD * 2 - TITLE_H, players3, keyShowClub) })}`}
+                     title: keyTitle, body: keyPlayersPanelHtml(innerW, ROW3_H - PANEL_PAD * 2 - TITLE_H, players3, keyShowClub, hidePlayerScores) })}`}
     </div>`;
 
   document.body.appendChild(container);
@@ -1694,6 +1729,10 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
   const [manualKeys, setManualKeys] = useState([]);
   const [recruitKeys, setRecruitKeys] = useState([]);
   const [xiOverrides, setXiOverrides] = useState({});
+  const [hidePlayerScores, setHidePlayerScores] = useState(false);
+  const [hideManagerScore, setHideManagerScore] = useState(false);
+  const [showContractYears, setShowContractYears] = useState(false);
+  const [xiSearchAll, setXiSearchAll] = useState(false);
   const [depthSel, setDepthSel] = useState(null);          // null = auto
   const [upgradeSel, setUpgradeSel] = useState(null);
 
@@ -1761,8 +1800,23 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
     } catch (e) { return null; }
   }, [coach, tenureRows, seasonPerf]);
 
-  const xi = useMemo(() => buildXI(formation, squad, depthCount, team.season, xiOverrides),
-                     [formation, squad, depthCount, team, xiOverrides]);
+  const xiPool = xiSearchAll ? players : squad;
+  // A <select> with ~83k options would hang the browser, so the "other clubs"
+  // list is the squad plus the highest-rated players elsewhere, and anyone
+  // already picked stays in regardless of rank.
+  const xiSelectPool = useMemo(() => {
+    if (!xiSearchAll) return squad;
+    const picked = new Set(Object.values(xiOverrides || {}));
+    const inSquad = new Set(squad.map(playerKey));
+    const rest = players
+      .filter(p => !inSquad.has(playerKey(p)))
+      .sort((a, b) => (b.careerScore || 0) - (a.careerScore || 0));
+    const keep = rest.filter(p => picked.has(playerKey(p)));
+    const top = rest.filter(p => !picked.has(playerKey(p))).slice(0, 300);
+    return [...squad, ...keep, ...top];
+  }, [xiSearchAll, players, squad, xiOverrides]);
+  const xi = useMemo(() => buildXI(formation, squad, depthCount, team.season, xiOverrides, xiPool),
+                     [formation, squad, depthCount, team, xiOverrides, xiPool]);
   const filled = xi.filter(s => s.starter).length;
 
   const slotLabels = useMemo(() => {
@@ -1793,7 +1847,8 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
     bottomMode, summaryText,
     keyRows, keyTitle, keyShowClub: keyMode === 'recruit',
     depthList: depthSel, upgradeList: upgradeSel,
-    xiOverrides,
+    xiOverrides, xiOverridePool: xiPool,
+    hidePlayerScores, hideManagerScore, showContractYears,
   });
 
   const handleDownload = async () => {
@@ -1801,7 +1856,9 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
     let el = null;
     try {
       const { toPng } = await import('html-to-image');
-      const urls = cardImageUrls(team, squad, coach, allTeams, keyRows);
+      const outsiders = findByKeys(players, Object.values(xiOverrides || {}))
+        .filter(p => !squad.includes(p));
+      const urls = cardImageUrls(team, squad, coach, allTeams, [...(keyRows || []), ...outsiders]);
       const images = await preloadImages(urls, (d, t) => setProgress(`Images ${d}/${t}`));
       setProgress('Rendering…');
       el = buildTeamReportElement(team, { ...buildOpts(), images });
@@ -1880,6 +1937,21 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
                 })}
               </div>
             </div>
+            {[['Hide player scores', hidePlayerScores, setHidePlayerScores],
+              ['Hide manager score', hideManagerScore, setHideManagerScore],
+              ['Show contract years left instead of age', showContractYears, setShowContractYears]
+             ].map(([lbl, val, setter]) => (
+              <div key={lbl} onClick={() => setter(v => !v)}
+                   style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', marginBottom: 7 }}>
+                <div style={{ width: 14, height: 14, borderRadius: 3, flexShrink: 0,
+                              border: `1px solid ${val ? '#3b7de8' : '#1e2d45'}`,
+                              background: val ? '#3b7de8' : 'transparent',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {val && <span style={{ color: '#fff', fontSize: 9 }}>✓</span>}
+                </div>
+                <span style={{ fontSize: 11, color: '#94a3b8', marginLeft: 8 }}>{lbl}</span>
+              </div>
+            ))}
             <div onClick={() => setRawOverall(v => !v)}
                  style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
               <div style={{ width: 14, height: 14, borderRadius: 3, flexShrink: 0,
@@ -1918,6 +1990,18 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
             </div>
             <div style={UI.block}>
               <span style={UI.label}>Manual XI — override any slot</span>
+              <div onClick={() => setXiSearchAll(v => !v)}
+                   style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', marginBottom: 8 }}>
+                <div style={{ width: 14, height: 14, borderRadius: 3, flexShrink: 0,
+                              border: `1px solid ${xiSearchAll ? '#3b7de8' : '#1e2d45'}`,
+                              background: xiSearchAll ? '#3b7de8' : 'transparent',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {xiSearchAll && <span style={{ color: '#fff', fontSize: 9 }}>✓</span>}
+                </div>
+                <span style={{ fontSize: 11, color: '#94a3b8', marginLeft: 8 }}>
+                  Include players from other clubs
+                </span>
+              </div>
               {xi.map(({ slot, starter }) => (
                 <div key={slot.id} style={{ display: 'flex', alignItems: 'center', marginBottom: 5 }}>
                   <span style={{ width: 42, flexShrink: 0, fontSize: 10, fontWeight: 700,
@@ -1930,9 +2014,10 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
                     })}
                     style={{ ...UI.select, fontSize: 11, padding: '4px 6px' }}>
                     <option value="">{starter ? `Auto — ${starter.name}` : 'Auto — empty'}</option>
-                    {squad.map(p => (
+                    {(xiSearchAll ? xiSelectPool : squad).map(p => (
                       <option key={playerKey(p)} value={playerKey(p)}>
                         {p.name}{p.position ? ` (${String(p.position).split(',')[0].trim()})` : ''}
+                        {xiSearchAll && p.team !== team.team ? ` — ${p.team}` : ''}
                       </option>
                     ))}
                   </select>
