@@ -1,4 +1,4 @@
-// TeamReport.js v26 — Team All-in-One report. 1920x1080 PNG export.
+// TeamReport.js v27 — Team All-in-One report. 1920x1080 PNG export.
 //
 // v2: bigger team name; country flag + league logo beside the league name;
 //     mini coach profile in the header gap; XI is now formation-driven and
@@ -919,7 +919,7 @@ function radarPanelHtml(w, h, team, allTeams) {
 // NOTE: t.attributes is a list of attribute NAMES (tags like "Possession"), not
 // 0-100 values, so it can't drive this. The numbers come from the season's own
 // percentiles instead — the four headline splits plus two metricGroups entries.
-function styleHexSvg(rows, maxWidth) {
+function styleHexSvg(rows, maxWidth, maxHeight) {
   const R = 11;
   const hex = (cx, cy, opacity, col) => {
     const pts = Array.from({ length: 6 }, (_, i) => {
@@ -928,7 +928,9 @@ function styleHexSvg(rows, maxWidth) {
     }).join(' ');
     return `<polygon points="${pts}" fill="${col}" opacity="${opacity}" stroke="#07090f" stroke-width="1.5"/>`;
   };
-  const rowH = 40, labelW = 156, numHex = 10, WD = R * 2, hexGap = 1;
+  // Row height flexes so a 7th row (set pieces) still fits the tile.
+  const rowH = maxHeight ? Math.max(30, Math.min(40, Math.floor((maxHeight - 6) / rows.length))) : 40;
+  const labelW = 156, numHex = 10, WD = R * 2, hexGap = 1;
   const w = Math.min(maxWidth, labelW + numHex * WD + (numHex - 1) * hexGap + 6);
   const h = rows.length * rowH + 6;
   const body = rows.map(([disp, score], i) => {
@@ -955,7 +957,18 @@ function mgPct(team, group, name) {
   return hit ? Number(hit[1]) : null;
 }
 
-function styleRowsFor(team) {
+// Set pieces aren't in the dataset, so they're two hand-entered 1-10 ratings
+// (attacking / defending) averaged into one figure. Scaled x10 to sit on the
+// same 0-100 scale as everything else on the card.
+export const SET_PIECE_WEAK_CUTOFF = 3;      // avg at or below this = a weakness
+export function setPieceScore(att, def) {
+  const a = Number(att), d = Number(def);
+  const vals = [a, d].filter(v => !isNaN(v) && v >= 1 && v <= 10);
+  if (!vals.length) return null;
+  return (vals.reduce((x, y) => x + y, 0) / vals.length) * 10;
+}
+
+function styleRowsFor(team, setPieces) {
   return [
     ['Possession', mgPct(team, 'Possession', 'Possession') ?? team.possession],
     ['Pressing',   team.pressing],
@@ -964,11 +977,13 @@ function styleRowsFor(team) {
     ['Long Ball',  mgPct(team, 'Possession', 'Long Passes')],
     ['Passing',    mgPct(team, 'Possession', 'Passing Accuracy %')],
   ].map(([l, v]) => [l, v == null || isNaN(v) ? 0 : Number(v)])
+   .concat(setPieces == null ? [] : [['Set Pieces', setPieces]])
    .sort((a, b) => b[1] - a[1]);
 }
 
-function stylePanelHtml(w, h, team) {
-  return `<div style="position:absolute;left:0;top:2px;">${styleHexSvg(styleRowsFor(team), w)}</div>`;
+function stylePanelHtml(w, h, team, setPieces) {
+  const rows = styleRowsFor(team, setPieces);
+  return `<div style="position:absolute;left:0;top:2px;">${styleHexSvg(rows, w, h)}</div>`;
 }
 // t.similarTeams may hold plain names or objects — resolve either against the
 // full team list so the row gets a crest, league and score regardless.
@@ -1376,8 +1391,13 @@ export function uncoveredSlots(xi) {
   return xi.filter(s => s.starter && (!s.depth || !s.depth.length)).map(s => s.slot.label);
 }
 
-function weaknessesPanelHtml(w, h, team, allTeams, xi, depthList, upgradeList) {
-  const metrics = weakestMetrics(team, allTeams, 4);
+function weaknessesPanelHtml(w, h, team, allTeams, xi, depthList, upgradeList, setPieces) {
+  let metrics = weakestMetrics(team, allTeams, 4);
+  // A set-piece rating at or below the cutoff replaces the mildest of the four —
+  // it's a real weakness and deserves the slot more than the least-bad metric.
+  if (setPieces != null && setPieces <= SET_PIECE_WEAK_CUTOFF * 10) {
+    metrics = metrics.slice(0, 3).concat([['Set Pieces', setPieces]]);
+  }
   // null means "use the auto-detected set"; an array means the user picked.
   const thinAll = Array.isArray(depthList) ? depthList : uncoveredSlots(xi);
   const improve = Array.isArray(upgradeList)
@@ -1623,20 +1643,19 @@ function headerHtml(team, coach, coachScore, allTeams, headerColour, rawOverall,
     return `
       <div style="display:flex;align-items:center;white-space:nowrap;">
         ${bits.map(([k, v, rk], i) => `
-          <span style="${i ? 'margin-left:18px;' : ''}font-size:7.5px;font-weight:700;
+          <span style="${i ? 'margin-left:20px;' : ''}font-size:7.5px;font-weight:700;
                        letter-spacing:0.13em;color:${ink.muted};">${k}</span>
-          <span style="margin-left:6px;font-size:11px;font-weight:700;color:${ink.soft};">${v}</span>
-          ${rk ? `<span style="margin-left:4px;font-size:8px;font-weight:600;color:${ink.muted};">${rankStr(rk)}</span>` : ''}
+          <span style="margin-left:7px;font-size:11px;font-weight:700;color:${ink.soft};">${v}</span>
+          ${rk ? `<span style="margin-left:8px;font-size:8.5px;font-weight:600;color:${ink.muted};">${rankStr(rk)}</span>` : ''}
         `).join('')}
         ${objective ? `
-          <span style="${bits.length ? 'margin-left:18px;' : ''}display:inline-block;padding:2px 10px;
-                border-radius:10px;background:${oc}1c;border:1px solid ${oc}55;
-                font-size:9.5px;font-weight:800;color:${oc};">${esc(objective)}</span>` : ''}
-        ${(objective && out) ? `
-          <span style="display:inline-flex;align-items:center;justify-content:center;margin-left:6px;
-                width:15px;height:15px;border-radius:50%;background:${out.c}22;
-                border:1px solid ${out.c}66;font-size:8.5px;font-weight:800;
-                color:${out.c};line-height:1;">${out.g}</span>` : ''}
+          <span style="${bits.length ? 'margin-left:20px;' : ''}font-size:7.5px;font-weight:700;
+                       letter-spacing:0.13em;color:${ink.muted};">OBJECTIVE</span>
+          <span style="margin-left:7px;font-size:9.5px;font-weight:700;color:${oc};">${esc(objective)}</span>
+          ${out ? `<span style="display:inline-flex;align-items:center;justify-content:center;
+                margin-left:6px;width:14px;height:14px;border-radius:50%;background:${out.c}22;
+                border:1px solid ${out.c}66;font-size:8px;font-weight:800;
+                color:${out.c};line-height:1;">${out.g}</span>` : ''}` : ''}
       </div>`;
   })();
 
@@ -1662,7 +1681,7 @@ function headerHtml(team, coach, coachScore, allTeams, headerColour, rawOverall,
                 white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(displayName)}</div>
 
     <!-- country flag + league logo + league name + season, one nowrap row -->
-    <div style="position:absolute;left:${NAME_X}px;top:83px;display:flex;align-items:center;
+    <div style="position:absolute;left:${NAME_X}px;top:78px;display:flex;align-items:center;
                 white-space:nowrap;">
       ${flag ? `<div style="width:27px;height:17px;flex-shrink:0;background-size:cover;
                   background-position:center;border-radius:2px;
@@ -1697,8 +1716,8 @@ function headerHtml(team, coach, coachScore, allTeams, headerColour, rawOverall,
       return all.map(([label, v, big], i) => scoreWheel({
         cx: WHEEL_X + step * i + step / 2,
         cy: 66,
-        r: big ? 33 : 27,
-        stroke: big ? 7 : 6,
+        r: big ? 36 : 27,       // ~10% larger, same cy so it stays centred
+        stroke: big ? 7.5 : 6,
         value: v, label, colour: scoreColor(v), ink, big,
       })).join('');
     })()}
@@ -1791,6 +1810,7 @@ export function buildTeamReportElement(team, opts = {}) {
     hidePlayerScores = false,
     hideManagerScore = false,
     metaMode = 'age',        // 'age' | 'contract' | 'none'
+    setPieces = null,        // averaged 1-10 rating, already x10
     purchaseValue = '', purchaseRank = null, objective = '', teamNameOverride = '',
     objectiveOutcome = '',
   } = opts;
@@ -1824,12 +1844,12 @@ export function buildTeamReportElement(team, opts = {}) {
       ${panel({ x: COL_A_X, y: ROW_1, w: COL_W, h: ROW1_H,
                 title: 'Performance', body: radarPanelHtml(innerW, ROW1_H - PANEL_PAD * 2 - TITLE_H, team, allTeams) })}
       ${panel({ x: COL_B_X, y: ROW_1, w: COL_W, h: ROW1_H,
-                title: 'Style', body: stylePanelHtml(innerW, ROW1_H - PANEL_PAD * 2 - TITLE_H, team) })}
+                title: 'Style', body: stylePanelHtml(innerW, ROW1_H - PANEL_PAD * 2 - TITLE_H, team, setPieces) })}
 
       ${panel({ x: COL_A_X, y: ROW_2, w: COL_W, h: ROW2_H,
                 title: 'League Table', body: leagueTablePanelHtml(innerW, ROW2_H - PANEL_PAD * 2 - TITLE_H, team, allTeams) })}
       ${panel({ x: COL_B_X, y: ROW_2, w: COL_W, h: ROW2_H,
-                title: 'Weaknesses', body: weaknessesPanelHtml(innerW, ROW2_H - PANEL_PAD * 2 - TITLE_H, team, allTeams, xi, depthList, upgradeList) })}
+                title: 'Weaknesses', body: weaknessesPanelHtml(innerW, ROW2_H - PANEL_PAD * 2 - TITLE_H, team, allTeams, xi, depthList, upgradeList, setPieces) })}
 
       ${[['A', COL_A_X, bottomLeft], ['B', COL_B_X, bottomRight]].map(([, x, kind]) => {
         const ih = ROW3_H - PANEL_PAD * 2 - TITLE_H;
@@ -2141,6 +2161,8 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
   const [hidePlayerScores, setHidePlayerScores] = useState(false);
   const [hideManagerScore, setHideManagerScore] = useState(false);
   const [metaMode, setMetaMode] = useState('age');   // beside player names
+  const [spAtt, setSpAtt] = useState('');
+  const [spDef, setSpDef] = useState('');
   const [xiSearchAll, setXiSearchAll] = useState(false);
   const [depthSel, setDepthSel] = useState(null);          // null = auto
   const [upgradeSel, setUpgradeSel] = useState(null);
@@ -2246,6 +2268,7 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
     depthList: depthSel, upgradeList: upgradeSel,
     xiSlotLists: xiLists, xiOverridePool: xiPool,
     hidePlayerScores, hideManagerScore, metaMode,
+    setPieces: setPieceScore(spAtt, spDef),
     purchaseValue: purchaseValue.trim(),
     purchaseRank: purchaseRank ? Number(purchaseRank) : null,
     objective, objectiveOutcome,
@@ -2378,6 +2401,23 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
                 <span style={{ fontSize: 11, color: '#94a3b8', marginLeft: 8 }}>{lbl}</span>
               </div>
             ))}
+            <div style={UI.block}>
+              <span style={UI.label}>Set pieces (1–10)</span>
+              <div style={{ display: 'flex' }}>
+                <input value={spAtt} onChange={e => setSpAtt(e.target.value.replace(/[^\d]/g, '').slice(0, 2))}
+                       placeholder="Attacking" style={{ ...UI.input, flex: 1 }} />
+                <input value={spDef} onChange={e => setSpDef(e.target.value.replace(/[^\d]/g, '').slice(0, 2))}
+                       placeholder="Defending" style={{ ...UI.input, flex: 1, marginLeft: 6 }} />
+              </div>
+              <div style={UI.note}>
+                {setPieceScore(spAtt, spDef) == null
+                  ? 'Leave blank to omit. Adds a 7th Style row when set.'
+                  : `Average ${(setPieceScore(spAtt, spDef) / 10).toFixed(1)}/10${
+                      setPieceScore(spAtt, spDef) <= SET_PIECE_WEAK_CUTOFF * 10
+                        ? ' — flagged in Weaknesses' : ''}`}
+              </div>
+            </div>
+
             <div style={UI.block}>
               <span style={UI.label}>Objective</span>
               <div style={{ display: 'flex' }}>
