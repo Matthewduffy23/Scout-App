@@ -1,4 +1,4 @@
-// TeamReport.js v15 — Team All-in-One report. 1920x1080 PNG export.
+// TeamReport.js v17 — Team All-in-One report. 1920x1080 PNG export.
 //
 // v2: bigger team name; country flag + league logo beside the league name;
 //     mini coach profile in the header gap; XI is now formation-driven and
@@ -70,27 +70,33 @@ const HEADER_R = 'rgb(17,22,42)';
 // Header colour options, same swatch set as QuickCard. Each is faded toward the
 // card background exactly like CoachQuickCard does with a club colour, so the
 // band keeps its depth instead of turning into a flat block.
+// Six common club colours, each with a light and a dark variant. The previous
+// set all faded to a similar navy because fadeHexToBG pulls hard toward the card
+// background; the dark variants use a lighter fade so they stay distinguishable.
 export const HEADER_COLOURS = {
-  Default: null,
-  Blue:   '#1d4ed8',
-  Navy:   '#172a77',
-  Purple: '#1800ad',
-  Pink:   '#ff66c4',
-  Red:    '#ff3131',
-  Orange: '#ff914d',
-  Green:  '#00bf63',
-  Slate:  '#334155',
-  Black:  '#0a0a0a',
+  'Default':      { hex: null,      fade: [0.62, 0.93] },
+  'Blue Light':   { hex: '#3b82f6', fade: [0.55, 0.90] },
+  'Blue Dark':    { hex: '#1e3a8a', fade: [0.30, 0.78] },
+  'Red Light':    { hex: '#ef4444', fade: [0.55, 0.90] },
+  'Red Dark':     { hex: '#7f1d1d', fade: [0.30, 0.78] },
+  'Green Light':  { hex: '#22c55e', fade: [0.55, 0.90] },
+  'Green Dark':   { hex: '#14532d', fade: [0.30, 0.78] },
+  'Purple Light': { hex: '#a855f7', fade: [0.55, 0.90] },
+  'Purple Dark':  { hex: '#4c1d95', fade: [0.30, 0.78] },
+  'Amber Light':  { hex: '#f59e0b', fade: [0.55, 0.90] },
+  'Amber Dark':   { hex: '#78350f', fade: [0.30, 0.78] },
+  'Mono Light':   { hex: '#94a3b8', fade: [0.60, 0.92] },
+  'Mono Dark':    { hex: '#1e293b', fade: [0.25, 0.75] },
 };
 export const HEADER_COLOUR_NAMES = Object.keys(HEADER_COLOURS);
 
-function headerGradient(hex) {
-  if (!hex) return `linear-gradient(to right, ${HEADER_L} 0%, ${HEADER_R} 100%)`;
+function headerGradient(spec) {
+  const def = `linear-gradient(to right, ${HEADER_L} 0%, ${HEADER_R} 100%)`;
+  if (!spec || !spec.hex) return def;
   try {
-    return `linear-gradient(to right, ${fadeHexToBG(hex, 0.62)} 0%, ${fadeHexToBG(hex, 0.93)} 100%)`;
-  } catch (e) {
-    return `linear-gradient(to right, ${HEADER_L} 0%, ${HEADER_R} 100%)`;
-  }
+    const [a, b] = spec.fade || [0.62, 0.93];
+    return `linear-gradient(to right, ${fadeHexToBG(spec.hex, a)} 0%, ${fadeHexToBG(spec.hex, b)} 100%)`;
+  } catch (e) { return def; }
 }
 const PANEL_BG = 'linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.025))';
 const PANEL_BORDER = 'rgba(255,255,255,0.13)';
@@ -434,7 +440,9 @@ export function seasonMinutes(p, season) {
   return hits.reduce((a, x) => a + (Number(x.mins) || 0), 0);
 }
 
-export function buildXI(formationKey, squad, depthCount = 2, season = null) {
+// overrides: { [slot.id]: playerKey } — a manual pick wins over the auto choice
+// and is removed from every other slot so nobody appears twice.
+export function buildXI(formationKey, squad, depthCount = 2, season = null, overrides = null) {
   const slots = FORMATIONS[formationKey] || FORMATIONS['4-3-3'];
   const mins = (p) => Number(p.minutesLatest || 0);
 
@@ -540,6 +548,22 @@ export function buildXI(formationKey, squad, depthCount = 2, season = null) {
         slotMap[sl.id] = [pick];
         starterSet.add(pick);
       }
+    }
+  }
+
+  // Apply manual overrides last: pin the chosen player to the slot, then strip
+  // them from anywhere else they'd been placed.
+  if (overrides && Object.keys(overrides).length) {
+    const byKey = new Map(squad.map(p => [playerKey(p), p]));
+    for (const slotId of Object.keys(overrides)) {
+      const p = byKey.get(overrides[slotId]);
+      if (!p) continue;
+      for (const id of Object.keys(slotMap)) {
+        if (id === slotId) continue;
+        slotMap[id] = (slotMap[id] || []).filter(x => x !== p);
+      }
+      const rest = (slotMap[slotId] || []).filter(x => x !== p);
+      slotMap[slotId] = [p, ...rest];
     }
   }
 
@@ -943,6 +967,29 @@ function leagueTablePanelHtml(w, h, team, allTeams) {
     tableRowHtml(t, team, w, HEAD + i * rowH, rowH, pinnedTop && i === 0)).join('');
 }
 
+export const SUMMARY_WORD_LIMIT = 90;
+export const countWords = (t) => String(t || '').trim().split(/\s+/).filter(Boolean).length;
+export function clampWords(t, limit = SUMMARY_WORD_LIMIT) {
+  const w = String(t || '').trim().split(/\s+/).filter(Boolean);
+  return w.length <= limit ? String(t || '') : w.slice(0, limit).join(' ');
+}
+
+// Free-text scout summary. Sized down a step when the text runs long so it fills
+// the tile without overflowing rather than clipping mid-sentence.
+function summaryPanelHtml(w, h, text) {
+  const body = String(text || '').trim();
+  if (!body) {
+    return `<div style="position:absolute;inset:0;display:flex;align-items:center;
+             justify-content:center;font-size:12px;color:#55617a;">No summary written.</div>`;
+  }
+  const n = countWords(body);
+  const fs = n > 70 ? 12 : n > 45 ? 13 : 14;
+  return `<div style="position:absolute;inset:0;overflow:hidden;">
+      <div style="font-size:${fs}px;line-height:1.55;color:#c8d2e0;white-space:pre-wrap;
+                  word-break:break-word;">${esc(body)}</div>
+    </div>`;
+}
+
 function similarTeamsPanelHtml(w, h, team, allTeams) {
   const rows = resolveSimilarTeams(team, allTeams, 3);
   if (!rows.length) {
@@ -986,6 +1033,29 @@ function similarTeamsPanelHtml(w, h, team, allTeams) {
   }).join('');
 }
 
+// Highest-scoring role from the pipeline's roleCareerScores, e.g. "Target Man".
+// Role strings already carry a trailing position token ("Box-to-Box CM"), which
+// is redundant next to the position we print, so it's trimmed off.
+export function bestRole(p) {
+  const rs = p && p.roleCareerScores;
+  if (!rs || typeof rs !== 'object') return '';
+  let best = null, bv = -Infinity;
+  for (const k of Object.keys(rs)) {
+    const v = Number(rs[k]);
+    if (!isNaN(v) && v > bv) { bv = v; best = k; }
+  }
+  if (!best) return '';
+  return best.replace(/\s+(GK|CB|FB|RB|LB|DM|CM|AM|RW|LW|ST|CF|WNG|ATT)$/i, '').trim();
+}
+
+// Stable identity for manual selections. Name alone collides across clubs.
+export const playerKey = (p) => `${p && p.name}|${p && p.team}`;
+export function findByKeys(pool, keys) {
+  if (!Array.isArray(keys) || !keys.length) return [];
+  const idx = new Map((pool || []).map(p => [playerKey(p), p]));
+  return keys.map(k => idx.get(k)).filter(Boolean);
+}
+
 export function topPlayers(squad, n = 3) {
   return squad.slice()
     .filter(p => p && p.careerScore != null)
@@ -993,11 +1063,10 @@ export function topPlayers(squad, n = 3) {
     .slice(0, n);
 }
 
-function keyPlayersPanelHtml(w, h, squad) {
-  const rows = topPlayers(squad, 3);
-  if (!rows.length) {
+function keyPlayersPanelHtml(w, h, rows, showClub = false) {
+  if (!rows || !rows.length) {
     return `<div style="position:absolute;inset:0;display:flex;align-items:center;
-             justify-content:center;font-size:12px;color:#55617a;">No squad data.</div>`;
+             justify-content:center;font-size:12px;color:#55617a;">No players selected.</div>`;
   }
   const rowH = Math.floor((h - 4) / 3);
   const PILL_W = 38, PILL_GAP = 5;
@@ -1006,6 +1075,7 @@ function keyPlayersPanelHtml(w, h, squad) {
     const sc = p.careerScore;
     const pot = p.potentialScore != null ? p.potentialScore : p.careerScore;
     const pos = String(p.position || '').split(',')[0].trim();
+    const role = bestRole(p);
     return `
       <div style="position:absolute;left:0;top:${i * rowH + 2}px;width:${w}px;height:${rowH - 6}px;
                   background:rgba(255,255,255,0.035);border:1px solid rgba(255,255,255,0.07);
@@ -1021,7 +1091,9 @@ function keyPlayersPanelHtml(w, h, squad) {
           <div style="font-size:13.5px;font-weight:700;color:#eaf0f8;line-height:1.15;white-space:nowrap;
                       overflow:hidden;text-overflow:ellipsis;">${esc(p.name)}<span
                 style="color:#7c8798;font-weight:600;"> ${p.age != null ? p.age : '—'}</span></div>
-          <div style="font-size:10px;color:#8b98ad;margin-top:4px;line-height:1.15;">${esc(pos)}</div>
+          <div style="font-size:10px;color:#8b98ad;margin-top:4px;line-height:1.15;white-space:nowrap;
+                      overflow:hidden;text-overflow:ellipsis;">${esc(pos)}${role ? `<span style="color:#6f7c92;"> · </span><span style="color:#93a1b5;">${esc(role)}</span>` : ''}${
+            showClub && p.team ? `<span style="color:#6f7c92;"> · </span><span style="color:#8b98ad;">${esc(p.team)}</span>` : ''}</div>
         </div>
         <div style="position:absolute;right:10px;top:50%;margin-top:-15px;width:${VALS_W}px;display:flex;">
           <div style="width:${PILL_W}px;text-align:center;">
@@ -1113,10 +1185,13 @@ export function uncoveredSlots(xi) {
   return xi.filter(s => s.starter && (!s.depth || !s.depth.length)).map(s => s.slot.label);
 }
 
-function weaknessesPanelHtml(w, h, team, allTeams, xi) {
+function weaknessesPanelHtml(w, h, team, allTeams, xi, depthList, upgradeList) {
   const metrics = weakestMetrics(team, allTeams, 4);
-  const thinAll = uncoveredSlots(xi);
-  const improve = improveSlots(xi, team.season, 4);
+  // null means "use the auto-detected set"; an array means the user picked.
+  const thinAll = Array.isArray(depthList) ? depthList : uncoveredSlots(xi);
+  const improve = Array.isArray(upgradeList)
+    ? upgradeList.map(k => ({ k }))
+    : improveSlots(xi, team.season, 4);
 
   const rowH = 32;
   const bars = metrics.map(([name, p], i) => `
@@ -1158,7 +1233,7 @@ function weaknessesPanelHtml(w, h, team, allTeams, xi) {
       <div style="margin-top:7px;">${depthPills}</div>
     </div>
     <div style="position:absolute;left:${colW + 16}px;top:${colTop}px;width:${colW}px;">
-      <div style="font-size:8.5px;font-weight:700;letter-spacing:0.14em;color:#6f7c92;">IMPROVE</div>
+      <div style="font-size:8.5px;font-weight:700;letter-spacing:0.14em;color:#6f7c92;">XI UPGRADE</div>
       <div style="margin-top:7px;">${improvePills}</div>
     </div>
   </div>`;
@@ -1256,12 +1331,14 @@ function coachHtml(coach, team, coachScore) {
 }
 
 // ─── Header ────────────────────────────────────────────────────────────────
-function headerHtml(team, coach, coachScore, allTeams, headerColour) {
+function headerHtml(team, coach, coachScore, allTeams, headerColour, rawOverall) {
   const crest = teamCrest(team.team);
   const league = leagueDisplayName(team.league);
   const logo = leagueLogo(team.league);
   const flag = leagueFlag(team.league);
-  const ovr = team.completeScore;
+  // completeScore is league-weighted; overall is the raw within-league score.
+  // Same pair TeamIndex's "Raw Score (not league weighted)" toggle switches on.
+  const ovr = rawOverall ? (team.overall ?? team.completeScore) : team.completeScore;
   const cells = [
     ['ATTACK', team.attack], ['DEFENCE', team.defence],
     ['POSSESSION', team.possession], ['PRESSING', team.pressing],
@@ -1371,7 +1448,7 @@ function headerHtml(team, coach, coachScore, allTeams, headerColour) {
 let IMG = {};
 const src = (url) => (url && IMG[url]) || url || '';
 
-export function cardImageUrls(team, squad, coach, allTeams = []) {
+export function cardImageUrls(team, squad, coach, allTeams = [], extraPlayers = []) {
   const urls = [teamCrest(team.team), leagueLogo(team.league), leagueFlag(team.league)];
   // Similar-team crests, so they're inlined like everything else.
   for (const t of resolveSimilarTeams(team, allTeams, 3)) urls.push(teamCrest(t.team));
@@ -1380,6 +1457,8 @@ export function cardImageUrls(team, squad, coach, allTeams = []) {
   for (const t of lw.rows) urls.push(teamCrest(t.team));
   if (lw.pinnedTop) urls.push(teamCrest(lw.pinnedTop.team));
   for (const p of squad) urls.push(photoUrl(p.name, p.team));
+  // Recruitment picks can sit outside the squad.
+  for (const p of (extraPlayers || [])) urls.push(photoUrl(p.name, p.team));
   if (coach) {
     const rawId = coach.fotmobId || '';
     const fmId = typeof rawId === 'string' && rawId.includes('fotmob.com')
@@ -1429,7 +1508,15 @@ export async function preloadImages(urls, onProgress, timeoutMs = 4000, concurre
 }
 
 export function buildTeamReportElement(team, opts = {}) {
-  const { squad = [], formation = '4-3-3', coach = null, images = {}, depthCount = 2, coachScore = null, allTeams = [], headerColour = null } = opts;
+  const { squad = [], formation = '4-3-3', coach = null, images = {}, depthCount = 2, coachScore = null, allTeams = [], headerColour = null, rawOverall = false,
+    bottomMode = 'similar',        // 'similar' | 'summary'
+    summaryText = '',
+    keyRows = null,                // explicit Key Players / Recruitment list
+    keyTitle = 'Key Players',
+    keyShowClub = false,
+    depthList = null, upgradeList = null,
+    xiOverrides = null,
+  } = opts;
   IMG = images || {};
 
   const container = document.createElement('div');
@@ -1443,13 +1530,14 @@ export function buildTeamReportElement(team, opts = {}) {
   const xiW = LEFT_W - PANEL_PAD * 2;
   const xiH = LEFT_H - PANEL_PAD * 2 - TITLE_H;
 
-  const xi = buildXI(formation, squad, depthCount, team.season);
+  const xi = buildXI(formation, squad, depthCount, team.season, xiOverrides);
+  const players3 = keyRows || topPlayers(squad, 3);
 
   container.innerHTML = `
     <div id="tr-card-root" style="width:${W}px;height:${H}px;overflow:hidden;background:${BG};
          font-family:'Montserrat',sans-serif;color:#fff;position:relative;box-sizing:border-box;">
 
-      ${headerHtml(team, coach, coachScore, allTeams, headerColour)}
+      ${headerHtml(team, coach, coachScore, allTeams, headerColour, rawOverall)}
 
       ${panel({ x: PAD, y: BODY_TOP, w: LEFT_W, h: LEFT_H,
                 title: 'XI + Depth', right: formation, body: xiPanelHtml(xiW, xiH, xi) })}
@@ -1462,12 +1550,17 @@ export function buildTeamReportElement(team, opts = {}) {
       ${panel({ x: COL_A_X, y: ROW_2, w: COL_W, h: ROW2_H,
                 title: 'League Table', body: leagueTablePanelHtml(innerW, ROW2_H - PANEL_PAD * 2 - TITLE_H, team, allTeams) })}
       ${panel({ x: COL_B_X, y: ROW_2, w: COL_W, h: ROW2_H,
-                title: 'Weaknesses', body: weaknessesPanelHtml(innerW, ROW2_H - PANEL_PAD * 2 - TITLE_H, team, allTeams, xi) })}
+                title: 'Weaknesses', body: weaknessesPanelHtml(innerW, ROW2_H - PANEL_PAD * 2 - TITLE_H, team, allTeams, xi, depthList, upgradeList) })}
 
-      ${panel({ x: COL_A_X, y: ROW_3, w: COL_W, h: ROW3_H,
-                title: 'Similar Teams', body: similarTeamsPanelHtml(innerW, ROW3_H - PANEL_PAD * 2 - TITLE_H, team, allTeams) })}
-      ${panel({ x: COL_B_X, y: ROW_3, w: COL_W, h: ROW3_H,
-                title: 'Key Players', body: keyPlayersPanelHtml(innerW, ROW3_H - PANEL_PAD * 2 - TITLE_H, squad) })}
+      ${bottomMode === 'summary'
+        ? `${panel({ x: COL_A_X, y: ROW_3, w: COL_W, h: ROW3_H,
+                     title: keyTitle, body: keyPlayersPanelHtml(innerW, ROW3_H - PANEL_PAD * 2 - TITLE_H, players3, keyShowClub) })}
+           ${panel({ x: COL_B_X, y: ROW_3, w: COL_W, h: ROW3_H,
+                     title: 'Summary', body: summaryPanelHtml(innerW, ROW3_H - PANEL_PAD * 2 - TITLE_H, summaryText) })}`
+        : `${panel({ x: COL_A_X, y: ROW_3, w: COL_W, h: ROW3_H,
+                     title: 'Similar Teams', body: similarTeamsPanelHtml(innerW, ROW3_H - PANEL_PAD * 2 - TITLE_H, team, allTeams) })}
+           ${panel({ x: COL_B_X, y: ROW_3, w: COL_W, h: ROW3_H,
+                     title: keyTitle, body: keyPlayersPanelHtml(innerW, ROW3_H - PANEL_PAD * 2 - TITLE_H, players3, keyShowClub) })}`}
     </div>`;
 
   document.body.appendChild(container);
@@ -1475,16 +1568,135 @@ export function buildTeamReportElement(team, opts = {}) {
 }
 
 // ─── Modal ─────────────────────────────────────────────────────────────────
+// ─── Small modal building blocks ───────────────────────────────────────────
+const UI = {
+  label: { fontSize: 10, color: '#94a3b8', textTransform: 'uppercase',
+           letterSpacing: '.04em', display: 'block', marginBottom: 6 },
+  select: { width: '100%', background: '#0d1220', border: '1px solid #1e2d45', borderRadius: 5,
+            color: '#e2e8f4', padding: '6px 7px', fontSize: 11.5, cursor: 'pointer' },
+  input: { width: '100%', background: '#0d1220', border: '1px solid #1e2d45', borderRadius: 5,
+           color: '#e2e8f4', padding: '6px 8px', fontSize: 11.5, boxSizing: 'border-box' },
+  block: { textAlign: 'left', marginBottom: 14 },
+  note: { fontSize: 10.5, color: '#64748b', marginTop: 5 },
+};
+
+function Section({ title, open, onToggle, children }) {
+  return (
+    <div style={{ border: '1px solid #16233a', borderRadius: 8, marginBottom: 10,
+                  background: 'rgba(255,255,255,0.015)' }}>
+      <div onClick={onToggle}
+           style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '9px 11px', cursor: 'pointer', userSelect: 'none' }}>
+        <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.09em',
+                       textTransform: 'uppercase', color: open ? '#ff66c4' : '#8b98ad' }}>{title}</span>
+        <span style={{ color: '#64748b', fontSize: 11 }}>{open ? '−' : '+'}</span>
+      </div>
+      {open && <div style={{ padding: '0 11px 12px' }}>{children}</div>}
+    </div>
+  );
+}
+
+function Chips({ options, selected, onToggle }) {
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap' }}>
+      {options.map((o, i) => {
+        const on = selected.includes(o);
+        return (
+          <button key={o + i} onClick={() => onToggle(o)}
+            style={{ padding: '4px 9px', marginRight: 6, marginBottom: 6, borderRadius: 11,
+                     border: `1px solid ${on ? '#3b7de8' : '#1e2d45'}`,
+                     background: on ? '#0e2040' : 'transparent',
+                     color: on ? '#60a5fa' : '#94a3b8',
+                     fontSize: 10.5, fontWeight: 700, cursor: 'pointer' }}>{o}</button>
+        );
+      })}
+    </div>
+  );
+}
+
+// Type-to-search player picker. Only searches once there are 2+ characters —
+// the pool can be the full ~83k player list, so it never renders unfiltered.
+function PlayerPicker({ pool, picked, onPick, onRemove, max = 3, placeholder }) {
+  const [q, setQ] = useState('');
+  const results = useMemo(() => {
+    const t = q.trim().toLowerCase();
+    if (t.length < 2) return [];
+    const out = [];
+    for (const p of pool) {
+      if (!p || !p.name) continue;
+      if (String(p.name).toLowerCase().includes(t) || String(p.team || '').toLowerCase().includes(t)) {
+        out.push(p);
+        if (out.length >= 40) break;
+      }
+    }
+    return out.sort((a, b) => (b.careerScore || 0) - (a.careerScore || 0)).slice(0, 8);
+  }, [q, pool]);
+
+  return (
+    <div>
+      {picked.map((p, i) => (
+        <div key={playerKey(p) + i}
+             style={{ display: 'flex', alignItems: 'center', marginBottom: 5,
+                      background: '#0d1220', border: '1px solid #1e2d45',
+                      borderRadius: 6, padding: '5px 8px' }}>
+          <span style={{ flex: 1, fontSize: 11.5, color: '#e2e8f4', overflow: 'hidden',
+                         whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+            {p.name} <span style={{ color: '#64748b' }}>· {p.team}</span>
+          </span>
+          <span style={{ fontSize: 11, fontWeight: 800, color: '#60a5fa', marginLeft: 8 }}>
+            {p.careerScore != null ? Math.round(p.careerScore) : '—'}
+          </span>
+          <button onClick={() => onRemove(p)}
+            style={{ marginLeft: 8, background: 'transparent', border: 'none', color: '#64748b',
+                     cursor: 'pointer', fontSize: 13, lineHeight: 1, padding: 0 }}>×</button>
+        </div>
+      ))}
+      {picked.length < max && (
+        <>
+          <input value={q} onChange={e => setQ(e.target.value)}
+                 placeholder={placeholder || 'Search player…'} style={UI.input} />
+          {results.map((p, i) => (
+            <div key={playerKey(p) + i} onClick={() => { onPick(p); setQ(''); }}
+                 style={{ display: 'flex', alignItems: 'center', cursor: 'pointer',
+                          padding: '5px 8px', borderBottom: '1px solid #101a2c' }}>
+              <span style={{ flex: 1, fontSize: 11, color: '#c8d2e0', overflow: 'hidden',
+                             whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                {p.name} <span style={{ color: '#64748b' }}>· {p.team}</span>
+              </span>
+              <span style={{ fontSize: 10.5, fontWeight: 700, color: '#8b98ad', marginLeft: 8 }}>
+                {p.careerScore != null ? Math.round(p.careerScore) : '—'}
+              </span>
+            </div>
+          ))}
+          {q.trim().length === 1 && <div style={UI.note}>Keep typing…</div>}
+          {q.trim().length >= 2 && !results.length && <div style={UI.note}>No match.</div>}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─── Modal ─────────────────────────────────────────────────────────────────
 export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], players = [], onClose }) {
   const [downloading, setDownloading] = useState(false);
   const [progress, setProgress] = useState('');
   const [error, setError] = useState('');
+  const [openSection, setOpenSection] = useState('layout');
+  const toggleSection = (k) => setOpenSection(cur => (cur === k ? '' : k));
+
   const [formation, setFormation] = useState('4-3-3');
   const [depthCount, setDepthCount] = useState(2);
   const [headerColourName, setHeaderColourName] = useState('Default');
+  const [rawOverall, setRawOverall] = useState(false);
+  const [bottomMode, setBottomMode] = useState('similar');
+  const [summaryText, setSummaryText] = useState('');
+  const [keyMode, setKeyMode] = useState('auto');          // auto | manual | recruit
+  const [manualKeys, setManualKeys] = useState([]);
+  const [recruitKeys, setRecruitKeys] = useState([]);
+  const [xiOverrides, setXiOverrides] = useState({});
+  const [depthSel, setDepthSel] = useState(null);          // null = auto
+  const [upgradeSel, setUpgradeSel] = useState(null);
 
-  // Player rows carry league in the '.' format ('England 1.'); team rows don't.
-  // Compare on the normalised form or every squad comes back empty.
   const squad = useMemo(() => {
     const norm = (l) => String(l || '').trim().replace(/\.$/, '').toLowerCase();
     return players.filter(p =>
@@ -1492,20 +1704,13 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
       norm(p.league) === norm(team.league));
   }, [players, team]);
 
-  // Auto-matched coach is only the DEFAULT — the dropdown below lets you pick
-  // any coach from the saved Coaches section, which is what you'll need for the
-  // majority of clubs that have no tenure saved against them.
   const savedCoaches = useMemo(() => listSavedCoaches(), []);
   const autoCoach = useMemo(() => findCoachForTeam(team), [team]);
   const [coachId, setCoachId] = useState('auto');
-  const coach = coachId === 'auto'
-    ? autoCoach
-    : coachId === 'none'
-      ? null
-      : (savedCoaches.find(c => String(c.id) === String(coachId)) || autoCoach);
+  const coach = coachId === 'auto' ? autoCoach
+    : coachId === 'none' ? null
+    : (savedCoaches.find(c => String(c.id) === String(coachId)) || autoCoach);
 
-  // Same tenure resolution CoachPanel uses, so the manager score here matches
-  // the one on their quick card exactly.
   const tenureRows = useMemo(() => {
     if (!coach) return [];
     return (coach.tenures || [])
@@ -1513,7 +1718,6 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
       .filter(Boolean);
   }, [coach, allTeams]);
 
-  // Total squad market value per team+league — same grouping TeamIndex uses.
   const totalMVByTeam = useMemo(() => {
     const sums = {};
     for (const p of players) {
@@ -1524,26 +1728,26 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
     return sums;
   }, [players]);
 
-  // Ported from CoachPanel.buildSeasonPerfMap / getMVPerfRank. This is the 25%
-  // "£ performance" half of the manager score — without it the score falls back
-  // to team quality alone and reads a couple of points below the quick card.
+  // Ported from CoachPanel.buildSeasonPerfMap / getMVPerfRank — the 25%
+  // "£ performance" half of the manager score. The ranking is mv-rank MINUS
+  // points-rank (overperformance vs spend), then teams ranked on THAT.
   const seasonPerf = useMemo(() => {
     const getTotalMV = (t, l) =>
       totalMVByTeam[String(t).toLowerCase() + '|' + String(l || '').trim().replace(/\.$/, '').toLowerCase()] ?? null;
     const map = {};
     for (const row of tenureRows) {
       const peers = allTeams.filter(t => String(t.league) === String(row.league)
-                                      && String(t.season) === String(row.season));
-      const withMV = peers
-        .map(t => ({ t, mv: getTotalMV(t.team, t.league) }))
-        .filter(x => x.mv != null && x.t.pointsRank != null);
+                                     && String(t.season) === String(row.season));
+      const withMV = peers.map(t => ({ t, mv: getTotalMV(t.team, t.league) }))
+                          .filter(x => x.mv != null && x.t.pointsRank != null);
       if (withMV.length < 2) continue;
       withMV.sort((a, b) => b.mv - a.mv);
-      const idx = withMV.findIndex(x => x.t.team === row.team);
+      const perf = withMV.map((x, i) => ({ team: x.t.team, val: (i + 1) - Number(x.t.pointsRank) }));
+      const ranked = perf.slice().sort((a, b) => b.val - a.val);
+      const idx = ranked.findIndex(x => String(x.team).toLowerCase() === String(row.team).toLowerCase());
       if (idx < 0) continue;
-      const rank = idx + 1, size = withMV.length;
-      const pct = ((size - rank) / (size - 1)) * 100;
-      map[`${row.season}||${row.league}||${row.team}`] = Math.round(pct * 10) / 10;
+      map[`${row.season}||${row.league}||${row.team}`] =
+        Math.round(((ranked.length - (idx + 1)) / (ranked.length - 1)) * 1000) / 10;
     }
     return map;
   }, [tenureRows, allTeams, totalMVByTeam]);
@@ -1557,183 +1761,305 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
     } catch (e) { return null; }
   }, [coach, tenureRows, seasonPerf]);
 
-  const xi = useMemo(() => buildXI(formation, squad, depthCount, team.season), [formation, squad, depthCount, team]);
+  const xi = useMemo(() => buildXI(formation, squad, depthCount, team.season, xiOverrides),
+                     [formation, squad, depthCount, team, xiOverrides]);
   const filled = xi.filter(s => s.starter).length;
-  const rating = xiRating(xi);
 
-  // Surfaces any position token with no CANONICAL entry — the silent failure that
-  // makes a slot look broken, because canon() collapses unknowns to 'CM'.
+  const slotLabels = useMemo(() => {
+    const seen = [];
+    xi.forEach(s => { if (!seen.includes(s.slot.label)) seen.push(s.slot.label); });
+    return seen;
+  }, [xi]);
+  const autoDepth = useMemo(() => uncoveredSlots(xi), [xi]);
+  const autoUpgrade = useMemo(() => improveSlots(xi, team.season, 4).map(x => x.k), [xi, team]);
+
+  const manualPicked = useMemo(() => findByKeys(squad, manualKeys), [squad, manualKeys]);
+  const recruitPicked = useMemo(() => findByKeys(players, recruitKeys), [players, recruitKeys]);
+
+  const keyRows = keyMode === 'manual' ? manualPicked
+                : keyMode === 'recruit' ? recruitPicked
+                : topPlayers(squad, 3);
+  const keyTitle = keyMode === 'recruit' ? 'Recruitment Recommendations' : 'Key Players';
+
   const unmapped = useMemo(() => reportUnmappedTokens(squad), [squad]);
   const unmappedKeys = Object.keys(unmapped);
-
   const groupsPresent = new Set(players.map(p => p && p.roleKey).filter(Boolean)).size;
   const partialSquadData = players.length > 0 && groupsPresent < 4;
+  const summaryWords = countWords(summaryText);
+
+  const buildOpts = () => ({
+    squad, formation, coach, depthCount, coachScore, allTeams,
+    headerColour: HEADER_COLOURS[headerColourName], rawOverall,
+    bottomMode, summaryText,
+    keyRows, keyTitle, keyShowClub: keyMode === 'recruit',
+    depthList: depthSel, upgradeList: upgradeSel,
+    xiOverrides,
+  });
 
   const handleDownload = async () => {
-    // EVERYTHING lives inside try/finally. Previously the preload and the
-    // element build sat outside it, so any throw skipped setDownloading(false)
-    // and the button stuck on "Generating…" with no error surfaced.
-    setDownloading(true);
-    setProgress('Loading images…');
+    setDownloading(true); setProgress('Loading images…'); setError('');
     let el = null;
     try {
       const { toPng } = await import('html-to-image');
-      const urls = cardImageUrls(team, squad, coach, allTeams);
+      const urls = cardImageUrls(team, squad, coach, allTeams, keyRows);
       const images = await preloadImages(urls, (d, t) => setProgress(`Images ${d}/${t}`));
       setProgress('Rendering…');
-
-      el = buildTeamReportElement(team, { squad, formation, coach, images, depthCount, coachScore, allTeams, headerColour: HEADER_COLOURS[headerColourName] });
+      el = buildTeamReportElement(team, { ...buildOpts(), images });
       const cardNode = el.querySelector('#tr-card-root') || el;
       const opts = {
         width: W, height: H, pixelRatio: 1, backgroundColor: BG,
         cacheBust: false, fontEmbedCSS: MONTSERRAT_EMBED_CSS,
         imagePlaceholder: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
       };
-      await toPng(cardNode, opts);               // warm-up: settles fonts/layout
-      const dataUrl = await toPng(cardNode, opts); // real capture
+      await toPng(cardNode, opts);
+      const dataUrl = await toPng(cardNode, opts);
       const a = document.createElement('a');
       a.download = `${String(team.team).replace(/\s+/g, '_')}_team_report.png`;
-      a.href = dataUrl;
-      a.click();
+      a.href = dataUrl; a.click();
     } catch (e) {
       console.error('[TeamReport] download failed:', e);
       setError(String((e && e.message) || e));
     } finally {
       if (el && el.parentNode) el.parentNode.removeChild(el);
-      setDownloading(false);
-      setProgress('');
+      setDownloading(false); setProgress('');
     }
   };
 
-  const note = { fontSize: 11.5, borderRadius: 8, padding: '8px 10px', marginBottom: 14, lineHeight: 1.45 };
+  const note = { fontSize: 11.5, borderRadius: 8, padding: '8px 10px', marginBottom: 12, lineHeight: 1.45 };
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.85)', zIndex: 9999,
                   display: 'flex', alignItems: 'center', justifyContent: 'center' }}
          onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div style={{ background: '#09111e', border: '1px solid #1e2d45', borderRadius: 12,
-                    padding: 28, textAlign: 'center', boxShadow: '0 8px 40px rgba(0,0,0,.7)',
-                    minWidth: 340, maxWidth: 400 }}>
-        <div style={{ fontSize: 15, fontWeight: 700, color: '#e2e8f4', marginBottom: 6 }}>Team Report</div>
-        <div style={{ fontSize: 12, color: '#64748b', marginBottom: 18 }}>
-          {team.team} · {leagueDisplayName(team.league)}
-        </div>
+                    padding: 22, boxShadow: '0 8px 40px rgba(0,0,0,.7)',
+                    width: 460, maxHeight: '88vh', display: 'flex', flexDirection: 'column' }}>
 
-        <div style={{ textAlign: 'left', marginBottom: 12 }}>
-          <span style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase',
-                         letterSpacing: '.04em', display: 'block', marginBottom: 5 }}>Formation</span>
-          <select value={formation} onChange={e => setFormation(e.target.value)}
-            style={{ width: '100%', background: '#0d1220', border: '1px solid #1e2d45',
-                     borderRadius: 5, color: '#e2e8f4', padding: '6px 7px',
-                     fontSize: 11.5, cursor: 'pointer' }}>
-            {FORMATION_NAMES.map(f => <option key={f} value={f}>{f}</option>)}
-          </select>
-        </div>
-
-        <div style={{ textAlign: 'left', marginBottom: 12 }}>
-          <span style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase',
-                         letterSpacing: '.04em', display: 'block', marginBottom: 6 }}>Header colour</span>
-          <div style={{ display: 'flex', flexWrap: 'wrap' }}>
-            {HEADER_COLOUR_NAMES.map((n, i) => {
-              const hex = HEADER_COLOURS[n];
-              const on = headerColourName === n;
-              return (
-                <button key={n} title={n} onClick={() => setHeaderColourName(n)}
-                  style={{ width: 26, height: 26, borderRadius: 6, marginLeft: i ? 6 : 0, marginBottom: 6,
-                           cursor: 'pointer', padding: 0,
-                           border: on ? '2px solid #60a5fa' : '1px solid #1e2d45',
-                           background: hex || 'linear-gradient(135deg,rgb(23,26,77),rgb(17,22,42))' }} />
-              );
-            })}
+        <div style={{ textAlign: 'center', marginBottom: 14, flexShrink: 0 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: '#e2e8f4' }}>Team Report</div>
+          <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
+            {team.team} · {leagueDisplayName(team.league)}
           </div>
         </div>
 
-        <div style={{ textAlign: 'left', marginBottom: 12 }}>
-          <span style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase',
-                         letterSpacing: '.04em', display: 'block', marginBottom: 5 }}>
-            Depth shown (50+ mins only)
-          </span>
-          <div style={{ display: 'flex' }}>
-            {[0, 1, 2, 3].map((n, i) => (
-              <button key={n} onClick={() => setDepthCount(n)}
-                style={{ flex: 1, padding: '5px 0', marginLeft: i ? 6 : 0, borderRadius: 5,
-                         border: `1px solid ${depthCount === n ? '#3b7de8' : '#1e2d45'}`,
-                         background: depthCount === n ? '#0e2040' : 'transparent',
-                         color: depthCount === n ? '#60a5fa' : '#94a3b8',
-                         fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>{n}</button>
-            ))}
-          </div>
+        <div style={{ overflowY: 'auto', flex: 1, paddingRight: 4, marginRight: -4 }}>
+
+          <Section title="Layout & panels" open={openSection === 'layout'} onToggle={() => toggleSection('layout')}>
+            <div style={UI.block}>
+              <span style={UI.label}>Bottom row</span>
+              <select value={bottomMode} onChange={e => setBottomMode(e.target.value)} style={UI.select}>
+                <option value="similar">Similar Teams + Key Players</option>
+                <option value="summary">Key Players + Summary</option>
+              </select>
+            </div>
+            {bottomMode === 'summary' && (
+              <div style={UI.block}>
+                <span style={UI.label}>Summary</span>
+                <textarea value={summaryText} rows={5}
+                  onChange={e => setSummaryText(clampWords(e.target.value))}
+                  placeholder="Write the scout summary…"
+                  style={{ ...UI.input, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }} />
+                <div style={{ ...UI.note, color: summaryWords >= SUMMARY_WORD_LIMIT ? '#f6a75c' : '#64748b' }}>
+                  {summaryWords}/{SUMMARY_WORD_LIMIT} words
+                </div>
+              </div>
+            )}
+            <div style={UI.block}>
+              <span style={UI.label}>Header colour</span>
+              <div style={{ display: 'flex', flexWrap: 'wrap' }}>
+                {HEADER_COLOUR_NAMES.map((n) => {
+                  const spec = HEADER_COLOURS[n];
+                  const on = headerColourName === n;
+                  return (
+                    <button key={n} title={n} onClick={() => setHeaderColourName(n)}
+                      style={{ width: 24, height: 24, borderRadius: 6, marginRight: 6, marginBottom: 6,
+                               cursor: 'pointer', padding: 0,
+                               border: on ? '2px solid #60a5fa' : '1px solid #1e2d45',
+                               background: spec.hex || 'linear-gradient(135deg,rgb(23,26,77),rgb(17,22,42))' }} />
+                  );
+                })}
+              </div>
+            </div>
+            <div onClick={() => setRawOverall(v => !v)}
+                 style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+              <div style={{ width: 14, height: 14, borderRadius: 3, flexShrink: 0,
+                            border: `1px solid ${rawOverall ? '#3b7de8' : '#1e2d45'}`,
+                            background: rawOverall ? '#3b7de8' : 'transparent',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {rawOverall && <span style={{ color: '#fff', fontSize: 9 }}>✓</span>}
+              </div>
+              <span style={{ fontSize: 11, color: '#94a3b8', marginLeft: 8 }}>
+                Raw overall (not league weighted)
+              </span>
+            </div>
+          </Section>
+
+          <Section title={`XI & depth · ${formation}`} open={openSection === 'xi'} onToggle={() => toggleSection('xi')}>
+            <div style={UI.block}>
+              <span style={UI.label}>Formation</span>
+              <select value={formation} onChange={e => { setFormation(e.target.value); setXiOverrides({}); }}
+                      style={UI.select}>
+                {FORMATION_NAMES.map(f => <option key={f} value={f}>{f}</option>)}
+              </select>
+              <div style={UI.note}>Changing formation clears manual XI picks.</div>
+            </div>
+            <div style={UI.block}>
+              <span style={UI.label}>Depth shown (50+ mins only)</span>
+              <div style={{ display: 'flex' }}>
+                {[0, 1, 2, 3].map((n, i) => (
+                  <button key={n} onClick={() => setDepthCount(n)}
+                    style={{ flex: 1, padding: '5px 0', marginLeft: i ? 6 : 0, borderRadius: 5,
+                             border: `1px solid ${depthCount === n ? '#3b7de8' : '#1e2d45'}`,
+                             background: depthCount === n ? '#0e2040' : 'transparent',
+                             color: depthCount === n ? '#60a5fa' : '#94a3b8',
+                             fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>{n}</button>
+                ))}
+              </div>
+            </div>
+            <div style={UI.block}>
+              <span style={UI.label}>Manual XI — override any slot</span>
+              {xi.map(({ slot, starter }) => (
+                <div key={slot.id} style={{ display: 'flex', alignItems: 'center', marginBottom: 5 }}>
+                  <span style={{ width: 42, flexShrink: 0, fontSize: 10, fontWeight: 700,
+                                 color: xiOverrides[slot.id] ? '#60a5fa' : '#6f7c92' }}>{slot.label}</span>
+                  <select value={xiOverrides[slot.id] || ''}
+                    onChange={e => setXiOverrides(o => {
+                      const next = { ...o };
+                      if (e.target.value) next[slot.id] = e.target.value; else delete next[slot.id];
+                      return next;
+                    })}
+                    style={{ ...UI.select, fontSize: 11, padding: '4px 6px' }}>
+                    <option value="">{starter ? `Auto — ${starter.name}` : 'Auto — empty'}</option>
+                    {squad.map(p => (
+                      <option key={playerKey(p)} value={playerKey(p)}>
+                        {p.name}{p.position ? ` (${String(p.position).split(',')[0].trim()})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ))}
+              {!!Object.keys(xiOverrides).length && (
+                <button onClick={() => setXiOverrides({})}
+                  style={{ marginTop: 4, background: 'transparent', border: '1px solid #1e2d45',
+                           borderRadius: 5, color: '#94a3b8', fontSize: 10.5, padding: '4px 9px',
+                           cursor: 'pointer' }}>Reset all to auto</button>
+              )}
+            </div>
+          </Section>
+
+          <Section title="Weaknesses tabs" open={openSection === 'weak'} onToggle={() => toggleSection('weak')}>
+            <div style={UI.block}>
+              <span style={UI.label}>Depth {depthSel === null && <span style={{ color: '#475569' }}>(auto)</span>}</span>
+              <Chips options={slotLabels} selected={depthSel === null ? autoDepth : depthSel}
+                     onToggle={(k) => setDepthSel(cur => {
+                       const base = cur === null ? autoDepth : cur;
+                       return base.includes(k) ? base.filter(x => x !== k) : [...base, k];
+                     })} />
+              {depthSel !== null && (
+                <button onClick={() => setDepthSel(null)}
+                  style={{ background: 'transparent', border: '1px solid #1e2d45', borderRadius: 5,
+                           color: '#94a3b8', fontSize: 10.5, padding: '4px 9px', cursor: 'pointer' }}>
+                  Back to auto
+                </button>
+              )}
+            </div>
+            <div style={UI.block}>
+              <span style={UI.label}>XI Upgrade {upgradeSel === null && <span style={{ color: '#475569' }}>(auto)</span>}</span>
+              <Chips options={slotLabels} selected={upgradeSel === null ? autoUpgrade : upgradeSel}
+                     onToggle={(k) => setUpgradeSel(cur => {
+                       const base = cur === null ? autoUpgrade : cur;
+                       return base.includes(k) ? base.filter(x => x !== k) : [...base, k];
+                     })} />
+              {upgradeSel !== null && (
+                <button onClick={() => setUpgradeSel(null)}
+                  style={{ background: 'transparent', border: '1px solid #1e2d45', borderRadius: 5,
+                           color: '#94a3b8', fontSize: 10.5, padding: '4px 9px', cursor: 'pointer' }}>
+                  Back to auto
+                </button>
+              )}
+            </div>
+          </Section>
+
+          <Section title={keyTitle} open={openSection === 'key'} onToggle={() => toggleSection('key')}>
+            <div style={UI.block}>
+              <span style={UI.label}>Mode</span>
+              <select value={keyMode} onChange={e => setKeyMode(e.target.value)} style={UI.select}>
+                <option value="auto">Key Players — top 3 by score</option>
+                <option value="manual">Key Players — pick manually</option>
+                <option value="recruit">Recruitment Recommendations</option>
+              </select>
+            </div>
+            {keyMode === 'manual' && (
+              <div style={UI.block}>
+                <span style={UI.label}>Pick up to 3 from the squad</span>
+                <PlayerPicker pool={squad} picked={manualPicked} max={3}
+                  placeholder="Search squad…"
+                  onPick={p => setManualKeys(k => [...k, playerKey(p)])}
+                  onRemove={p => setManualKeys(k => k.filter(x => x !== playerKey(p)))} />
+              </div>
+            )}
+            {keyMode === 'recruit' && (
+              <div style={UI.block}>
+                <span style={UI.label}>Pick up to 3 from all players</span>
+                <PlayerPicker pool={players} picked={recruitPicked} max={3}
+                  placeholder="Search all players…"
+                  onPick={p => setRecruitKeys(k => [...k, playerKey(p)])}
+                  onRemove={p => setRecruitKeys(k => k.filter(x => x !== playerKey(p)))} />
+                <div style={UI.note}>{players.length.toLocaleString()} players searchable.</div>
+              </div>
+            )}
+          </Section>
+
+          <Section title="Manager" open={openSection === 'coach'} onToggle={() => toggleSection('coach')}>
+            <select value={coachId} onChange={e => setCoachId(e.target.value)} style={UI.select}>
+              <option value="auto">{autoCoach ? `Auto — ${autoCoach.name}` : 'Auto — none matched'}</option>
+              <option value="none">Hide manager</option>
+              {savedCoaches.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+            {!savedCoaches.length && <div style={UI.note}>No saved coaches on this domain.</div>}
+            {coach && coachScore != null && (
+              <div style={UI.note}>Manager score {Math.round(coachScore)}.</div>
+            )}
+          </Section>
         </div>
 
-        <div style={{ textAlign: 'left', marginBottom: 12 }}>
-          <span style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase',
-                         letterSpacing: '.04em', display: 'block', marginBottom: 5 }}>Manager</span>
-          <select value={coachId} onChange={e => setCoachId(e.target.value)}
-            style={{ width: '100%', background: '#0d1220', border: '1px solid #1e2d45',
-                     borderRadius: 5, color: '#e2e8f4', padding: '6px 7px',
-                     fontSize: 11.5, cursor: 'pointer' }}>
-            <option value="auto">
-              {autoCoach ? `Auto — ${autoCoach.name}` : 'Auto — none matched'}
-            </option>
-            <option value="none">Hide manager</option>
-            {savedCoaches.map(c => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
-          {!savedCoaches.length && (
-            <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 5 }}>
-              No saved coaches found on this domain.
+        <div style={{ flexShrink: 0, paddingTop: 12 }}>
+          <div style={{ fontSize: 11, color: '#64748b', textAlign: 'left', marginBottom: 10 }}>
+            {squad.length} in squad · {filled}/11 filled{coach ? ` · ${coach.name}` : ''}
+          </div>
+
+          {partialSquadData && (
+            <div style={{ ...note, color: '#fbc701', background: 'rgba(251,199,1,0.08)',
+                          border: '1px solid rgba(251,199,1,0.25)' }}>
+              Only {groupsPresent} position group{groupsPresent === 1 ? '' : 's'} loaded — the XI
+              will be incomplete. Switch the position filter to "All" to load every group.
             </div>
           )}
+          {unmappedKeys.length > 0 && (
+            <div style={{ ...note, color: '#f87171', background: 'rgba(248,113,113,0.08)',
+                          border: '1px solid rgba(248,113,113,0.25)', textAlign: 'left' }}>
+              Unrecognised position token{unmappedKeys.length === 1 ? '' : 's'}:{' '}
+              <b>{unmappedKeys.join(', ')}</b> — these fall through to CM.
+            </div>
+          )}
+          {error && (
+            <div style={{ ...note, color: '#f87171', background: 'rgba(248,113,113,0.08)',
+                          border: '1px solid rgba(248,113,113,0.25)', textAlign: 'left' }}>
+              Download failed: {error}
+            </div>
+          )}
+
+          <button onClick={handleDownload} disabled={downloading}
+            style={{ width: '100%', padding: '10px 0', borderRadius: 8, border: 'none',
+                     background: downloading ? '#1e2d45' : '#3b7de8', color: '#fff',
+                     fontSize: 13, fontWeight: 700, cursor: downloading ? 'default' : 'pointer' }}>
+            {downloading ? (progress || 'Generating…') : '⬇ Download 1920×1080'}
+          </button>
+          <button onClick={onClose}
+            style={{ width: '100%', marginTop: 9, padding: '8px 0', borderRadius: 8,
+                     border: '1px solid #1e2d45', background: 'transparent',
+                     color: '#94a3b8', fontSize: 12, cursor: 'pointer' }}>Close</button>
         </div>
-
-        <div style={{ fontSize: 11, color: '#64748b', textAlign: 'left', marginBottom: 14 }}>
-          {squad.length} in squad · {filled}/11 filled{rating != null ? ` · XI ${rating.toFixed(1)}` : ''}
-          {coach ? ` · ${coach.name}${coachScore != null ? ` (${Math.round(coachScore)})` : ''}` : ' · no coach saved'}
-        </div>
-
-        {partialSquadData && (
-          <div style={{ ...note, color: '#fbc701', background: 'rgba(251,199,1,0.08)',
-                        border: '1px solid rgba(251,199,1,0.25)' }}>
-            Only {groupsPresent} position group{groupsPresent === 1 ? '' : 's'} loaded — the XI
-            will be incomplete. Switch the position filter to "All" to load every group.
-          </div>
-        )}
-
-        {unmappedKeys.length > 0 && (
-          <div style={{ ...note, color: '#f87171', background: 'rgba(248,113,113,0.08)',
-                        border: '1px solid rgba(248,113,113,0.25)', textAlign: 'left' }}>
-            Unrecognised position token{unmappedKeys.length === 1 ? '' : 's'}:{' '}
-            <b>{unmappedKeys.join(', ')}</b> — these fall through to CM and can leave
-            a slot empty. Add them to CANONICAL in TeamReport.js.
-          </div>
-        )}
-
-        {!partialSquadData && filled < 11 && (
-          <div style={{ ...note, color: '#f18c31', background: 'rgba(241,140,49,0.08)',
-                        border: '1px solid rgba(241,140,49,0.25)' }}>
-            {11 - filled} slot{11 - filled === 1 ? '' : 's'} unfilled — no squad player matches
-            that role. They render as dashed outlines.
-          </div>
-        )}
-
-        {error && (
-          <div style={{ ...note, color: '#f87171', background: 'rgba(248,113,113,0.08)',
-                        border: '1px solid rgba(248,113,113,0.25)', textAlign: 'left' }}>
-            Download failed: {error}
-          </div>
-        )}
-
-        <button onClick={handleDownload} disabled={downloading}
-          style={{ width: '100%', padding: '10px 0', borderRadius: 8, border: 'none',
-                   background: downloading ? '#1e2d45' : '#3b7de8', color: '#fff',
-                   fontSize: 13, fontWeight: 700, cursor: downloading ? 'default' : 'pointer' }}>
-          {downloading ? (progress || 'Generating…') : '⬇ Download 1920×1080'}
-        </button>
-        <button onClick={onClose}
-          style={{ width: '100%', marginTop: 10, padding: '8px 0', borderRadius: 8,
-                   border: '1px solid #1e2d45', background: 'transparent',
-                   color: '#94a3b8', fontSize: 12, cursor: 'pointer' }}>Close</button>
       </div>
     </div>
   );
