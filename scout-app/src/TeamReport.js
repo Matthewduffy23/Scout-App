@@ -1,4 +1,4 @@
-// TeamReport.js v24 — Team All-in-One report. 1920x1080 PNG export.
+// TeamReport.js v25 — Team All-in-One report. 1920x1080 PNG export.
 //
 // v2: bigger team name; country flag + league logo beside the league name;
 //     mini coach profile in the header gap; XI is now formation-driven and
@@ -50,17 +50,16 @@ const LEFT_H = ROW_3 + ROW3_H - BODY_TOP;      // 889
 // Header column stops. The team name is capped and ellipsised so long clubs
 // ("Wolverhampton Wanderers") can't run into the coach block.
 const NAME_X = PAD + 128;
-// Three zones, no cluster: the five score wheels take the middle span, and the
-// manager block runs all the way to the right margin with the club facts tucked
-// in beneath his details.
-//   identity 24-440 | rule 456 | wheels 474-1174 | rule 1192 | manager 1210-1896
+// Manager's left edge is COL_B_X, so the header block sits directly above the
+// right-hand tile column instead of floating between columns.
+//   identity 24-440 | rule 456 | wheels 474-1338 | manager 1358-1896
 const NAME_MAX_W = 288;
 const RULE_1 = 456;
+const RULE_2 = 1338;                     // between the wheels and the manager
 const WHEEL_X = 474;
-const WHEEL_W = 700;
-const RULE_2 = 1192;
-const COACH_X = 1210;
-const COACH_W = 686;
+const WHEEL_W = 864;
+const COACH_X = 1358;                    // = COL_B_X
+const COACH_W = 538;
 
 // ─── Palette ───────────────────────────────────────────────────────────────
 // Generic head-and-shoulders, inlined as a data URI so it needs no network and
@@ -1102,6 +1101,14 @@ function leagueTablePanelHtml(w, h, team, allTeams) {
 export const BOTTOM_PANELS = ['Similar Teams', 'Key Players', 'Recruitment Recommendations',
                               'Summary', 'Possible Departures', 'None'];
 
+// Did they hit it? Rendered as a small badge beside the objective.
+export const OBJECTIVE_OUTCOMES = ['', 'Achieved', 'Partial', 'Missed'];
+const OUTCOME_STYLE = {
+  Achieved: { c: '#22c55e', g: '✓' },
+  Partial:  { c: '#fbc701', g: '–' },
+  Missed:   { c: '#ef4444', g: '✕' },
+};
+
 export const OBJECTIVES = [
   'Title Challenge', 'European Places', 'Promotion', 'Play-offs',
   'Upper Mid-Table', 'Mid-Table', 'Consolidate', 'Avoid Relegation', 'Rebuild',
@@ -1551,25 +1558,25 @@ function coachHtml(coach, team, coachScore, hideManagerScore = false, ink = head
 
   return `
     <div style="position:absolute;left:${COACH_X}px;top:20px;width:${COACH_W}px;height:112px;">
-      <div style="position:absolute;left:0;top:6px;width:94px;height:94px;border-radius:11px;
+      <div style="position:absolute;left:0;top:4px;width:88px;height:88px;border-radius:11px;
                   background-color:#151b2e;${photoCss}
                   background-repeat:no-repeat;
                   border:1px solid rgba(255,255,255,0.16);"></div>
 
-      <div style="position:absolute;left:110px;top:0px;width:${COACH_W - 110}px;">
+      <div style="position:absolute;left:102px;top:0px;width:${COACH_W - 102}px;">
         <div style="font-size:9.5px;font-weight:700;letter-spacing:0.16em;color:${ink.muted};">MANAGER</div>
         <div style="margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-          <span style="font-size:23px;font-weight:700;color:${ink.primary};vertical-align:middle;">${esc(coach.name || '')}</span>${scoreChip}
+          <span style="font-size:21px;font-weight:700;color:${ink.primary};vertical-align:middle;">${esc(coach.name || '')}</span>${scoreChip}
         </div>
         <div style="display:flex;align-items:center;margin-top:7px;white-space:nowrap;">
           ${iso ? `<div style="width:24px;height:15px;flex-shrink:0;background-size:cover;
                      background-position:center;border-radius:2px;
                      box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15);
                      background-image:url('${src(`https://flagcdn.com/w40/${iso}.png`)}');"></div>` : ''}
-          <span style="font-size:12.5px;color:#aab4c8;${iso ? 'margin-left:7px;' : ''}">${esc(coach.nationality || '')}</span>
+          <span style="font-size:11px;color:${ink.soft};${iso ? 'margin-left:6px;' : ''}">${esc(coach.nationality || '')}</span>
           ${facts.map(([k, v]) =>
             `<span style="font-size:11px;color:#6f7c92;margin-left:14px;">
-               ${k}: <span style="color:#c3ccdd;font-weight:600;">${esc(v)}</span></span>`).join('')}
+               ${k}: <span style="color:${ink.soft};font-weight:600;">${esc(v)}</span></span>`).join('')}
         </div>
         ${clubFacts ? `<div style="margin-top:9px;">${clubFacts}</div>` : ''}
       </div>
@@ -1578,7 +1585,7 @@ function coachHtml(coach, team, coachScore, hideManagerScore = false, ink = head
 
 // ─── Header ────────────────────────────────────────────────────────────────
 function headerHtml(team, coach, coachScore, allTeams, headerColour, rawOverall, hideManagerScore,
-                    purchaseValue, purchaseRank, objective, teamNameOverride) {
+                    purchaseValue, purchaseRank, objective, teamNameOverride, objectiveOutcome) {
   const displayName = (teamNameOverride && teamNameOverride.trim()) || team.team;
   const crest = teamCrest(team.team);
   const league = leagueDisplayName(team.league);
@@ -1608,18 +1615,28 @@ function headerHtml(team, coach, coachScore, allTeams, headerColour, rawOverall,
         (purchaseRank && leagueSizeLate) ? { rank: purchaseRank, size: leagueSizeLate } : null]);
     }
     const oc = OBJECTIVE_COLOUR[objective] || '#94a3b8';
+    const out = OUTCOME_STYLE[objectiveOutcome] || null;
     if (!bits.length && !objective) return '';
     return `
-      <div style="display:flex;align-items:center;white-space:nowrap;">
-        ${bits.map(([k, v, rk], i) => `
-          <span style="${i ? 'margin-left:20px;' : ''}font-size:7.5px;font-weight:700;
-                       letter-spacing:0.13em;color:${ink.muted};">${k}</span>
-          <span style="margin-left:6px;font-size:12.5px;font-weight:800;color:${ink.secondary};">${v}</span>
-          ${rk ? `<span style="margin-left:4px;font-size:8.5px;font-weight:700;color:${ink.muted};">${rankStr(rk)}</span>` : ''}
-        `).join('')}
-        ${objective ? `<span style="${bits.length ? 'margin-left:20px;' : ''}display:inline-block;
-              padding:2px 10px;border-radius:10px;background:${oc}1c;border:1px solid ${oc}55;
-              font-size:9.5px;font-weight:800;color:${oc};">${esc(objective)}</span>` : ''}
+      <div style="white-space:nowrap;">
+        <div style="display:flex;align-items:center;">
+          ${bits.map(([k, v, rk], i) => `
+            <span style="${i ? 'margin-left:18px;' : ''}font-size:7px;font-weight:700;
+                         letter-spacing:0.13em;color:${ink.muted};">${k}</span>
+            <span style="margin-left:5px;font-size:10.5px;font-weight:700;color:${ink.soft};">${v}</span>
+            ${rk ? `<span style="margin-left:4px;font-size:7.5px;font-weight:600;color:${ink.muted};">${rankStr(rk)}</span>` : ''}
+          `).join('')}
+        </div>
+        ${objective ? `
+          <div style="display:flex;align-items:center;margin-top:7px;">
+            <span style="display:inline-block;padding:2px 10px;border-radius:10px;
+                  background:${oc}1c;border:1px solid ${oc}55;
+                  font-size:9.5px;font-weight:800;color:${oc};">${esc(objective)}</span>
+            ${out ? `<span style="display:inline-flex;align-items:center;justify-content:center;
+                  margin-left:7px;width:16px;height:16px;border-radius:50%;
+                  background:${out.c}22;border:1px solid ${out.c}66;
+                  font-size:9px;font-weight:800;color:${out.c};line-height:1;">${out.g}</span>` : ''}
+          </div>` : ''}
       </div>`;
   })();
 
@@ -1658,7 +1675,17 @@ function headerHtml(team, coach, coachScore, allTeams, headerColour, rawOverall,
       ${team.season ? `<span style="font-size:18px;font-weight:500;color:${ink.muted};margin-left:12px;">· ${esc(team.season)}</span>` : ''}
     </div>
 
-    ${[RULE_1, RULE_2].map(x =>
+    <!-- League standing sits with the club identity, not with the style scores —
+         it's a fact about the season rather than a measure of how they play. -->
+    <div style="position:absolute;left:${NAME_X}px;top:116px;display:flex;align-items:center;
+                white-space:nowrap;">
+      <span style="font-size:8px;font-weight:700;letter-spacing:0.14em;color:${ink.muted};">PTS</span>
+      <span style="font-size:13px;font-weight:800;color:${ink.secondary};margin-left:7px;">${rankStr(ptsRank)}</span>
+      <span style="font-size:8px;font-weight:700;letter-spacing:0.14em;color:${ink.muted};margin-left:24px;">xPTS</span>
+      <span style="font-size:13px;font-weight:800;color:${ink.secondary};margin-left:7px;">${rankStr(xptsRank)}</span>
+    </div>
+
+    ${[RULE_1, RULE_2].filter(Boolean).map(x =>
       `<div style="position:absolute;left:${x}px;top:28px;width:1px;height:94px;
                    background:${ink.rule};"></div>`).join('')}
 
@@ -1669,20 +1696,12 @@ function headerHtml(team, coach, coachScore, allTeams, headerColour, rawOverall,
       const step = WHEEL_W / all.length;
       return all.map(([label, v, big], i) => scoreWheel({
         cx: WHEEL_X + step * i + step / 2,
-        cy: 62,
+        cy: 66,
         r: big ? 33 : 27,
         stroke: big ? 7 : 6,
         value: v, label, colour: scoreColor(v), ink, big,
       })).join('');
     })()}
-
-    <div style="position:absolute;left:${WHEEL_X}px;top:120px;width:${WHEEL_W}px;
-                display:flex;align-items:center;justify-content:center;white-space:nowrap;">
-      <span style="font-size:8px;font-weight:700;letter-spacing:0.13em;color:${ink.muted};">PTS</span>
-      <span style="font-size:12px;font-weight:800;color:${ink.secondary};margin-left:7px;">${rankStr(ptsRank)}</span>
-      <span style="font-size:8px;font-weight:700;letter-spacing:0.13em;color:${ink.muted};margin-left:26px;">xPTS</span>
-      <span style="font-size:12px;font-weight:800;color:${ink.secondary};margin-left:7px;">${rankStr(xptsRank)}</span>
-    </div>
 
     ${coachHtml(coach, team, coachScore, hideManagerScore, ink, clubFactsHtml)}`;
 }
@@ -1773,6 +1792,7 @@ export function buildTeamReportElement(team, opts = {}) {
     hideManagerScore = false,
     showContractYears = false,
     purchaseValue = '', purchaseRank = null, objective = '', teamNameOverride = '',
+    objectiveOutcome = '',
   } = opts;
   IMG = images || {};
 
@@ -1796,7 +1816,7 @@ export function buildTeamReportElement(team, opts = {}) {
          font-family:'Montserrat',sans-serif;color:#fff;position:relative;box-sizing:border-box;">
 
       ${headerHtml(team, coach, coachScore, allTeams, headerColour, rawOverall, hideManagerScore,
-                   purchaseValue, purchaseRank, objective, teamNameOverride)}
+                   purchaseValue, purchaseRank, objective, teamNameOverride, objectiveOutcome)}
 
       ${panel({ x: PAD, y: BODY_TOP, w: LEFT_W, h: LEFT_H,
                 title: 'XI + Depth', right: formation, body: xiPanelHtml(xiW, xiH, xi, { hideScores: hidePlayerScores, showContract: showContractYears, season: team.season }) })}
@@ -2117,6 +2137,7 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
   const [purchaseValue, setPurchaseValue] = useState('');
   const [purchaseRank, setPurchaseRank] = useState('');
   const [objective, setObjective] = useState('');
+  const [objectiveOutcome, setObjectiveOutcome] = useState('');
   const [hidePlayerScores, setHidePlayerScores] = useState(false);
   const [hideManagerScore, setHideManagerScore] = useState(false);
   const [showContractYears, setShowContractYears] = useState(false);
@@ -2227,7 +2248,7 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
     hidePlayerScores, hideManagerScore, showContractYears,
     purchaseValue: purchaseValue.trim(),
     purchaseRank: purchaseRank ? Number(purchaseRank) : null,
-    objective,
+    objective, objectiveOutcome,
   });
 
   const handleDownload = async () => {
@@ -2346,10 +2367,17 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
             ))}
             <div style={UI.block}>
               <span style={UI.label}>Objective</span>
-              <select value={objective} onChange={e => setObjective(e.target.value)} style={UI.select}>
-                <option value="">None</option>
-                {OBJECTIVES.map(o => <option key={o} value={o}>{o}</option>)}
-              </select>
+              <div style={{ display: 'flex' }}>
+                <select value={objective} onChange={e => setObjective(e.target.value)}
+                        style={{ ...UI.select, flex: 2 }}>
+                  <option value="">None</option>
+                  {OBJECTIVES.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+                <select value={objectiveOutcome} onChange={e => setObjectiveOutcome(e.target.value)}
+                        style={{ ...UI.select, flex: 1, marginLeft: 6 }}>
+                  {OBJECTIVE_OUTCOMES.map(o => <option key={o} value={o}>{o || 'No status'}</option>)}
+                </select>
+              </div>
             </div>
             <div style={UI.block}>
               <span style={UI.label}>Purchase value</span>
