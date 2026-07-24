@@ -1477,9 +1477,9 @@ function weaknessesPanelHtml(w, h, team, allTeams, xi, depthList, upgradeList, s
   // same gap from what's above them (14px).
   const colTop = metrics.length * rowH + (hasExtras ? 12 : 4);
   const colW = Math.floor((w - 16) / 2);
-  // 3 keeps each column to a single line; a 4th wrapped and pushed the panel
-  // past its height once the objective row was added. Overflow shows as "+N".
-  const CAP = 3;
+  // 5 fits one line at this pill size (5 x ~42px + gaps inside a 241px column).
+  // Beyond that shows as "+N" rather than wrapping into a second row.
+  const CAP = 5;
   const pill = (text, tone) => `<span style="display:inline-block;font-size:10.5px;font-weight:700;
       padding:3px 8px;border-radius:10px;margin-right:5px;margin-bottom:4px;
       background:${tone}1e;border:1px solid ${tone}59;color:${tone};">${text}</span>`;
@@ -1715,21 +1715,6 @@ function headerHtml(team, coach, coachScore, allTeams, headerColour, rawOverall,
     }
     const oc = OBJECTIVE_COLOUR[objective] || '#94a3b8';
     const out = OUTCOME_STYLE[objectiveOutcome] || null;
-    const g = objectiveGap(objective, team.pointsRank, leagueSizeLate);
-    const ord = (n) => {
-      const v = Number(n); if (!v) return '—';
-      const t = v % 10, h = v % 100;
-      return v + ((t === 1 && h !== 11) ? 'st' : (t === 2 && h !== 12) ? 'nd' : (t === 3 && h !== 13) ? 'rd' : 'th');
-    };
-    const gapInfo = !g ? null : {
-      from: ord(team.pointsRank), to: ord(g.target), colour: g.colour,
-      // An arrow only makes sense when there's ground to make up. Already past
-      // the target and "13th -> 17th" reads like they need to drop, so it
-      // becomes a static "target 17th" instead.
-      met: g.gap === 0,
-      // Full bar when they're there; empties as the gap widens, 10+ = floor.
-      fill: Math.max(6, 100 - Math.min(100, (g.gap / 10) * 100)).toFixed(0),
-    };
     if (!bits.length && !objective) return '';
     return `
       <div style="display:flex;align-items:baseline;white-space:nowrap;">
@@ -1750,24 +1735,7 @@ function headerHtml(team, coach, coachScore, allTeams, headerColour, rawOverall,
           ${out ? `<span style="display:inline-flex;align-items:center;justify-content:center;
                 margin-left:6px;width:14px;height:14px;border-radius:50%;background:${out.c}22;
                 border:1px solid ${out.c}66;font-size:8px;font-weight:800;
-                color:${out.c};line-height:1;vertical-align:middle;">${out.g}</span>` : ''}
-          ${gapInfo ? `
-            <!-- Distance to the objective: current position, an arrow, the
-                 position the objective implies. Self-explanatory without a
-                 legend, and the colour carries the size of the job. -->
-            <span style="margin-left:12px;font-size:9.5px;font-weight:700;
-                         color:${ink.muted};vertical-align:middle;">${gapInfo.from}</span>
-            <span style="margin-left:5px;font-size:9.5px;font-weight:700;
-                         color:${gapInfo.colour};vertical-align:middle;">${gapInfo.met ? '·' : '→'}</span>
-            <span style="margin-left:5px;font-size:9.5px;font-weight:800;
-                         color:${gapInfo.colour};vertical-align:middle;">${
-                           gapInfo.met ? `target ${gapInfo.to}` : gapInfo.to}</span>
-            <span style="display:inline-block;margin-left:7px;width:38px;height:3px;
-                         border-radius:2px;background:${ink.track};vertical-align:middle;
-                         overflow:hidden;">
-              <span style="display:block;width:${gapInfo.fill}%;height:100%;
-                           background:${gapInfo.colour};border-radius:2px;"></span>
-            </span>` : ''}` : ''}
+                color:${out.c};line-height:1;vertical-align:middle;">${out.g}</span>` : ''}` : ''}
       </div>`;
   })();
 
