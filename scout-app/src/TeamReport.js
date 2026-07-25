@@ -1,4 +1,4 @@
-// TeamReport.js v44 — Team All-in-One report. 1920x1080 PNG export.
+// TeamReport.js v45 — Team All-in-One report. 1920x1080 PNG export.
 //
 // v2: bigger team name; country flag + league logo beside the league name;
 //     mini coach profile in the header gap; XI is now formation-driven and
@@ -65,6 +65,14 @@
 // nudged by fixed pixels, and the separator between position and role is gone. The
 // XI photo upload was rendering but looked like a third move arrow, so it's now a
 // bordered PHOTO button.
+//
+// v45: name / age / flag now share a flex row with align-items:center, so all three
+// centre on one axis instead of relying on vertical-align approximations, and the
+// age can't be eaten by a long name's ellipsis. Age is explicitly the same 13.5px
+// as the name. Flags moved from x-height (0.62) to cap height (0.74) and badges to
+// the full text height. Coach Shortlist was showing the last-SAVED tenure rather
+// than the most recent one — Andorra for a coach since at Elche — now sorted on
+// season, as coachHtml already did for "since".
 
 import React, { useState, useMemo, useCallback } from 'react';
 import {
@@ -1492,10 +1500,13 @@ function coachShortlistPanelHtml(w, h, rows, hideScores = false) {
                     background-repeat:no-repeat, no-repeat;
                     border:1.5px solid rgba(190,203,224,0.26);"></div>
         <div style="position:absolute;left:50px;right:${hideScores ? 14 : PILL_W + 20}px;top:50%;margin-top:-15px;">
-          <div style="font-size:13.5px;font-weight:700;color:#eaf0f8;line-height:1.15;white-space:nowrap;
-                      overflow:hidden;text-overflow:ellipsis;">${esc(c.name || '')}${
-            c.age != null ? `<span style="color:#7c8798;font-weight:600;"> ${c.age}</span>` : ''}${
-            (() => { const f = flagImg(c.flag, 13.5); return f ? `${gapSpan(5)}${f}` : ''; })()}</div>
+          <div style="display:flex;align-items:center;line-height:1.15;min-width:0;">
+            <span style="font-size:13.5px;font-weight:700;color:#eaf0f8;white-space:nowrap;
+                         overflow:hidden;text-overflow:ellipsis;">${esc(c.name || '')}</span>
+            ${c.age != null ? `<span style="font-size:13.5px;font-weight:600;color:#7c8798;
+                 margin-left:5px;flex-shrink:0;">${c.age}</span>` : ''}
+            ${flexFlag(c.flag, 13.5, 5)}
+          </div>
           <div style="font-size:10px;color:#8b98ad;margin-top:4px;line-height:1.15;white-space:nowrap;
                       overflow:hidden;text-overflow:ellipsis;">${
             meta.join('<span style="color:#6f7c92;"> · </span>')}</div>
@@ -1635,9 +1646,11 @@ export function personFlagUrl(p) {
 // vertical-align:middle centres the box against the text's own middle, which holds
 // at any font size — the earlier -1px/-2px nudges were tuned for one size and drifted
 // at the other. Everything trails the text it belongs to rather than preceding it.
+// 0.62 put the flag at roughly the x-height, which read as undersized next to the
+// name. 0.74 matches cap height, so it sits level with the top of the digits.
 function flagImg(url, textPx) {
   if (!url) return '';
-  const hPx = Math.round(textPx * 0.62);
+  const hPx = Math.round(textPx * 0.74);
   return `<span style="display:inline-block;width:${Math.round(hPx * 1.5)}px;height:${hPx}px;
            background-image:url('${src(url)}');background-size:cover;background-position:center;
            border-radius:1.5px;box-shadow:inset 0 0 0 0.5px rgba(255,255,255,0.22);
@@ -1645,13 +1658,20 @@ function flagImg(url, textPx) {
 }
 function logoImg(url, textPx) {
   if (!url) return '';
-  const hPx = Math.round(textPx * 0.9);
+  const hPx = Math.round(textPx * 1.0);
   return `<span style="display:inline-block;width:${hPx}px;height:${hPx}px;
            background-image:url('${src(url)}');background-size:contain;
            background-repeat:no-repeat;background-position:center;
            vertical-align:middle;"></span>`;
 }
 const gapSpan = (px) => `<span style="display:inline-block;width:${px}px;"></span>`;
+// Inside a flex row the flag needs flex-shrink:0 and its own margin instead of a
+// spacer span, or it gets squeezed to nothing when the name is long.
+function flexFlag(url, textPx, gap) {
+  const f = flagImg(url, textPx);
+  return f ? f.replace('display:inline-block;', `display:inline-block;flex-shrink:0;margin-left:${gap}px;`) : '';
+}
+const natStampFlex = (p, textPx) => flexFlag(personFlagUrl(p), textPx, 5);
 // Nationality flag, trailing whatever text it follows.
 function natStamp(p, textPx) {
   const f = flagImg(personFlagUrl(p), textPx);
@@ -1691,10 +1711,13 @@ function keyPlayersPanelHtml(w, h, rows, showClub = false, hideScores = false, p
         <!-- text box ends exactly where the pills begin — previously it was a
              fixed max-width guess, which is why names were ellipsising early -->
         <div style="position:absolute;left:50px;right:${VALS_W + 20}px;top:50%;margin-top:-15px;">
-          <div style="font-size:13.5px;font-weight:700;color:#eaf0f8;line-height:1.15;white-space:nowrap;
-                      overflow:hidden;text-overflow:ellipsis;">${esc(p.name)}<span
-                style="color:#7c8798;font-weight:600;"> ${p.age != null ? p.age : '—'}</span>${
-            natStamp(p, 13.5)}</div>
+          <div style="display:flex;align-items:center;line-height:1.15;min-width:0;">
+            <span style="font-size:13.5px;font-weight:700;color:#eaf0f8;white-space:nowrap;
+                         overflow:hidden;text-overflow:ellipsis;">${esc(p.name)}</span>
+            <span style="font-size:13.5px;font-weight:600;color:#7c8798;margin-left:5px;
+                         flex-shrink:0;">${p.age != null ? p.age : '—'}</span>${
+              natStampFlex(p, 13.5)}
+          </div>
           <div style="font-size:10px;color:#8b98ad;margin-top:4px;line-height:1.15;white-space:nowrap;
                       overflow:hidden;text-overflow:ellipsis;">${esc(pos)}${
             role ? ` <span style="color:#93a1b5;">${esc(role)}</span>` : ''}${
@@ -2822,8 +2845,13 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
         : (rawId || null);
       let age = null;
       try { age = computeAge(c.dob); } catch (e) { age = null; }
-      const tenures = c.tenures || [];
-      const lastTenure = tenures.length ? tenures[tenures.length - 1] : null;
+      // Array order is whatever order the tenures were SAVED in, which is why the
+      // shortlist was showing Andorra for a coach who has since been at Elche.
+      // Sort on the season string, same as coachHtml's "since" derivation does.
+      const tenures = (c.tenures || []).filter(t => t && t.team);
+      const lastTenure = tenures.length
+        ? tenures.slice().sort((a, b) => String(a.season) < String(b.season) ? 1 : -1)[0]
+        : null;
       const ciso = countryToIso2(c.nationality || '');
       return {
         name: c.name || '',
