@@ -1,4 +1,4 @@
-// TeamReport.js v45 — Team All-in-One report. 1920x1080 PNG export.
+// TeamReport.js v46 — Team All-in-One report. 1920x1080 PNG export.
 //
 // v2: bigger team name; country flag + league logo beside the league name;
 //     mini coach profile in the header gap; XI is now formation-driven and
@@ -73,6 +73,13 @@
 // the full text height. Coach Shortlist was showing the last-SAVED tenure rather
 // than the most recent one — Andorra for a coach since at Elche — now sorted on
 // season, as coachHtml already did for "since".
+//
+// v46: names were truncating in the bottom panels — v45's flex name row was the
+// cause, html-to-image mismeasures a flex item carrying text-overflow:ellipsis and
+// collapsed it. Back to inline-blocks all set to vertical-align:middle, which
+// centres just as exactly and measures reliably, with an explicit pixel budget for
+// the name. Rows also reworked: 40px faces, 14px names, 10.5px meta. New Selling
+// Assets bottom panel — squad ranked by xValue, per-player xValue editable.
 
 import React, { useState, useMemo, useCallback } from 'react';
 import {
@@ -1387,7 +1394,8 @@ function leagueTablePanelHtml(w, h, team, allTeams) {
 // rather than free text that reads differently every card.
 // Either bottom slot can hold any of these.
 export const BOTTOM_PANELS = ['Similar Teams', 'Key Players', 'Recruitment Recommendations',
-                              'Coach Shortlist', 'Summary', 'Possible Departures', 'None'];
+                              'Coach Shortlist', 'Selling Assets', 'Summary',
+                              'Possible Departures', 'None'];
 
 // Did they hit it? Rendered as a small badge beside the objective.
 // Where each objective expects a side to finish, as a fraction of the league
@@ -1481,33 +1489,38 @@ function coachShortlistPanelHtml(w, h, rows, hideScores = false) {
   }
   const rowH = Math.floor((h - 4) / 3);
   const PILL_W = 38;
+  const FACE = 40, FACE_X = 11, TEXT_X = FACE_X + FACE + 11;
+  const textW = w - TEXT_X - (hideScores ? 14 : PILL_W + 18);
+  const cNameMaxW = Math.max(70, textW - 58);
   return rows.slice(0, 3).map((c, i) => {
     // Nationality is now the flag beside the name, so the meta line carries the
     // formation and the club with its league stamp instead of repeating it.
     // Already-escaped fragments — clubStamp escapes the club name itself and the
     // rest is markup, so this list must NOT be run through esc() again.
     const meta = [c.formation ? esc(c.formation) : '',
-                  c.club ? clubStamp(c.league, c.club, 10) : ''].filter(Boolean);
+                  c.club ? clubStamp(c.league, c.club, 10.5) : ''].filter(Boolean);
     return `
       <div style="position:absolute;left:0;top:${i * rowH + 2}px;width:${w}px;height:${rowH - 6}px;
                   background:rgba(255,255,255,0.035);border:1px solid rgba(255,255,255,0.07);
                   border-radius:9px;">
-        <div style="position:absolute;left:10px;top:50%;margin-top:-16px;width:32px;height:32px;
+        <div style="position:absolute;left:${FACE_X}px;top:50%;margin-top:-${FACE / 2}px;
+                    width:${FACE}px;height:${FACE}px;
                     border-radius:50%;background-color:#1a2233;
                     background-image:url('${src(c.photo || '')}'), url('${SILHOUETTE}');
                     background-size:cover, cover;
                     background-position:center top, center top;
                     background-repeat:no-repeat, no-repeat;
                     border:1.5px solid rgba(190,203,224,0.26);"></div>
-        <div style="position:absolute;left:50px;right:${hideScores ? 14 : PILL_W + 20}px;top:50%;margin-top:-15px;">
-          <div style="display:flex;align-items:center;line-height:1.15;min-width:0;">
-            <span style="font-size:13.5px;font-weight:700;color:#eaf0f8;white-space:nowrap;
-                         overflow:hidden;text-overflow:ellipsis;">${esc(c.name || '')}</span>
-            ${c.age != null ? `<span style="font-size:13.5px;font-weight:600;color:#7c8798;
-                 margin-left:5px;flex-shrink:0;">${c.age}</span>` : ''}
-            ${flexFlag(c.flag, 13.5, 5)}
+        <div style="position:absolute;left:${TEXT_X}px;width:${textW}px;top:50%;margin-top:-16px;">
+          <div style="white-space:nowrap;overflow:hidden;line-height:1.15;">
+            <span style="display:inline-block;vertical-align:middle;max-width:${cNameMaxW}px;
+                         font-size:14px;font-weight:700;color:#eaf0f8;overflow:hidden;
+                         text-overflow:ellipsis;white-space:nowrap;">${esc(c.name || '')}</span>${
+            c.age != null ? `<span style="display:inline-block;vertical-align:middle;margin-left:6px;
+                 font-size:14px;font-weight:600;color:#7c8798;">${c.age}</span>` : ''}${
+            (() => { const f = flagImg(c.flag, 14); return f ? `${gapSpan(6)}${f}` : ''; })()}
           </div>
-          <div style="font-size:10px;color:#8b98ad;margin-top:4px;line-height:1.15;white-space:nowrap;
+          <div style="font-size:10.5px;color:#8b98ad;margin-top:5px;line-height:1.15;white-space:nowrap;
                       overflow:hidden;text-overflow:ellipsis;">${
             meta.join('<span style="color:#6f7c92;"> · </span>')}</div>
         </div>
@@ -1665,17 +1678,11 @@ function logoImg(url, textPx) {
            vertical-align:middle;"></span>`;
 }
 const gapSpan = (px) => `<span style="display:inline-block;width:${px}px;"></span>`;
-// Inside a flex row the flag needs flex-shrink:0 and its own margin instead of a
-// spacer span, or it gets squeezed to nothing when the name is long.
-function flexFlag(url, textPx, gap) {
-  const f = flagImg(url, textPx);
-  return f ? f.replace('display:inline-block;', `display:inline-block;flex-shrink:0;margin-left:${gap}px;`) : '';
-}
-const natStampFlex = (p, textPx) => flexFlag(personFlagUrl(p), textPx, 5);
+
 // Nationality flag, trailing whatever text it follows.
 function natStamp(p, textPx) {
   const f = flagImg(personFlagUrl(p), textPx);
-  return f ? `${gapSpan(5)}${f}` : '';
+  return f ? `${gapSpan(6)}${f}` : '';
 }
 // Club name first, then its league flag and badge.
 function clubStamp(league, club, textPx) {
@@ -1692,6 +1699,12 @@ function keyPlayersPanelHtml(w, h, rows, showClub = false, hideScores = false, p
   const rowH = Math.floor((h - 4) / 3);
   const PILL_W = 38, PILL_GAP = 5;
   const VALS_W = PILL_W * 2 + PILL_GAP;
+  // 40px face instead of 32: it's the thing the eye lands on first and there was
+  // room for it. TEXT_X follows from the face, and the name gets an explicit pixel
+  // budget rather than relying on the browser to shrink a flex item.
+  const FACE = 40, FACE_X = 11, TEXT_X = FACE_X + FACE + 11;
+  const textW = w - TEXT_X - (hideScores ? 14 : VALS_W + 18);
+  const nameMaxW = Math.max(70, textW - 58);   // room for the age and the flag
   return rows.map((p, i) => {
     const sc = p.careerScore;
     const pot = p.potentialScore != null ? p.potentialScore : p.careerScore;
@@ -1701,7 +1714,8 @@ function keyPlayersPanelHtml(w, h, rows, showClub = false, hideScores = false, p
       <div style="position:absolute;left:0;top:${i * rowH + 2}px;width:${w}px;height:${rowH - 6}px;
                   background:rgba(255,255,255,0.035);border:1px solid rgba(255,255,255,0.07);
                   border-radius:9px;">
-        <div style="position:absolute;left:10px;top:50%;margin-top:-16px;width:32px;height:32px;
+        <div style="position:absolute;left:${FACE_X}px;top:50%;margin-top:-${FACE / 2}px;
+                    width:${FACE}px;height:${FACE}px;
                     border-radius:50%;background-color:#1a2233;
                     background-image:url('${photoOverrides[playerKey(p)] || src(photoUrl(p.name, p.team))}'), url('${SILHOUETTE}');
                     background-size:cover, cover;
@@ -1710,19 +1724,20 @@ function keyPlayersPanelHtml(w, h, rows, showClub = false, hideScores = false, p
                     border:1.5px solid rgba(190,203,224,0.26);"></div>
         <!-- text box ends exactly where the pills begin — previously it was a
              fixed max-width guess, which is why names were ellipsising early -->
-        <div style="position:absolute;left:50px;right:${VALS_W + 20}px;top:50%;margin-top:-15px;">
-          <div style="display:flex;align-items:center;line-height:1.15;min-width:0;">
-            <span style="font-size:13.5px;font-weight:700;color:#eaf0f8;white-space:nowrap;
-                         overflow:hidden;text-overflow:ellipsis;">${esc(p.name)}</span>
-            <span style="font-size:13.5px;font-weight:600;color:#7c8798;margin-left:5px;
-                         flex-shrink:0;">${p.age != null ? p.age : '—'}</span>${
-              natStampFlex(p, 13.5)}
+        <div style="position:absolute;left:${TEXT_X}px;width:${textW}px;top:50%;margin-top:-16px;">
+          <div style="white-space:nowrap;overflow:hidden;line-height:1.15;">
+            <span style="display:inline-block;vertical-align:middle;max-width:${nameMaxW}px;
+                         font-size:14px;font-weight:700;color:#eaf0f8;overflow:hidden;
+                         text-overflow:ellipsis;white-space:nowrap;">${esc(p.name)}</span><span
+                  style="display:inline-block;vertical-align:middle;margin-left:6px;
+                         font-size:14px;font-weight:600;color:#7c8798;">${p.age != null ? p.age : '—'}</span>${
+              natStamp(p, 14)}
           </div>
-          <div style="font-size:10px;color:#8b98ad;margin-top:4px;line-height:1.15;white-space:nowrap;
+          <div style="font-size:10.5px;color:#8b98ad;margin-top:5px;line-height:1.15;white-space:nowrap;
                       overflow:hidden;text-overflow:ellipsis;">${esc(pos)}${
-            role ? ` <span style="color:#93a1b5;">${esc(role)}</span>` : ''}${
+            role ? ` <span style="color:#a7b4c8;">${esc(role)}</span>` : ''}${
             showClub && p.team ? `<span style="color:#6f7c92;"> · </span><span style="color:#8b98ad;">${
-              clubStamp(p.league, p.team, 10)}</span>` : ''}</div>
+              clubStamp(p.league, p.team, 10.5)}</span>` : ''}</div>
         </div>
         ${hideScores ? '' : `
         <!-- lifted 3px and captions a size down: they were sitting on the row's
@@ -1938,6 +1953,70 @@ export function likelyDepartures(squad, season, n = 3) {
     .map(x => x.p);
 }
 
+// Selling Assets — the squad ranked by xValue, so the headline number is what the
+// player is worth rather than how good he is. Market value sits underneath as the
+// comparison, since the gap between the two is the actual sales argument.
+// xValue is overridable per player: the model is a model, and a real offer or a
+// known asking price beats it.
+// An override wins over the model, and '' clears back to it.
+function xvFor(p, overrides = {}) {
+  const o = overrides[playerKey(p)];
+  if (o !== undefined && o !== '' && !isNaN(Number(o))) return Number(o);
+  const v = Number(p && p.xValue);
+  return isNaN(v) || !v ? null : v;
+}
+
+function sellingAssetsPanelHtml(w, h, rows, xValueOverrides = {}, photoOverrides = {}) {
+  if (!rows || !rows.length) {
+    return `<div style="position:absolute;inset:0;display:flex;align-items:center;
+             justify-content:center;font-size:12px;color:#55617a;">No players selected.</div>`;
+  }
+  const rowH = Math.floor((h - 4) / 3);
+  const VAL_W = 74;
+  const FACE = 40, FACE_X = 11, TEXT_X = FACE_X + FACE + 11;
+  const textW = w - TEXT_X - VAL_W - 18;
+  const nameMaxW = Math.max(70, textW - 58);
+  return rows.slice(0, 3).map((p, i) => {
+    const xv = xvFor(p, xValueOverrides);
+    const mv = Number(p.marketValue);
+    // Green when the model rates him above his market value, amber when below —
+    // that direction is the whole point of putting the two next to each other.
+    const up = xv != null && !isNaN(mv) && mv > 0 && xv > mv;
+    return `
+      <div style="position:absolute;left:0;top:${i * rowH + 2}px;width:${w}px;height:${rowH - 6}px;
+                  background:rgba(255,255,255,0.035);border:1px solid rgba(255,255,255,0.07);
+                  border-radius:9px;">
+        <div style="position:absolute;left:${FACE_X}px;top:50%;margin-top:-${FACE / 2}px;
+                    width:${FACE}px;height:${FACE}px;border-radius:50%;background-color:#1a2233;
+                    background-image:url('${photoOverrides[playerKey(p)] || src(photoUrl(p.name, p.team))}'), url('${SILHOUETTE}');
+                    background-size:cover, cover;background-position:center top, center top;
+                    background-repeat:no-repeat, no-repeat;
+                    border:1.5px solid rgba(190,203,224,0.26);"></div>
+        <div style="position:absolute;left:${TEXT_X}px;width:${textW}px;top:50%;margin-top:-16px;">
+          <div style="white-space:nowrap;overflow:hidden;line-height:1.15;">
+            <span style="display:inline-block;vertical-align:middle;max-width:${nameMaxW}px;
+                         font-size:14px;font-weight:700;color:#eaf0f8;overflow:hidden;
+                         text-overflow:ellipsis;white-space:nowrap;">${esc(p.name)}</span><span
+                  style="display:inline-block;vertical-align:middle;margin-left:6px;
+                         font-size:14px;font-weight:600;color:#7c8798;">${p.age != null ? p.age : '—'}</span>${
+            natStamp(p, 14)}
+          </div>
+          <div style="font-size:10.5px;color:#8b98ad;margin-top:5px;line-height:1.15;white-space:nowrap;
+                      overflow:hidden;text-overflow:ellipsis;">${
+            esc(String(p.position || '').split(',')[0].trim())}${
+            mv > 0 ? `<span style="color:#6f7c92;"> · MV </span><span style="color:#a7b4c8;">${formatMoney(mv)}</span>` : ''}${
+            contractLeft(p, null) ? `<span style="color:#6f7c92;"> · </span><span style="color:#a7b4c8;">${esc(contractLeft(p, null))}</span>` : ''}</div>
+        </div>
+        <div style="position:absolute;right:11px;top:50%;margin-top:-16px;width:${VAL_W}px;text-align:right;">
+          <div style="font-size:15px;font-weight:800;line-height:1;
+                      color:${xv == null ? '#55617a' : up ? '#4ade80' : '#e8eef8'};">${
+            xv == null ? '—' : formatMoney(xv)}</div>
+          <div style="font-size:7px;font-weight:700;letter-spacing:0.14em;color:#6f7c92;margin-top:5px;">XVALUE</div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
 function departuresPanelHtml(w, h, rows, season) {
   if (!rows || !rows.length) {
     return `<div style="position:absolute;inset:0;display:flex;align-items:center;
@@ -1952,7 +2031,8 @@ function departuresPanelHtml(w, h, rows, season) {
       <div style="position:absolute;left:0;top:${i * rowH + 2}px;width:${w}px;height:${rowH - 6}px;
                   background:rgba(255,255,255,0.035);border:1px solid rgba(255,255,255,0.07);
                   border-radius:9px;">
-        <div style="position:absolute;left:10px;top:50%;margin-top:-16px;width:32px;height:32px;
+        <div style="position:absolute;left:${FACE_X}px;top:50%;margin-top:-${FACE / 2}px;
+                    width:${FACE}px;height:${FACE}px;
                     border-radius:50%;background-color:#1a2233;
                     background-image:url('${photoOverrides[playerKey(p)] || src(photoUrl(p.name, p.team))}'), url('${SILHOUETTE}');
                     background-size:cover, cover;background-position:center top, center top;
@@ -1963,7 +2043,7 @@ function departuresPanelHtml(w, h, rows, season) {
                       overflow:hidden;text-overflow:ellipsis;">${esc(p.name)}<span
                 style="color:#7c8798;font-weight:600;"> ${p.age != null ? p.age : '—'}</span>${
             natStamp(p, 13.5)}</div>
-          <div style="font-size:10px;color:#8b98ad;margin-top:4px;line-height:1.15;white-space:nowrap;
+          <div style="font-size:10.5px;color:#8b98ad;margin-top:5px;line-height:1.15;white-space:nowrap;
                       overflow:hidden;text-overflow:ellipsis;">${esc(pos)}${
             p.marketValue ? `<span style="color:#6f7c92;"> · </span><span style="color:#93a1b5;">${formatMoney(p.marketValue)}</span>` : ''}${
             p.xValue ? `<span style="color:#6f7c92;"> · xV </span><span style="color:#93c5fd;">${formatMoney(p.xValue)}</span>` : ''}</div>
@@ -2056,7 +2136,8 @@ function coachHtml(coach, team, coachScore, hideManagerScore = false, ink = head
     .filter(t => t.team === team.team)
     .map(t => String(t.season))
     .sort();
-  const sinceYear = clubSeasons.length ? clubSeasons[0].slice(0, 4) : '';
+  // A session coach has no tenure rows to derive from, so an explicit value wins.
+  const sinceYear = coach.sinceYear || (clubSeasons.length ? clubSeasons[0].slice(0, 4) : '');
 
   const facts = [
     formation ? ['Formation', formation] : null,
@@ -2345,6 +2426,8 @@ export function buildTeamReportElement(team, opts = {}) {
     recruitRows = [],              // Recruitment Recommendations list
     coachRows = [],                // Coach Shortlist, pre-resolved in the component
     departureRows = null,          // null = auto (shortest contracts)
+    sellRows = null,               // null = auto (squad by xValue, highest first)
+    xValueOverrides = {},          // playerKey -> typed xValue, beats the model
     depthList = null, upgradeList = null,
     xiSlotLists = null,
     xiOverridePool = null,
@@ -2375,6 +2458,10 @@ export function buildTeamReportElement(team, opts = {}) {
   const xi = buildXI(formation, squad, depthCount, team.season, null, xiOverridePool, xiSlotLists);
   const players3 = keyRows || topPlayers(squad, 3);
   const departures = departureRows || likelyDepartures(squad, team.season, 3);
+  const selling = sellRows || squad.slice()
+    .filter(p => xvFor(p, xValueOverrides) != null)
+    .sort((a, b) => xvFor(b, xValueOverrides) - xvFor(a, xValueOverrides))
+    .slice(0, 3);
 
   container.innerHTML = `
     <div id="tr-card-root" style="width:${W}px;height:${H}px;overflow:hidden;background:${BG};
@@ -2407,6 +2494,9 @@ export function buildTeamReportElement(team, opts = {}) {
         if (kind === 'Summary')
           return panel({ x, y: ROW_3, w: COL_W, h: ROW3_H, title: 'Summary',
                          body: summaryPanelHtml(innerW, ih, summaryText) });
+        if (kind === 'Selling Assets')
+          return panel({ x, y: ROW_3, w: COL_W, h: ROW3_H, title: 'Selling Assets',
+                         body: sellingAssetsPanelHtml(innerW, ih, selling, xValueOverrides, photoOverrides) });
         if (kind === 'Possible Departures')
           return panel({ x, y: ROW_3, w: COL_W, h: ROW3_H, title: 'Possible Departures',
                          body: departuresPanelHtml(innerW, ih, departures, team.season) });
@@ -2738,6 +2828,18 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
   // are per-report fixes for players the photo repo doesn't have, and a stored blob
   // per player would fill the quota fast.
   const [photoOverrides, setPhotoOverrides] = useState({});
+  // Selling Assets: null means "auto", i.e. the squad ranked by xValue. Once a
+  // player is picked the list becomes manual. Overrides are per player and beat
+  // the model, so a known asking price can replace it.
+  const [sellIds, setSellIds] = useState([]);
+  const [xValueOverrides, setXValueOverrides] = useState({});
+  const sellPicked = useMemo(() => sellIds
+    .map(k => squad.find(p => playerKey(p) === k)).filter(Boolean), [sellIds, squad]);
+  const sellAuto = useMemo(() => squad.slice()
+    .filter(p => xvFor(p, xValueOverrides) != null)
+    .sort((a, b) => xvFor(b, xValueOverrides) - xvFor(a, xValueOverrides))
+    .slice(0, 3), [squad, xValueOverrides]);
+  const sellShown = sellPicked.length ? sellPicked : sellAuto;
   const [spAtt, setSpAtt] = useState('');
   const [spDef, setSpDef] = useState('');
   const [extraAreas, setExtraAreas] = useState({});   // { name: severity }
@@ -2757,6 +2859,7 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
   const [coachId, setCoachId] = useState('auto');
   const coach = coachId === 'auto' ? autoCoach
     : coachId === 'none' ? null
+    : coachId === 'session' ? (sessionCoachReady ? sessionCoach : null)
     : (savedCoaches.find(c => String(c.id) === String(coachId)) || autoCoach);
 
   const tenureRows = useMemo(() => {
@@ -2867,14 +2970,28 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
 
   const [vacancyTarget, setVacancyTarget] = useState('');
 
+  // Quick coach — a bypass for the fact that saved coaches live in localStorage,
+  // which is per-browser and per-domain, so a phone has none of the ones saved on
+  // the desktop. Deliberately NOT persisted: it exists for one export. The report
+  // only reads six fields off a coach, so typing them is quicker than syncing.
+  const [sessionCoach, setSessionCoach] = useState(
+    { name: '', nationality: '', formation: '', sinceYear: '', contract: '', score: '', photoDataUrl: '' });
+  const setSC = (k, v) => setSessionCoach(c => ({ ...c, [k]: v }));
+  const sessionCoachReady = Boolean(sessionCoach.name && sessionCoach.name.trim());
+
   const coachScore = useMemo(() => {
+    // A session coach has no tenures to score from, so the number is typed or absent.
+    if (coachId === 'session') {
+      const v = Number(sessionCoach.score);
+      return sessionCoach.score !== '' && !isNaN(v) ? v : null;
+    }
     if (!coach || !tenureRows.length) return null;
     try {
       let age = null;
       try { age = computeAge(coach.dob); } catch (e) { age = null; }
       return computeCoachScore(tenureRows, age, { seasonPerf }).score;
     } catch (e) { return null; }
-  }, [coach, tenureRows, seasonPerf]);
+  }, [coach, tenureRows, seasonPerf, coachId, sessionCoach.score]);
 
   const xiPool = xiSearchAll ? players : squad;
 
@@ -2909,6 +3026,7 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
     headerColour: HEADER_COLOURS[headerColourName], rawOverall,
     bottomLeft, bottomRight, summaryText,
     keyRows, recruitRows: recruitPicked, departureRows: departurePicked,
+    sellRows: sellPicked.length ? sellPicked : null, xValueOverrides,
     teamNameOverride,
     depthList: depthSel, upgradeList: upgradeSel,
     xiSlotLists: xiLists, xiOverridePool: xiPool,
@@ -3286,6 +3404,60 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
                   )}
               </div>
             )}
+            {shown.includes('Selling Assets') && (
+              <div style={UI.block}>
+                <span style={UI.label}>
+                  Selling Assets — {sellPicked.length ? 'manual' : 'auto: squad by xValue'}
+                </span>
+                <select value="" onChange={e => {
+                  const k = e.target.value;
+                  if (k) setSellIds(ids => ids.includes(k) || ids.length >= 3 ? ids : [...ids, k]);
+                }} style={UI.select}>
+                  <option value="">{sellPicked.length ? 'Add a player…' : 'Override with a specific player…'}</option>
+                  {squad.slice()
+                    .sort((a, b) => (xvFor(b, xValueOverrides) || 0) - (xvFor(a, xValueOverrides) || 0))
+                    .filter(p => !sellIds.includes(playerKey(p)))
+                    .map(p => (
+                      <option key={playerKey(p)} value={playerKey(p)}>
+                        {p.name}{xvFor(p, xValueOverrides) != null ? ` — ${formatMoney(xvFor(p, xValueOverrides))}` : ''}
+                      </option>
+                    ))}
+                </select>
+                {/* xValue is editable for whichever three are actually on the card,
+                    auto-picked or not — blank the field to fall back to the model. */}
+                <div style={{ marginTop: 7 }}>
+                  {sellShown.map(p => {
+                    const k = playerKey(p);
+                    const overridden = xValueOverrides[k] !== undefined && xValueOverrides[k] !== '';
+                    return (
+                      <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
+                        <span style={{ flex: 1, fontSize: 10.5, color: '#cbd5e1', whiteSpace: 'nowrap',
+                                       overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</span>
+                        <input value={xValueOverrides[k] !== undefined ? xValueOverrides[k] : ''}
+                          onChange={e => setXValueOverrides(o => ({ ...o, [k]: e.target.value }))}
+                          placeholder={p.xValue ? String(Math.round(p.xValue)) : 'xValue'}
+                          inputMode="numeric"
+                          style={{ ...UI.select, width: 96, cursor: 'text',
+                                   color: overridden ? '#93c5fd' : '#cbd5e1' }} />
+                        {overridden && (
+                          <button onClick={() => setXValueOverrides(o => { const n = { ...o }; delete n[k]; return n; })}
+                            title="Back to the model's xValue"
+                            style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer',
+                                     padding: 0, fontSize: 12, lineHeight: 1 }}>×</button>
+                        )}
+                        {sellIds.includes(k) && (
+                          <button onClick={() => setSellIds(ids => ids.filter(x => x !== k))}
+                            title="Remove from the manual list"
+                            style={{ background: 'none', border: 'none', color: '#8b98ad', cursor: 'pointer',
+                                     padding: 0, fontSize: 11, lineHeight: 1 }}>unpin</button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={UI.note}>Values are in the same units as the model — blank the box to use it.</div>
+              </div>
+            )}
             {shown.includes('Possible Departures') && (
               <div style={{ ...UI.block, marginTop: 4 }}>
                 <span style={UI.label}>
@@ -3310,12 +3482,70 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
             <select value={coachId} onChange={e => setCoachId(e.target.value)} style={UI.select}>
               <option value="auto">{autoCoach ? `Auto — ${autoCoach.name}` : 'Auto — none matched'}</option>
               <option value="none">No head coach (vacant)</option>
+              {sessionCoachReady && <option value="session">{`Quick — ${sessionCoach.name}`}</option>}
               {savedCoaches.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
             {!savedCoaches.length && <div style={UI.note}>No saved coaches on this domain.</div>}
             {coach && coachScore != null && (
               <div style={UI.note}>Manager score {Math.round(coachScore)}.</div>
             )}
+            {/* Quick coach. Saved coaches live in localStorage, which is per-browser and
+                per-domain — a phone has none of the ones saved on the desktop, and the
+                header only reads six fields. Typed here, used for this export only. */}
+            <div style={{ ...UI.block, marginTop: 8 }}>
+              <span style={UI.label}>
+                Quick coach — this session only
+                {sessionCoachReady && coachId !== 'session' && (
+                  <button onClick={() => setCoachId('session')}
+                    style={{ marginLeft: 8, background: 'transparent', border: '1px solid #26456f',
+                             borderRadius: 4, color: '#60a5fa', fontSize: 9, padding: '1px 6px',
+                             cursor: 'pointer' }}>use</button>
+                )}
+              </span>
+              <input value={sessionCoach.name} onChange={e => setSC('name', e.target.value)}
+                placeholder="Name" style={{ ...UI.select, cursor: 'text' }} />
+              <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                <input value={sessionCoach.nationality} onChange={e => setSC('nationality', e.target.value)}
+                  placeholder="Nationality" style={{ ...UI.select, flex: 1, cursor: 'text' }} />
+                <input value={sessionCoach.formation} onChange={e => setSC('formation', e.target.value)}
+                  placeholder="4-3-3" style={{ ...UI.select, width: 78, cursor: 'text' }} />
+              </div>
+              <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                <input value={sessionCoach.sinceYear} onChange={e => setSC('sinceYear', e.target.value)}
+                  placeholder="Since" style={{ ...UI.select, flex: 1, cursor: 'text' }} />
+                <input value={sessionCoach.contract} onChange={e => setSC('contract', e.target.value)}
+                  placeholder="Contract" style={{ ...UI.select, flex: 1, cursor: 'text' }} />
+                <input value={sessionCoach.score} onChange={e => setSC('score', e.target.value)}
+                  placeholder="Score" inputMode="numeric" style={{ ...UI.select, width: 62, cursor: 'text' }} />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
+                <label style={{ cursor: 'pointer', fontSize: 8.5, fontWeight: 700, letterSpacing: '0.04em',
+                                padding: '3px 7px', borderRadius: 4, whiteSpace: 'nowrap',
+                                border: `1px solid ${sessionCoach.photoDataUrl ? '#3b7de8' : '#1e2d45'}`,
+                                background: sessionCoach.photoDataUrl ? '#0e2040' : 'transparent',
+                                color: sessionCoach.photoDataUrl ? '#60a5fa' : '#8b98ad' }}>
+                  {sessionCoach.photoDataUrl ? 'PHOTO ✓' : 'PHOTO'}
+                  <input type="file" accept="image/*" style={{ display: 'none' }}
+                    onChange={e => {
+                      const f = e.target.files && e.target.files[0];
+                      if (!f) return;
+                      const r = new FileReader();
+                      r.onload = () => setSC('photoDataUrl', String(r.result));
+                      r.readAsDataURL(f);
+                      e.target.value = '';
+                    }} />
+                </label>
+                {sessionCoach.photoDataUrl && (
+                  <button onClick={() => setSC('photoDataUrl', '')}
+                    style={{ background: 'transparent', border: 'none', color: '#f87171',
+                             fontSize: 10, cursor: 'pointer', padding: 0 }}>clear photo</button>
+                )}
+                <span style={{ fontSize: 9.5, color: '#55617a' }}>
+                  {sessionCoachReady ? 'Pick “Quick” above to use it.' : 'A name is all that’s required.'}
+                </span>
+              </div>
+            </div>
+
             {!coach && (
               <div style={{ ...UI.block, marginTop: 8 }}>
                 <span style={UI.label}>Target (shown beside TARGET on the card)</span>
