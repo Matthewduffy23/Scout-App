@@ -1,4 +1,4 @@
-// TeamReport.js v43 — Team All-in-One report. 1920x1080 PNG export.
+// TeamReport.js v44 — Team All-in-One report. 1920x1080 PNG export.
 //
 // v2: bigger team name; country flag + league logo beside the league name;
 //     mini coach profile in the header gap; XI is now formation-driven and
@@ -58,6 +58,13 @@
 // place of their age. Per-player photo override (upload in the XI editor, right
 // click to clear) for anyone the photo repo doesn't have. TARGET gains a colon and
 // its value now matches the label's type in white.
+//
+// v44: Coach Shortlist rows were printing raw <span> markup — the club stamp is
+// built HTML and the meta line ran it through esc() a second time. Flags now TRAIL
+// the text they belong to rather than preceding it, are middle-aligned rather than
+// nudged by fixed pixels, and the separator between position and role is gone. The
+// XI photo upload was rendering but looked like a third move arrow, so it's now a
+// bordered PHOTO button.
 
 import React, { useState, useMemo, useCallback } from 'react';
 import {
@@ -1469,7 +1476,10 @@ function coachShortlistPanelHtml(w, h, rows, hideScores = false) {
   return rows.slice(0, 3).map((c, i) => {
     // Nationality is now the flag beside the name, so the meta line carries the
     // formation and the club with its league stamp instead of repeating it.
-    const meta = [c.formation, c.club ? clubStamp(c.league, c.club, 10) : ''].filter(Boolean);
+    // Already-escaped fragments — clubStamp escapes the club name itself and the
+    // rest is markup, so this list must NOT be run through esc() again.
+    const meta = [c.formation ? esc(c.formation) : '',
+                  c.club ? clubStamp(c.league, c.club, 10) : ''].filter(Boolean);
     return `
       <div style="position:absolute;left:0;top:${i * rowH + 2}px;width:${w}px;height:${rowH - 6}px;
                   background:rgba(255,255,255,0.035);border:1px solid rgba(255,255,255,0.07);
@@ -1484,12 +1494,11 @@ function coachShortlistPanelHtml(w, h, rows, hideScores = false) {
         <div style="position:absolute;left:50px;right:${hideScores ? 14 : PILL_W + 20}px;top:50%;margin-top:-15px;">
           <div style="font-size:13.5px;font-weight:700;color:#eaf0f8;line-height:1.15;white-space:nowrap;
                       overflow:hidden;text-overflow:ellipsis;">${esc(c.name || '')}${
-            (() => { const f = flagImg(c.flag, 13.5);
-                     return f ? `<span style="display:inline-block;width:6px;"></span>${f}` : ''; })()}${
-            c.age != null ? `<span style="color:#7c8798;font-weight:600;"> ${c.age}</span>` : ''}</div>
+            c.age != null ? `<span style="color:#7c8798;font-weight:600;"> ${c.age}</span>` : ''}${
+            (() => { const f = flagImg(c.flag, 13.5); return f ? `${gapSpan(5)}${f}` : ''; })()}</div>
           <div style="font-size:10px;color:#8b98ad;margin-top:4px;line-height:1.15;white-space:nowrap;
                       overflow:hidden;text-overflow:ellipsis;">${
-            meta.map(esc).join('<span style="color:#6f7c92;"> · </span>')}</div>
+            meta.join('<span style="color:#6f7c92;"> · </span>')}</div>
         </div>
         ${hideScores || c.score == null ? '' : `
         <div style="position:absolute;right:10px;top:50%;margin-top:-13px;width:${PILL_W}px;text-align:center;">
@@ -1623,26 +1632,36 @@ export function personFlagUrl(p) {
 }
 // Flags are 3:2, so the width follows from the height. vertical-align:-1px sits it
 // on the text baseline instead of hanging above it.
+// vertical-align:middle centres the box against the text's own middle, which holds
+// at any font size — the earlier -1px/-2px nudges were tuned for one size and drifted
+// at the other. Everything trails the text it belongs to rather than preceding it.
 function flagImg(url, textPx) {
   if (!url) return '';
   const hPx = Math.round(textPx * 0.62);
   return `<span style="display:inline-block;width:${Math.round(hPx * 1.5)}px;height:${hPx}px;
            background-image:url('${src(url)}');background-size:cover;background-position:center;
            border-radius:1.5px;box-shadow:inset 0 0 0 0.5px rgba(255,255,255,0.22);
-           vertical-align:-1px;"></span>`;
+           vertical-align:middle;"></span>`;
 }
 function logoImg(url, textPx) {
   if (!url) return '';
-  const hPx = Math.round(textPx * 0.86);
+  const hPx = Math.round(textPx * 0.9);
   return `<span style="display:inline-block;width:${hPx}px;height:${hPx}px;
            background-image:url('${src(url)}');background-size:contain;
-           background-repeat:no-repeat;background-position:center;vertical-align:-2px;"></span>`;
+           background-repeat:no-repeat;background-position:center;
+           vertical-align:middle;"></span>`;
 }
-// League flag + league badge + club name, as one nowrap unit.
+const gapSpan = (px) => `<span style="display:inline-block;width:${px}px;"></span>`;
+// Nationality flag, trailing whatever text it follows.
+function natStamp(p, textPx) {
+  const f = flagImg(personFlagUrl(p), textPx);
+  return f ? `${gapSpan(5)}${f}` : '';
+}
+// Club name first, then its league flag and badge.
 function clubStamp(league, club, textPx) {
-  const bits = [flagImg(leagueFlag(league), textPx), logoImg(leagueLogo(league), textPx)]
-    .filter(Boolean).join('<span style="display:inline-block;width:3px;"></span>');
-  return `${bits}${bits ? '<span style="display:inline-block;width:4px;"></span>' : ''}${esc(club || '')}`;
+  const marks = [flagImg(leagueFlag(league), textPx), logoImg(leagueLogo(league), textPx)]
+    .filter(Boolean).join(gapSpan(3));
+  return `${esc(club || '')}${marks ? gapSpan(5) + marks : ''}`;
 }
 
 function keyPlayersPanelHtml(w, h, rows, showClub = false, hideScores = false, photoOverrides = {}) {
@@ -1673,12 +1692,12 @@ function keyPlayersPanelHtml(w, h, rows, showClub = false, hideScores = false, p
              fixed max-width guess, which is why names were ellipsising early -->
         <div style="position:absolute;left:50px;right:${VALS_W + 20}px;top:50%;margin-top:-15px;">
           <div style="font-size:13.5px;font-weight:700;color:#eaf0f8;line-height:1.15;white-space:nowrap;
-                      overflow:hidden;text-overflow:ellipsis;">${esc(p.name)}${
-            (() => { const f = flagImg(personFlagUrl(p), 13.5);
-                     return f ? `<span style="display:inline-block;width:6px;"></span>${f}` : ''; })()}<span
-                style="color:#7c8798;font-weight:600;"> ${p.age != null ? p.age : '—'}</span></div>
+                      overflow:hidden;text-overflow:ellipsis;">${esc(p.name)}<span
+                style="color:#7c8798;font-weight:600;"> ${p.age != null ? p.age : '—'}</span>${
+            natStamp(p, 13.5)}</div>
           <div style="font-size:10px;color:#8b98ad;margin-top:4px;line-height:1.15;white-space:nowrap;
-                      overflow:hidden;text-overflow:ellipsis;">${esc(pos)}${role ? `<span style="color:#6f7c92;"> · </span><span style="color:#93a1b5;">${esc(role)}</span>` : ''}${
+                      overflow:hidden;text-overflow:ellipsis;">${esc(pos)}${
+            role ? ` <span style="color:#93a1b5;">${esc(role)}</span>` : ''}${
             showClub && p.team ? `<span style="color:#6f7c92;"> · </span><span style="color:#8b98ad;">${
               clubStamp(p.league, p.team, 10)}</span>` : ''}</div>
         </div>
@@ -1918,10 +1937,9 @@ function departuresPanelHtml(w, h, rows, season) {
                     border:1.5px solid rgba(190,203,224,0.26);"></div>
         <div style="position:absolute;left:50px;right:96px;top:50%;margin-top:-15px;">
           <div style="font-size:13.5px;font-weight:700;color:#eaf0f8;line-height:1.15;white-space:nowrap;
-                      overflow:hidden;text-overflow:ellipsis;">${esc(p.name)}${
-            (() => { const f = flagImg(personFlagUrl(p), 13.5);
-                     return f ? `<span style="display:inline-block;width:6px;"></span>${f}` : ''; })()}<span
-                style="color:#7c8798;font-weight:600;"> ${p.age != null ? p.age : '—'}</span></div>
+                      overflow:hidden;text-overflow:ellipsis;">${esc(p.name)}<span
+                style="color:#7c8798;font-weight:600;"> ${p.age != null ? p.age : '—'}</span>${
+            natStamp(p, 13.5)}</div>
           <div style="font-size:10px;color:#8b98ad;margin-top:4px;line-height:1.15;white-space:nowrap;
                       overflow:hidden;text-overflow:ellipsis;">${esc(pos)}${
             p.marketValue ? `<span style="color:#6f7c92;"> · </span><span style="color:#93a1b5;">${formatMoney(p.marketValue)}</span>` : ''}${
@@ -2486,12 +2504,16 @@ function XiSlotEditor({ xi, pool, lists, setLists, teamName, photoOverrides = {}
                   {/* Photo override. Turns blue once set, and right-click clears it —
                       photoUrl() derives its address from name+team, so a player the
                       repo doesn't have has no other route to a face. */}
-                  <label title={photoOverrides[k] ? 'Photo overridden — right-click to clear' : 'Upload photo'}
+                  <label title={photoOverrides[k] ? 'Photo set — right-click to clear' : 'Upload a photo for this player'}
                     onContextMenu={e => { e.preventDefault();
                       setPhotoOverrides(o => { const n = { ...o }; delete n[k]; return n; }); }}
-                    style={{ marginLeft: 6, cursor: 'pointer', fontSize: 10, lineHeight: 1,
-                             color: photoOverrides[k] ? '#60a5fa' : '#55617a' }}>
-                    ⬆
+                    style={{ marginLeft: 8, cursor: 'pointer', fontSize: 8.5, fontWeight: 700,
+                             letterSpacing: '0.04em', lineHeight: 1, padding: '2px 5px',
+                             borderRadius: 4, whiteSpace: 'nowrap',
+                             border: `1px solid ${photoOverrides[k] ? '#3b7de8' : '#1e2d45'}`,
+                             background: photoOverrides[k] ? '#0e2040' : 'transparent',
+                             color: photoOverrides[k] ? '#60a5fa' : '#8b98ad' }}>
+                    {photoOverrides[k] ? 'PHOTO ✓' : 'PHOTO'}
                     <input type="file" accept="image/*" style={{ display: 'none' }}
                       onChange={e => {
                         const f = e.target.files && e.target.files[0];
@@ -2810,7 +2832,7 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
         club: lastTenure ? lastTenure.team : '',
         league: lastTenure ? lastTenure.league : '',
         flag: ciso ? `https://flagcdn.com/w40/${ciso}.png` : '',
-        photo: fmId ? `${FOTMOB_PHOTO_BASE}${fmId}.png` : (c.photoDataUrl || c.photoUrl || ''),
+        photo: c.photoDataUrl || (fmId ? `${FOTMOB_PHOTO_BASE}${fmId}.png` : (c.photoUrl || '')),
         age, score: scoreForCoach(c),
       };
     }), [coachShortlistIds, savedCoaches, scoreForCoach]);
