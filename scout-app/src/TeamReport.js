@@ -1,4 +1,4 @@
-// TeamReport.js v32 — Team All-in-One report. 1920x1080 PNG export.
+// TeamReport.js v36 — Team All-in-One report. 1920x1080 PNG export.
 //
 // v2: bigger team name; country flag + league logo beside the league name;
 //     mini coach profile in the header gap; XI is now formation-driven and
@@ -13,6 +13,13 @@
 // only appears for clubs you've actually saved a coach for — everything else gets
 // a quiet empty state. localStorage is per-domain, so a coach saved on production
 // will NOT show on a preview deploy.
+//
+// v36: header band retuned. Wheel span tightened 460 -> 396 (89px of dead air
+// between Overall and Attack down to 59), RULE_MID/TREND pulled left, so the
+// trend gains 76px and its plot goes 304 -> 380. All three wheel labels now
+// share one baseline (HDR_LABEL_Y) instead of OVERALL hanging 9px low, and the
+// trend's season row sits on the same line with LEAGUE FINISH centred over the
+// plot in the same type as the season labels. Ordinal demoted 16 -> 12.5px.
 
 import React, { useState, useMemo } from 'react';
 import {
@@ -54,13 +61,25 @@ const NAME_X = PAD + 128;
 // right-hand tile column instead of floating between columns.
 //   identity 24-440 | rule 456 | wheels 474-1338 | manager 1358-1896
 const NAME_MAX_W = 288;
-const RULE_1 = 456;
+// 448 is the floor for RULE_1: the name is ellipsised at NAME_MAX_W, so its box
+// ends at 440 and the rule can't come any further left without clipping it.
+const RULE_1 = 448;
 const RULE_2 = 1338;                     // between the wheels and the manager
-const WHEEL_X = 474;
-const WHEEL_W = 460;                     // 3 wheels: Overall, Attack, Defence
-const RULE_MID = 962;
-const TREND_X = 984;
-const TREND_W = 344;                     // 984..1328
+// WHEEL_W was 460 (step 153), which left 89px of dead air between the Overall
+// and Attack rings and made the group read as adrift rather than as one unit.
+// 396 gives step 132 / a 59px ring gap, and puts the wheels' visual span
+// (498..835) symmetrically between the two rules with ~50px clear either side.
+// Every pixel freed goes to the trend, which is the element that needed it:
+// PROMOTED/RELEGATED labels are 68px wide and collided on the old 304px plot.
+const WHEEL_X = 473;
+const WHEEL_W = 396;                     // 3 wheels: Overall, Attack, Defence
+const RULE_MID = 886;
+const TREND_X = 908;
+const TREND_W = 420;                     // 908..1328, plot 304 -> 380
+
+// Wheel labels and the trend's season/caption row share one baseline, so the
+// two halves of the header read as a single band rather than two stacks.
+const HDR_LABEL_Y = 112;
 const COACH_X = 1358;                    // = COL_B_X
 const COACH_W = 538;
 
@@ -154,7 +173,7 @@ function statRow({ x, y, w, label, value, pct, colour, ink, rank, labelW = 74, v
 // Circular gauge. Five of these in a row give the band a single, repeated shape
 // instead of a hero-plus-rows split — closer to a broadcast graphic, and the
 // arcs are directly comparable at a glance.
-function scoreWheel({ cx, cy, r, stroke, value, label, colour, ink, big }) {
+function scoreWheel({ cx, cy, r, stroke, value, label, colour, ink, big, labelY }) {
   const c = 2 * Math.PI * r;
   const pct = Math.max(0, Math.min(100, Number(value) || 0));
   const size = r * 2 + stroke + 2;
@@ -171,7 +190,7 @@ function scoreWheel({ cx, cy, r, stroke, value, label, colour, ink, big }) {
             font-family="Montserrat,sans-serif" font-size="${big ? 26 : 20}"
             font-weight="900" fill="${colour}">${whole(value)}</text>
     </svg>
-    <div style="position:absolute;left:${cx - 60}px;top:${cy + size / 2 + 6}px;width:120px;
+    <div style="position:absolute;left:${cx - 60}px;top:${labelY != null ? labelY : cy + size / 2 + 6}px;width:120px;
                 text-align:center;font-size:8px;font-weight:700;letter-spacing:0.15em;
                 color:${ink.muted};">${label}</div>`;
 }
@@ -236,10 +255,12 @@ function trendChart({ x, y, w, h, seasons, allTeams, ink }) {
     .slice(-5)
     .map(t => ({ ...t, pos: ladderPosition(t, allTeams), tier: leagueTier(t.league) }));
 
-  const caption = `<div style="position:absolute;left:${x}px;top:${y + h + 16}px;width:${w}px;
-      font-size:7.5px;font-weight:700;letter-spacing:0.16em;color:${ink.muted};">LEAGUE FINISH</div>`;
+  // Shared with the season labels so the axis row reads as one line of type.
+  const AXIS_FONT = `font-size:7.5px;font-weight:700;letter-spacing:0.08em;color:${ink.muted};`;
 
   if (rows.length < 2) {
+    const caption = `<div style="position:absolute;left:${x}px;top:${HDR_LABEL_Y}px;width:${w}px;
+        ${AXIS_FONT}">LEAGUE FINISH</div>`;
     return `<div style="position:absolute;left:${x}px;top:${y + 18}px;width:${w}px;
         font-size:10.5px;color:${ink.muted};">Not enough season history.</div>${caption}`;
   }
@@ -309,21 +330,22 @@ function trendChart({ x, y, w, h, seasons, allTeams, ink }) {
       ${dots}
     </svg>
     ${moveLabels}
-    <div style="position:absolute;left:${x + plotW + 8}px;top:${y + 8}px;width:${VAL_W - 8}px;">
-      <div style="font-size:16px;font-weight:800;line-height:1;color:${ink.secondary};">${last.pos}${
+    <div style="position:absolute;left:${x + plotW + 8}px;top:${y + Math.round((h - 26) / 2)}px;
+                width:${VAL_W - 8}px;">
+      <div style="font-size:12.5px;font-weight:800;line-height:1;color:${ink.soft};">${last.pos}${
         last.pos % 10 === 1 && last.pos % 100 !== 11 ? 'st'
         : last.pos % 10 === 2 && last.pos % 100 !== 12 ? 'nd'
         : last.pos % 10 === 3 && last.pos % 100 !== 13 ? 'rd' : 'th'}</div>
       <div style="font-size:9px;font-weight:700;color:${moveCol};margin-top:4px;">${
         move === 0 ? '—' : `${move > 0 ? '▲' : '▼'}${Math.abs(move)}`}</div>
     </div>
-    <div style="position:absolute;left:${x}px;top:${y + h + 4}px;width:${plotW}px;display:flex;
-                justify-content:space-between;font-size:7.5px;font-weight:700;
-                letter-spacing:0.08em;color:${ink.muted};">
+    <div style="position:absolute;left:${x}px;top:${HDR_LABEL_Y}px;width:${plotW}px;display:flex;
+                justify-content:space-between;${AXIS_FONT}">
       <span>${esc(seasonShort(first.season))}</span>
       <span>${esc(seasonShort(last.season))}</span>
     </div>
-    ${caption}`;
+    <div style="position:absolute;left:${x}px;top:${HDR_LABEL_Y}px;width:${plotW}px;
+                text-align:center;${AXIS_FONT}">LEAGUE FINISH</div>`;
 }
 
 function headerGradient(spec) {
@@ -1955,14 +1977,18 @@ function headerHtml(team, coach, coachScore, allTeams, headerColour, rawOverall,
         cy: 66,
         r: big ? 36 : 28,
         stroke: big ? 7.5 : 6,
-        value: v, label, colour: scoreColor(v), ink, big,
+        value: v, label, colour: scoreColor(v), ink, big, labelY: HDR_LABEL_Y,
       })).join('');
     })()}
 
-    <div style="position:absolute;left:${RULE_MID}px;top:34px;width:1px;height:82px;
+    <!-- Matches RULE_1/RULE_2's 28..122 span so all three rules bracket the same
+         band, including the label baseline at the bottom of it. -->
+    <div style="position:absolute;left:${RULE_MID}px;top:28px;width:1px;height:94px;
                 background:${ink.rule};"></div>
 
-    ${trendChart({ x: TREND_X, y: 26, w: TREND_W, h: 62,
+    <!-- Chart occupies 30..106 and its axis row lands on HDR_LABEL_Y with the
+         wheel labels. Taller as well as wider now that RULE_MID moved left. -->
+    ${trendChart({ x: TREND_X, y: 30, w: TREND_W, h: 76,
                    seasons: allTeamSeasons, allTeams, ink })}
 
     ${coachHtml(coach, team, coachScore, hideManagerScore, ink, clubFactsHtml)}`;
