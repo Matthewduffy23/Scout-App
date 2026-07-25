@@ -1,4 +1,4 @@
-// TeamReport.js v41 — Team All-in-One report. 1920x1080 PNG export.
+// TeamReport.js v42 — Team All-in-One report. 1920x1080 PNG export.
 //
 // v2: bigger team name; country flag + league logo beside the league name;
 //     mini coach profile in the header gap; XI is now formation-driven and
@@ -43,8 +43,15 @@
 // a proper vacancy block in the manager slot — same skeleton, dashed photo frame,
 // and a TARGET row (Philosophy / Best Shape / Mandate) in place of the nationality
 // and contract line, with the club-facts strip kept.
+//
+// v42: trend drops the position ordinal and keeps the move arrow — it printed the
+// cross-division LADDER number, so a Championship 2nd read "22nd". The freed
+// column plus a slice of the plot goes to the club name, whose width estimate was
+// running ~12% light and clipped "Southampton" to "Southamptor". Vacancy block now
+// uses the silhouette and a TARGET line typed in the editor rather than three
+// derived fields. New Coach Shortlist bottom panel, picked from saved coaches.
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   MONTSERRAT_EMBED_CSS, teamCrest, leagueDisplayName,
   leagueLogo, leagueFlag, photoUrl,
@@ -83,20 +90,21 @@ const NAME_X = PAD + 128;
 // Manager's left edge is COL_B_X, so the header block sits directly above the
 // right-hand tile column instead of floating between columns.
 //   identity 24-440 | rule 456 | wheels 474-1338 | manager 1358-1896
-// 288 forced "Southampton" to ellipsise. Now 360, funded by tightening the ring
-// gaps and taking ~16px off the trend, and paired with the auto-sizing below so
-// nothing ever truncates regardless of how long the club name is.
-const NAME_MAX_W = 360;
-const RULE_1 = 528;
+// 288 ellipsised "Southampton"; 360 still clipped it to "Southamptor" because the
+// width estimate below was running light. Now 410, funded by dropping the trend's
+// ordinal column and taking another slice off the plot, with the estimate
+// recalibrated against real Montserrat metrics.
+const NAME_MAX_W = 410;
+const RULE_1 = 578;
 const RULE_2 = 1338;                     // between the wheels and the manager
 // Originally 460 (step 153) with 89px of dead air between the Overall and Attack
 // rings. Now 372: step 124, ring gaps 49/60, visual span 557..880. The width that
 // came out of here and out of the trend both went to the club name.
-const WHEEL_X = 534;
+const WHEEL_X = 582;
 const WHEEL_W = 372;                     // 3 wheels: Overall, Attack, Defence
-const RULE_MID = 902;
-const TREND_X = 924;
-const TREND_W = 404;                     // 924..1328, plot 364
+const RULE_MID = 946;
+const TREND_X = 968;
+const TREND_W = 360;                     // 968..1328, plot 334
 
 // Wheel labels and the trend's season/caption row share one baseline, so the
 // two halves of the header read as a single band rather than two stacks.
@@ -200,17 +208,23 @@ function statRow({ x, y, w, label, value, pct, colour, ink, rank, labelW = 74, v
 // this point in the render, so the width is estimated per character: Montserrat
 // 800 is roughly 0.56em for lowercase, wider for caps and m/w, much narrower for
 // the i/l/t family. Accurate enough to pick a size, and it only ever errs small.
-const NAME_EM = { m: 0.90, w: 0.90, M: 0.90, W: 0.90, ' ': 0.27,
-                  i: 0.33, l: 0.33, j: 0.33, t: 0.33, f: 0.33, r: 0.33, I: 0.33, '.': 0.30, "'": 0.22 };
+// First pass ran ~12% light and clipped "Southampton" — the round lowercase
+// letters are nearer 0.62em in Montserrat 800, not 0.56, and t/f/r nearer 0.42
+// than 0.33. SAFETY is on top of that, because clipping is far worse than
+// picking a size a point smaller than strictly necessary.
+const NAME_SAFETY = 1.04;
+const NAME_EM = { m: 0.95, w: 0.83, M: 0.93, W: 0.93, ' ': 0.27,
+                  i: 0.29, l: 0.29, j: 0.29, I: 0.29,
+                  t: 0.42, f: 0.42, r: 0.42, '.': 0.30, "'": 0.22 };
 export function nameEmWidth(text) {
   let em = 0;
   for (const ch of String(text || '')) {
     if (NAME_EM[ch] != null) em += NAME_EM[ch];
-    else if (ch >= 'A' && ch <= 'Z') em += 0.68;
-    else if (ch >= '0' && ch <= '9') em += 0.68;
-    else em += 0.56;
+    else if (ch >= 'A' && ch <= 'Z') em += 0.73;
+    else if (ch >= '0' && ch <= '9') em += 0.65;
+    else em += 0.62;
   }
-  return em;
+  return em * NAME_SAFETY;
 }
 export function fitNameSize(text, maxW = NAME_MAX_W, maxPx = 52, minPx = 26) {
   const em = nameEmWidth(text);
@@ -318,7 +332,7 @@ function trendChart({ x, y, w, h, seasons, allTeams, ink }) {
   const top = Math.max(1, best - pad), bot = worst + pad;
   const span = (bot - top) || 1;
 
-  const VAL_W = 40;
+  const VAL_W = 26;   // just the move indicator now, no ordinal
   const plotW = w - VAL_W;
   const px = (i) => 4 + (i / (rows.length - 1)) * (plotW - 12);
   const py = (v) => 6 + ((v - top) / span) * (h - 14);   // 1st at the top
@@ -375,15 +389,10 @@ function trendChart({ x, y, w, h, seasons, allTeams, ink }) {
       ${dots}
     </svg>
     ${moveLabels}
-    <div style="position:absolute;left:${x + plotW + 8}px;top:${y + Math.round((h - 26) / 2)}px;
-                width:${VAL_W - 8}px;">
-      <div style="font-size:12.5px;font-weight:800;line-height:1;color:${ink.soft};">${last.pos}${
-        last.pos % 10 === 1 && last.pos % 100 !== 11 ? 'st'
-        : last.pos % 10 === 2 && last.pos % 100 !== 12 ? 'nd'
-        : last.pos % 10 === 3 && last.pos % 100 !== 13 ? 'rd' : 'th'}</div>
-      <div style="font-size:9px;font-weight:700;color:${moveCol};margin-top:4px;">${
-        move === 0 ? '—' : `${move > 0 ? '▲' : '▼'}${Math.abs(move)}`}</div>
-    </div>
+    <div style="position:absolute;left:${x + plotW + 6}px;top:${y + Math.round(h / 2) - 6}px;
+                width:${VAL_W - 6}px;font-size:10.5px;font-weight:800;color:${moveCol};
+                line-height:1;">${
+      move === 0 ? '—' : `${move > 0 ? '▲' : '▼'}${Math.abs(move)}`}</div>
     <div style="position:absolute;left:${x}px;top:${HDR_LABEL_Y}px;width:${plotW}px;display:flex;
                 justify-content:space-between;${AXIS_FONT}">
       <span>${esc(seasonShort(first.season))}</span>
@@ -1346,7 +1355,7 @@ function leagueTablePanelHtml(w, h, team, allTeams) {
 // rather than free text that reads differently every card.
 // Either bottom slot can hold any of these.
 export const BOTTOM_PANELS = ['Similar Teams', 'Key Players', 'Recruitment Recommendations',
-                              'Summary', 'Possible Departures', 'None'];
+                              'Coach Shortlist', 'Summary', 'Possible Departures', 'None'];
 
 // Did they hit it? Rendered as a small badge beside the objective.
 // Where each objective expects a side to finish, as a fraction of the league
@@ -1426,6 +1435,49 @@ function summaryPanelHtml(w, h, text) {
       <div style="font-size:${fs}px;line-height:1.55;color:#c8d2e0;white-space:pre-wrap;
                   word-break:break-word;">${esc(body)}</div>
     </div>`;
+}
+
+// Coach Shortlist — the manager equivalent of Recruitment Recommendations, built
+// from the coaches already saved on this domain. Rows arrive pre-resolved from the
+// component (photo, flag and score all worked out there) because scoring a coach
+// needs their tenure rows and the league market-value table, which live in React
+// state rather than anywhere this function can reach.
+function coachShortlistPanelHtml(w, h, rows, hideScores = false) {
+  if (!rows || !rows.length) {
+    return `<div style="position:absolute;inset:0;display:flex;align-items:center;
+             justify-content:center;font-size:12px;color:#55617a;">No coaches selected.</div>`;
+  }
+  const rowH = Math.floor((h - 4) / 3);
+  const PILL_W = 38;
+  return rows.slice(0, 3).map((c, i) => {
+    const meta = [c.nationality, c.formation, c.club].filter(Boolean);
+    return `
+      <div style="position:absolute;left:0;top:${i * rowH + 2}px;width:${w}px;height:${rowH - 6}px;
+                  background:rgba(255,255,255,0.035);border:1px solid rgba(255,255,255,0.07);
+                  border-radius:9px;">
+        <div style="position:absolute;left:10px;top:50%;margin-top:-16px;width:32px;height:32px;
+                    border-radius:50%;background-color:#1a2233;
+                    background-image:url('${src(c.photo || '')}'), url('${SILHOUETTE}');
+                    background-size:cover, cover;
+                    background-position:center top, center top;
+                    background-repeat:no-repeat, no-repeat;
+                    border:1.5px solid rgba(190,203,224,0.26);"></div>
+        <div style="position:absolute;left:50px;right:${hideScores ? 14 : PILL_W + 20}px;top:50%;margin-top:-15px;">
+          <div style="font-size:13.5px;font-weight:700;color:#eaf0f8;line-height:1.15;white-space:nowrap;
+                      overflow:hidden;text-overflow:ellipsis;">${esc(c.name || '')}${
+            c.age != null ? `<span style="color:#7c8798;font-weight:600;"> ${c.age}</span>` : ''}</div>
+          <div style="font-size:10px;color:#8b98ad;margin-top:4px;line-height:1.15;white-space:nowrap;
+                      overflow:hidden;text-overflow:ellipsis;">${
+            meta.map(esc).join('<span style="color:#6f7c92;"> · </span>')}</div>
+        </div>
+        ${hideScores || c.score == null ? '' : `
+        <div style="position:absolute;right:10px;top:50%;margin-top:-13px;width:${PILL_W}px;text-align:center;">
+          <div style="padding:3px 0;border-radius:11px;background:rgba(255,255,255,0.06);
+                      border:1px solid ${gradeColor(c.score)}44;font-size:13px;font-weight:800;
+                      color:${gradeColor(c.score)};">${whole(c.score)}</div>
+        </div>`}
+      </div>`;
+  }).join('');
 }
 
 function similarTeamsPanelHtml(w, h, team, allTeams) {
@@ -1848,81 +1900,35 @@ export function findCoachForTeam(team) {
   return coaches.find(c => (c.tenures || []).some(t => t.team === team.team)) || null;
 }
 
-// ─── Vacancy profile ───────────────────────────────────────────────────────
-// When a club has no head coach, the manager block has nothing to describe, so it
-// describes the appointment instead: the style the squad already plays, the shape
-// it's best equipped for, and what the age profile implies about the brief. All
-// three come from data already on the card — nothing new is stored.
-
-// Style the squad currently plays, read off the same numbers the Style panel uses.
-export function philosophyFor(team) {
-  const poss = mgPct(team, 'Possession', 'Possession') ?? team.possession;
-  const press = team.pressing;
-  const bits = [];
-  if (poss != null && !isNaN(poss)) bits.push(poss >= 60 ? 'Possession' : poss <= 40 ? 'Direct' : 'Balanced');
-  if (press != null && !isNaN(press)) bits.push(press >= 60 ? 'High Press' : press <= 35 ? 'Low Block' : 'Mid Block');
-  return bits.length ? bits.join(' · ') : '';
-}
-
-// Which of the nine shapes this squad actually fits, by building the XI for each
-// and taking the best average starter score. Answers "what can they play now"
-// rather than "what did the last manager play".
-export function bestShapeFor(squad, season) {
-  if (!Array.isArray(squad) || squad.length < 11) return '';
-  let best = null;
-  for (const key of FORMATION_NAMES) {
-    const r = xiRating(buildXI(key, squad, 0, season));
-    if (r != null && (!best || r > best.r)) best = { key, r };
-  }
-  return best ? best.key : '';
-}
-
-// The brief the age profile implies. Youngest third of the league means there's
-// something to develop; oldest third means it needs refreshing; in between, league
-// position decides whether the job is to progress or to rebuild.
-export function mandateFor(team, allTeams) {
-  const peers = (allTeams || []).filter(t =>
-    String(t.league) === String(team.league) && String(t.season) === String(team.season));
-  const ageRank = rankIn(allTeams, team, 'avgAge', false);
-  if (ageRank && ageRank.size >= 6) {
-    const third = ageRank.size / 3;
-    if (ageRank.rank <= third) return 'Develop Youth';
-    if (ageRank.rank > ageRank.size - third) return 'Refresh Squad';
-  }
-  const pr = team.pointsRank, size = team.leagueSize || (peers.length || null);
-  if (pr && size) return pr > size - size / 3 ? 'Rebuild' : 'Progress';
-  return '';
-}
-
-function coachHtml(coach, team, coachScore, hideManagerScore = false, ink = headerInk(null), clubFacts = '', squad = [], allTeams = []) {
+function coachHtml(coach, team, coachScore, hideManagerScore = false, ink = headerInk(null), clubFacts = '', vacancyTarget = '') {
   if (!coach) {
     // Deliberately the same skeleton as the populated block below — same photo
     // frame, same label position, same name line, same facts row, same club-facts
     // strip. A blank that keeps the shape reads as a vacancy; the old single line
     // of grey text read as the card having failed to load.
-    const targets = [
-      ['Philosophy', philosophyFor(team)],
-      ['Best Shape', bestShapeFor(squad, team.season)],
-      ['Mandate', mandateFor(team, allTeams)],
-    ].filter(([, v]) => v);
+
     return `
       <div style="position:absolute;left:${COACH_X}px;top:20px;width:${COACH_W}px;height:114px;">
-        <!-- empty frame rather than a photo: holds the column and reads as a gap
-             to be filled, not as a broken image -->
+        <!-- the same generic head-and-shoulders the photo path falls back to, so
+             the slot reads as an unfilled position rather than a missing image -->
         <div style="position:absolute;left:0;top:4px;width:94px;height:94px;border-radius:11px;
-                    background-color:#151b2e;border:1px dashed rgba(255,255,255,0.18);"></div>
+                    background-color:#151b2e;background-image:url('${SILHOUETTE}');
+                    background-size:cover;background-position:center top;
+                    border:1px solid rgba(255,255,255,0.16);"></div>
         <div style="position:absolute;left:110px;top:4px;width:${COACH_W - 110}px;">
           <div style="font-size:9.5px;font-weight:700;letter-spacing:0.16em;color:${ink.muted};">MANAGER</div>
           <div style="margin-top:4px;white-space:nowrap;">
             <span style="font-size:25px;font-weight:700;color:${ink.muted};vertical-align:middle;">No Head Coach</span>
           </div>
-          ${targets.length ? `
-          <div style="display:flex;align-items:center;margin-top:7px;white-space:nowrap;">
-            <span style="font-size:9px;font-weight:700;letter-spacing:0.14em;color:${ink.muted};">TARGET</span>
-            ${targets.map(([k, v]) =>
-              `<span style="font-size:11.5px;color:${ink.muted};margin-left:16px;">
-                 ${k}: <span style="color:${ink.secondary};font-weight:600;">${esc(v)}</span></span>`).join('')}
-          </div>` : ''}
+          <!-- Typed in the editor rather than derived. The label keeps the same
+               type as the facts row it replaces so the block still scans the same. -->
+          <div style="display:flex;align-items:center;margin-top:7px;white-space:nowrap;
+                      overflow:hidden;width:${COACH_W - 110}px;">
+            <span style="font-size:9px;font-weight:700;letter-spacing:0.14em;color:${ink.muted};
+                         flex-shrink:0;">TARGET</span>
+            ${vacancyTarget ? `<span style="font-size:12.5px;color:${ink.secondary};font-weight:600;
+                 margin-left:14px;">${esc(vacancyTarget)}</span>` : ''}
+          </div>
           ${clubFacts ? `<div style="margin-top:9px;">${clubFacts}</div>` : ''}
         </div>
       </div>`;
@@ -1997,7 +2003,7 @@ function coachHtml(coach, team, coachScore, hideManagerScore = false, ink = head
 // ─── Header ────────────────────────────────────────────────────────────────
 function headerHtml(team, coach, coachScore, allTeams, headerColour, rawOverall, hideManagerScore,
                     purchaseValue, purchaseRank, objective, teamNameOverride, objectiveOutcome, allTeamSeasons,
-                    squad = []) {
+                    vacancyTarget = '') {
   const displayName = (teamNameOverride && teamNameOverride.trim()) || team.team;
   const crest = teamCrest(team.team);
   const league = leagueDisplayName(team.league);
@@ -2135,7 +2141,7 @@ function headerHtml(team, coach, coachScore, allTeams, headerColour, rawOverall,
     ${trendChart({ x: TREND_X, y: 30, w: TREND_W, h: 76,
                    seasons: allTeamSeasons, allTeams, ink })}
 
-    ${coachHtml(coach, team, coachScore, hideManagerScore, ink, clubFactsHtml, squad, allTeams)}`;
+    ${coachHtml(coach, team, coachScore, hideManagerScore, ink, clubFactsHtml, vacancyTarget)}`;
 }
 
 // ─── Image handling ────────────────────────────────────────────────────────
@@ -2150,7 +2156,7 @@ function headerHtml(team, coach, coachScore, allTeams, headerColour, rawOverall,
 let IMG = {};
 const src = (url) => (url && IMG[url]) || url || '';
 
-export function cardImageUrls(team, squad, coach, allTeams = [], extraPlayers = []) {
+export function cardImageUrls(team, squad, coach, allTeams = [], extraPlayers = [], coachRows = []) {
   const urls = [teamCrest(team.team), leagueLogo(team.league), leagueFlag(team.league)];
   // Similar-team crests, so they're inlined like everything else.
   for (const t of resolveSimilarTeams(team, allTeams, 3)) urls.push(teamCrest(t.team));
@@ -2161,6 +2167,13 @@ export function cardImageUrls(team, squad, coach, allTeams = [], extraPlayers = 
   for (const p of squad) urls.push(photoUrl(p.name, p.team));
   // Recruitment picks can sit outside the squad.
   for (const p of (extraPlayers || [])) urls.push(photoUrl(p.name, p.team));
+  // Shortlisted coaches need the same treatment as the header one, or their
+  // photos would be the only remote references left in the render.
+  for (const c of (coachRows || [])) {
+    if (c && c.photo) urls.push(c.photo);
+    const ciso = countryToIso2((c && c.nationality) || '');
+    if (ciso) urls.push(`https://flagcdn.com/w40/${ciso}.png`);
+  }
   if (coach) {
     const rawId = coach.fotmobId || '';
     const fmId = typeof rawId === 'string' && rawId.includes('fotmob.com')
@@ -2216,6 +2229,7 @@ export function buildTeamReportElement(team, opts = {}) {
     summaryText = '',
     keyRows = null,                // explicit Key Players list
     recruitRows = [],              // Recruitment Recommendations list
+    coachRows = [],                // Coach Shortlist, pre-resolved in the component
     departureRows = null,          // null = auto (shortest contracts)
     depthList = null, upgradeList = null,
     xiSlotLists = null,
@@ -2228,6 +2242,7 @@ export function buildTeamReportElement(team, opts = {}) {
     allTeamSeasons = [],     // this club's season history, for the trend line
     purchaseValue = '', purchaseRank = null, objective = '', teamNameOverride = '',
     objectiveOutcome = '',
+    vacancyTarget = '',      // free text for the TARGET row when there's no coach
   } = opts;
   IMG = images || {};
 
@@ -2252,7 +2267,7 @@ export function buildTeamReportElement(team, opts = {}) {
 
       ${headerHtml(team, coach, coachScore, allTeams, headerColour, rawOverall, hideManagerScore,
                    purchaseValue, purchaseRank, objective, teamNameOverride, objectiveOutcome, allTeamSeasons,
-                   squad)}
+                   vacancyTarget)}
 
       ${panel({ x: PAD, y: BODY_TOP, w: LEFT_W, h: LEFT_H,
                 title: 'XI + Depth', right: formation, body: xiPanelHtml(xiW, xiH, xi, { hideScores: hidePlayerScores, metaMode, season: team.season }) })}
@@ -2280,6 +2295,9 @@ export function buildTeamReportElement(team, opts = {}) {
         if (kind === 'Possible Departures')
           return panel({ x, y: ROW_3, w: COL_W, h: ROW3_H, title: 'Possible Departures',
                          body: departuresPanelHtml(innerW, ih, departures, team.season) });
+        if (kind === 'Coach Shortlist')
+          return panel({ x, y: ROW_3, w: COL_W, h: ROW3_H, title: 'Coach Shortlist',
+                         body: coachShortlistPanelHtml(innerW, ih, coachRows, hideManagerScore) });
         if (kind === 'Recruitment Recommendations')
           return panel({ x, y: ROW_3, w: COL_W, h: ROW3_H, title: 'Recruitment Recommendations',
                          body: keyPlayersPanelHtml(innerW, ih, recruitRows, true, hidePlayerScores) });
@@ -2640,6 +2658,64 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
     return map;
   }, [tenureRows, allTeams, totalMVByTeam]);
 
+  // Same two steps as tenureRows + seasonPerf above, as a function of any coach,
+  // so a shortlisted name is scored identically to the one in the header.
+  const scoreForCoach = useCallback((c) => {
+    if (!c) return null;
+    const rows = (c.tenures || [])
+      .map(t => allTeams.find(x => x.team === t.team && x.league === t.league && x.season === t.season))
+      .filter(Boolean);
+    if (!rows.length) return null;
+    const getTotalMV = (t, l) =>
+      totalMVByTeam[String(t).toLowerCase() + '|' + String(l || '').trim().replace(/\.$/, '').toLowerCase()] ?? null;
+    const perf = {};
+    for (const row of rows) {
+      const peers = allTeams.filter(t => String(t.league) === String(row.league)
+                                     && String(t.season) === String(row.season));
+      const withMV = peers.map(t => ({ t, mv: getTotalMV(t.team, t.league) }))
+                          .filter(x => x.mv != null && x.t.pointsRank != null);
+      if (withMV.length < 2) continue;
+      withMV.sort((a, b) => b.mv - a.mv);
+      const vals = withMV.map((x, i) => ({ team: x.t.team, val: (i + 1) - Number(x.t.pointsRank) }));
+      const ranked = vals.slice().sort((a, b) => b.val - a.val);
+      const idx = ranked.findIndex(x => String(x.team).toLowerCase() === String(row.team).toLowerCase());
+      if (idx < 0) continue;
+      perf[`${row.season}||${row.league}||${row.team}`] =
+        Math.round(((ranked.length - (idx + 1)) / (ranked.length - 1)) * 1000) / 10;
+    }
+    try {
+      let age = null;
+      try { age = computeAge(c.dob); } catch (e) { age = null; }
+      return computeCoachScore(rows, age, { seasonPerf: perf }).score;
+    } catch (e) { return null; }
+  }, [allTeams, totalMVByTeam]);
+
+  // Shortlist rows, resolved here because the photo, flag and score all need
+  // things buildTeamReportElement can't see.
+  const [coachShortlistIds, setCoachShortlistIds] = useState([]);
+  const coachRows = useMemo(() => coachShortlistIds
+    .map(id => savedCoaches.find(c => String(c.id) === String(id)))
+    .filter(Boolean)
+    .map(c => {
+      const rawId = c.fotmobId || '';
+      const fmId = typeof rawId === 'string' && rawId.includes('fotmob.com')
+        ? (rawId.match(/\/(\d+)\.png/) || [])[1] || null
+        : (rawId || null);
+      let age = null;
+      try { age = computeAge(c.dob); } catch (e) { age = null; }
+      const tenureClubs = [...new Set((c.tenures || []).map(t => t.team))];
+      return {
+        name: c.name || '',
+        nationality: c.nationality || '',
+        formation: (Array.isArray(c.formations) ? c.formations[0] : c.formation) || '',
+        club: tenureClubs.length ? tenureClubs[tenureClubs.length - 1] : '',
+        photo: fmId ? `${FOTMOB_PHOTO_BASE}${fmId}.png` : (c.photoDataUrl || c.photoUrl || ''),
+        age, score: scoreForCoach(c),
+      };
+    }), [coachShortlistIds, savedCoaches, scoreForCoach]);
+
+  const [vacancyTarget, setVacancyTarget] = useState('');
+
   const coachScore = useMemo(() => {
     if (!coach || !tenureRows.length) return null;
     try {
@@ -2685,7 +2761,7 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
     teamNameOverride,
     depthList: depthSel, upgradeList: upgradeSel,
     xiSlotLists: xiLists, xiOverridePool: xiPool,
-    hidePlayerScores, hideManagerScore, metaMode,
+    hidePlayerScores, hideManagerScore, metaMode, coachRows, vacancyTarget,
     setPieces: setPieceScore(spAtt, spDef),
     extraAreas: Object.keys(extraAreas).map(name => ({ name, severity: extraAreas[name] })),
     allTeamSeasons,
@@ -2702,7 +2778,7 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
       const outsiders = findByKeys(players, Object.values(xiLists || {}).flat())
         .filter(p => !squad.includes(p));
       const urls = cardImageUrls(team, squad, coach, allTeams,
-        [...(keyRows || []), ...recruitPicked, ...departurePicked, ...outsiders]);
+        [...(keyRows || []), ...recruitPicked, ...departurePicked, ...outsiders], coachRows);
       const images = await preloadImages(urls, (d, t) => setProgress(`Images ${d}/${t}`));
       setProgress('Rendering…');
       el = buildTeamReportElement(team, { ...buildOpts(), images });
@@ -3023,6 +3099,42 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
                 <div style={UI.note}>{players.length.toLocaleString()} players searchable.</div>
               </div>
             )}
+            {shown.includes('Coach Shortlist') && (
+              <div style={UI.block}>
+                <span style={UI.label}>Coach Shortlist — up to 3 saved coaches</span>
+                {!savedCoaches.length
+                  ? <div style={UI.note}>No saved coaches on this domain.</div>
+                  : (
+                    <>
+                      <select value="" onChange={e => {
+                        const id = e.target.value;
+                        if (id) setCoachShortlistIds(ids =>
+                          ids.includes(id) || ids.length >= 3 ? ids : [...ids, id]);
+                      }} style={UI.select}>
+                        <option value="">Add a coach…</option>
+                        {savedCoaches
+                          .filter(c => !coachShortlistIds.includes(String(c.id)))
+                          .map(c => <option key={c.id} value={String(c.id)}>{c.name}</option>)}
+                      </select>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 6 }}>
+                        {coachRows.map((c, i) => (
+                          <span key={coachShortlistIds[i]}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 6,
+                                     background: 'rgba(255,255,255,0.05)', border: '1px solid #1e2d45',
+                                     borderRadius: 11, padding: '3px 8px', fontSize: 10.5, color: '#cbd5e1' }}>
+                            {c.name}{c.score != null && <span style={{ color: '#64748b' }}>{Math.round(c.score)}</span>}
+                            <button onClick={() => setCoachShortlistIds(ids =>
+                              ids.filter(x => x !== coachShortlistIds[i]))}
+                              style={{ background: 'none', border: 'none', color: '#f87171',
+                                       cursor: 'pointer', padding: 0, fontSize: 12, lineHeight: 1 }}>×</button>
+                          </span>
+                        ))}
+                      </div>
+                      {coachShortlistIds.length >= 3 && <div style={UI.note}>Three is the maximum the panel shows.</div>}
+                    </>
+                  )}
+              </div>
+            )}
             {shown.includes('Possible Departures') && (
               <div style={{ ...UI.block, marginTop: 4 }}>
                 <span style={UI.label}>
@@ -3052,6 +3164,14 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
             {!savedCoaches.length && <div style={UI.note}>No saved coaches on this domain.</div>}
             {coach && coachScore != null && (
               <div style={UI.note}>Manager score {Math.round(coachScore)}.</div>
+            )}
+            {!coach && (
+              <div style={{ ...UI.block, marginTop: 8 }}>
+                <span style={UI.label}>Target (shown beside TARGET on the card)</span>
+                <input value={vacancyTarget} onChange={e => setVacancyTarget(e.target.value)}
+                  placeholder="e.g. Possession coach, 4-3-3, promotion experience"
+                  style={{ ...UI.select, cursor: 'text' }} />
+              </div>
             )}
           </Section>
         </div>
