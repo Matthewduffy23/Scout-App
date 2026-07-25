@@ -1,4 +1,4 @@
-// TeamReport.js v50 — Team All-in-One report. 1920x1080 PNG export.
+// TeamReport.js v51 — Team All-in-One report. 1920x1080 PNG export.
 //
 // v2: bigger team name; country flag + league logo beside the league name;
 //     mini coach profile in the header gap; XI is now formation-driven and
@@ -112,6 +112,15 @@
 // text node). A non-breaking space is a character: nothing can collapse it. Name
 // and age are now plain spans sharing one baseline with the size set once on the
 // line, so they cannot drift apart either.
+//
+// v51: league badge removed from every row panel. Sized to match the text it stood
+// taller than the cap height, so it could never sit level with the flag next to it,
+// and at that scale it was a smudge rather than an identifier — the flag alone
+// carries the country. Flags also stop using vertical-align:middle, which centres
+// the box on baseline + half the x-height and therefore hangs a cap-height flag
+// below the digits beside it. Default baseline alignment puts the bottom of the
+// flag on the bottom of the text, and can't be undone by the pipeline dropping a
+// property, since it is the initial value.
 
 import React, { useState, useMemo, useCallback } from 'react';
 import {
@@ -1683,28 +1692,19 @@ export function personFlagUrl(p) {
   return iso ? `https://flagcdn.com/w40/${iso}.png` : '';
 }
 // Flags are 3:2, so the width follows from the height. vertical-align:-1px sits it
-// on the text baseline instead of hanging above it.
-// vertical-align:middle centres the box against the text's own middle, which holds
-// at any font size — the earlier -1px/-2px nudges were tuned for one size and drifted
-// at the other. Everything trails the text it belongs to rather than preceding it.
-// 0.62 put the flag at roughly the x-height, which read as undersized next to the
-// name. 0.74 matches cap height, so it sits level with the top of the digits.
+// Sized to cap height and left on the DEFAULT baseline alignment rather than being
+// pushed around with vertical-align. vertical-align:middle centres the box on
+// baseline + half the x-height, which sits a cap-height flag about 1.5px below the
+// digits beside it; baseline puts its bottom exactly on the bottom of the text. It
+// also survives this pipeline dropping the property, since it is the initial value.
 function flagImg(url, textPx) {
   if (!url) return '';
-  const hPx = Math.round(textPx * 0.74);
+  const hPx = Math.round(textPx * 0.72);
   return `<span style="display:inline-block;width:${Math.round(hPx * 1.5)}px;height:${hPx}px;
            background-image:url('${src(url)}');background-size:cover;background-position:center;
-           border-radius:1.5px;box-shadow:inset 0 0 0 0.5px rgba(255,255,255,0.22);
-           vertical-align:middle;"></span>`;
+           border-radius:1.5px;box-shadow:inset 0 0 0 0.5px rgba(255,255,255,0.22);"></span>`;
 }
-function logoImg(url, textPx) {
-  if (!url) return '';
-  const hPx = Math.round(textPx * 1.0);
-  return `<span style="display:inline-block;width:${hPx}px;height:${hPx}px;
-           background-image:url('${src(url)}');background-size:contain;
-           background-repeat:no-repeat;background-position:center;
-           vertical-align:middle;"></span>`;
-}
+
 const gapSpan = (px) => `<span style="display:inline-block;width:${px}px;"></span>`;
 
 // Nationality flag, trailing whatever text it follows.
@@ -1712,11 +1712,13 @@ function natStamp(p, textPx) {
   const f = flagImg(personFlagUrl(p), textPx);
   return f ? `&nbsp;${f}` : '';
 }
-// Club name first, then its league flag and badge.
+// Club name then its league's flag. The league BADGE used to follow, but sized to
+// match the text it stood taller than the cap height and so could never line up with
+// the flag beside it — and at this scale it read as a smudge rather than an
+// identifier. The flag alone carries the country.
 function clubStamp(league, club, textPx) {
-  const marks = [flagImg(leagueFlag(league), textPx), logoImg(leagueLogo(league), textPx)]
-    .filter(Boolean).join('&thinsp;');
-  return `${esc(club || '')}${marks ? '&nbsp;' + marks : ''}`;
+  const f = flagImg(leagueFlag(league), textPx);
+  return `${esc(club || '')}${f ? '&nbsp;' + f : ''}`;
 }
 
 function keyPlayersPanelHtml(w, h, rows, showClub = false, hideScores = false, photoOverrides = {}) {
@@ -2375,14 +2377,14 @@ export function cardImageUrls(team, squad, coach, allTeams = [], extraPlayers = 
   for (const c of (coachRows || [])) {
     if (c && c.photo) urls.push(c.photo);
     if (c && c.flag) urls.push(c.flag);
-    if (c && c.league) { urls.push(leagueFlag(c.league)); urls.push(leagueLogo(c.league)); }
+    if (c && c.league) urls.push(leagueFlag(c.league));
   }
   // Nationality flags and league badges for every row that can show them. Without
   // this they'd be the only remote references left and would blank in the export.
   for (const pl of [...squad, ...(extraPlayers || [])]) {
     const f = personFlagUrl(pl);
     if (f) urls.push(f);
-    if (pl && pl.league) { urls.push(leagueFlag(pl.league)); urls.push(leagueLogo(pl.league)); }
+    if (pl && pl.league) urls.push(leagueFlag(pl.league));
   }
   if (coach) {
     const rawId = coach.fotmobId || '';
