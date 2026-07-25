@@ -1,4 +1,4 @@
-// TeamReport.js v48 — Team All-in-One report. 1920x1080 PNG export.
+// TeamReport.js v49 — Team All-in-One report. 1920x1080 PNG export.
 //
 // v2: bigger team name; country flag + league logo beside the league name;
 //     mini coach profile in the header gap; XI is now formation-driven and
@@ -95,6 +95,15 @@
 // overflows visibly instead of being silently cut. Applied across Key Players,
 // Recruitment, Coach Shortlist, Similar Teams, Selling Assets and Departures. The
 // XI pitch keeps its ellipsis: genuinely tight space, and never a problem there.
+//
+// v49: the age was running into the name because it spaced itself with margin-left,
+// which survives inside the header's flex containers but is dropped on these plain
+// inline-blocks — the flag was fine precisely because it uses a gapSpan element.
+// All gaps on these lines are now real elements. Two-line text blocks recentred
+// (-17 rather than -16: 16.1 + 4 + 12.1 = 32.2 of content). Selling Assets drops
+// market value and the green/plain colour that depended on it: marketValue is
+// populated for some players and not others, so both appeared on one row of three
+// and read as a defect rather than a signal.
 
 import React, { useState, useMemo, useCallback } from 'react';
 import {
@@ -1525,16 +1534,16 @@ function coachShortlistPanelHtml(w, h, rows, hideScores = false) {
                     background-position:center top, center top;
                     background-repeat:no-repeat, no-repeat;
                     border:1.5px solid rgba(190,203,224,0.26);"></div>
-        <div style="position:absolute;left:${TEXT_X}px;width:${textW}px;top:50%;margin-top:-16px;">
+        <div style="position:absolute;left:${TEXT_X}px;width:${textW}px;top:50%;margin-top:-17px;">
           <div style="white-space:nowrap;line-height:1.15;">
             <span style="display:inline-block;vertical-align:middle;
                          font-size:14px;font-weight:700;color:#eaf0f8;
                          white-space:nowrap;">${esc(c.name || '')}</span>${
-            c.age != null ? `<span style="display:inline-block;vertical-align:middle;margin-left:6px;
+            c.age != null ? `${gapSpan(7)}<span style="display:inline-block;vertical-align:middle;
                  font-size:14px;font-weight:600;color:#7c8798;">${c.age}</span>` : ''}${
             (() => { const f = flagImg(c.flag, 14); return f ? `${gapSpan(6)}${f}` : ''; })()}
           </div>
-          <div style="font-size:10.5px;color:#8b98ad;margin-top:5px;line-height:1.15;white-space:nowrap;
+          <div style="font-size:10.5px;color:#8b98ad;margin-top:4px;line-height:1.15;white-space:nowrap;
                       overflow:hidden;">${
             meta.join('<span style="color:#6f7c92;"> · </span>')}</div>
         </div>
@@ -1737,16 +1746,16 @@ function keyPlayersPanelHtml(w, h, rows, showClub = false, hideScores = false, p
                     border:1.5px solid rgba(190,203,224,0.26);"></div>
         <!-- text box ends exactly where the pills begin — previously it was a
              fixed max-width guess, which is why names were ellipsising early -->
-        <div style="position:absolute;left:${TEXT_X}px;width:${textW}px;top:50%;margin-top:-16px;">
+        <div style="position:absolute;left:${TEXT_X}px;width:${textW}px;top:50%;margin-top:-17px;">
           <div style="white-space:nowrap;line-height:1.15;">
             <span style="display:inline-block;vertical-align:middle;
                          font-size:14px;font-weight:700;color:#eaf0f8;
-                         white-space:nowrap;">${esc(p.name)}</span><span
-                  style="display:inline-block;vertical-align:middle;margin-left:6px;
+                         white-space:nowrap;">${esc(p.name)}</span>${gapSpan(7)}<span
+                  style="display:inline-block;vertical-align:middle;
                          font-size:14px;font-weight:600;color:#7c8798;">${p.age != null ? p.age : '—'}</span>${
               natStamp(p, 14)}
           </div>
-          <div style="font-size:10.5px;color:#8b98ad;margin-top:5px;line-height:1.15;white-space:nowrap;
+          <div style="font-size:10.5px;color:#8b98ad;margin-top:4px;line-height:1.15;white-space:nowrap;
                       overflow:hidden;">${esc(pos)}${
             role ? ` <span style="color:#a7b4c8;">${esc(role)}</span>` : ''}${
             showClub && p.team ? `<span style="color:#6f7c92;"> · </span><span style="color:#8b98ad;">${
@@ -1990,10 +1999,6 @@ function sellingAssetsPanelHtml(w, h, rows, xValueOverrides = {}, photoOverrides
   const textW = w - TEXT_X - VAL_W - 18;
   return rows.slice(0, 3).map((p, i) => {
     const xv = xvFor(p, xValueOverrides);
-    const mv = Number(p.marketValue);
-    // Green when the model rates him above his market value, amber when below —
-    // that direction is the whole point of putting the two next to each other.
-    const up = xv != null && !isNaN(mv) && mv > 0 && xv > mv;
     return `
       <div style="position:absolute;left:0;top:${i * rowH + 2}px;width:${w}px;height:${rowH - 6}px;
                   background:rgba(255,255,255,0.035);border:1px solid rgba(255,255,255,0.07);
@@ -2004,24 +2009,23 @@ function sellingAssetsPanelHtml(w, h, rows, xValueOverrides = {}, photoOverrides
                     background-size:cover, cover;background-position:center top, center top;
                     background-repeat:no-repeat, no-repeat;
                     border:1.5px solid rgba(190,203,224,0.26);"></div>
-        <div style="position:absolute;left:${TEXT_X}px;width:${textW}px;top:50%;margin-top:-16px;">
+        <div style="position:absolute;left:${TEXT_X}px;width:${textW}px;top:50%;margin-top:-17px;">
           <div style="white-space:nowrap;line-height:1.15;">
             <span style="display:inline-block;vertical-align:middle;
                          font-size:14px;font-weight:700;color:#eaf0f8;
-                         white-space:nowrap;">${esc(p.name)}</span><span
-                  style="display:inline-block;vertical-align:middle;margin-left:6px;
+                         white-space:nowrap;">${esc(p.name)}</span>${gapSpan(7)}<span
+                  style="display:inline-block;vertical-align:middle;
                          font-size:14px;font-weight:600;color:#7c8798;">${p.age != null ? p.age : '—'}</span>${
             natStamp(p, 14)}
           </div>
-          <div style="font-size:10.5px;color:#8b98ad;margin-top:5px;line-height:1.15;white-space:nowrap;
+          <div style="font-size:10.5px;color:#8b98ad;margin-top:4px;line-height:1.15;white-space:nowrap;
                       overflow:hidden;">${
             esc(String(p.position || '').split(',')[0].trim())}${
-            mv > 0 ? `<span style="color:#6f7c92;"> · MV </span><span style="color:#a7b4c8;">${formatMoney(mv)}</span>` : ''}${
-            contractLeft(p, null) ? `<span style="color:#6f7c92;"> · </span><span style="color:#a7b4c8;">${esc(contractLeft(p, null))}</span>` : ''}</div>
+            bestRole(p) ? ` <span style="color:#a7b4c8;">${esc(bestRole(p))}</span>` : ''}</div>
         </div>
-        <div style="position:absolute;right:11px;top:50%;margin-top:-16px;width:${VAL_W}px;text-align:right;">
+        <div style="position:absolute;right:11px;top:50%;margin-top:-17px;width:${VAL_W}px;text-align:right;">
           <div style="font-size:15px;font-weight:800;line-height:1;
-                      color:${xv == null ? '#55617a' : up ? '#4ade80' : '#e8eef8'};">${
+                      color:${xv == null ? '#55617a' : '#e8eef8'};">${
             xv == null ? '—' : formatMoney(xv)}</div>
           <div style="font-size:7px;font-weight:700;letter-spacing:0.14em;color:#6f7c92;margin-top:5px;">XVALUE</div>
         </div>
@@ -2055,7 +2059,7 @@ function departuresPanelHtml(w, h, rows, season) {
                       ">${esc(p.name)}<span
                 style="color:#7c8798;font-weight:600;"> ${p.age != null ? p.age : '—'}</span>${
             natStamp(p, 13.5)}</div>
-          <div style="font-size:10.5px;color:#8b98ad;margin-top:5px;line-height:1.15;white-space:nowrap;
+          <div style="font-size:10.5px;color:#8b98ad;margin-top:4px;line-height:1.15;white-space:nowrap;
                       overflow:hidden;">${esc(pos)}${
             p.marketValue ? `<span style="color:#6f7c92;"> · </span><span style="color:#93a1b5;">${formatMoney(p.marketValue)}</span>` : ''}${
             p.xValue ? `<span style="color:#6f7c92;"> · xV </span><span style="color:#93c5fd;">${formatMoney(p.xValue)}</span>` : ''}</div>
