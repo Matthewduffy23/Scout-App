@@ -1,4 +1,4 @@
-// TeamReport.js v49 — Team All-in-One report. 1920x1080 PNG export.
+// TeamReport.js v50 — Team All-in-One report. 1920x1080 PNG export.
 //
 // v2: bigger team name; country flag + league logo beside the league name;
 //     mini coach profile in the header gap; XI is now formation-driven and
@@ -104,6 +104,14 @@
 // market value and the green/plain colour that depended on it: marketValue is
 // populated for some players and not others, so both appeared on one row of three
 // and read as a defect rather than a signal.
+//
+// v50: third attempt at that gap, and this time with the mechanism that already
+// worked in v43 — literal &nbsp; in a single text flow. margin-left is dropped on
+// plain inline-blocks here, and so is an empty spacer span sitting between two
+// inline-blocks (the identical spacer survives in clubStamp, where it neighbours a
+// text node). A non-breaking space is a character: nothing can collapse it. Name
+// and age are now plain spans sharing one baseline with the size set once on the
+// line, so they cannot drift apart either.
 
 import React, { useState, useMemo, useCallback } from 'react';
 import {
@@ -1535,13 +1543,10 @@ function coachShortlistPanelHtml(w, h, rows, hideScores = false) {
                     background-repeat:no-repeat, no-repeat;
                     border:1.5px solid rgba(190,203,224,0.26);"></div>
         <div style="position:absolute;left:${TEXT_X}px;width:${textW}px;top:50%;margin-top:-17px;">
-          <div style="white-space:nowrap;line-height:1.15;">
-            <span style="display:inline-block;vertical-align:middle;
-                         font-size:14px;font-weight:700;color:#eaf0f8;
-                         white-space:nowrap;">${esc(c.name || '')}</span>${
-            c.age != null ? `${gapSpan(7)}<span style="display:inline-block;vertical-align:middle;
-                 font-size:14px;font-weight:600;color:#7c8798;">${c.age}</span>` : ''}${
-            (() => { const f = flagImg(c.flag, 14); return f ? `${gapSpan(6)}${f}` : ''; })()}
+          <div style="white-space:nowrap;line-height:1.15;font-size:14px;">
+            <span style="font-weight:700;color:#eaf0f8;">${esc(c.name || '')}</span>${
+            c.age != null ? `&nbsp;<span style="font-weight:600;color:#7c8798;">${c.age}</span>` : ''}${
+            (() => { const f = flagImg(c.flag, 14); return f ? `&nbsp;${f}` : ''; })()}
           </div>
           <div style="font-size:10.5px;color:#8b98ad;margin-top:4px;line-height:1.15;white-space:nowrap;
                       overflow:hidden;">${
@@ -1705,13 +1710,13 @@ const gapSpan = (px) => `<span style="display:inline-block;width:${px}px;"></spa
 // Nationality flag, trailing whatever text it follows.
 function natStamp(p, textPx) {
   const f = flagImg(personFlagUrl(p), textPx);
-  return f ? `${gapSpan(6)}${f}` : '';
+  return f ? `&nbsp;${f}` : '';
 }
 // Club name first, then its league flag and badge.
 function clubStamp(league, club, textPx) {
   const marks = [flagImg(leagueFlag(league), textPx), logoImg(leagueLogo(league), textPx)]
-    .filter(Boolean).join(gapSpan(3));
-  return `${esc(club || '')}${marks ? gapSpan(5) + marks : ''}`;
+    .filter(Boolean).join('&thinsp;');
+  return `${esc(club || '')}${marks ? '&nbsp;' + marks : ''}`;
 }
 
 function keyPlayersPanelHtml(w, h, rows, showClub = false, hideScores = false, photoOverrides = {}) {
@@ -1747,12 +1752,9 @@ function keyPlayersPanelHtml(w, h, rows, showClub = false, hideScores = false, p
         <!-- text box ends exactly where the pills begin — previously it was a
              fixed max-width guess, which is why names were ellipsising early -->
         <div style="position:absolute;left:${TEXT_X}px;width:${textW}px;top:50%;margin-top:-17px;">
-          <div style="white-space:nowrap;line-height:1.15;">
-            <span style="display:inline-block;vertical-align:middle;
-                         font-size:14px;font-weight:700;color:#eaf0f8;
-                         white-space:nowrap;">${esc(p.name)}</span>${gapSpan(7)}<span
-                  style="display:inline-block;vertical-align:middle;
-                         font-size:14px;font-weight:600;color:#7c8798;">${p.age != null ? p.age : '—'}</span>${
+          <div style="white-space:nowrap;line-height:1.15;font-size:14px;">
+            <span style="font-weight:700;color:#eaf0f8;">${esc(p.name)}</span>&nbsp;<span
+                  style="font-weight:600;color:#7c8798;">${p.age != null ? p.age : '—'}</span>${
               natStamp(p, 14)}
           </div>
           <div style="font-size:10.5px;color:#8b98ad;margin-top:4px;line-height:1.15;white-space:nowrap;
@@ -2010,12 +2012,9 @@ function sellingAssetsPanelHtml(w, h, rows, xValueOverrides = {}, photoOverrides
                     background-repeat:no-repeat, no-repeat;
                     border:1.5px solid rgba(190,203,224,0.26);"></div>
         <div style="position:absolute;left:${TEXT_X}px;width:${textW}px;top:50%;margin-top:-17px;">
-          <div style="white-space:nowrap;line-height:1.15;">
-            <span style="display:inline-block;vertical-align:middle;
-                         font-size:14px;font-weight:700;color:#eaf0f8;
-                         white-space:nowrap;">${esc(p.name)}</span>${gapSpan(7)}<span
-                  style="display:inline-block;vertical-align:middle;
-                         font-size:14px;font-weight:600;color:#7c8798;">${p.age != null ? p.age : '—'}</span>${
+          <div style="white-space:nowrap;line-height:1.15;font-size:14px;">
+            <span style="font-weight:700;color:#eaf0f8;">${esc(p.name)}</span>&nbsp;<span
+                  style="font-weight:600;color:#7c8798;">${p.age != null ? p.age : '—'}</span>${
             natStamp(p, 14)}
           </div>
           <div style="font-size:10.5px;color:#8b98ad;margin-top:4px;line-height:1.15;white-space:nowrap;
