@@ -1,4 +1,4 @@
-// TeamReport.js v40 — Team All-in-One report. 1920x1080 PNG export.
+// TeamReport.js v41 — Team All-in-One report. 1920x1080 PNG export.
 //
 // v2: bigger team name; country flag + league logo beside the league name;
 //     mini coach profile in the header gap; XI is now formation-driven and
@@ -37,6 +37,12 @@
 // build_teams.py, which is where it already was — the league-strength weighting
 // and reserve exclusion were added there instead, so every consumer reads one
 // number from one place. teamSimilarity.js is deleted.
+//
+// v41: club name auto-sizes instead of ellipsising ("Southa..." is gone), funded
+// by tightening the ring gaps and 16px off the trend. No-head-coach clubs now get
+// a proper vacancy block in the manager slot — same skeleton, dashed photo frame,
+// and a TARGET row (Philosophy / Best Shape / Mandate) in place of the nationality
+// and contract line, with the club-facts strip kept.
 
 import React, { useState, useMemo } from 'react';
 import {
@@ -77,22 +83,20 @@ const NAME_X = PAD + 128;
 // Manager's left edge is COL_B_X, so the header block sits directly above the
 // right-hand tile column instead of floating between columns.
 //   identity 24-440 | rule 456 | wheels 474-1338 | manager 1358-1896
-const NAME_MAX_W = 288;
-// 448 is the floor for RULE_1: the name is ellipsised at NAME_MAX_W, so its box
-// ends at 440 and the rule can't come any further left without clipping it.
-const RULE_1 = 448;
+// 288 forced "Southampton" to ellipsise. Now 360, funded by tightening the ring
+// gaps and taking ~16px off the trend, and paired with the auto-sizing below so
+// nothing ever truncates regardless of how long the club name is.
+const NAME_MAX_W = 360;
+const RULE_1 = 528;
 const RULE_2 = 1338;                     // between the wheels and the manager
-// WHEEL_W was 460 (step 153), which left 89px of dead air between the Overall
-// and Attack rings and made the group read as adrift rather than as one unit.
-// 396 gives step 132 / a 59px ring gap, and puts the wheels' visual span
-// (498..835) symmetrically between the two rules with ~50px clear either side.
-// Every pixel freed goes to the trend, which is the element that needed it:
-// PROMOTED/RELEGATED labels are 68px wide and collided on the old 304px plot.
-const WHEEL_X = 473;
-const WHEEL_W = 396;                     // 3 wheels: Overall, Attack, Defence
-const RULE_MID = 886;
-const TREND_X = 908;
-const TREND_W = 420;                     // 908..1328, plot 304 -> 380
+// Originally 460 (step 153) with 89px of dead air between the Overall and Attack
+// rings. Now 372: step 124, ring gaps 49/60, visual span 557..880. The width that
+// came out of here and out of the trend both went to the club name.
+const WHEEL_X = 534;
+const WHEEL_W = 372;                     // 3 wheels: Overall, Attack, Defence
+const RULE_MID = 902;
+const TREND_X = 924;
+const TREND_W = 404;                     // 924..1328, plot 364
 
 // Wheel labels and the trend's season/caption row share one baseline, so the
 // two halves of the header read as a single band rather than two stacks.
@@ -190,6 +194,30 @@ function statRow({ x, y, w, label, value, pct, colour, ink, rank, labelW = 74, v
 // Circular gauge. Five of these in a row give the band a single, repeated shape
 // instead of a hero-plus-rows split — closer to a broadcast graphic, and the
 // arcs are directly comparable at a glance.
+// Club names run from "Elche" to "Wolverhampton Wanderers", and a fixed 52px with
+// an ellipsis meant anything past ~9 characters got cut. Instead the size drops to
+// whatever fits the box, so the name is always whole. No canvas is available at
+// this point in the render, so the width is estimated per character: Montserrat
+// 800 is roughly 0.56em for lowercase, wider for caps and m/w, much narrower for
+// the i/l/t family. Accurate enough to pick a size, and it only ever errs small.
+const NAME_EM = { m: 0.90, w: 0.90, M: 0.90, W: 0.90, ' ': 0.27,
+                  i: 0.33, l: 0.33, j: 0.33, t: 0.33, f: 0.33, r: 0.33, I: 0.33, '.': 0.30, "'": 0.22 };
+export function nameEmWidth(text) {
+  let em = 0;
+  for (const ch of String(text || '')) {
+    if (NAME_EM[ch] != null) em += NAME_EM[ch];
+    else if (ch >= 'A' && ch <= 'Z') em += 0.68;
+    else if (ch >= '0' && ch <= '9') em += 0.68;
+    else em += 0.56;
+  }
+  return em;
+}
+export function fitNameSize(text, maxW = NAME_MAX_W, maxPx = 52, minPx = 26) {
+  const em = nameEmWidth(text);
+  if (em <= 0) return maxPx;
+  return Math.max(minPx, Math.min(maxPx, Math.floor(maxW / em)));
+}
+
 function scoreWheel({ cx, cy, r, stroke, value, label, colour, ink, big, labelY }) {
   const c = 2 * Math.PI * r;
   const pct = Math.max(0, Math.min(100, Number(value) || 0));
@@ -1820,13 +1848,83 @@ export function findCoachForTeam(team) {
   return coaches.find(c => (c.tenures || []).some(t => t.team === team.team)) || null;
 }
 
-function coachHtml(coach, team, coachScore, hideManagerScore = false, ink = headerInk(null), clubFacts = '') {
+// ─── Vacancy profile ───────────────────────────────────────────────────────
+// When a club has no head coach, the manager block has nothing to describe, so it
+// describes the appointment instead: the style the squad already plays, the shape
+// it's best equipped for, and what the age profile implies about the brief. All
+// three come from data already on the card — nothing new is stored.
+
+// Style the squad currently plays, read off the same numbers the Style panel uses.
+export function philosophyFor(team) {
+  const poss = mgPct(team, 'Possession', 'Possession') ?? team.possession;
+  const press = team.pressing;
+  const bits = [];
+  if (poss != null && !isNaN(poss)) bits.push(poss >= 60 ? 'Possession' : poss <= 40 ? 'Direct' : 'Balanced');
+  if (press != null && !isNaN(press)) bits.push(press >= 60 ? 'High Press' : press <= 35 ? 'Low Block' : 'Mid Block');
+  return bits.length ? bits.join(' · ') : '';
+}
+
+// Which of the nine shapes this squad actually fits, by building the XI for each
+// and taking the best average starter score. Answers "what can they play now"
+// rather than "what did the last manager play".
+export function bestShapeFor(squad, season) {
+  if (!Array.isArray(squad) || squad.length < 11) return '';
+  let best = null;
+  for (const key of FORMATION_NAMES) {
+    const r = xiRating(buildXI(key, squad, 0, season));
+    if (r != null && (!best || r > best.r)) best = { key, r };
+  }
+  return best ? best.key : '';
+}
+
+// The brief the age profile implies. Youngest third of the league means there's
+// something to develop; oldest third means it needs refreshing; in between, league
+// position decides whether the job is to progress or to rebuild.
+export function mandateFor(team, allTeams) {
+  const peers = (allTeams || []).filter(t =>
+    String(t.league) === String(team.league) && String(t.season) === String(team.season));
+  const ageRank = rankIn(allTeams, team, 'avgAge', false);
+  if (ageRank && ageRank.size >= 6) {
+    const third = ageRank.size / 3;
+    if (ageRank.rank <= third) return 'Develop Youth';
+    if (ageRank.rank > ageRank.size - third) return 'Refresh Squad';
+  }
+  const pr = team.pointsRank, size = team.leagueSize || (peers.length || null);
+  if (pr && size) return pr > size - size / 3 ? 'Rebuild' : 'Progress';
+  return '';
+}
+
+function coachHtml(coach, team, coachScore, hideManagerScore = false, ink = headerInk(null), clubFacts = '', squad = [], allTeams = []) {
   if (!coach) {
-    // No manager saved: the club facts still belong here rather than vanishing.
+    // Deliberately the same skeleton as the populated block below — same photo
+    // frame, same label position, same name line, same facts row, same club-facts
+    // strip. A blank that keeps the shape reads as a vacancy; the old single line
+    // of grey text read as the card having failed to load.
+    const targets = [
+      ['Philosophy', philosophyFor(team)],
+      ['Best Shape', bestShapeFor(squad, team.season)],
+      ['Mandate', mandateFor(team, allTeams)],
+    ].filter(([, v]) => v);
     return `
-      <div style="position:absolute;left:${COACH_X}px;top:44px;width:${COACH_W}px;">
-        <div style="font-size:12.5px;color:${ink.muted};">No manager saved for this club.</div>
-        ${clubFacts ? `<div style="margin-top:14px;">${clubFacts}</div>` : ''}
+      <div style="position:absolute;left:${COACH_X}px;top:20px;width:${COACH_W}px;height:114px;">
+        <!-- empty frame rather than a photo: holds the column and reads as a gap
+             to be filled, not as a broken image -->
+        <div style="position:absolute;left:0;top:4px;width:94px;height:94px;border-radius:11px;
+                    background-color:#151b2e;border:1px dashed rgba(255,255,255,0.18);"></div>
+        <div style="position:absolute;left:110px;top:4px;width:${COACH_W - 110}px;">
+          <div style="font-size:9.5px;font-weight:700;letter-spacing:0.16em;color:${ink.muted};">MANAGER</div>
+          <div style="margin-top:4px;white-space:nowrap;">
+            <span style="font-size:25px;font-weight:700;color:${ink.muted};vertical-align:middle;">No Head Coach</span>
+          </div>
+          ${targets.length ? `
+          <div style="display:flex;align-items:center;margin-top:7px;white-space:nowrap;">
+            <span style="font-size:9px;font-weight:700;letter-spacing:0.14em;color:${ink.muted};">TARGET</span>
+            ${targets.map(([k, v]) =>
+              `<span style="font-size:11.5px;color:${ink.muted};margin-left:16px;">
+                 ${k}: <span style="color:${ink.secondary};font-weight:600;">${esc(v)}</span></span>`).join('')}
+          </div>` : ''}
+          ${clubFacts ? `<div style="margin-top:9px;">${clubFacts}</div>` : ''}
+        </div>
       </div>`;
   }
   const rawId = coach.fotmobId || '';
@@ -1898,7 +1996,8 @@ function coachHtml(coach, team, coachScore, hideManagerScore = false, ink = head
 
 // ─── Header ────────────────────────────────────────────────────────────────
 function headerHtml(team, coach, coachScore, allTeams, headerColour, rawOverall, hideManagerScore,
-                    purchaseValue, purchaseRank, objective, teamNameOverride, objectiveOutcome, allTeamSeasons) {
+                    purchaseValue, purchaseRank, objective, teamNameOverride, objectiveOutcome, allTeamSeasons,
+                    squad = []) {
   const displayName = (teamNameOverride && teamNameOverride.trim()) || team.team;
   const crest = teamCrest(team.team);
   const league = leagueDisplayName(team.league);
@@ -1970,9 +2069,15 @@ function headerHtml(team, coach, coachScore, allTeams, headerColour, rawOverall,
                 background-image:url('${src(crest)}');background-size:contain;
                 background-repeat:no-repeat;background-position:center;"></div>` : ''}
 
-    <div style="position:absolute;left:${NAME_X}px;top:16px;width:${NAME_MAX_W}px;
-                font-size:52px;font-weight:800;letter-spacing:-0.8px;line-height:1.02;color:${ink.primary};
-                white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(displayName)}</div>
+    <!-- Bottom-aligned in a fixed-height box: a shorter name renders at 52px and a
+         long one shrinks, but both sit on the same baseline above the league row
+         rather than the smaller one floating high. overflow:hidden is only a
+         backstop for a name long enough to defeat the 26px floor. -->
+    <div style="position:absolute;left:${NAME_X}px;top:14px;width:${NAME_MAX_W}px;height:56px;
+                display:flex;align-items:flex-end;overflow:hidden;">
+      <div style="font-size:${fitNameSize(displayName)}px;font-weight:800;letter-spacing:-0.8px;
+                  line-height:1.0;color:${ink.primary};white-space:nowrap;">${esc(displayName)}</div>
+    </div>
 
     <!-- country flag + league logo + league name + season, one nowrap row -->
     <div style="position:absolute;left:${NAME_X}px;top:78px;display:flex;align-items:center;
@@ -2030,7 +2135,7 @@ function headerHtml(team, coach, coachScore, allTeams, headerColour, rawOverall,
     ${trendChart({ x: TREND_X, y: 30, w: TREND_W, h: 76,
                    seasons: allTeamSeasons, allTeams, ink })}
 
-    ${coachHtml(coach, team, coachScore, hideManagerScore, ink, clubFactsHtml)}`;
+    ${coachHtml(coach, team, coachScore, hideManagerScore, ink, clubFactsHtml, squad, allTeams)}`;
 }
 
 // ─── Image handling ────────────────────────────────────────────────────────
@@ -2146,7 +2251,8 @@ export function buildTeamReportElement(team, opts = {}) {
          font-family:'Montserrat',sans-serif;color:#fff;position:relative;box-sizing:border-box;">
 
       ${headerHtml(team, coach, coachScore, allTeams, headerColour, rawOverall, hideManagerScore,
-                   purchaseValue, purchaseRank, objective, teamNameOverride, objectiveOutcome, allTeamSeasons)}
+                   purchaseValue, purchaseRank, objective, teamNameOverride, objectiveOutcome, allTeamSeasons,
+                   squad)}
 
       ${panel({ x: PAD, y: BODY_TOP, w: LEFT_W, h: LEFT_H,
                 title: 'XI + Depth', right: formation, body: xiPanelHtml(xiW, xiH, xi, { hideScores: hidePlayerScores, metaMode, season: team.season }) })}
@@ -2940,7 +3046,7 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
           <Section title="Manager" open={openSection === 'coach'} onToggle={() => toggleSection('coach')}>
             <select value={coachId} onChange={e => setCoachId(e.target.value)} style={UI.select}>
               <option value="auto">{autoCoach ? `Auto — ${autoCoach.name}` : 'Auto — none matched'}</option>
-              <option value="none">Hide manager</option>
+              <option value="none">No head coach (vacant)</option>
               {savedCoaches.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
             {!savedCoaches.length && <div style={UI.note}>No saved coaches on this domain.</div>}
