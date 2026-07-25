@@ -1,4 +1,4 @@
-// TeamReport.js v36 — Team All-in-One report. 1920x1080 PNG export.
+// TeamReport.js v40 — Team All-in-One report. 1920x1080 PNG export.
 //
 // v2: bigger team name; country flag + league logo beside the league name;
 //     mini coach profile in the header gap; XI is now formation-driven and
@@ -20,6 +20,23 @@
 // share one baseline (HDR_LABEL_Y) instead of OVERALL hanging 9px low, and the
 // trend's season row sits on the same line with LEAGUE FINISH centred over the
 // plot in the same type as the season labels. Ordinal demoted 16 -> 12.5px.
+//
+// v37: trend fill cut 0.20 -> 0.09 and the ramp stopped at 60% (at 76px tall it
+// had become the loudest thing in the header). OVERALL ring to r38/stroke8 to
+// reassert it at the tighter spacing; label baseline 112 -> 114 to hold the gap.
+// AREAS TO IMPROVE now draws from an outcome-only allow-list, dedupes by label
+// (PPDA was eligible for two of the four slots as identical bars).
+//
+// v38: (reverted in v40 — the similarity briefly moved to a frontend module
+// before going back into build_teams.py where it belongs.)
+//
+// v39: the Finishing/Goalkeeping xG residuals are gone — back to four metric
+// bars. The outcome-only allow-list and the PPDA dedupe from v37 stay.
+//
+// v40: similarity reverted to reading team.similarTeams. It belongs in
+// build_teams.py, which is where it already was — the league-strength weighting
+// and reserve exclusion were added there instead, so every consumer reads one
+// number from one place. teamSimilarity.js is deleted.
 
 import React, { useState, useMemo } from 'react';
 import {
@@ -79,7 +96,7 @@ const TREND_W = 420;                     // 908..1328, plot 304 -> 380
 
 // Wheel labels and the trend's season/caption row share one baseline, so the
 // two halves of the header read as a single band rather than two stacks.
-const HDR_LABEL_Y = 112;
+const HDR_LABEL_Y = 114;
 const COACH_X = 1358;                    // = COL_B_X
 const COACH_W = 538;
 
@@ -319,8 +336,8 @@ function trendChart({ x, y, w, h, seasons, allTeams, ink }) {
          style="position:absolute;left:${x}px;top:${y}px;">
       <defs>
         <linearGradient id="trFill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#8fa0b8" stop-opacity="0.20"/>
-          <stop offset="100%" stop-color="#8fa0b8" stop-opacity="0"/>
+          <stop offset="0%" stop-color="#8fa0b8" stop-opacity="0.09"/>
+          <stop offset="60%" stop-color="#8fa0b8" stop-opacity="0"/>
         </linearGradient>
       </defs>
       <path d="${area}" fill="url(#trFill)" stroke="none"/>
@@ -1547,6 +1564,21 @@ function keyPlayersPanelHtml(w, h, rows, showClub = false, hideScores = false) {
 // "Goals Against" can't show up as a strength by accident.
 const WEAKNESS_INVERT = new Set(['xG Against', 'Goals Against', 'Shots Against', 'PPDA']);
 
+// Only outcome metrics are eligible to be called a weakness. The full
+// metricGroups set mixes these with volume/identity metrics -- Crosses, Long
+// Passes, Possession, Dribbles, Progressive Runs and the two duel *counts* --
+// where being bottom of the league is a decision, not a flaw. A direct,
+// low-block side would otherwise have Game Control, Retention and Long Passing %
+// eat three of four slots while describing its identity. Those axes are also
+// already in the Style panel. Shooting % is excluded on the same grounds: it
+// tracks finishing luck more than anything a coach controls.
+const WEAKNESS_ELIGIBLE = new Set([
+  'Goals Scored', 'xG', 'Shots', 'Touches in Box',
+  'Goals Against', 'xG Against', 'Shots Against', 'PPDA',
+  'Aerial Duel Success %', 'Defensive Duel Win %', 'Defensive Duels Win %',
+  'Passes to Final 3rd', 'Progressive Passes',
+]);
+
 // Wyscout metric names read like a stats export; these are the plain-English
 // equivalents for the card. Anything not listed falls through unchanged.
 const METRIC_PLAIN = {
@@ -1600,13 +1632,20 @@ export function weakestMetrics(team, allTeams, n = 4) {
       const name = r[0];
       const v = Number(r[2]);
       if (isNaN(v)) continue;
+      if (!WEAKNESS_ELIGIBLE.has(name)) continue;
       const vals = pool.map(t => rawMetric(t, g, name)).filter(x => x != null);
       if (vals.length < 2) continue;
       const p = (vals.filter(x => x <= v).length / vals.length) * 100;
       out.push([plainMetric(name), WEAKNESS_INVERT.has(name) ? 100 - p : p]);
     }
   }
-  return out.sort((a, b) => a[1] - b[1]).slice(0, n);
+  // PPDA sits in both the Defence and Pressing groups and resolves to the same
+  // raw value, so without this it could take two of the four slots as two
+  // identical bars -- it also isn't in METRIC_PLAIN, so both read "PPDA".
+  const seen = new Set();
+  return out.sort((a, b) => a[1] - b[1])
+            .filter(([name]) => !seen.has(name) && seen.add(name))
+            .slice(0, n);
 }
 
 // Starting slots with no cover behind them — the squad-shape half of "weakness".
@@ -1960,7 +1999,7 @@ function headerHtml(team, coach, coachScore, allTeams, headerColour, rawOverall,
     </div>
 
     ${[RULE_1, RULE_2].filter(Boolean).map(x =>
-      `<div style="position:absolute;left:${x}px;top:28px;width:1px;height:94px;
+      `<div style="position:absolute;left:${x}px;top:28px;width:1px;height:100px;
                    background:${ink.rule};"></div>`).join('')}
 
     <!-- FIVE WHEELS. One repeated shape across the whole span reads as a single
@@ -1975,15 +2014,15 @@ function headerHtml(team, coach, coachScore, allTeams, headerColour, rawOverall,
       return all.map(([label, v, big], i) => scoreWheel({
         cx: WHEEL_X + step * i + step / 2,
         cy: 66,
-        r: big ? 36 : 28,
-        stroke: big ? 7.5 : 6,
+        r: big ? 38 : 28,
+        stroke: big ? 8 : 6,
         value: v, label, colour: scoreColor(v), ink, big, labelY: HDR_LABEL_Y,
       })).join('');
     })()}
 
     <!-- Matches RULE_1/RULE_2's 28..122 span so all three rules bracket the same
          band, including the label baseline at the bottom of it. -->
-    <div style="position:absolute;left:${RULE_MID}px;top:28px;width:1px;height:94px;
+    <div style="position:absolute;left:${RULE_MID}px;top:28px;width:1px;height:100px;
                 background:${ink.rule};"></div>
 
     <!-- Chart occupies 30..106 and its axis row lands on HDR_LABEL_Y with the
