@@ -1,4 +1,4 @@
-// TeamReport.js v46 — Team All-in-One report. 1920x1080 PNG export.
+// TeamReport.js v47 — Team All-in-One report. 1920x1080 PNG export.
 //
 // v2: bigger team name; country flag + league logo beside the league name;
 //     mini coach profile in the header gap; XI is now formation-driven and
@@ -80,6 +80,12 @@
 // centres just as exactly and measures reliably, with an explicit pixel budget for
 // the name. Rows also reworked: 40px faces, 14px names, 10.5px meta. New Selling
 // Assets bottom panel — squad ranked by xValue, per-player xValue editable.
+//
+// v47: fixes a crash on opening the report. v46 declared the Selling Assets memos
+// above `const squad`, and a useMemo dependency array is evaluated immediately
+// rather than deferred like its callback — so [sellIds, squad] was a temporal dead
+// zone read and threw "Cannot access 'squad' before initialization" (minified to
+// 'Ka') the moment the editor mounted. Memos moved below squad.
 
 import React, { useState, useMemo, useCallback } from 'react';
 import {
@@ -2833,13 +2839,6 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
   // the model, so a known asking price can replace it.
   const [sellIds, setSellIds] = useState([]);
   const [xValueOverrides, setXValueOverrides] = useState({});
-  const sellPicked = useMemo(() => sellIds
-    .map(k => squad.find(p => playerKey(p) === k)).filter(Boolean), [sellIds, squad]);
-  const sellAuto = useMemo(() => squad.slice()
-    .filter(p => xvFor(p, xValueOverrides) != null)
-    .sort((a, b) => xvFor(b, xValueOverrides) - xvFor(a, xValueOverrides))
-    .slice(0, 3), [squad, xValueOverrides]);
-  const sellShown = sellPicked.length ? sellPicked : sellAuto;
   const [spAtt, setSpAtt] = useState('');
   const [spDef, setSpDef] = useState('');
   const [extraAreas, setExtraAreas] = useState({});   // { name: severity }
@@ -2853,6 +2852,18 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
       String(p.team).toLowerCase() === String(team.team).toLowerCase() &&
       norm(p.league) === norm(team.league));
   }, [players, team]);
+
+  // Must sit BELOW `squad`: a useMemo dependency array is evaluated the moment the
+  // line runs, so referencing squad from above its declaration is a temporal dead
+  // zone read and throws "Cannot access 'squad' before initialization" as soon as
+  // the editor mounts. Minified, that surfaced as "Cannot access 'Ka'".
+  const sellPicked = useMemo(() => sellIds
+    .map(k => squad.find(p => playerKey(p) === k)).filter(Boolean), [sellIds, squad]);
+  const sellAuto = useMemo(() => squad.slice()
+    .filter(p => xvFor(p, xValueOverrides) != null)
+    .sort((a, b) => xvFor(b, xValueOverrides) - xvFor(a, xValueOverrides))
+    .slice(0, 3), [squad, xValueOverrides]);
+  const sellShown = sellPicked.length ? sellPicked : sellAuto;
 
   const savedCoaches = useMemo(() => listSavedCoaches(), []);
   const autoCoach = useMemo(() => findCoachForTeam(team), [team]);
