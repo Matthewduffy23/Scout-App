@@ -1,4 +1,4 @@
-// TeamReport.js v51 — Team All-in-One report. 1920x1080 PNG export.
+// TeamReport.js v52 — Team All-in-One report. 1920x1080 PNG export.
 //
 // v2: bigger team name; country flag + league logo beside the league name;
 //     mini coach profile in the header gap; XI is now formation-driven and
@@ -121,6 +121,16 @@
 // below the digits beside it. Default baseline alignment puts the bottom of the
 // flag on the bottom of the text, and can't be undone by the pipeline dropping a
 // property, since it is the initial value.
+//
+// v52: fixes the Quick Coach crash. `const coach` reads sessionCoach/sessionCoachReady
+// in one of its ternary branches, and those were declared ~110 lines further down, so
+// selecting Quick Coach hit a temporal dead zone. It only crashed on that option
+// because the earlier branches short-circuit, which is also why a plain mount test
+// missed it. State hoisted above `coach`. PPDA dropped from the weakness pool —
+// pressing intensity is a chosen approach, not a deficiency. Separator dots removed
+// before the club name, row text blocks recentred (-16 for 32px of content), and two
+// new toggles hide scores in Recruitment/Key Players and Coach Shortlist independently
+// of the XI and header.
 
 import React, { useState, useMemo, useCallback } from 'react';
 import {
@@ -1551,7 +1561,7 @@ function coachShortlistPanelHtml(w, h, rows, hideScores = false) {
                     background-position:center top, center top;
                     background-repeat:no-repeat, no-repeat;
                     border:1.5px solid rgba(190,203,224,0.26);"></div>
-        <div style="position:absolute;left:${TEXT_X}px;width:${textW}px;top:50%;margin-top:-17px;">
+        <div style="position:absolute;left:${TEXT_X}px;width:${textW}px;top:50%;margin-top:-16px;">
           <div style="white-space:nowrap;line-height:1.15;font-size:14px;">
             <span style="font-weight:700;color:#eaf0f8;">${esc(c.name || '')}</span>${
             c.age != null ? `&nbsp;<span style="font-weight:600;color:#7c8798;">${c.age}</span>` : ''}${
@@ -1559,7 +1569,7 @@ function coachShortlistPanelHtml(w, h, rows, hideScores = false) {
           </div>
           <div style="font-size:10.5px;color:#8b98ad;margin-top:4px;line-height:1.15;white-space:nowrap;
                       overflow:hidden;">${
-            meta.join('<span style="color:#6f7c92;"> · </span>')}</div>
+            meta.join('&nbsp;&nbsp;')}</div>
         </div>
         ${hideScores || c.score == null ? '' : `
         <div style="position:absolute;right:10px;top:50%;margin-top:-13px;width:${PILL_W}px;text-align:center;">
@@ -1753,7 +1763,7 @@ function keyPlayersPanelHtml(w, h, rows, showClub = false, hideScores = false, p
                     border:1.5px solid rgba(190,203,224,0.26);"></div>
         <!-- text box ends exactly where the pills begin — previously it was a
              fixed max-width guess, which is why names were ellipsising early -->
-        <div style="position:absolute;left:${TEXT_X}px;width:${textW}px;top:50%;margin-top:-17px;">
+        <div style="position:absolute;left:${TEXT_X}px;width:${textW}px;top:50%;margin-top:-16px;">
           <div style="white-space:nowrap;line-height:1.15;font-size:14px;">
             <span style="font-weight:700;color:#eaf0f8;">${esc(p.name)}</span>&nbsp;<span
                   style="font-weight:600;color:#7c8798;">${p.age != null ? p.age : '—'}</span>${
@@ -1762,7 +1772,7 @@ function keyPlayersPanelHtml(w, h, rows, showClub = false, hideScores = false, p
           <div style="font-size:10.5px;color:#8b98ad;margin-top:4px;line-height:1.15;white-space:nowrap;
                       overflow:hidden;">${esc(pos)}${
             role ? ` <span style="color:#a7b4c8;">${esc(role)}</span>` : ''}${
-            showClub && p.team ? `<span style="color:#6f7c92;"> · </span><span style="color:#8b98ad;">${
+            showClub && p.team ? `&nbsp;&nbsp;<span style="color:#8b98ad;">${
               clubStamp(p.league, p.team, 10.5)}</span>` : ''}</div>
         </div>
         ${hideScores ? '' : `
@@ -1798,10 +1808,12 @@ const WEAKNESS_INVERT = new Set(['xG Against', 'Goals Against', 'Shots Against',
 // low-block side would otherwise have Game Control, Retention and Long Passing %
 // eat three of four slots while describing its identity. Those axes are also
 // already in the Style panel. Shooting % is excluded on the same grounds: it
-// tracks finishing luck more than anything a coach controls.
+// tracks finishing luck more than anything a coach controls. PPDA is out too —
+// pressing intensity is a chosen approach, not a deficiency, and a side that
+// presses rarely by design isn't weak at pressing.
 const WEAKNESS_ELIGIBLE = new Set([
   'Goals Scored', 'xG', 'Shots', 'Touches in Box',
-  'Goals Against', 'xG Against', 'Shots Against', 'PPDA',
+  'Goals Against', 'xG Against', 'Shots Against',
   'Aerial Duel Success %', 'Defensive Duel Win %', 'Defensive Duels Win %',
   'Passes to Final 3rd', 'Progressive Passes',
 ]);
@@ -2013,7 +2025,7 @@ function sellingAssetsPanelHtml(w, h, rows, xValueOverrides = {}, photoOverrides
                     background-size:cover, cover;background-position:center top, center top;
                     background-repeat:no-repeat, no-repeat;
                     border:1.5px solid rgba(190,203,224,0.26);"></div>
-        <div style="position:absolute;left:${TEXT_X}px;width:${textW}px;top:50%;margin-top:-17px;">
+        <div style="position:absolute;left:${TEXT_X}px;width:${textW}px;top:50%;margin-top:-16px;">
           <div style="white-space:nowrap;line-height:1.15;font-size:14px;">
             <span style="font-weight:700;color:#eaf0f8;">${esc(p.name)}</span>&nbsp;<span
                   style="font-weight:600;color:#7c8798;">${p.age != null ? p.age : '—'}</span>${
@@ -2024,7 +2036,7 @@ function sellingAssetsPanelHtml(w, h, rows, xValueOverrides = {}, photoOverrides
             esc(String(p.position || '').split(',')[0].trim())}${
             bestRole(p) ? ` <span style="color:#a7b4c8;">${esc(bestRole(p))}</span>` : ''}</div>
         </div>
-        <div style="position:absolute;right:11px;top:50%;margin-top:-17px;width:${VAL_W}px;text-align:right;">
+        <div style="position:absolute;right:11px;top:50%;margin-top:-16px;width:${VAL_W}px;text-align:right;">
           <div style="font-size:15px;font-weight:800;line-height:1;
                       color:${xv == null ? '#55617a' : '#e8eef8'};">${
             xv == null ? '—' : formatMoney(xv)}</div>
@@ -2450,6 +2462,8 @@ export function buildTeamReportElement(team, opts = {}) {
     xiOverridePool = null,
     hidePlayerScores = false,
     hideManagerScore = false,
+    hideRecruitScores = false,     // Recruitment / Key Players pills only
+    hideShortlistScores = false,   // Coach Shortlist pills only
     metaMode = 'age',        // 'age' | 'contract' | 'none'
     setPieces = null,        // averaged 1-10 rating, already x10
     photoOverrides = {},     // playerKey -> data URL, for players missing from the photo repo
@@ -2519,12 +2533,15 @@ export function buildTeamReportElement(team, opts = {}) {
                          body: departuresPanelHtml(innerW, ih, departures, team.season) });
         if (kind === 'Coach Shortlist')
           return panel({ x, y: ROW_3, w: COL_W, h: ROW3_H, title: 'Coach Shortlist',
-                         body: coachShortlistPanelHtml(innerW, ih, coachRows, hideManagerScore) });
+                         body: coachShortlistPanelHtml(innerW, ih, coachRows,
+                                 hideManagerScore || hideShortlistScores) });
         if (kind === 'Recruitment Recommendations')
           return panel({ x, y: ROW_3, w: COL_W, h: ROW3_H, title: 'Recruitment Recommendations',
-                         body: keyPlayersPanelHtml(innerW, ih, recruitRows, true, hidePlayerScores, photoOverrides) });
+                         body: keyPlayersPanelHtml(innerW, ih, recruitRows, true,
+                                 hidePlayerScores || hideRecruitScores, photoOverrides) });
         return panel({ x, y: ROW_3, w: COL_W, h: ROW3_H, title: 'Key Players',
-                       body: keyPlayersPanelHtml(innerW, ih, players3, false, hidePlayerScores, photoOverrides) });
+                       body: keyPlayersPanelHtml(innerW, ih, players3, false,
+                               hidePlayerScores || hideRecruitScores, photoOverrides) });
       }).join('')}
     </div>`;
 
@@ -2840,6 +2857,8 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
   const [objectiveOutcome, setObjectiveOutcome] = useState('');
   const [hidePlayerScores, setHidePlayerScores] = useState(false);
   const [hideManagerScore, setHideManagerScore] = useState(false);
+  const [hideRecruitScores, setHideRecruitScores] = useState(false);
+  const [hideShortlistScores, setHideShortlistScores] = useState(false);
   const [metaMode, setMetaMode] = useState('age');   // beside player names
   // playerKey -> data URL. Kept in component state rather than localStorage: these
   // are per-report fixes for players the photo repo doesn't have, and a stored blob
@@ -2879,6 +2898,18 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
   const savedCoaches = useMemo(() => listSavedCoaches(), []);
   const autoCoach = useMemo(() => findCoachForTeam(team), [team]);
   const [coachId, setCoachId] = useState('auto');
+
+  const [vacancyTarget, setVacancyTarget] = useState('');
+
+  // Quick coach — a bypass for the fact that saved coaches live in localStorage,
+  // which is per-browser and per-domain, so a phone has none of the ones saved on
+  // the desktop. Deliberately NOT persisted: it exists for one export. The report
+  // only reads six fields off a coach, so typing them is quicker than syncing.
+  const [sessionCoach, setSessionCoach] = useState(
+    { name: '', nationality: '', formation: '', sinceYear: '', contract: '', score: '', photoDataUrl: '' });
+  const setSC = (k, v) => setSessionCoach(c => ({ ...c, [k]: v }));
+  const sessionCoachReady = Boolean(sessionCoach.name && sessionCoach.name.trim());
+
   const coach = coachId === 'auto' ? autoCoach
     : coachId === 'none' ? null
     : coachId === 'session' ? (sessionCoachReady ? sessionCoach : null)
@@ -2990,16 +3021,6 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
       };
     }), [coachShortlistIds, savedCoaches, scoreForCoach]);
 
-  const [vacancyTarget, setVacancyTarget] = useState('');
-
-  // Quick coach — a bypass for the fact that saved coaches live in localStorage,
-  // which is per-browser and per-domain, so a phone has none of the ones saved on
-  // the desktop. Deliberately NOT persisted: it exists for one export. The report
-  // only reads six fields off a coach, so typing them is quicker than syncing.
-  const [sessionCoach, setSessionCoach] = useState(
-    { name: '', nationality: '', formation: '', sinceYear: '', contract: '', score: '', photoDataUrl: '' });
-  const setSC = (k, v) => setSessionCoach(c => ({ ...c, [k]: v }));
-  const sessionCoachReady = Boolean(sessionCoach.name && sessionCoach.name.trim());
 
   const coachScore = useMemo(() => {
     // A session coach has no tenures to score from, so the number is typed or absent.
@@ -3052,7 +3073,8 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
     teamNameOverride,
     depthList: depthSel, upgradeList: upgradeSel,
     xiSlotLists: xiLists, xiOverridePool: xiPool,
-    hidePlayerScores, hideManagerScore, metaMode, coachRows, vacancyTarget, photoOverrides,
+    hidePlayerScores, hideManagerScore, hideRecruitScores, hideShortlistScores,
+    metaMode, coachRows, vacancyTarget, photoOverrides,
     setPieces: setPieceScore(spAtt, spDef),
     extraAreas: Object.keys(extraAreas).map(name => ({ name, severity: extraAreas[name] })),
     allTeamSeasons,
@@ -3174,8 +3196,10 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
               </div>
             </div>
 
-            {[['Hide player scores', hidePlayerScores, setHidePlayerScores],
-              ['Hide manager score', hideManagerScore, setHideManagerScore],
+            {[['Hide player scores (XI)', hidePlayerScores, setHidePlayerScores],
+              ['Hide manager score (header)', hideManagerScore, setHideManagerScore],
+              ['Hide scores in Recruitment / Key Players', hideRecruitScores, setHideRecruitScores],
+              ['Hide scores in Coach Shortlist', hideShortlistScores, setHideShortlistScores],
              ].map(([lbl, val, setter]) => (
               <div key={lbl} onClick={() => setter(v => !v)}
                    style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', marginBottom: 7 }}>
