@@ -1,4 +1,4 @@
-// TeamReport.js v52 — Team All-in-One report. 1920x1080 PNG export.
+// TeamReport.js v53 — Team All-in-One report. 1920x1080 PNG export.
 //
 // v2: bigger team name; country flag + league logo beside the league name;
 //     mini coach profile in the header gap; XI is now formation-driven and
@@ -131,6 +131,14 @@
 // before the club name, row text blocks recentred (-16 for 32px of content), and two
 // new toggles hide scores in Recruitment/Key Players and Coach Shortlist independently
 // of the XI and header.
+//
+// v53: (L) loan markers can be switched off in XI + Depth. Similar Teams now offers
+// the seven nearest in the editor and any three can be chosen from them, auto being
+// the computed top three. Key Players was drawing on `squad`, which matches club and
+// league but NOT season, so a player who left two years ago could outrank the current
+// side — now filtered on season history, with a fallback so a club with thin history
+// doesn't end up with an empty panel. New Youth Prospects panel: the club's own
+// under-23s ranked by ceiling rather than current level.
 
 import React, { useState, useMemo, useCallback } from 'react';
 import {
@@ -1028,7 +1036,10 @@ const SLOT_W = 196;
 const SLOT_H = 138;
 const FACE = 62;
 function xiPanelHtml(w, h, xi, opts = {}) {
-  const { hideScores = false, metaMode = 'age', season = null, photoOverrides = {} } = opts;
+  const { hideScores = false, metaMode = 'age', season = null, photoOverrides = {},
+          hideLoanTags = false } = opts;
+  const loanTag = hideLoanTags ? '' : LOAN_TAG;
+  const loanTagSm = hideLoanTags ? '' : LOAN_TAG_SM;
   const faceUrl = (pl) => (pl && photoOverrides[playerKey(pl)]) || (pl ? photoUrl(pl.name, pl.team) : '');
   const line = 'rgba(255,255,255,0.10)';
 
@@ -1080,7 +1091,7 @@ function xiPanelHtml(w, h, xi, opts = {}) {
 
     const depthNames = depth.map(d =>
       `<div style="font-size:12.5px;color:#93a1b5;line-height:1.42;white-space:nowrap;
-                   overflow:hidden;text-overflow:ellipsis;">${d.onLoan ? LOAN_TAG_SM : ''}${esc(d.name)}${
+                   overflow:hidden;text-overflow:ellipsis;">${d.onLoan ? loanTagSm : ''}${esc(d.name)}${
         (() => {
           if (metaMode === 'none') return '';
           // Depth players have no ring to carry a score, so this is where it goes —
@@ -1098,7 +1109,7 @@ function xiPanelHtml(w, h, xi, opts = {}) {
         <div style="position:relative;height:${FACE}px;">${face}${score}</div>
         <div style="font-size:14.5px;font-weight:700;color:#eaf0f8;margin-top:6px;
                     text-align:center;white-space:nowrap;overflow:hidden;
-                    text-overflow:ellipsis;">${starter && starter.onLoan ? LOAN_TAG : ''}${starter ? esc(starter.name) : '—'}${age}${oopTag}</div>
+                    text-overflow:ellipsis;">${starter && starter.onLoan ? loanTag : ''}${starter ? esc(starter.name) : '—'}${age}${oopTag}</div>
         <div style="margin-top:3px;text-align:center;">${depthNames}</div>
       </div>`;
   }).join('');
@@ -1445,8 +1456,8 @@ function leagueTablePanelHtml(w, h, team, allTeams) {
 // rather than free text that reads differently every card.
 // Either bottom slot can hold any of these.
 export const BOTTOM_PANELS = ['Similar Teams', 'Key Players', 'Recruitment Recommendations',
-                              'Coach Shortlist', 'Selling Assets', 'Summary',
-                              'Possible Departures', 'None'];
+                              'Coach Shortlist', 'Selling Assets', 'Youth Prospects',
+                              'Summary', 'Possible Departures', 'None'];
 
 // Did they hit it? Rendered as a small badge beside the objective.
 // Where each objective expects a side to finish, as a fraction of the league
@@ -1581,8 +1592,10 @@ function coachShortlistPanelHtml(w, h, rows, hideScores = false) {
   }).join('');
 }
 
-function similarTeamsPanelHtml(w, h, team, allTeams) {
-  const rows = resolveSimilarTeams(team, allTeams, 3);
+// Rows can be supplied, so the editor can present the top 7 candidates and let three
+// be chosen from them; with none supplied it falls back to the computed top 3.
+function similarTeamsPanelHtml(w, h, team, allTeams, rows = null) {
+  rows = (rows && rows.length) ? rows.slice(0, 3) : resolveSimilarTeams(team, allTeams, 3);
   if (!rows.length) {
     return `<div style="position:absolute;inset:0;display:flex;align-items:center;
              justify-content:center;font-size:12px;color:#55617a;">No similar teams in the data.</div>`;
@@ -1678,11 +1691,33 @@ export function findByKeys(pool, keys) {
   return keys.map(k => idx.get(k)).filter(Boolean);
 }
 
-export function topPlayers(squad, n = 3) {
-  return squad.slice()
-    .filter(p => p && p.careerScore != null)
-    .sort((a, b) => b.careerScore - a.careerScore)
-    .slice(0, n);
+// `squad` matches on club and league but NOT season, so a player who was at the club
+// two years ago still qualifies — which is how someone long gone was turning up in
+// Key Players. `sh` (season history) is the only season signal on a player row, so
+// presence of an entry for the card's season is the test. Falls back to the unfiltered
+// list if that leaves too few, because a club with thin season history shouldn't end
+// up with an empty panel.
+export function playedInSeason(p, season) {
+  if (!season || !Array.isArray(p && p.sh) || !p.sh.length) return true;
+  return p.sh.some(x => String(x.s) === String(season));
+}
+export function topPlayers(squad, n = 3, season = null) {
+  const rated = squad.filter(p => p && p.careerScore != null);
+  const current = rated.filter(p => playedInSeason(p, season));
+  const pool = current.length >= n ? current : rated;
+  return pool.slice().sort((a, b) => b.careerScore - a.careerScore).slice(0, n);
+}
+
+// Youth Prospects — the club's own under-23s ranked by ceiling rather than by current
+// level, since that is the question being asked of a prospect. Same season filter as
+// Key Players, so a player who has since moved on doesn't reappear.
+export const YOUTH_MAX_AGE = 22;
+export function youthProspects(squad, n = 3, season = null, maxAge = YOUTH_MAX_AGE) {
+  const young = squad.filter(p => p && p.age != null && Number(p.age) <= maxAge
+                              && playedInSeason(p, season));
+  const rank = (p) => (p.potentialScore != null ? Number(p.potentialScore)
+                     : p.careerScore != null ? Number(p.careerScore) : -1);
+  return young.slice().sort((a, b) => rank(b) - rank(a)).slice(0, n);
 }
 
 // Two different flags appear on a row and they mean different things: the one by
@@ -2456,6 +2491,9 @@ export function buildTeamReportElement(team, opts = {}) {
     coachRows = [],                // Coach Shortlist, pre-resolved in the component
     departureRows = null,          // null = auto (shortest contracts)
     sellRows = null,               // null = auto (squad by xValue, highest first)
+    similarRows = null,            // null = auto (computed top 3)
+    youthRows = null,              // null = auto (squad under-23s by potential)
+    hideLoanTags = false,          // drop the (L) marker in XI + Depth
     xValueOverrides = {},          // playerKey -> typed xValue, beats the model
     depthList = null, upgradeList = null,
     xiSlotLists = null,
@@ -2503,7 +2541,7 @@ export function buildTeamReportElement(team, opts = {}) {
                    vacancyTarget)}
 
       ${panel({ x: PAD, y: BODY_TOP, w: LEFT_W, h: LEFT_H,
-                title: 'XI + Depth', right: formation, body: xiPanelHtml(xiW, xiH, xi, { hideScores: hidePlayerScores, metaMode, season: team.season, photoOverrides }) })}
+                title: 'XI + Depth', right: formation, body: xiPanelHtml(xiW, xiH, xi, { hideScores: hidePlayerScores, metaMode, season: team.season, photoOverrides, hideLoanTags }) })}
 
       ${panel({ x: COL_A_X, y: ROW_1, w: COL_W, h: ROW1_H,
                 title: 'Performance', body: radarPanelHtml(innerW, ROW1_H - PANEL_PAD * 2 - TITLE_H, team, allTeams) })}
@@ -2521,10 +2559,15 @@ export function buildTeamReportElement(team, opts = {}) {
         if (kind === 'None') return '';
         if (kind === 'Similar Teams')
           return panel({ x, y: ROW_3, w: COL_W, h: ROW3_H, title: 'Similar Teams',
-                         body: similarTeamsPanelHtml(innerW, ih, team, allTeams) });
+                         body: similarTeamsPanelHtml(innerW, ih, team, allTeams, similarRows) });
         if (kind === 'Summary')
           return panel({ x, y: ROW_3, w: COL_W, h: ROW3_H, title: 'Summary',
                          body: summaryPanelHtml(innerW, ih, summaryText) });
+        if (kind === 'Youth Prospects')
+          return panel({ x, y: ROW_3, w: COL_W, h: ROW3_H, title: 'Youth Prospects',
+                         body: keyPlayersPanelHtml(innerW, ih,
+                                 youthRows || youthProspects(squad, 3, team.season), false,
+                                 hidePlayerScores || hideRecruitScores, photoOverrides) });
         if (kind === 'Selling Assets')
           return panel({ x, y: ROW_3, w: COL_W, h: ROW3_H, title: 'Selling Assets',
                          body: sellingAssetsPanelHtml(innerW, ih, selling, xValueOverrides, photoOverrides) });
@@ -2859,6 +2902,10 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
   const [hideManagerScore, setHideManagerScore] = useState(false);
   const [hideRecruitScores, setHideRecruitScores] = useState(false);
   const [hideShortlistScores, setHideShortlistScores] = useState(false);
+  const [hideLoanTags, setHideLoanTags] = useState(false);
+  // Similar Teams: the seven nearest are offered and any three chosen from them.
+  // Empty means auto, i.e. whatever the model ranks top three.
+  const [similarPicked, setSimilarPicked] = useState([]);
   const [metaMode, setMetaMode] = useState('age');   // beside player names
   // playerKey -> data URL. Kept in component state rather than localStorage: these
   // are per-report fixes for players the photo repo doesn't have, and a stored blob
@@ -2894,6 +2941,13 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
     .sort((a, b) => xvFor(b, xValueOverrides) - xvFor(a, xValueOverrides))
     .slice(0, 3), [squad, xValueOverrides]);
   const sellShown = sellPicked.length ? sellPicked : sellAuto;
+  const similarPool = useMemo(() => resolveSimilarTeams(team, allTeams, 7), [team, allTeams]);
+  const similarRows = useMemo(() => {
+    const chosen = similarPicked
+      .map(k => similarPool.find(t => `${t.team}|${t.season}` === k)).filter(Boolean);
+    return chosen.length ? chosen : null;
+  }, [similarPicked, similarPool]);
+  const youthAuto = useMemo(() => youthProspects(squad, 3, team.season), [squad, team.season]);
 
   const savedCoaches = useMemo(() => listSavedCoaches(), []);
   const autoCoach = useMemo(() => findCoachForTeam(team), [team]);
@@ -3053,7 +3107,7 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
   const manualPicked = useMemo(() => findByKeys(squad, manualKeys), [squad, manualKeys]);
   const recruitPicked = useMemo(() => findByKeys(players, recruitKeys), [players, recruitKeys]);
 
-  const keyRows = keyMode === 'manual' ? manualPicked : topPlayers(squad, 3);
+  const keyRows = keyMode === 'manual' ? manualPicked : topPlayers(squad, 3, team.season);
   const autoDepartures = useMemo(() => likelyDepartures(squad, team.season, 3), [squad, team]);
   const departurePicked = departureKeys === null ? autoDepartures : findByKeys(squad, departureKeys);
   const shown = [bottomLeft, bottomRight];
@@ -3070,6 +3124,7 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
     bottomLeft, bottomRight, summaryText,
     keyRows, recruitRows: recruitPicked, departureRows: departurePicked,
     sellRows: sellPicked.length ? sellPicked : null, xValueOverrides,
+    similarRows, youthRows: null, hideLoanTags,
     teamNameOverride,
     depthList: depthSel, upgradeList: upgradeSel,
     xiSlotLists: xiLists, xiOverridePool: xiPool,
@@ -3200,6 +3255,7 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
               ['Hide manager score (header)', hideManagerScore, setHideManagerScore],
               ['Hide scores in Recruitment / Key Players', hideRecruitScores, setHideRecruitScores],
               ['Hide scores in Coach Shortlist', hideShortlistScores, setHideShortlistScores],
+              ['Hide (L) loan markers in XI + Depth', hideLoanTags, setHideLoanTags],
              ].map(([lbl, val, setter]) => (
               <div key={lbl} onClick={() => setter(v => !v)}
                    style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', marginBottom: 7 }}>
@@ -3412,6 +3468,63 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
                   onPick={p => setRecruitKeys(k => [...k, playerKey(p)])}
                   onRemove={p => setRecruitKeys(k => k.filter(x => x !== playerKey(p)))} />
                 <div style={UI.note}>{players.length.toLocaleString()} players searchable.</div>
+              </div>
+            )}
+            {shown.includes('Similar Teams') && (
+              <div style={UI.block}>
+                <span style={UI.label}>
+                  Similar Teams — {similarPicked.length ? `${similarPicked.length} chosen` : 'auto: top 3'}
+                  {similarPicked.length > 0 && (
+                    <button onClick={() => setSimilarPicked([])}
+                      style={{ marginLeft: 8, background: 'transparent', border: '1px solid #26456f',
+                               borderRadius: 4, color: '#60a5fa', fontSize: 9, padding: '1px 6px',
+                               cursor: 'pointer' }}>reset</button>
+                  )}
+                </span>
+                {!similarPool.length
+                  ? <div style={UI.note}>No comparable teams in this season's data.</div>
+                  : similarPool.map(t => {
+                      const k = `${t.team}|${t.season}`;
+                      const on = similarPicked.includes(k);
+                      const full = !on && similarPicked.length >= 3;
+                      return (
+                        <div key={k} onClick={() => { if (full) return;
+                            setSimilarPicked(ids => on ? ids.filter(x => x !== k) : [...ids, k]); }}
+                          style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 4,
+                                   cursor: full ? 'default' : 'pointer', opacity: full ? 0.45 : 1 }}>
+                          <div style={{ width: 13, height: 13, borderRadius: 3, flexShrink: 0,
+                                        border: `1px solid ${on ? '#3b7de8' : '#1e2d45'}`,
+                                        background: on ? '#3b7de8' : 'transparent',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            {on && <span style={{ color: '#fff', fontSize: 9 }}>✓</span>}
+                          </div>
+                          <span style={{ flex: 1, fontSize: 10.5, color: '#cbd5e1', whiteSpace: 'nowrap',
+                                         overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.team}</span>
+                          <span style={{ fontSize: 9.5, color: '#6f7c92', whiteSpace: 'nowrap' }}>
+                            {leagueDisplayName(t.league)}</span>
+                          <span style={{ fontSize: 10.5, fontWeight: 700, color: '#93c5fd', width: 30,
+                                         textAlign: 'right' }}>{Math.round(t.similarity)}%</span>
+                        </div>
+                      );
+                    })}
+                <div style={UI.note}>Pick up to 3. The panel shows them in the order chosen.</div>
+              </div>
+            )}
+            {shown.includes('Youth Prospects') && (
+              <div style={UI.block}>
+                <span style={UI.label}>Youth Prospects — squad under-{YOUTH_MAX_AGE + 1}, by potential</span>
+                {!youthAuto.length
+                  ? <div style={UI.note}>No players at or under {YOUTH_MAX_AGE} in this squad.</div>
+                  : youthAuto.map(p => (
+                      <div key={playerKey(p)} style={{ display: 'flex', alignItems: 'center', gap: 7,
+                                                       marginBottom: 4, fontSize: 10.5, color: '#cbd5e1' }}>
+                        <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden',
+                                       textOverflow: 'ellipsis' }}>{p.name}</span>
+                        <span style={{ color: '#6f7c92' }}>{p.age}</span>
+                        <span style={{ fontWeight: 700, color: '#93c5fd', width: 26, textAlign: 'right' }}>
+                          {p.potentialScore != null ? Math.round(p.potentialScore) : '—'}</span>
+                      </div>
+                    ))}
               </div>
             )}
             {shown.includes('Coach Shortlist') && (
