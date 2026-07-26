@@ -1,4 +1,4 @@
-// TeamReport.js v55 — Team All-in-One report. 1920x1080 PNG export.
+// TeamReport.js v56 — Team All-in-One report. 1920x1080 PNG export.
 //
 // v2: bigger team name; country flag + league logo beside the league name;
 //     mini coach profile in the header gap; XI is now formation-driven and
@@ -152,6 +152,13 @@
 // CF's 73 invites a comparison that isn't real — the raw number is a within-academy
 // discriminator, not a transferable rating. Youth Prospects also gets its own
 // hide-scores toggle, independent of the XI, header and recruitment ones.
+//
+// v56: departuresPanelHtml has been throwing since v46 — that version's global
+// replace of the photo block touched three panels but the FACE constants were only
+// declared in two, so Possible Departures referenced FACE_X, FACE and photoOverrides
+// with none of them in scope. Invisible until the panel was selected, because the
+// reference lives inside a template literal. Constants added, photoOverrides threaded
+// through, and its text column moved to the shared TEXT_X.
 
 import React, { useState, useMemo, useCallback } from 'react';
 import {
@@ -2126,12 +2133,14 @@ function sellingAssetsPanelHtml(w, h, rows, xValueOverrides = {}, photoOverrides
   }).join('');
 }
 
-function departuresPanelHtml(w, h, rows, season) {
+function departuresPanelHtml(w, h, rows, season, photoOverrides = {}) {
   if (!rows || !rows.length) {
     return `<div style="position:absolute;inset:0;display:flex;align-items:center;
              justify-content:center;font-size:12px;color:#55617a;">No departures flagged.</div>`;
   }
   const rowH = Math.floor((h - 4) / 3);
+  // Same face geometry as the other row panels.
+  const FACE = 40, FACE_X = 11, TEXT_X = FACE_X + FACE + 11;
   return rows.slice(0, 3).map((p, i) => {
     const left = contractLeft(p, season);
     const urgent = left === '+0';
@@ -2147,7 +2156,7 @@ function departuresPanelHtml(w, h, rows, season) {
                     background-size:cover, cover;background-position:center top, center top;
                     background-repeat:no-repeat, no-repeat;
                     border:1.5px solid rgba(190,203,224,0.26);"></div>
-        <div style="position:absolute;left:50px;right:96px;top:50%;margin-top:-15px;">
+        <div style="position:absolute;left:${TEXT_X}px;right:96px;top:50%;margin-top:-16px;">
           <div style="font-size:13.5px;font-weight:700;color:#eaf0f8;line-height:1.15;white-space:nowrap;
                       ">${esc(p.name)}<span
                 style="color:#7c8798;font-weight:600;"> ${p.age != null ? p.age : '—'}</span>${
@@ -2618,7 +2627,7 @@ export function buildTeamReportElement(team, opts = {}) {
                          body: sellingAssetsPanelHtml(innerW, ih, selling, xValueOverrides, photoOverrides) });
         if (kind === 'Possible Departures')
           return panel({ x, y: ROW_3, w: COL_W, h: ROW3_H, title: 'Possible Departures',
-                         body: departuresPanelHtml(innerW, ih, departures, team.season) });
+                         body: departuresPanelHtml(innerW, ih, departures, team.season, photoOverrides) });
         if (kind === 'Coach Shortlist')
           return panel({ x, y: ROW_3, w: COL_W, h: ROW3_H, title: 'Coach Shortlist',
                          body: coachShortlistPanelHtml(innerW, ih, coachRows,
