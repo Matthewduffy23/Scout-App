@@ -1,4 +1,4 @@
-// TeamReport.js v56 — Team All-in-One report. 1920x1080 PNG export.
+// TeamReport.js v57 — Team All-in-One report. 1920x1080 PNG export.
 //
 // v2: bigger team name; country flag + league logo beside the league name;
 //     mini coach profile in the header gap; XI is now formation-driven and
@@ -159,6 +159,16 @@
 // with none of them in scope. Invisible until the panel was selected, because the
 // reference lives inside a template literal. Constants added, photoOverrides threaded
 // through, and its text column moved to the shared TEXT_X.
+//
+// v57: set pieces are entered as a LEAGUE RANK per phase and converted to a
+// percentile, so they're derived the same way as every other number on the card
+// rather than being a 1-10 opinion sharing its axis. Rank 14 of 20 = 35, matching
+// build_teams.py's rank(pct=True) convention, and the league's real size is used so a
+// 24-team division isn't scored as a 20-team one. Set Pieces now also competes for a
+// weakness slot on merit — it used to be handed slot 4 whenever it cleared the cutoff,
+// evicting a genuinely worse metric. Possible Departures reads LOAN instead of a
+// parent-club expiry for loanees, and shows xValue only, overridable like Selling
+// Assets.
 
 import React, { useState, useMemo, useCallback } from 'react';
 import {
@@ -1310,12 +1320,25 @@ function mgPct(team, group, name) {
 // Set pieces aren't in the dataset, so they're two hand-entered 1-10 ratings
 // (attacking / defending) averaged into one figure. Scaled x10 to sit on the
 // same 0-100 scale as everything else on the card.
-export const SET_PIECE_WEAK_CUTOFF = 3;      // avg at or below this = a weakness
-export function setPieceScore(att, def) {
-  const a = Number(att), d = Number(def);
-  const vals = [a, d].filter(v => !isNaN(v) && v >= 1 && v <= 10);
+// Set pieces come from a separate source as a LEAGUE RANK — attacking and defending
+// — so they're converted to a percentile here rather than being a 1-10 opinion. That
+// puts them on genuinely the same footing as every other number on the card instead
+// of merely the same 0-100 axis.
+//
+// Convention matches the team percentiles in build_teams.py, which use pandas
+// rank(pct=True): best of N scores N/N = 100, worst scores 1/N. So rank 14 of 20 is
+// (20-14+1)/20 = 35.
+export const SET_PIECE_WEAK_PCT = 30;        // at or below this percentile = a weakness
+export function rankToPct(rank, size) {
+  const r = Number(rank), n = Number(size);
+  if (isNaN(r) || isNaN(n) || n < 2 || r < 1 || r > n) return null;
+  return ((n - r + 1) / n) * 100;
+}
+export function setPieceScore(attRank, defRank, leagueSize = 20) {
+  const vals = [rankToPct(attRank, leagueSize), rankToPct(defRank, leagueSize)]
+    .filter(v => v != null);
   if (!vals.length) return null;
-  return (vals.reduce((x, y) => x + y, 0) / vals.length) * 10;
+  return vals.reduce((x, y) => x + y, 0) / vals.length;
 }
 
 function styleRowsFor(team, setPieces) {
@@ -1980,12 +2003,15 @@ export function uncoveredSlots(xi) {
 }
 
 function weaknessesPanelHtml(w, h, team, allTeams, xi, depthList, upgradeList, setPieces, extraAreas) {
-  let metrics = weakestMetrics(team, allTeams, 4);
-  // A set-piece rating at or below the cutoff replaces the mildest of the four —
-  // it's a real weakness and deserves the slot more than the least-bad metric.
-  if (setPieces != null && setPieces <= SET_PIECE_WEAK_CUTOFF * 10) {
-    metrics = metrics.slice(0, 3).concat([['Set Pieces', setPieces]]);
+  // Take five so set pieces can displace a metric on merit rather than by decree.
+  // The old version forced it into slot 4 whenever it cleared the cutoff, which
+  // evicted a genuinely worse metric whenever the set-piece percentile happened to
+  // be higher than the fourth-worst.
+  let metrics = weakestMetrics(team, allTeams, 5);
+  if (setPieces != null && setPieces <= SET_PIECE_WEAK_PCT) {
+    metrics = metrics.concat([['Set Pieces', setPieces]]);
   }
+  metrics = metrics.sort((a, b) => a[1] - b[1]).slice(0, 4);
   // null means "use the auto-detected set"; an array means the user picked.
   const thinAll = Array.isArray(depthList) ? depthList : uncoveredSlots(xi);
   const improve = Array.isArray(upgradeList)
@@ -2133,7 +2159,7 @@ function sellingAssetsPanelHtml(w, h, rows, xValueOverrides = {}, photoOverrides
   }).join('');
 }
 
-function departuresPanelHtml(w, h, rows, season, photoOverrides = {}) {
+function departuresPanelHtml(w, h, rows, season, photoOverrides = {}, xValueOverrides = {}) {
   if (!rows || !rows.length) {
     return `<div style="position:absolute;inset:0;display:flex;align-items:center;
              justify-content:center;font-size:12px;color:#55617a;">No departures flagged.</div>`;
@@ -2142,8 +2168,11 @@ function departuresPanelHtml(w, h, rows, season, photoOverrides = {}) {
   // Same face geometry as the other row panels.
   const FACE = 40, FACE_X = 11, TEXT_X = FACE_X + FACE + 11;
   return rows.slice(0, 3).map((p, i) => {
+    // A loanee has no contract with THIS club, so showing the parent-club expiry as
+    // if it were one is simply wrong — Héctor Fort read "2029 +3" while being on loan.
+    const onLoan = Boolean(p.onLoan);
     const left = contractLeft(p, season);
-    const urgent = left === '+0';
+    const urgent = onLoan || left === '+0';
     const pos = String(p.position || '').split(',')[0].trim();
     return `
       <div style="position:absolute;left:0;top:${i * rowH + 2}px;width:${w}px;height:${rowH - 6}px;
@@ -2163,16 +2192,18 @@ function departuresPanelHtml(w, h, rows, season, photoOverrides = {}) {
             natStamp(p, 13.5)}</div>
           <div style="font-size:10.5px;color:#8b98ad;margin-top:4px;line-height:1.15;white-space:nowrap;
                       overflow:hidden;">${esc(pos)}${
-            p.marketValue ? `<span style="color:#6f7c92;"> · </span><span style="color:#93a1b5;">${formatMoney(p.marketValue)}</span>` : ''}${
-            p.xValue ? `<span style="color:#6f7c92;"> · xV </span><span style="color:#93c5fd;">${formatMoney(p.xValue)}</span>` : ''}</div>
+            xvFor(p, xValueOverrides) != null
+              ? `<span style="color:#6f7c92;"> · xV </span><span style="color:#93c5fd;">${
+                  formatMoney(xvFor(p, xValueOverrides))}</span>` : ''}</div>
         </div>
         <div style="position:absolute;right:11px;top:50%;margin-top:-13px;width:76px;text-align:center;
                     padding:4px 0;border-radius:13px;
                     background:${urgent ? 'rgba(239,68,68,0.14)' : 'rgba(255,255,255,0.06)'};
                     border:1px solid ${urgent ? 'rgba(239,68,68,0.5)' : 'rgba(255,255,255,0.13)'};">
           <span style="font-size:12px;font-weight:800;color:${urgent ? '#f87171' : '#c3ccdd'};">
-            ${p.contractYear ? esc(String(p.contractYear)) : '—'}</span>
-          <span style="font-size:10px;font-weight:700;color:${urgent ? '#f87171' : '#8b98ad'};margin-left:5px;">${left}</span>
+            ${onLoan ? 'LOAN' : (p.contractYear ? esc(String(p.contractYear)) : '—')}</span>
+          ${onLoan ? '' : `<span style="font-size:10px;font-weight:700;
+            color:${urgent ? '#f87171' : '#8b98ad'};margin-left:5px;">${left}</span>`}
         </div>
       </div>`;
   }).join('');
@@ -2627,7 +2658,7 @@ export function buildTeamReportElement(team, opts = {}) {
                          body: sellingAssetsPanelHtml(innerW, ih, selling, xValueOverrides, photoOverrides) });
         if (kind === 'Possible Departures')
           return panel({ x, y: ROW_3, w: COL_W, h: ROW3_H, title: 'Possible Departures',
-                         body: departuresPanelHtml(innerW, ih, departures, team.season, photoOverrides) });
+                         body: departuresPanelHtml(innerW, ih, departures, team.season, photoOverrides, xValueOverrides) });
         if (kind === 'Coach Shortlist')
           return panel({ x, y: ROW_3, w: COL_W, h: ROW3_H, title: 'Coach Shortlist',
                          body: coachShortlistPanelHtml(innerW, ih, coachRows,
@@ -2980,6 +3011,9 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
   const [xValueOverrides, setXValueOverrides] = useState({});
   const [spAtt, setSpAtt] = useState('');
   const [spDef, setSpDef] = useState('');
+  // Ranks are out of the league's actual size, so the percentile is right for a
+  // 24-team Championship as well as a 20-team top flight.
+  const spLeagueSize = leagueSizeFor(team, allTeams) || 20;
   const [extraAreas, setExtraAreas] = useState({});   // { name: severity }
   const [xiSearchAll, setXiSearchAll] = useState(false);
   const [depthSel, setDepthSel] = useState(null);          // null = auto
@@ -3203,7 +3237,7 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
     xiSlotLists: xiLists, xiOverridePool: xiPool,
     hidePlayerScores, hideManagerScore, hideRecruitScores, hideShortlistScores,
     metaMode, coachRows, vacancyTarget, photoOverrides,
-    setPieces: setPieceScore(spAtt, spDef),
+    setPieces: setPieceScore(spAtt, spDef, spLeagueSize),
     extraAreas: Object.keys(extraAreas).map(name => ({ name, severity: extraAreas[name] })),
     allTeamSeasons,
     purchaseValue: purchaseValue.trim(),
@@ -3343,18 +3377,22 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
               </div>
             ))}
             <div style={UI.block}>
-              <span style={UI.label}>Set pieces (1–10)</span>
+              <span style={UI.label}>Set pieces — league rank (1 = best of {spLeagueSize})</span>
               <div style={{ display: 'flex' }}>
                 <input value={spAtt} onChange={e => setSpAtt(e.target.value.replace(/[^\d]/g, '').slice(0, 2))}
-                       placeholder="Attacking" style={{ ...UI.input, flex: 1 }} />
+                       placeholder="Attacking rank" style={{ ...UI.input, flex: 1 }} />
                 <input value={spDef} onChange={e => setSpDef(e.target.value.replace(/[^\d]/g, '').slice(0, 2))}
-                       placeholder="Defending" style={{ ...UI.input, flex: 1, marginLeft: 6 }} />
+                       placeholder="Defending rank" style={{ ...UI.input, flex: 1, marginLeft: 6 }} />
               </div>
               <div style={UI.note}>
-                {setPieceScore(spAtt, spDef) == null
-                  ? 'Leave blank to omit. Adds a 7th Style row when set.'
-                  : `Average ${(setPieceScore(spAtt, spDef) / 10).toFixed(1)}/10${
-                      setPieceScore(spAtt, spDef) <= SET_PIECE_WEAK_CUTOFF * 10
+                {setPieceScore(spAtt, spDef, spLeagueSize) == null
+                  ? `Leave blank to omit. Ranks out of ${spLeagueSize}, converted to a percentile.`
+                  : `${rankToPct(spAtt, spLeagueSize) != null
+                        ? `Att ${Math.round(rankToPct(spAtt, spLeagueSize))} ` : ''}${
+                      rankToPct(spDef, spLeagueSize) != null
+                        ? `Def ${Math.round(rankToPct(spDef, spLeagueSize))} ` : ''}→ ${
+                      Math.round(setPieceScore(spAtt, spDef, spLeagueSize))} percentile${
+                      setPieceScore(spAtt, spDef, spLeagueSize) <= SET_PIECE_WEAK_PCT
                         ? ' — flagged in Weaknesses' : ''}`}
               </div>
             </div>
