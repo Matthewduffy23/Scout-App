@@ -1,4 +1,4 @@
-// TeamReport.js v53 — Team All-in-One report. 1920x1080 PNG export.
+// TeamReport.js v55 — Team All-in-One report. 1920x1080 PNG export.
 //
 // v2: bigger team name; country flag + league logo beside the league name;
 //     mini coach profile in the header gap; XI is now formation-driven and
@@ -139,6 +139,19 @@
 // side — now filtered on season history, with a fallback so a club with thin history
 // doesn't end up with an empty panel. New Youth Prospects panel: the club's own
 // under-23s ranked by ceiling rather than current level.
+//
+// v54: Youth Prospects rebuilt. v53 looked inside `squad`, but an academy side is its
+// OWN team row — "Viktoria Plzeň U19" in Czech 3. — so it found nobody. The panel now
+// works off a team you search for, and ranks on RAW score: a 17-year-old scores ~86
+// raw and ~55 weighted, because league weighting exists to make senior divisions
+// comparable and flattens youth football almost flat. Manual picking searches every
+// player, not just that team, since a prospect can be out on loan elsewhere.
+//
+// v55: raw score ORDERS the youth list but is no longer printed on it. The card shows
+// the league-adjusted current and potential instead, because 86 raw beside a first-team
+// CF's 73 invites a comparison that isn't real — the raw number is a within-academy
+// discriminator, not a transferable rating. Youth Prospects also gets its own
+// hide-scores toggle, independent of the XI, header and recruitment ones.
 
 import React, { useState, useMemo, useCallback } from 'react';
 import {
@@ -1708,16 +1721,49 @@ export function topPlayers(squad, n = 3, season = null) {
   return pool.slice().sort((a, b) => b.careerScore - a.careerScore).slice(0, n);
 }
 
-// Youth Prospects — the club's own under-23s ranked by ceiling rather than by current
-// level, since that is the question being asked of a prospect. Same season filter as
-// Key Players, so a player who has since moved on doesn't reappear.
-export const YOUTH_MAX_AGE = 22;
-export function youthProspects(squad, n = 3, season = null, maxAge = YOUTH_MAX_AGE) {
-  const young = squad.filter(p => p && p.age != null && Number(p.age) <= maxAge
-                              && playedInSeason(p, season));
-  const rank = (p) => (p.potentialScore != null ? Number(p.potentialScore)
-                     : p.careerScore != null ? Number(p.careerScore) : -1);
-  return young.slice().sort((a, b) => rank(b) - rank(a)).slice(0, n);
+// ─── Youth Prospects ───────────────────────────────────────────────────────
+// A club's academy side is its OWN team row in this data — "Viktoria Plzeň U19" in
+// Czech 3., not part of the senior squad — which is why looking inside `squad` found
+// nobody. The panel therefore works off a team the user searches for.
+//
+// Ranking is on RAW score, not the league-weighted one. A 17-year-old in a U19
+// division scores ~86 raw and ~55 weighted: the weighting exists to make senior
+// leagues comparable and it flattens youth football almost flat. Raw is the only
+// number that separates one prospect from another.
+export function rawScore(p, season = null) {
+  if (season && Array.isArray(p && p.sh)) {
+    const hit = p.sh.find(x => String(x.s) === String(season));
+    if (hit) return hit.r != null ? Number(hit.r) : (hit.sc != null ? Number(hit.sc) : null);
+  }
+  const v = p && (p.careerRaw != null ? p.careerRaw : p.careerScore);
+  return v == null ? null : Number(v);
+}
+
+// Every distinct club in the data, for the team picker. Academy sides are ordinary
+// team rows, so "u19" as a query finds them. Sorted by squad size so the fuller
+// record wins when a name is ambiguous.
+export function teamOptions(players, query, limit = 12) {
+  const q = String(query || '').trim().toLowerCase();
+  if (q.length < 2) return [];
+  const seen = new Map();
+  for (const p of (players || [])) {
+    if (!p || !p.team) continue;
+    const name = String(p.team);
+    if (!name.toLowerCase().includes(q)) continue;
+    const key = name + '|' + String(p.league || '');
+    if (!seen.has(key)) seen.set(key, { team: name, league: p.league, count: 0 });
+    seen.get(key).count++;
+  }
+  return [...seen.values()].sort((a, b) => b.count - a.count).slice(0, limit);
+}
+
+// Exact team match, not a substring one: "Viktoria Plzeň" must not pull in the U19s.
+export function youthProspects(players, teamName, n = 3, season = null) {
+  if (!teamName) return [];
+  const t = String(teamName).toLowerCase();
+  const pool = (players || []).filter(p => p && String(p.team).toLowerCase() === t
+                                        && rawScore(p, season) != null);
+  return pool.slice().sort((a, b) => rawScore(b, season) - rawScore(a, season)).slice(0, n);
 }
 
 // Two different flags appear on a row and they mean different things: the one by
@@ -1750,7 +1796,6 @@ function flagImg(url, textPx) {
            border-radius:1.5px;box-shadow:inset 0 0 0 0.5px rgba(255,255,255,0.22);"></span>`;
 }
 
-const gapSpan = (px) => `<span style="display:inline-block;width:${px}px;"></span>`;
 
 // Nationality flag, trailing whatever text it follows.
 function natStamp(p, textPx) {
@@ -2494,6 +2539,7 @@ export function buildTeamReportElement(team, opts = {}) {
     similarRows = null,            // null = auto (computed top 3)
     youthRows = null,              // null = auto (squad under-23s by potential)
     hideLoanTags = false,          // drop the (L) marker in XI + Depth
+    hideYouthScores = false,       // Youth Prospects pills only
     xValueOverrides = {},          // playerKey -> typed xValue, beats the model
     depthList = null, upgradeList = null,
     xiSlotLists = null,
@@ -2565,9 +2611,8 @@ export function buildTeamReportElement(team, opts = {}) {
                          body: summaryPanelHtml(innerW, ih, summaryText) });
         if (kind === 'Youth Prospects')
           return panel({ x, y: ROW_3, w: COL_W, h: ROW3_H, title: 'Youth Prospects',
-                         body: keyPlayersPanelHtml(innerW, ih,
-                                 youthRows || youthProspects(squad, 3, team.season), false,
-                                 hidePlayerScores || hideRecruitScores, photoOverrides) });
+                         body: keyPlayersPanelHtml(innerW, ih, youthRows || [], true,
+                                 hideYouthScores, photoOverrides) });
         if (kind === 'Selling Assets')
           return panel({ x, y: ROW_3, w: COL_W, h: ROW3_H, title: 'Selling Assets',
                          body: sellingAssetsPanelHtml(innerW, ih, selling, xValueOverrides, photoOverrides) });
@@ -2903,9 +2948,17 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
   const [hideRecruitScores, setHideRecruitScores] = useState(false);
   const [hideShortlistScores, setHideShortlistScores] = useState(false);
   const [hideLoanTags, setHideLoanTags] = useState(false);
+  const [hideYouthScores, setHideYouthScores] = useState(false);
   // Similar Teams: the seven nearest are offered and any three chosen from them.
   // Empty means auto, i.e. whatever the model ranks top three.
   const [similarPicked, setSimilarPicked] = useState([]);
+  // Youth Prospects. The academy side is a separate team row in the data, so it has to
+  // be searched for rather than derived from this club. Manual picking searches ALL
+  // players, not just that team, because a prospect can be out on loan elsewhere.
+  const [youthTeam, setYouthTeam] = useState('');
+  const [youthTeamQuery, setYouthTeamQuery] = useState('');
+  const [youthManual, setYouthManual] = useState([]);
+  const [youthQuery, setYouthQuery] = useState('');
   const [metaMode, setMetaMode] = useState('age');   // beside player names
   // playerKey -> data URL. Kept in component state rather than localStorage: these
   // are per-report fixes for players the photo repo doesn't have, and a stored blob
@@ -2947,7 +3000,18 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
       .map(k => similarPool.find(t => `${t.team}|${t.season}` === k)).filter(Boolean);
     return chosen.length ? chosen : null;
   }, [similarPicked, similarPool]);
-  const youthAuto = useMemo(() => youthProspects(squad, 3, team.season), [squad, team.season]);
+  const youthTeamHits = useMemo(() => teamOptions(players, youthTeamQuery), [players, youthTeamQuery]);
+  const youthAuto = useMemo(() => youthProspects(players, youthTeam, 3, null),
+    [players, youthTeam]);
+  const youthHits = useMemo(() => {
+    const q = String(youthQuery || '').trim().toLowerCase();
+    if (q.length < 2) return [];
+    return players.filter(p => p && String(p.name || '').toLowerCase().includes(q))
+      .sort((a, b) => (rawScore(b) || 0) - (rawScore(a) || 0)).slice(0, 10);
+  }, [players, youthQuery]);
+  const youthPicked = useMemo(() => youthManual
+    .map(k => players.find(p => playerKey(p) === k)).filter(Boolean), [youthManual, players]);
+  const youthRows = youthPicked.length ? youthPicked : youthAuto;
 
   const savedCoaches = useMemo(() => listSavedCoaches(), []);
   const autoCoach = useMemo(() => findCoachForTeam(team), [team]);
@@ -3124,7 +3188,7 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
     bottomLeft, bottomRight, summaryText,
     keyRows, recruitRows: recruitPicked, departureRows: departurePicked,
     sellRows: sellPicked.length ? sellPicked : null, xValueOverrides,
-    similarRows, youthRows: null, hideLoanTags,
+    similarRows, youthRows, hideLoanTags, hideYouthScores,
     teamNameOverride,
     depthList: depthSel, upgradeList: upgradeSel,
     xiSlotLists: xiLists, xiOverridePool: xiPool,
@@ -3255,6 +3319,7 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
               ['Hide manager score (header)', hideManagerScore, setHideManagerScore],
               ['Hide scores in Recruitment / Key Players', hideRecruitScores, setHideRecruitScores],
               ['Hide scores in Coach Shortlist', hideShortlistScores, setHideShortlistScores],
+              ['Hide scores in Youth Prospects', hideYouthScores, setHideYouthScores],
               ['Hide (L) loan markers in XI + Depth', hideLoanTags, setHideLoanTags],
              ].map(([lbl, val, setter]) => (
               <div key={lbl} onClick={() => setter(v => !v)}
@@ -3512,19 +3577,82 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
             )}
             {shown.includes('Youth Prospects') && (
               <div style={UI.block}>
-                <span style={UI.label}>Youth Prospects — squad under-{YOUTH_MAX_AGE + 1}, by potential</span>
-                {!youthAuto.length
-                  ? <div style={UI.note}>No players at or under {YOUTH_MAX_AGE} in this squad.</div>
-                  : youthAuto.map(p => (
-                      <div key={playerKey(p)} style={{ display: 'flex', alignItems: 'center', gap: 7,
-                                                       marginBottom: 4, fontSize: 10.5, color: '#cbd5e1' }}>
-                        <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden',
-                                       textOverflow: 'ellipsis' }}>{p.name}</span>
-                        <span style={{ color: '#6f7c92' }}>{p.age}</span>
-                        <span style={{ fontWeight: 700, color: '#93c5fd', width: 26, textAlign: 'right' }}>
-                          {p.potentialScore != null ? Math.round(p.potentialScore) : '—'}</span>
-                      </div>
+                <span style={UI.label}>
+                  Youth Prospects — {youthPicked.length ? `${youthPicked.length} picked manually`
+                    : youthTeam ? `top 3 raw from ${youthTeam}` : 'pick a team'}
+                  {(youthTeam || youthPicked.length) > 0 && (
+                    <button onClick={() => { setYouthTeam(''); setYouthManual([]);
+                                             setYouthTeamQuery(''); setYouthQuery(''); }}
+                      style={{ marginLeft: 8, background: 'transparent', border: '1px solid #26456f',
+                               borderRadius: 4, color: '#60a5fa', fontSize: 9, padding: '1px 6px',
+                               cursor: 'pointer' }}>reset</button>
+                  )}
+                </span>
+
+                {/* Team search. Academy sides are ordinary team rows, so "u19" finds them. */}
+                <input value={youthTeamQuery} onChange={e => setYouthTeamQuery(e.target.value)}
+                  placeholder='Search a team, e.g. "plzen u19"'
+                  style={{ ...UI.select, cursor: 'text' }} />
+                {youthTeamHits.map(t => (
+                  <div key={t.team + t.league} onClick={() => { setYouthTeam(t.team); setYouthTeamQuery(''); }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 4,
+                             cursor: 'pointer', fontSize: 10.5, color: '#cbd5e1' }}>
+                    <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden',
+                                   textOverflow: 'ellipsis' }}>{t.team}</span>
+                    <span style={{ fontSize: 9.5, color: '#6f7c92' }}>{leagueDisplayName(t.league)}</span>
+                    <span style={{ fontSize: 9.5, color: '#55617a' }}>{t.count}</span>
+                  </div>
+                ))}
+
+                {youthTeam && !youthPicked.length && (
+                  <div style={{ marginTop: 7 }}>
+                    {!youthAuto.length
+                      ? <div style={UI.note}>No rated players found for {youthTeam}.</div>
+                      : youthAuto.map(p => (
+                          <div key={playerKey(p)} style={{ display: 'flex', alignItems: 'center', gap: 7,
+                                                           marginBottom: 4, fontSize: 10.5, color: '#cbd5e1' }}>
+                            <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden',
+                                           textOverflow: 'ellipsis' }}>{p.name}</span>
+                            <span style={{ color: '#6f7c92' }}>{p.age}</span>
+                            <span style={{ fontWeight: 700, color: '#93c5fd', width: 30, textAlign: 'right' }}>
+                              {rawScore(p) != null ? Math.round(rawScore(p) * 10) / 10 : '—'}</span>
+                          </div>
+                        ))}
+                  </div>
+                )}
+
+                {/* Manual picks search every player, since a prospect may be out on loan. */}
+                <input value={youthQuery} onChange={e => setYouthQuery(e.target.value)}
+                  placeholder="Or search any player by name (incl. loans)"
+                  style={{ ...UI.select, cursor: 'text', marginTop: 7 }} />
+                {youthHits.filter(p => !youthManual.includes(playerKey(p))).map(p => (
+                  <div key={playerKey(p)} onClick={() => setYouthManual(ids =>
+                      ids.length >= 3 ? ids : [...ids, playerKey(p)])}
+                    style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 4,
+                             cursor: 'pointer', fontSize: 10.5, color: '#cbd5e1' }}>
+                    <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden',
+                                   textOverflow: 'ellipsis' }}>{p.name}</span>
+                    <span style={{ fontSize: 9.5, color: '#6f7c92', whiteSpace: 'nowrap' }}>{p.team}</span>
+                    <span style={{ fontWeight: 700, color: '#93c5fd', width: 30, textAlign: 'right' }}>
+                      {rawScore(p) != null ? Math.round(rawScore(p) * 10) / 10 : '—'}</span>
+                  </div>
+                ))}
+                {youthPicked.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 6 }}>
+                    {youthPicked.map(p => (
+                      <span key={playerKey(p)}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 6,
+                                 background: 'rgba(255,255,255,0.05)', border: '1px solid #1e2d45',
+                                 borderRadius: 11, padding: '3px 8px', fontSize: 10.5, color: '#cbd5e1' }}>
+                        {p.name}
+                        <button onClick={() => setYouthManual(ids => ids.filter(x => x !== playerKey(p)))}
+                          style={{ background: 'none', border: 'none', color: '#f87171',
+                                   cursor: 'pointer', padding: 0, fontSize: 12, lineHeight: 1 }}>×</button>
+                      </span>
                     ))}
+                  </div>
+                )}
+                <div style={UI.note}>Ranked on raw score — league weighting flattens youth football.</div>
               </div>
             )}
             {shown.includes('Coach Shortlist') && (
