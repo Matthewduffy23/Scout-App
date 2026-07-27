@@ -491,6 +491,17 @@ function ensureMontserratEmbedded() {
 }
 
 
+// Same strings computeEscReasons() produces, so a manually picked reason reads
+// identically to a detected one.
+const ESC_REASON_OPTIONS = [
+  'Home nation',
+  'Continental history',
+  'International history',
+  'Youth league (5+ games)',
+  '5+ games Band 1-5',
+  'Exceptional talent panel',
+];
+
 function gbeThresholdBar(label, val, max, w = 220) {
   const p = Math.max(0, Math.min(100, (val / max) * 100));
   const pass = val >= max * 0.5;
@@ -885,8 +896,13 @@ function buildQuickCardElement(player, players, manual = {}) {
   //  - <10 pts but flagged exceptional talent: ESC eligible
   // Players who pass, or who fail with no route in, get no extra note.
   const gbePanelEligible = !gbePass && gbeTotal >= 10;
-  const gbeEscEligible   = !gbePass && gbeTotal < 10 && !!player.escEligible;
-  const escReasons = gbeEscEligible ? computeEscReasons(player) : [];
+  const escOverrideOn = !!manual.escOverride;
+  const gbeEscEligible   = escOverrideOn || (!gbePass && gbeTotal < 10 && !!player.escEligible);
+  // A manually chosen reason always wins; otherwise fall back to whatever the
+  // automatic check derived.
+  const escReasons = escOverrideOn
+    ? (manual.escReason ? [manual.escReason] : computeEscReasons(player))
+    : (gbeEscEligible ? computeEscReasons(player) : []);
   // FAIL badge is orange when the player is in the Exceptions Panel range —
   // a distinct "not dead, needs review" signal vs a hard red no-route fail.
   const gbeColor   = gbePass ? '#3da65b' : gbePanelEligible ? '#f0a637' : '#c7363c';
@@ -1143,6 +1159,8 @@ export default function QuickCardModal({ player, players, onClose }) {
   const [showScorePills, setShowScorePills] = useState(true);
   const [headerColorOverride, setHeaderColorOverride] = useState('');
   const [showPitchPosition, setShowPitchPosition] = useState(false);
+  const [escOverride, setEscOverride] = useState(false);
+  const [escReason, setEscReason] = useState('');
   const [seasonOverride, setSeasonOverride] = useState('');
   const BIO_MAX_LENGTH = scoutStatus ? 248 : 350;
 
@@ -1166,7 +1184,7 @@ export default function QuickCardModal({ player, players, onClose }) {
   const handleDownload = async () => {
     setDownloading(true);
     const { toPng } = await import('html-to-image');
-    const el = buildQuickCardElement(player, players, { agentOverride, nameOverride, valueOverride, heightOverride, teamOverride, posLabelOverride, uploadedPhotoDataUrl, biography, halfTeamContext, showForecast, scoutStatus, showScorePills, headerColorOverride, showPitchPosition, useBestRoleCareer, seasonOverride, shiftTeamText });
+    const el = buildQuickCardElement(player, players, { agentOverride, nameOverride, valueOverride, heightOverride, teamOverride, posLabelOverride, uploadedPhotoDataUrl, biography, halfTeamContext, showForecast, scoutStatus, showScorePills, headerColorOverride, showPitchPosition, useBestRoleCareer, seasonOverride, shiftTeamText, escOverride, escReason });
     try {
       const cardNode = el.querySelector('#qc-card-root') || el;
       const opts = {
@@ -1272,6 +1290,22 @@ export default function QuickCardModal({ player, players, onClose }) {
         <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12,textAlign:'left'}}>
           <input type="checkbox" id="qc-pitch" checked={showPitchPosition} onChange={e=>setShowPitchPosition(e.target.checked)} style={{cursor:'pointer'}} />
           <label htmlFor="qc-pitch" style={{fontSize:11.5,color:'#cbd5e1',cursor:'pointer'}}>Replace GBE card with pitch position diagram</label>
+        </div>
+
+        <div style={{marginBottom:12,textAlign:'left'}}>
+          <div style={{display:'flex',alignItems:'center',gap:8}}>
+            <input type="checkbox" id="qc-esc" checked={escOverride} onChange={e=>setEscOverride(e.target.checked)} style={{cursor:'pointer'}} />
+            <label htmlFor="qc-esc" style={{fontSize:11.5,color:'#cbd5e1',cursor:'pointer'}}>Force ESC eligible</label>
+          </div>
+          {escOverride && (
+            <select style={{...qcInputStyle,marginTop:6}} value={escReason} onChange={e=>setEscReason(e.target.value)}>
+              <option value="">Auto — use detected reason</option>
+              {ESC_REASON_OPTIONS.map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
+          )}
+          <div style={{fontSize:10,color:'#64748b',marginTop:4,lineHeight:1.4}}>
+            Shows the ⚡ ESC Eligible line even when the data doesn't flag it.
+          </div>
         </div>
 
         <div style={{marginBottom:12}}>

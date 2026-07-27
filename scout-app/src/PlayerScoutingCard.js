@@ -765,6 +765,9 @@ function pitchDiagramSvg(player, manual) {
 const TREND_SEASON_ORDER = ['2018-19','2019-20','2020-21','2021','2021-22','2022','2022-23','2023','2023-24','2024','2024-25','2025','2025-26','2026'];
 
 export function buildCardElement(player, manual = {}) {
+  // Single source of truth for the SVG-star path: the level-label offsets below must
+  // move in lockstep with the stars or the text lands on top of them.
+  const svgStars = !!manual.iphoneExport || isTouchDevice();
   // seasonsDetail is a dict keyed by season string (e.g. "2023-24") with no guaranteed
   // insertion order matching recency — Object.values()[0] previously grabbed whichever
   // key happened to be first, which could be the OLDEST season (confirmed bug: showed
@@ -1141,11 +1144,11 @@ export function buildCardElement(player, manual = {}) {
 
       <!-- CURRENT / POTENTIAL LEVEL -->
       <div style="position:absolute;top:894px;left:938px;font-size:26.6px;font-weight:700;color:#fff;">CURRENT LEVEL</div>
-      <div style="position:absolute;top:940px;left:941px;">${starsHtml(manual.currentScore ?? player.careerScore, 40, manual.currentStarsOverride != null && manual.currentStarsOverride !== '' ? Number(manual.currentStarsOverride) : null, (!!manual.iphoneExport || isTouchDevice()))}</div>
-      <div style="position:absolute;top:948px;left:${manual.iphoneExport ? '1155px' : '1133px'};font-size:20px;font-weight:500;color:#c0c0c0;">${manual.currentLevel || scoreLabel(player.careerScore)}</div>
+      <div style="position:absolute;top:940px;left:941px;">${starsHtml(manual.currentScore ?? player.careerScore, 40, manual.currentStarsOverride != null && manual.currentStarsOverride !== '' ? Number(manual.currentStarsOverride) : null, svgStars)}</div>
+      <div style="position:absolute;top:948px;left:${svgStars ? '1163px' : '1133px'};font-size:20px;font-weight:500;color:#c0c0c0;">${manual.currentLevel || scoreLabel(player.careerScore)}</div>
       <div style="position:absolute;top:995px;left:938px;font-size:26.6px;font-weight:700;color:#fff;">POTENTIAL LEVEL</div>
-      <div style="position:absolute;top:1033px;left:937px;">${starsHtml(manual.potentialScore ?? player.potentialScore ?? player.careerScore, 40, manual.potentialStarsOverride != null && manual.potentialStarsOverride !== '' ? Number(manual.potentialStarsOverride) : null, (!!manual.iphoneExport || isTouchDevice()))}</div>
-      <div style="position:absolute;top:1039px;left:${manual.iphoneExport ? '1155px' : '1133px'};font-size:20px;font-weight:500;color:#c0c0c0;">${manual.potentialLevel || scoreLabel(player.potentialScore || player.careerScore)}</div>
+      <div style="position:absolute;top:1033px;left:937px;">${starsHtml(manual.potentialScore ?? player.potentialScore ?? player.careerScore, 40, manual.potentialStarsOverride != null && manual.potentialStarsOverride !== '' ? Number(manual.potentialStarsOverride) : null, svgStars)}</div>
+      <div style="position:absolute;top:1039px;left:${svgStars ? '1163px' : '1133px'};font-size:20px;font-weight:500;color:#c0c0c0;">${manual.potentialLevel || scoreLabel(player.potentialScore || player.careerScore)}</div>
 
       <!-- TEMP build marker (remove once font is confirmed) -->
 
