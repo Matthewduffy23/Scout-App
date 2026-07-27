@@ -42,3 +42,11 @@ html, body, #root {
 input, select, button { font-family: inherit; font-size: 14px; }
 
 button { cursor: pointer; }
+
+/* Mobile only. Two things that bite on iOS regardless of component styling:
+   a stray wide child can make the whole page pan sideways, and Safari zooms the
+   viewport whenever a focused input has a font-size under 16px. */
+@media (max-width: 768px) and (pointer: coarse) {
+  html, body, #root { overflow-x: hidden; width: 100%; }
+  input, select, textarea { font-size: 16px !important; }
+}

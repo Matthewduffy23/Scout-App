@@ -1,3 +1,4 @@
+import { deliverJson } from './utils';
 // coachStorage.js — localStorage persistence for coach profiles, same pattern as
 // the Scout Index shortlist (export/import JSON backup for the same reasons: tied
 // to one browser/device, so a manual backup matters).
@@ -44,15 +45,7 @@ export function newCoachId() {
 export function exportCoaches() {
   const coaches = loadCoaches();
   const payload = { coaches, exportedAt: new Date().toISOString() };
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `coaches_backup_${new Date().toISOString().slice(0, 10)}.json`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  deliverJson(JSON.stringify(payload, null, 2), `coaches_backup_${new Date().toISOString().slice(0, 10)}.json`);
 }
 
 export function importCoachesFile(file, onDone) {

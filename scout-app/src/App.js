@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import PlayerCard from './PlayerCard';
 import ClubTool from './ClubTool';
 import TeamIndex from './TeamIndex';
-import { Photo as PhotoUtil, Crest as CrestUtil, photoUrl as photoUrlUtil, useIsMobile } from './utils';
+import { Photo as PhotoUtil, Crest as CrestUtil, photoUrl as photoUrlUtil, useIsMobile, deliverJson } from './utils';
 import { scoreBandColor, formatMV, formatFoot, ROLE_KEY_LABELS, ROLES_BY_KEY, POSITION_ATTRIBUTES, playerHasAttribute, ALL_LEAGUES, DEFAULT_LEAGUES, HIDDEN_LEAGUES, YOUTH_LEAGUES, PRESET_LEAGUES, COUNTRY_TO_REGION, GBE_LEAGUE_BANDS, leagueToRegion, leagueToBand, scoreLabel, scoreToStars, promotionBadge, ALL_SEASONS, LEAGUE_STRENGTHS } from './constants';
 
 // Height filter: data is stored in cm, but displayed as feet'inches (matches player card
@@ -342,15 +342,7 @@ export default function App(){
   };
   const exportShortlist=()=>{
     const payload={ids:shortlist,exportedAt:new Date().toISOString()};
-    const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement('a');
-    a.href=url;
-    a.download=`shortlist_backup_${new Date().toISOString().slice(0,10)}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    deliverJson(JSON.stringify(payload,null,2),`shortlist_backup_${new Date().toISOString().slice(0,10)}.json`);
   };
   const importShortlistFile=(file)=>{
     if(!file) return;

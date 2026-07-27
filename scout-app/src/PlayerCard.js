@@ -29,7 +29,7 @@ function flagUrl(country) {
   return '';
 }
 import { openOnePager } from './PlayerOnePager';
-import { Photo, Crest } from './utils';
+import { Photo, Crest, useIsMobile, deliverPng } from './utils';
 import ScoutingCardModal from './ScoutingCardModal';
 import QuickCardModal from './QuickCard';
 
@@ -174,6 +174,7 @@ function ScoreCard({label,score,league,sub,showStars=true}) {
 }
 
 function ForecastTab({player}) {
+  const isMobile=useIsMobile();
   const fc=player.forecast||{};
   const history=(player.sh||[]).filter(h=>h.sc!=null);
   if(history.length<2) return <div style={{color:'#475569',fontSize:12,padding:16}}>Insufficient data.</div>;
@@ -208,7 +209,7 @@ function ForecastTab({player}) {
         <ScoreCard label="Ceiling" score={player.potentialCeiling||player.potentialScore} league={player.league} showStars/>
       </div>
 
-      <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:10}}>
+      <div style={{display:'grid',gridTemplateColumns:isMobile?'repeat(2,1fr)':'repeat(3,1fr)',gap:10}}>
         {[
           {label:'Trajectory',val:trend,color:trendColor,sub:`${trendPts>0?'+':''}${trendPts} pts/season`},
           {label:'1-Season Proj',val:proj1.toFixed(1),color:scoreBandColor(proj1),sub:scoreLabel(proj1)},
@@ -373,6 +374,7 @@ const LEAGUE_COLORS = [
 const POS_COLORS = { GK:'#f59e0b', CB:'#3b7de8', FB:'#22c55e', CM:'#a78bfa', ATT:'#f97316', CF:'#ec4899' };
 
 function CareerTab({ player, players }) {
+  const isMobile=useIsMobile();
   const [view, setView] = React.useState('player');
   const [showForecast, setShowForecast] = React.useState(false);
   const [showScores, setShowScores] = React.useState(true);
@@ -832,14 +834,8 @@ function CareerTab({ player, players }) {
     } else {
       drawSquad(offscreen, 1920, 1080, 1, true, highlightPlayer, showTitle, filterOutliers, showCumulSquad);
     }
-    offscreen.toBlob(blob=>{
-      const url=URL.createObjectURL(blob);
-      const a=document.createElement('a');
-      a.href=url;
-      a.download=(view==='player'?player.name.replace(/\s+/g,'_')+'_career':player.team.replace(/\s+/g,'_')+'_squad')+'_chart.png';
-      a.click();
-      URL.revokeObjectURL(url);
-    },'image/png');
+    const chartName=(view==='player'?player.name.replace(/\s+/g,'_')+'_career':player.team.replace(/\s+/g,'_')+'_squad')+'_chart.png';
+    deliverPng(offscreen.toDataURL('image/png'), chartName);
   }
 
   const LeagueLegend=()=>(<div style={{display:'flex',flexWrap:'wrap',gap:'6px 12px',marginTop:8}}>
@@ -905,7 +901,7 @@ function CareerTab({ player, players }) {
             <div style={{background:'#07090f',borderRadius:8,padding:'8px 4px 2px',border:'1px solid #0d1220'}}>
               <canvas ref={canvasRef} style={{display:'block',width:'100%',height:260,borderRadius:6}}/>
             </div>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8}}>
+            <div style={{display:'grid',gridTemplateColumns:isMobile?'repeat(2,1fr)':'repeat(3,1fr)',gap:8}}>
               {[
                 {label:'Career Score',val:player.careerScore,color:scoreBandColor(player.careerScore)},
                 {label:'Peak Score',val:player.peakScore,color:scoreBandColor(player.peakScore)},
@@ -981,6 +977,7 @@ function CareerTab({ player, players }) {
 
 
 export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=false}) {
+  const isMobile=useIsMobile();
   const SEASON_ORDER_ARR=['2025-26','2026','2025','2024-25','2024','2023-24','2023','2022-23','2022','2021-22','2021','2020-21','2020','2019-20','2018-19'];
   // Build selectable options from allSeasonsSummary standard rows, deduped by season+league
   const allStdRows=(()=>{
@@ -1037,19 +1034,19 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
   const hasUpside=player.potentialScore>player.careerScore+3;
 
   return (
-    <div style={{position:'fixed',inset:0,background:'rgba(2,4,10,0.94)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:16,backdropFilter:'blur(8px)'}}
+    <div style={{position:'fixed',inset:0,background:'rgba(2,4,10,0.94)',zIndex:200,display:'flex',alignItems:isMobile?'flex-start':'center',justifyContent:'center',padding:isMobile?6:16,backdropFilter:'blur(8px)'}}
       onClick={e=>e.target===e.currentTarget&&onClose()}>
-      <div style={{background:'#09111e',border:'1px solid #1e2d45',borderRadius:16,width:'100%',maxWidth:880,maxHeight:'94vh',overflowY:'auto'}}>
+      <div style={{background:'#09111e',border:'1px solid #1e2d45',borderRadius:isMobile?12:16,width:'100%',maxWidth:880,maxHeight:isMobile?'97vh':'94vh',overflowY:'auto',WebkitOverflowScrolling:'touch'}}>
 
         {/* Header */}
-        <div style={{background:'#0c1424',borderBottom:'1px solid #1e2d45',padding:'18px 22px',display:'flex',alignItems:'flex-start',gap:16}}>
+        <div style={{background:'#0c1424',borderBottom:'1px solid #1e2d45',padding:isMobile?'12px 12px':'18px 22px',display:'flex',alignItems:'flex-start',flexWrap:isMobile?'wrap':'nowrap',gap:isMobile?10:16}}>
           <div style={{position:'relative',flexShrink:0}}>
-            <Photo name={player.name} team={player.team} size={72}/>
+            <Photo name={player.name} team={player.team} size={isMobile?52:72}/>
             {player.teamFotmobId&&<img src={`${CREST_BASE}${player.teamFotmobId}.png`} onError={e=>e.target.style.display='none'} style={{position:'absolute',bottom:-4,right:-4,width:22,height:22,background:'#0c1424',borderRadius:5,padding:2,border:'1px solid #1e2d45'}} alt=""/>}
           </div>
-          <div style={{flex:1,minWidth:0}}>
+          <div style={{flex:1,minWidth:isMobile?150:0}}>
             <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:3,flexWrap:'wrap'}}>
-              <div style={{fontSize:21,fontWeight:800,color:'#f1f5f9',letterSpacing:'-0.02em'}}>{player.name}</div>
+              <div style={{fontSize:isMobile?17:21,fontWeight:800,color:'#f1f5f9',letterSpacing:'-0.02em'}}>{player.name}</div>
               <div style={{padding:'3px 10px',borderRadius:6,background:scoreBandColor(player.careerScore),color:'#fff',fontSize:14,fontWeight:900}}>{player.careerScore.toFixed(1)}</div>
               {hasUpside&&<div style={{padding:'3px 10px',borderRadius:6,background:'#14532d',color:'#22c55e',fontSize:12,fontWeight:700}}>↑ {player.potentialScore?.toFixed(1)} pot</div>}
             </div>
@@ -1085,17 +1082,17 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
               {player.onLoan&&<Tag label='On Loan' bg='#160f30' color='#a78bfa'/>}
             </div>
           </div>
-          <div style={{display:'flex',gap:6,flexShrink:0,alignItems:'center'}}>
-            <button onClick={()=>openOnePager(player)} style={{background:'#0e2040',border:'1px solid #3b7de8',color:'#93c5fd',borderRadius:6,padding:'0 10px',height:28,display:'flex',alignItems:'center',gap:5,fontSize:11,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>
+          <div style={{display:'flex',gap:6,flexShrink:0,alignItems:'center',width:isMobile?'100%':'auto'}}>
+            <button onClick={()=>openOnePager(player)} style={{background:'#0e2040',border:'1px solid #3b7de8',color:'#93c5fd',borderRadius:6,padding:'0 10px',height:isMobile?36:28,flex:isMobile?1:'0 0 auto',justifyContent:'center',display:'flex',alignItems:'center',gap:5,fontSize:11,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>
               <span style={{fontSize:13}}>⬇</span> PDF Report
             </button>
-            <button onClick={()=>setShowScoutingCard(true)} style={{background:'#3a0e2a',border:'1px solid #ff66c4',color:'#ff8fd4',borderRadius:6,padding:'0 10px',height:28,display:'flex',alignItems:'center',gap:5,fontSize:11,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>
+            <button onClick={()=>setShowScoutingCard(true)} style={{background:'#3a0e2a',border:'1px solid #ff66c4',color:'#ff8fd4',borderRadius:6,padding:'0 10px',height:isMobile?36:28,flex:isMobile?1:'0 0 auto',justifyContent:'center',display:'flex',alignItems:'center',gap:5,fontSize:11,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>
               <span style={{fontSize:13}}>🖼</span> Scouting Card
             </button>
-            <button onClick={()=>setShowQuickCard(true)} style={{background:'#0e2a1c',border:'1px solid #22c55e',color:'#86efac',borderRadius:6,padding:'0 10px',height:28,display:'flex',alignItems:'center',gap:5,fontSize:11,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>
+            <button onClick={()=>setShowQuickCard(true)} style={{background:'#0e2a1c',border:'1px solid #22c55e',color:'#86efac',borderRadius:6,padding:'0 10px',height:isMobile?36:28,flex:isMobile?1:'0 0 auto',justifyContent:'center',display:'flex',alignItems:'center',gap:5,fontSize:11,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>
               <span style={{fontSize:13}}>⚡</span> Quick Card
             </button>
-            <button onClick={onClose} style={{background:'none',border:'1px solid #1e2d45',color:'#94a3b8',borderRadius:6,width:28,height:28,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,cursor:'pointer'}}>×</button>
+            <button onClick={onClose} style={{background:'none',border:'1px solid #1e2d45',color:'#94a3b8',borderRadius:6,width:isMobile?36:28,height:isMobile?36:28,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,cursor:'pointer'}}>×</button>
           </div>
         </div>
 
@@ -1106,13 +1103,13 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
           <TabBtn label="Career" active={tab==='career'} onClick={()=>setTab('career')}/>
         </div>
 
-        <div style={{padding:'18px 22px',display:'flex',flexDirection:'column',gap:18}}>
+        <div style={{padding:isMobile?'14px 12px':'18px 22px',display:'flex',flexDirection:'column',gap:isMobile?16:18}}>
 
           {rawMode&&<div style={{padding:'6px 14px',background:'#2d1a00',borderBottom:'1px solid #92400e',fontSize:10,color:'#fbbf24',fontWeight:600}}>★ Raw mode — scores show unweighted league percentile (no league strength discount). Stars reflect performance vs league peers only.</div>}
       {tab==='career'&&<CareerTab player={player} players={players}/>}
       {tab==='profile'&&(<>
             {/* Score cards with stars */}
-            <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8}}>
+            <div style={{display:'grid',gridTemplateColumns:isMobile?'repeat(2,1fr)':'repeat(4,1fr)',gap:8}}>
               <ScoreCard label={rawMode?'Career (Unweighted)':'Career Score'} score={rawMode?rawCareer:player.careerScore} league={rawMode?null:player.league} showStars/>
               <ScoreCard label={rawMode?'Peak (Unweighted)':'Peak Score'} score={rawMode?rawPeak:player.peakScore} league={rawMode?null:player.league} showStars/>
               <ScoreCard label="Potential" score={player.potentialScore} league={player.league} showStars sub={`ceil: ${(player.potentialCeiling||0).toFixed(1)}`}/>
@@ -1126,7 +1123,7 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
             {player.xValue&&(
               <div style={{background:'#0d1624',border:'1px solid #1e2d45',borderRadius:9,padding:'14px'}}>
                 <div style={{...SEC,marginBottom:8}}>xValue Analysis</div>
-                <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:10,marginBottom:10}}>
+                <div style={{display:'grid',gridTemplateColumns:isMobile?'repeat(2,1fr)':'repeat(3,1fr)',gap:10,marginBottom:10}}>
                   {[
                     {label:'xValue',val:formatMV(player.xValue),color:'#93c5fd',sub:'model estimate'},
                     {label:'Actual MV',val:player.marketValue?formatMV(player.marketValue):'No MV data',color:'#94a3b8',sub:player.xValueMvSource==='team_avg'?'used team avg base':player.xValueMvSource==='actual'?'transfermarkt':'estimated'},
@@ -1165,8 +1162,8 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
                 {selectedRow.team&&<div style={{marginTop:6,fontSize:10.5,color:'#64748b'}}><strong style={{color:'#94a3b8'}}>{selectedRow.team}</strong> · {selectedRow.l} · Score: <strong style={{color:scoreBandColor(sd.score||0)}}>{sd.score?(sd.score).toFixed(1):'—'}</strong> · {sd.score?scoreLabel(sd.score):'—'}</div>}
               {/* Season stats */}
               {(player.allSeasonsSummary||[]).length>0&&(
-              <div style={{marginTop:10,background:'#07090f',border:'1px solid #131c2e',borderRadius:7,overflow:'hidden'}}>
-                <table style={{width:'100%',borderCollapse:'collapse'}}>
+              <div style={{marginTop:10,background:'#07090f',border:'1px solid #131c2e',borderRadius:7,overflowX:isMobile?'auto':'hidden',overflowY:'hidden',WebkitOverflowScrolling:'touch'}}>
+                <table style={{width:'100%',borderCollapse:'collapse',minWidth:isMobile?560:undefined}}>
                   <thead><tr style={{background:'#0d1220'}}>
                     {['Season','Club','League','Apps','Mins','Goals','Assists'].map(h=>(
                       <th key={h} style={{padding:'5px 8px',textAlign:'left',fontSize:9,fontWeight:700,color:'#94a3b8',letterSpacing:'0.08em',textTransform:'uppercase',borderBottom:'1px solid #131c2e'}}>{h}</th>
@@ -1193,7 +1190,7 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
 
             {/* Style / strengths / weaknesses */}
             {(styles.length>0||strengths.length>0||weaknesses.length>0)&&(
-              <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:10}}>
+              <div style={{display:'grid',gridTemplateColumns:isMobile?'repeat(2,1fr)':'repeat(3,1fr)',gap:10}}>
                 {[
                   {label:'Playing Style',items:styles,bg:'#0e1830',color:'#60a5fa'},
                   {label:'Strengths',items:strengths,bg:'#0a1e14',color:'#4ade80'},
@@ -1363,7 +1360,7 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
                     <div style={SEC}>GBE / Visa Points</div>
                     <div style={{padding:'4px 12px',borderRadius:20,background:statusColor+'22',border:`1px solid ${statusColor}`,color:statusColor,fontSize:11,fontWeight:700}}>{status}</div>
                   </div>
-                  <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:6,marginBottom:10}}>
+                  <div style={{display:'grid',gridTemplateColumns:isMobile?'repeat(2,1fr)':'repeat(7,1fr)',gap:6,marginBottom:10}}>
                     {[
                       {label:'Band',val:`Band ${band}`,sub:domSh?.l||player.league,color:'#94a3b8'},
                       {label:'Minutes',val:(domSh?.mins||0).toLocaleString(),sub:`${minsPct}% · ${domSh?.s||'—'}`,color:'#94a3b8'},

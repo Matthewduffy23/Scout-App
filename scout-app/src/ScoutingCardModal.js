@@ -3,6 +3,7 @@
 // then calls downloadScoutingCardPNG from PlayerScoutingCard.js
 
 import React, { useState } from 'react';
+import { useIsMobile } from './utils';
 import { downloadScoutingCardPNG } from './PlayerScoutingCard';
 
 const inputStyle = {
@@ -13,6 +14,7 @@ const labelStyle = { fontSize: 10, color: '#9ca3af', textTransform: 'uppercase',
 const sectionStyle = { marginBottom: 14 };
 
 export default function ScoutingCardModal({ player, onClose }) {
+  const isMobile = useIsMobile();
   const [keyAttributes, setKeyAttributes] = useState('');
   const [devAreas, setDevAreas] = useState('');
   const [view, setView] = useState('');
@@ -112,11 +114,15 @@ export default function ScoutingCardModal({ player, onClose }) {
   return (
     <div style={{
       position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1000,
-      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+      display: 'flex', alignItems: isMobile ? 'flex-start' : 'center',
+      justifyContent: 'center', padding: isMobile ? 6 : 20,
     }} onClick={onClose}>
       <div style={{
         background: '#0c1424', borderRadius: 10, border: '1px solid #1e2d45',
-        width: 480, maxHeight: '88vh', overflowY: 'auto', padding: 22,
+        width: isMobile ? '100%' : 480, maxWidth: isMobile ? 480 : undefined,
+        boxSizing: isMobile ? 'border-box' : undefined,
+        maxHeight: isMobile ? '97vh' : '88vh', overflowY: 'auto',
+        WebkitOverflowScrolling: 'touch', padding: isMobile ? 14 : 22,
       }} onClick={e => e.stopPropagation()}>
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>

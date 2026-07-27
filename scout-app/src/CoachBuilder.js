@@ -6,6 +6,7 @@
 // (Clubs/PPG/Contract, narrative bullets, Current/Potential Level, Form, formations,
 // trait overrides).
 import React, { useState, useMemo } from 'react';
+import { useIsMobile } from './utils';
 import { newCoachId, upsertCoach } from './coachStorage';
 
 const FORMATIONS = ['4-3-3', '4-4-2', '4-2-3-1', '4-1-4-1', '4-1-3-2', '4-2-2-2', '3-5-2', '3-4-3', '3-4-2-1', '5-4-1', '5-3-2'];
@@ -18,6 +19,7 @@ const labelStyle = { fontSize: 10, color: '#94a3b8', textTransform: 'uppercase',
 const sectionStyle = { marginBottom: 16 };
 
 export default function CoachBuilder({ allTeams = [], existingCoach = null, onClose, onSaved }) {
+  const isMobile = useIsMobile();
   const [name, setName] = useState(existingCoach?.name || '');
   const [nationality, setNationality] = useState(existingCoach?.nationality || '');
   const [dob, setDob] = useState(existingCoach?.dob || '');
@@ -128,9 +130,9 @@ export default function CoachBuilder({ allTeams = [], existingCoach = null, onCl
   };
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(2,4,10,0.94)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, backdropFilter: 'blur(8px)' }}
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(2,4,10,0.94)', zIndex: 300, display: 'flex', alignItems: isMobile ? 'flex-start' : 'center', justifyContent: 'center', padding: isMobile ? 6 : 16, backdropFilter: 'blur(8px)' }}
       onClick={e => e.target === e.currentTarget && onClose()}>
-      <div style={{ background: '#09111e', border: '1px solid #1e2d45', borderRadius: 16, width: '100%', maxWidth: 720, maxHeight: '92vh', overflowY: 'auto', padding: '20px 24px' }}>
+      <div style={{ background: '#09111e', border: '1px solid #1e2d45', borderRadius: isMobile ? 12 : 16, width: '100%', maxWidth: 720, maxHeight: isMobile ? '97vh' : '92vh', overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: isMobile ? '14px 12px' : '20px 24px' }}>
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
           <div style={{ fontSize: 18, fontWeight: 800, color: '#f1f5f9' }}>{existingCoach ? 'Edit Coach' : 'New Coach'}</div>

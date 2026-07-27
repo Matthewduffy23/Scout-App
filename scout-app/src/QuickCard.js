@@ -1,7 +1,7 @@
 // QuickCard v68 - Edit position label, upload player photo, edit team name, flag gap fix.
 import React, { useState } from 'react';
 import { scoreLabel, formatFoot, formatMV, GBE_LEAGUE_BANDS } from './constants';
-import { useIsMobile } from './utils';
+import { useIsMobile, deliverPng } from './utils';
 
 // ─── Shared constants ──────────────────────────────────────────────────────
 const PHOTO_BASE = 'https://raw.githubusercontent.com/Matthewduffy23/scouting-photos/main/photos/';
@@ -1176,10 +1176,7 @@ export default function QuickCardModal({ player, players, onClose }) {
       };
       await toPng(cardNode, opts);
       const dataUrl = await toPng(cardNode, opts);
-      const a = document.createElement('a');
-      a.download = `${player.name.replace(/\s+/g,'_')}_quick_card.png`;
-      a.href = dataUrl;
-      a.click();
+      await deliverPng(dataUrl, `${player.name.replace(/\s+/g,'_')}_quick_card.png`);
     } catch(e) { console.error(e); }
     finally { document.body.removeChild(el); setDownloading(false); }
   };

@@ -6,6 +6,7 @@
 // bottom-right Impact tile. Independent of CoachCard.js apart from a few
 // functional helpers imported below.
 import { computeCoachMetricGroups } from './coachMetrics';
+import { deliverPng } from './utils';
 import {
   computeAge, countryToIso2, leagueToCountry, teamCrestUrl, fadeHexToBG,
   FOTMOB_PHOTO_BASE, ensureMontserratEmbedded, MONTSERRAT_EMBED_CSS,
@@ -636,12 +637,7 @@ export async function downloadCoachQuickCardPNG(coach, tenureRows, traits, overr
   try {
     const { toPng } = await import('html-to-image');
     const dataUrl = await toPng(el, { width: 1920, height: 1080, pixelRatio: 1, fontEmbedCSS: MONTSERRAT_EMBED_CSS });
-    const a = document.createElement('a');
-    a.href = dataUrl;
-    a.download = `${(overrides.nameOverride || coach.name || 'coach').replace(/\s+/g, '_')}_quickcard.png`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    await deliverPng(dataUrl, `${(overrides.nameOverride || coach.name || 'coach').replace(/\s+/g, '_')}_quickcard.png`);
   } finally {
     document.body.removeChild(el);
   }

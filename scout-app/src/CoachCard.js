@@ -1,4 +1,5 @@
 import { computeCoachMetricGroups } from "./coachMetrics";
+import { deliverPng } from './utils';
 
 // CoachCard.js — generates a Coach Card PNG using the same export pattern and
 // visual system as PlayerScoutingCard.js. The header, percentile bars (barRow),
@@ -4366,12 +4367,7 @@ export async function downloadCoachCardPNG(coach, tenureRows, traits, overrides 
       pixelRatio: 1,
       fontEmbedCSS: MONTSERRAT_EMBED_CSS,
     });
-    const a = document.createElement("a");
-    a.href = dataUrl;
-    a.download = `${(coach.name || "coach").replace(/\s+/g, "_")}_card.png`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    await deliverPng(dataUrl, `${(coach.name || "coach").replace(/\s+/g, "_")}_card.png`);
   } finally {
     document.body.removeChild(el);
   }

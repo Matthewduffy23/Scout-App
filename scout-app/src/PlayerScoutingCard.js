@@ -4,6 +4,7 @@
 // Uses html2canvas to screenshot an offscreen DOM node and trigger a PNG download.
 
 import { scoreBandColor, scoreLabel, scoreToStars, ROLE_KEY_LABELS, formatMV, formatFoot, LEAGUE_STRENGTHS } from './constants';
+import { deliverPng } from './utils';
 
 const PHOTO_BASE = 'https://raw.githubusercontent.com/Matthewduffy23/scouting-photos/main/photos/';
 const CREST_BASE = 'https://raw.githubusercontent.com/Matthewduffy23/scouting-photos/main/crests/';
@@ -1255,10 +1256,7 @@ export async function downloadScoutingCardPNG(player, manual = {}) {
     await toPng(cardNode, opts);
     const dataUrl = await toPng(cardNode, opts);
 
-    const link = document.createElement('a');
-    link.download = `${player.name.replace(/\s+/g, '_')}_scouting_card.png`;
-    link.href = dataUrl;
-    link.click();
+    await deliverPng(dataUrl, `${player.name.replace(/\s+/g, '_')}_scouting_card.png`);
   } finally {
     document.body.removeChild(el);
   }

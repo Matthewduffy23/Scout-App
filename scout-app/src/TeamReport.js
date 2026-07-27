@@ -210,7 +210,7 @@ import {
 import { loadCoaches } from './coachStorage';
 import { FOTMOB_PHOTO_BASE, countryToIso2, computeAge, fadeHexToBG } from './CoachCard';
 import { computeCoachScore } from './CoachQuickCard';
-import { useIsMobile } from './utils';
+import { useIsMobile, deliverPng } from './utils';
 
 // ─── Canvas geometry ───────────────────────────────────────────────────────
 const W = 1920;
@@ -3409,9 +3409,7 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
       };
       await toPng(cardNode, opts);
       const dataUrl = await toPng(cardNode, opts);
-      const a = document.createElement('a');
-      a.download = `${String(team.team).replace(/\s+/g, '_')}_team_report.png`;
-      a.href = dataUrl; a.click();
+      await deliverPng(dataUrl, `${String(team.team).replace(/\s+/g, '_')}_team_report.png`);
     } catch (e) {
       console.error('[TeamReport] download failed:', e);
       setError(String((e && e.message) || e));
