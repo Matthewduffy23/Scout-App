@@ -11,6 +11,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import TeamCard from './TeamCard';
 import CoachPanel from './CoachPanel';
 import TeamReport from './TeamReport';
+import { useIsMobile } from './utils';
 import { LEAGUE_STRENGTHS, ALL_LEAGUES, DEFAULT_LEAGUES, HIDDEN_LEAGUES, YOUTH_LEAGUES,
          PRESET_LEAGUES, COUNTRY_TO_REGION, GBE_LEAGUE_BANDS, leagueToRegion, leagueToBand } from './constants';
 
@@ -132,21 +133,10 @@ function scoreColor(v) {
   return '#ef4444';
 }
 
-// Live viewport check. The desktop layout is a 260px fixed sidebar beside a wide
-// table, which on a 390px phone leaves ~130px for the table and pushes everything
-// off-screen horizontally — the sidebar becomes a drawer and the table becomes cards.
-function useIsMobile(bp = 768) {
-  const [m, setM] = useState(() => typeof window !== 'undefined'
-    && window.matchMedia(`(max-width: ${bp}px)`).matches);
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const q = window.matchMedia(`(max-width: ${bp}px)`);
-    const on = (e) => setM(e.matches);
-    q.addEventListener ? q.addEventListener('change', on) : q.addListener(on);
-    return () => (q.removeEventListener ? q.removeEventListener('change', on) : q.removeListener(on));
-  }, [bp]);
-  return m;
-}
+// Viewport check lives in utils.js so there is exactly one definition of what "mobile"
+// means. A second local copy here drifted out of sync the moment the pointer:coarse
+// guard was added, which would have left TeamIndex flipping to phone layout on desktop
+// zoom while every other tab stayed put.
 
 export default function TeamIndex({ players = [] }) {
   const isMobile = useIsMobile();
@@ -813,7 +803,7 @@ export default function TeamIndex({ players = [] }) {
                               <div style={{ fontSize: 10.5, color: '#64748b' }}>{t.league} · {t.season}</div>
                             </div>
                             <div style={T.cardStat}>
-                              <span style={{ fontWeight: 800, fontSize: 17, color: scoreBandColor(getDisplayScore(t)) }}>
+                              <span style={{ fontWeight: 800, fontSize: 17, color: scoreColor(getDisplayScore(t)) }}>
                                 {getDisplayScore(t) != null ? Math.round(getDisplayScore(t)) : '—'}</span>
                               <span style={{ fontSize: 8, color: '#475569', letterSpacing: '.08em' }}>
                                 {scoreMode.toUpperCase()}</span>
@@ -914,10 +904,12 @@ export default function TeamIndex({ players = [] }) {
               </table>
             )}
         </div>
-        <div style={{ display: 'flex', gap: 8, margin: '12px 16px', alignItems: 'center' }}>
-          <button disabled={page === 0} onClick={() => setPage(p => p - 1)} style={{ padding: '4px 10px', borderRadius: 5, border: '1px solid #1e2d45', background: 'transparent', color: page === 0 ? '#475569' : '#e2e8f4', cursor: page === 0 ? 'default' : 'pointer' }}>Prev</button>
+        <div style={isMobile
+          ? { display: 'flex', gap: 10, margin: '12px 10px 78px', alignItems: 'center', justifyContent: 'center' }
+          : { display: 'flex', gap: 8, margin: '12px 16px', alignItems: 'center' }}>
+          <button disabled={page === 0} onClick={() => setPage(p => p - 1)} style={{ padding: isMobile ? '9px 18px' : '4px 10px', borderRadius: 5, border: '1px solid #1e2d45', background: 'transparent', color: page === 0 ? '#475569' : '#e2e8f4', cursor: page === 0 ? 'default' : 'pointer' }}>Prev</button>
           <span style={{ fontSize: 11, color: '#94a3b8' }}>Page {page + 1} of {Math.max(1, Math.ceil(sorted.length / PAGE_SIZE))}</span>
-          <button disabled={(page + 1) * PAGE_SIZE >= sorted.length} onClick={() => setPage(p => p + 1)} style={{ padding: '4px 10px', borderRadius: 5, border: '1px solid #1e2d45', background: 'transparent', color: (page + 1) * PAGE_SIZE >= sorted.length ? '#475569' : '#e2e8f4', cursor: (page + 1) * PAGE_SIZE >= sorted.length ? 'default' : 'pointer' }}>Next</button>
+          <button disabled={(page + 1) * PAGE_SIZE >= sorted.length} onClick={() => setPage(p => p + 1)} style={{ padding: isMobile ? '9px 18px' : '4px 10px', borderRadius: 5, border: '1px solid #1e2d45', background: 'transparent', color: (page + 1) * PAGE_SIZE >= sorted.length ? '#475569' : '#e2e8f4', cursor: (page + 1) * PAGE_SIZE >= sorted.length ? 'default' : 'pointer' }}>Next</button>
         </div>
       </main>
       {selTeam && (

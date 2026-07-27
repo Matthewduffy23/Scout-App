@@ -25,6 +25,29 @@ export function Photo({name,team,size=34}){
   return <img src={src} alt="" onError={()=>{if(!tried){set('/fallback.png');setT(true);}}} style={{width:size,height:size,borderRadius:'50%',objectFit:'cover',background:'#111827',flexShrink:0,border:'2px solid #1a2740'}}/>;
 }
 
+// Single shared viewport check. Live (listens to resize/rotate) rather than a one-shot
+// useMemo, so rotating the phone or resizing a desktop window re-lays out instead of
+// leaving the app stuck in whichever mode it booted in.
+// Desktop is untouched: every consumer branches only when this returns true.
+// The `pointer: coarse` half is not optional. A width-only query measures CSS pixels,
+// which shrink as you zoom: a 1280px desktop window at 175% zoom reports 731px and would
+// flip a laptop into the phone layout. Requiring a coarse primary pointer means only
+// actual touch devices (and DevTools device emulation, which sets it) can match.
+const MOBILE_Q = (bp) => `(max-width: ${bp}px) and (pointer: coarse)`;
+
+export function useIsMobile(bp=768){
+  const [m,setM]=useState(()=>typeof window!=='undefined'&&window.matchMedia(MOBILE_Q(bp)).matches);
+  React.useEffect(()=>{
+    if(typeof window==='undefined') return;
+    const q=window.matchMedia(MOBILE_Q(bp));
+    const h=e=>setM(e.matches);
+    q.addEventListener?q.addEventListener('change',h):q.addListener(h);
+    setM(q.matches);
+    return()=>{q.removeEventListener?q.removeEventListener('change',h):q.removeListener(h);};
+  },[bp]);
+  return m;
+}
+
 export function Crest({id,name,size=20}){
   const [ok,set]=useState(!!id);
   if(!id||!ok) return <div style={{width:size,height:size,borderRadius:3,background:'#1a2740',display:'flex',alignItems:'center',justifyContent:'center',fontSize:size*.5,color:'#94a3b8',flexShrink:0,fontWeight:700}}>{(name||'?')[0]}</div>;

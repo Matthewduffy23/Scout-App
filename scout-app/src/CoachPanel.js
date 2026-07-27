@@ -9,6 +9,7 @@ import { loadCoaches, deleteCoach, exportCoaches, importCoachesFile } from './co
 import { computeCoachTraits } from './coachMetrics';
 import { downloadCoachCardPNG } from './CoachCard';
 import { downloadCoachQuickCardPNG } from './CoachQuickCard';
+import { useIsMobile } from './utils';
 
 const FIELD_LABELS = [
   ['games',  'Games'],
@@ -36,8 +37,9 @@ function OverrideInput({ label, value, onCommit }) {
 }
 
 function CoachStatOverrides({ coachId, overrides, onFieldChange, onClear }) {
+  var isMobile = useIsMobile();
   return (
-    <div style={{ margin: '4px 0 6px 52px', padding: '10px 12px', background: '#060c18', border: '1px solid #1e2d45', borderRadius: 7 }}>
+    <div style={{ margin: isMobile ? '4px 0 6px 0' : '4px 0 6px 52px', padding: '10px 12px', background: '#060c18', border: '1px solid #1e2d45', borderRadius: 7 }}>
       <div style={{ fontSize: 10, color: '#475569', marginBottom: 8 }}>
         Override card stats — leave blank to use auto-calculated values. xG/xGA entered as per-90 (multiplied by matches on card).
       </div>
@@ -126,6 +128,7 @@ function TeamSeasonSearch({ label, valueObj, teams, onPick, onClear }) {
 }
 
 function CoachQuickOverrides({ coach, coachId, overrides, teams, onFieldChange, onClear }) {
+  var isMobile = useIsMobile();
   var latestT = (coach.tenures || []).slice().sort(function(a, b) { return a.season < b.season ? 1 : -1; })[0];
   var latestRow = latestT ? teams.find(function(x) { return x.team === latestT.team && x.league === latestT.league && x.season === latestT.season; }) : null;
   var sizeHint = latestRow && latestRow.leagueSize != null ? String(latestRow.leagueSize) : '20';
@@ -138,7 +141,7 @@ function CoachQuickOverrides({ coach, coachId, overrides, teams, onFieldChange, 
   function set(field, raw) { onFieldChange(coachId, field, raw === '' ? undefined : raw); }
 
   return (
-    <div style={{ margin: '4px 0 6px 52px', padding: '10px 12px', background: '#0a0614', border: '1px solid #2b1e45', borderRadius: 7 }}>
+    <div style={{ margin: isMobile ? '4px 0 6px 0' : '4px 0 6px 52px', padding: '10px 12px', background: '#0a0614', border: '1px solid #2b1e45', borderRadius: 7 }}>
       <div style={{ fontSize: 10, color: '#8b5cf6', marginBottom: 8, fontWeight: 700 }}>
         ⚡ Quick-card inputs — separate from the ⬇ Card overrides. Enter league rank only (size + avg age auto).
       </div>
@@ -236,6 +239,7 @@ function CoachQuickOverrides({ coach, coachId, overrides, teams, onFieldChange, 
 }
 
 function CoachRow({ coach, teams, generatingId, generatingQuickId, expandedOverride, cardOverrides, expandedQuick, quickOverrides, onGenerate, onGenerateQuick, onToggleOverride, onToggleQuick, onEdit, onDelete, onFieldChange, onClear, onQuickFieldChange, onQuickClear }) {
+  var isMobile = useIsMobile();
   var tenureCount = (coach.tenures || []).length;
   var sorted = (coach.tenures || []).slice().sort(function(a, b) { return a.season < b.season ? 1 : -1; });
   var latestTenure = sorted[0];
@@ -251,12 +255,12 @@ function CoachRow({ coach, teams, generatingId, generatingQuickId, expandedOverr
   var quickColor = isQuickOpen ? '#c084fc' : '#8b5cf6';
   return (
     <div key={coach.id}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#0d1624', border: '1px solid #1e2d45', borderRadius: 8, padding: '10px 14px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', flexWrap: isMobile ? 'wrap' : 'nowrap', gap: 12, background: '#0d1624', border: '1px solid #1e2d45', borderRadius: 8, padding: '10px 14px' }}>
         {coach.photoDataUrl
           ? <img src={coach.photoDataUrl} alt="" style={{ width: 40, height: 40, borderRadius: 6, objectFit: 'cover', flexShrink: 0 }} />
           : <div style={{ width: 40, height: 40, borderRadius: 6, background: '#1e2d45', flexShrink: 0 }} />
         }
-        <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ flex: 1, minWidth: isMobile ? 130 : 0 }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: '#e2e8f4', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{coach.name}</div>
           <div style={{ fontSize: 10, color: '#64748b' }}>
             {coach.nationality || '—'} · {tenureCount} season{tenureCount !== 1 ? 's' : ''}{latestTenure ? ' · latest: ' + latestTenure.team + ' (' + latestTenure.season + ')' : ''}
@@ -316,6 +320,7 @@ function CoachRow({ coach, teams, generatingId, generatingQuickId, expandedOverr
 }
 
 export default function CoachPanel({ allTeams, allPlayers, onClose }) {
+  var isMobile = useIsMobile();
   var teams = allTeams || [];
   var players = allPlayers || [];
 
@@ -579,10 +584,10 @@ export default function CoachPanel({ allTeams, allPlayers, onClose }) {
 
   return (
     <div
-      style={{ position: 'fixed', inset: 0, background: 'rgba(2,4,10,0.94)', zIndex: 250, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, backdropFilter: 'blur(8px)' }}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(2,4,10,0.94)', zIndex: 250, display: 'flex', alignItems: isMobile ? 'flex-start' : 'center', justifyContent: 'center', padding: isMobile ? 6 : 16, backdropFilter: 'blur(8px)' }}
       onClick={function(e) { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div style={{ background: '#09111e', border: '1px solid #1e2d45', borderRadius: 16, width: '100%', maxWidth: 780, maxHeight: '90vh', overflowY: 'auto', padding: '20px 24px' }}>
+      <div style={{ background: '#09111e', border: '1px solid #1e2d45', borderRadius: isMobile ? 12 : 16, width: '100%', maxWidth: 780, maxHeight: isMobile ? '97vh' : '90vh', overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: isMobile ? '14px 12px' : '20px 24px' }}>
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
           <div style={{ fontSize: 18, fontWeight: 800, color: '#f1f5f9' }}>Coaches</div>

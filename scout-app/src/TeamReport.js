@@ -210,6 +210,7 @@ import {
 import { loadCoaches } from './coachStorage';
 import { FOTMOB_PHOTO_BASE, countryToIso2, computeAge, fadeHexToBG } from './CoachCard';
 import { computeCoachScore } from './CoachQuickCard';
+import { useIsMobile } from './utils';
 
 // ─── Canvas geometry ───────────────────────────────────────────────────────
 const W = 1920;
@@ -3002,12 +3003,13 @@ const UI = {
 };
 
 function Section({ title, open, onToggle, children }) {
+  const isMobile = useIsMobile();
   return (
     <div style={{ border: '1px solid #16233a', borderRadius: 8, marginBottom: 10,
                   background: 'rgba(255,255,255,0.015)' }}>
       <div onClick={onToggle}
            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    padding: '9px 11px', cursor: 'pointer', userSelect: 'none' }}>
+                    padding: isMobile ? '12px 11px' : '9px 11px', cursor: 'pointer', userSelect: 'none' }}>
         <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.09em',
                        textTransform: 'uppercase', color: open ? '#ff66c4' : '#8b98ad' }}>{title}</span>
         <span style={{ color: '#64748b', fontSize: 11 }}>{open ? '−' : '+'}</span>
@@ -3098,6 +3100,7 @@ function PlayerPicker({ pool, picked, onPick, onRemove, max = 3, placeholder }) 
 }
 // ─── Modal ─────────────────────────────────────────────────────────────────
 export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], players = [], onClose }) {
+  const isMobile = useIsMobile();
   const [downloading, setDownloading] = useState(false);
   const [progress, setProgress] = useState('');
   const [error, setError] = useState('');
@@ -3422,11 +3425,14 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.85)', zIndex: 9999,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  display: 'flex', alignItems: isMobile ? 'flex-start' : 'center',
+                  justifyContent: 'center', padding: isMobile ? 6 : 0 }}
          onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div style={{ background: '#09111e', border: '1px solid #1e2d45', borderRadius: 12,
-                    padding: 22, boxShadow: '0 8px 40px rgba(0,0,0,.7)',
-                    width: 460, maxHeight: '88vh', display: 'flex', flexDirection: 'column' }}>
+                    padding: isMobile ? 14 : 22, boxShadow: '0 8px 40px rgba(0,0,0,.7)',
+                    width: isMobile ? '100%' : 460, maxWidth: isMobile ? 460 : undefined,
+                    boxSizing: isMobile ? 'border-box' : undefined,
+                    maxHeight: isMobile ? '97vh' : '88vh', display: 'flex', flexDirection: 'column' }}>
 
         <div style={{ textAlign: 'center', marginBottom: 14, flexShrink: 0 }}>
           <div style={{ fontSize: 15, fontWeight: 700, color: '#e2e8f4' }}>Team Report</div>
@@ -3435,7 +3441,7 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
           </div>
         </div>
 
-        <div style={{ overflowY: 'auto', flex: 1, paddingRight: 4, marginRight: -4 }}>
+        <div style={{ overflowY: 'auto', WebkitOverflowScrolling: 'touch', flex: 1, paddingRight: 4, marginRight: -4 }}>
 
           <Section title="Layout & panels" open={openSection === 'layout'} onToggle={() => toggleSection('layout')}>
             <div style={UI.block}>
@@ -4116,10 +4122,10 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
           )}
 
           <button onClick={handleDownload} disabled={downloading}
-            style={{ width: '100%', padding: '10px 0', borderRadius: 8, border: 'none',
+            style={{ width: '100%', padding: isMobile ? '13px 0' : '10px 0', borderRadius: 8, border: 'none',
                      background: downloading ? '#1e2d45' : '#3b7de8', color: '#fff',
                      fontSize: 13, fontWeight: 700, cursor: downloading ? 'default' : 'pointer' }}>
-            {downloading ? (progress || 'Generating…') : '⬇ Download 1920×1080'}
+            {downloading ? (progress || 'Generating…') : (isMobile ? '⬇ Download Report' : '⬇ Download 1920×1080')}
           </button>
           <button onClick={onClose}
             style={{ width: '100%', marginTop: 9, padding: '8px 0', borderRadius: 8,

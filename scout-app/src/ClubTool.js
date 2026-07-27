@@ -5,7 +5,7 @@ import { scoreBandColor, scoreLabel, formatMV, ROLE_KEY_LABELS, ROLES_BY_KEY,
          ALL_LEAGUES, LEAGUE_STRENGTHS, promotionBadge, divColor, PRESET_LEAGUES,
          HIDDEN_LEAGUES, YOUTH_LEAGUES, leagueToRegion, leagueToBand,
          POSITION_ATTRIBUTES, playerHasAttribute } from './constants';
-import { Photo, Crest } from './utils';
+import { Photo, Crest, useIsMobile } from './utils';
 
 const ALL_SEASONS = ['2025-26','2024-25','2023-24','2022-23','2021-22','2020-21','2019-20','2018-19'];
 
@@ -232,9 +232,17 @@ const T={
   cb:(on)=>({width:13,height:13,borderRadius:2,flexShrink:0,border:`1px solid ${on?'#3b7de8':'#475569'}`,background:on?'#3b7de8':'transparent',display:'flex',alignItems:'center',justifyContent:'center'}),
   cl:(on)=>({fontSize:11,color:on?'#e2e8f4':'#94a3b8'}),
   cr:{display:'flex',alignItems:'center',gap:6,cursor:'pointer',marginBottom:4},
+  // --- mobile-only. Unreferenced unless isMobile is true, so desktop is unchanged. ---
+  cfgMobile:{position:'fixed',top:0,left:0,bottom:0,width:'88vw',maxWidth:340,zIndex:300,background:'#07090f',borderRight:'1px solid #1e2d45',overflowY:'auto',WebkitOverflowScrolling:'touch',padding:'14px 12px',boxSizing:'border-box',boxShadow:'0 0 40px rgba(0,0,0,.7)'},
+  scrim:{position:'fixed',inset:0,background:'rgba(0,0,0,.55)',zIndex:290},
+  fab:{position:'fixed',left:12,bottom:16,zIndex:280,padding:'11px 16px',borderRadius:22,border:'1px solid #26456f',background:'#12203a',color:'#dbeafe',fontSize:13,fontWeight:700,cursor:'pointer',boxShadow:'0 6px 20px rgba(0,0,0,.5)'},
 };
 
 export default function ClubTool({players}){
+  const isMobile=useIsMobile();
+  // The 264px config column beside the results grid leaves almost nothing for results
+  // on a phone, so on mobile it becomes an off-canvas drawer behind a Setup button.
+  const [cfgOpen,setCfgOpen]=useState(false);
   const [selCard,setSelCard]=useState(null);
   const [tmplLeague,setTmplLeague]=useState('England 2.');
   const [tmplTeam,setTmplTeam]=useState('');
@@ -502,9 +510,14 @@ export default function ClubTool({players}){
   return(
     <>
     <div style={{display:'flex',gap:0,flex:1,minHeight:0}}>
+      {isMobile&&cfgOpen&&<div style={T.scrim} onClick={()=>setCfgOpen(false)}/>}
       {/* Config */}
-      <div style={{width:264,flexShrink:0,background:'#07090f',borderRight:'1px solid #1e2d45',overflowY:'auto',padding:'14px 12px',scrollbarWidth:'thin',scrollbarColor:'#1e2d45 #07090f'}}>
-        <div style={{fontSize:13,fontWeight:800,color:'#e2e8f4',marginBottom:14}}>Club Recruitment Tool</div>
+      {(!isMobile||cfgOpen)&&(
+      <div style={isMobile?T.cfgMobile:{width:264,flexShrink:0,background:'#07090f',borderRight:'1px solid #1e2d45',overflowY:'auto',padding:'14px 12px',scrollbarWidth:'thin',scrollbarColor:'#1e2d45 #07090f'}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}}>
+          <div style={{fontSize:13,fontWeight:800,color:'#e2e8f4'}}>Club Recruitment Tool</div>
+          {isMobile&&<button onClick={()=>setCfgOpen(false)} style={{padding:'6px 14px',borderRadius:6,border:'1px solid #26456f',background:'#12203a',color:'#dbeafe',fontSize:12,fontWeight:700,cursor:'pointer'}}>Done</button>}
+        </div>
 
         <div style={T.fg}>
           <span style={T.fl}>Template League</span>
@@ -821,13 +834,18 @@ export default function ClubTool({players}){
           </div>
         </div>
 
-        <button onClick={run} style={{width:'100%',padding:'9px',background:'#0e2040',border:'1px solid #3b7de8',borderRadius:6,color:'#60a5fa',fontSize:12,fontWeight:700,cursor:'pointer'}}>
+        <button onClick={()=>{run();if(isMobile)setCfgOpen(false);}} style={{width:'100%',padding:isMobile?'13px':'9px',background:'#0e2040',border:'1px solid #3b7de8',borderRadius:6,color:'#60a5fa',fontSize:12,fontWeight:700,cursor:'pointer'}}>
           🔍 Find Similar Players
         </button>
       </div>
 
+      )}
+      {isMobile&&!cfgOpen&&(
+        <button style={T.fab} onClick={()=>setCfgOpen(true)}>&#9776; Setup</button>
+      )}
+
       {/* Results */}
-      <div style={{flex:1,minWidth:0,overflowY:'auto',padding:'16px'}}>
+      <div style={isMobile?{flex:1,minWidth:0,overflowY:'auto',WebkitOverflowScrolling:'touch',padding:'12px 10px 74px'}:{flex:1,minWidth:0,overflowY:'auto',padding:'16px'}}>
         {!ran&&(
           <div style={{padding:'20px 24px',maxWidth:580}}>
             <div style={{fontSize:16,fontWeight:800,color:'#e2e8f4',marginBottom:12}}>🏟️ How It Works</div>
@@ -875,7 +893,7 @@ export default function ClubTool({players}){
         )}
 
         {ran&&results.length>0&&(
-          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(340px,1fr))',gap:10}}>
+          <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'repeat(auto-fill,minmax(340px,1fr))',gap:10}}>
             {results.map((p,i)=>(
               <CandidateCard key={p.name+i} player={p} tmplMetrics={tmplMetrics} rk={pos} onUseAsTemplate={useAsTemplate} onOpenCard={setSelCard}/>
             ))}

@@ -1,6 +1,7 @@
 // QuickCard v68 - Edit position label, upload player photo, edit team name, flag gap fix.
 import React, { useState } from 'react';
 import { scoreLabel, formatFoot, formatMV, GBE_LEAGUE_BANDS } from './constants';
+import { useIsMobile } from './utils';
 
 // ─── Shared constants ──────────────────────────────────────────────────────
 const PHOTO_BASE = 'https://raw.githubusercontent.com/Matthewduffy23/scouting-photos/main/photos/';
@@ -1124,6 +1125,7 @@ const qcInputStyle = {
 const qcLabelStyle = { fontSize: 10, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4, display: 'block', textAlign: 'left' };
 
 export default function QuickCardModal({ player, players, onClose }) {
+  const isMobile = useIsMobile();
   const [downloading, setDownloading] = useState(false);
   const [agentOverride, setAgentOverride] = useState('');
   const [nameOverride, setNameOverride] = useState('');
@@ -1191,9 +1193,9 @@ export default function QuickCardModal({ player, players, onClose }) {
   };
 
   return (
-    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.85)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center'}}
+    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.85)',zIndex:9999,display:'flex',alignItems:isMobile?'flex-start':'center',justifyContent:'center',padding:isMobile?6:0}}
       onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
-      <div style={{background:'#09111e',border:'1px solid #1e2d45',borderRadius:12,padding:32,textAlign:'center',boxShadow:'0 8px 40px rgba(0,0,0,.7)',minWidth:320,maxWidth:360,maxHeight:'90vh',overflowY:'auto'}}>
+      <div style={{background:'#09111e',border:'1px solid #1e2d45',borderRadius:12,padding:isMobile?16:32,textAlign:'center',boxShadow:'0 8px 40px rgba(0,0,0,.7)',boxSizing:isMobile?'border-box':undefined,width:isMobile?'100%':undefined,minWidth:isMobile?0:320,maxWidth:isMobile?'100%':360,maxHeight:isMobile?'97vh':'90vh',overflowY:'auto',WebkitOverflowScrolling:'touch'}}>
         <div style={{fontSize:15,fontWeight:700,color:'#e2e8f4',marginBottom:8}}>⚡ Quick Card</div>
         <div style={{fontSize:12,color:'#64748b',marginBottom:20}}>{player.name} · {player.team}</div>
 

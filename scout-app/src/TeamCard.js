@@ -5,6 +5,7 @@
 // League Rank (Points/Expected Points) columns to Season History.
 import React, { useRef, useEffect, useMemo, useState } from 'react';
 import { scoreBandColor, scoreLabel, divColor, scoreToStars, starLabel } from './constants';
+import { useIsMobile } from './utils';
 
 function Stars({ score, size = 14 }) {
   const stars = scoreToStars(score);
@@ -152,6 +153,7 @@ const CATEGORY_BARS = [
 ];
 
 export default function TeamCard({ team, allTeamSeasons = [], onClose }) {
+  const isMobile = useIsMobile();
   // Season selector — defaults to whichever row was clicked, but the user can switch
   // to any season on file for this team (same pattern as PlayerCard.js's Season
   // buttons). activeTeam is whichever row is currently selected; falls back to the
@@ -178,18 +180,18 @@ export default function TeamCard({ team, allTeamSeasons = [], onClose }) {
   }, [allTeamSeasons]);
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(2,4,10,0.94)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, backdropFilter: 'blur(8px)' }}
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(2,4,10,0.94)', zIndex: 200, display: 'flex', alignItems: isMobile ? 'flex-start' : 'center', justifyContent: 'center', padding: isMobile ? 6 : 16, backdropFilter: 'blur(8px)' }}
       onClick={e => e.target === e.currentTarget && onClose()}>
-      <div style={{ background: '#09111e', border: '1px solid #1e2d45', borderRadius: 16, width: '100%', maxWidth: 880, maxHeight: '94vh', overflowY: 'auto' }}>
+      <div style={{ background: '#09111e', border: '1px solid #1e2d45', borderRadius: isMobile ? 12 : 16, width: '100%', maxWidth: 880, maxHeight: isMobile ? '97vh' : '94vh', overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
 
         {/* Header */}
-        <div style={{ background: '#0c1424', borderBottom: '1px solid #1e2d45', padding: '18px 22px', display: 'flex', alignItems: 'flex-start', gap: 16 }}>
-          <div style={{ position: 'relative', flexShrink: 0, width: 72, height: 72, background: '#0d1624', border: '1px solid #1e2d45', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            {team.crest ? <img src={team.crest} alt="" style={{ width: 48, height: 48, objectFit: 'contain' }} onError={e => { e.target.style.display = 'none'; }} /> : <span style={{ fontSize: 26 }}>⚽</span>}
+        <div style={{ background: '#0c1424', borderBottom: '1px solid #1e2d45', padding: isMobile ? '12px 12px' : '18px 22px', display: 'flex', alignItems: 'flex-start', gap: isMobile ? 10 : 16 }}>
+          <div style={{ position: 'relative', flexShrink: 0, width: isMobile ? 50 : 72, height: isMobile ? 50 : 72, background: '#0d1624', border: '1px solid #1e2d45', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {team.crest ? <img src={team.crest} alt="" style={{ width: isMobile ? 34 : 48, height: isMobile ? 34 : 48, objectFit: 'contain' }} onError={e => { e.target.style.display = 'none'; }} /> : <span style={{ fontSize: 26 }}>⚽</span>}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3, flexWrap: 'wrap' }}>
-              <div style={{ fontSize: 21, fontWeight: 800, color: '#f1f5f9', letterSpacing: '-0.02em' }}>{activeTeam.team}</div>
+              <div style={{ fontSize: isMobile ? 16 : 21, fontWeight: 800, color: '#f1f5f9', letterSpacing: '-0.02em' }}>{activeTeam.team}</div>
               <div style={{ padding: '3px 10px', borderRadius: 6, background: scoreBandColor(activeTeam.completeScore), color: '#fff', fontSize: 14, fontWeight: 900 }}>{activeTeam.completeScore != null ? activeTeam.completeScore.toFixed(1) : '—'}</div>
               {activeTeam.completeScore != null && <Stars score={activeTeam.completeScore} size={13} />}
             </div>
@@ -220,7 +222,7 @@ export default function TeamCard({ team, allTeamSeasons = [], onClose }) {
           <button onClick={onClose} style={{ background: 'none', border: '1px solid #1e2d45', color: '#94a3b8', borderRadius: 6, width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, cursor: 'pointer', flexShrink: 0 }}>×</button>
         </div>
 
-        <div style={{ padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+        <div style={{ padding: isMobile ? '14px 12px' : '18px 22px', display: 'flex', flexDirection: 'column', gap: isMobile ? 16 : 18 }}>
 
           {/* Season selector — same pattern as PlayerCard.js's Season buttons */}
           {allTeamSeasons.length > 1 && (
@@ -240,7 +242,7 @@ export default function TeamCard({ team, allTeamSeasons = [], onClose }) {
           )}
 
           {/* Score cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: 8 }}>
             <ScoreCard label="Overall" score={activeTeam.completeScore} />
             <ScoreCard label="Peak" score={peakScore} sub="best season on file" />
             <div style={{ background: '#0d1624', border: '1px solid #1e2d45', borderRadius: 9, padding: '12px', textAlign: 'center' }}>
@@ -268,8 +270,8 @@ export default function TeamCard({ team, allTeamSeasons = [], onClose }) {
           {allTeamSeasons.length > 0 && (
             <div>
               <div style={{ fontSize: 9, fontWeight: 700, color: '#c8d4e8', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 10 }}>Season History</div>
-              <div style={{ background: '#07090f', border: '1px solid #131c2e', borderRadius: 7, overflow: 'hidden' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <div style={{ background: '#07090f', border: '1px solid #131c2e', borderRadius: 7, overflowX: isMobile ? 'auto' : 'hidden', overflowY: 'hidden', WebkitOverflowScrolling: 'touch' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: isMobile ? 720 : undefined }}>
                   <thead><tr style={{ background: '#0d1220' }}>
                     {['Season', 'League', 'Overall', 'Attack', 'Defence', 'Possession', 'Pressing', 'Pts', 'Pts Rank', 'xPts Rank', 'GF', 'GA'].map(h => (
                       <th key={h} style={{ padding: '5px 8px', textAlign: 'left', fontSize: 9, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.08em', textTransform: 'uppercase', borderBottom: '1px solid #131c2e' }}>{h}</th>
@@ -317,9 +319,9 @@ export default function TeamCard({ team, allTeamSeasons = [], onClose }) {
           {/* Metric Percentiles — the individual stats behind each category score, same grouped-tabs pattern as PlayerCard.js */}
           {activeTeam.metricGroups && Object.values(activeTeam.metricGroups).some(g => g.length > 0) && (
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <div style={{ display: 'flex', alignItems: isMobile ? 'flex-start' : 'center', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 8 : 0, justifyContent: 'space-between', marginBottom: 10 }}>
                 <div style={{ fontSize: 9, fontWeight: 700, color: '#c8d4e8', letterSpacing: '0.12em', textTransform: 'uppercase' }}>Metric Percentiles — {activeTeam.season} · vs {activeTeam.league}</div>
-                <div style={{ display: 'flex', gap: 4 }}>
+                <div style={{ display: 'flex', gap: 4, flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
                   {Object.keys(activeTeam.metricGroups).filter(k => k !== 'Pressing' && activeTeam.metricGroups[k]?.length > 0).map(k => (
                     <button key={k} onClick={() => setGrpTab(k)} style={{ padding: '3px 9px', borderRadius: 5, border: `1px solid ${grpTab === k ? '#3b7de8' : '#1e2d45'}`, background: grpTab === k ? '#0e2040' : 'transparent', color: grpTab === k ? '#60a5fa' : '#64748b', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>
                       {k}

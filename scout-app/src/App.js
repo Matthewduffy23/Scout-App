@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import PlayerCard from './PlayerCard';
 import ClubTool from './ClubTool';
 import TeamIndex from './TeamIndex';
-import { Photo as PhotoUtil, Crest as CrestUtil, photoUrl as photoUrlUtil } from './utils';
+import { Photo as PhotoUtil, Crest as CrestUtil, photoUrl as photoUrlUtil, useIsMobile } from './utils';
 import { scoreBandColor, formatMV, formatFoot, ROLE_KEY_LABELS, ROLES_BY_KEY, POSITION_ATTRIBUTES, playerHasAttribute, ALL_LEAGUES, DEFAULT_LEAGUES, HIDDEN_LEAGUES, YOUTH_LEAGUES, PRESET_LEAGUES, COUNTRY_TO_REGION, GBE_LEAGUE_BANDS, leagueToRegion, leagueToBand, scoreLabel, scoreToStars, promotionBadge, ALL_SEASONS, LEAGUE_STRENGTHS } from './constants';
 
 // Height filter: data is stored in cm, but displayed as feet'inches (matches player card
@@ -204,6 +204,21 @@ const T={
   layout:{display:'flex',flex:1,minHeight:0},
   sb:{width:260,flexShrink:0,background:'#07090f',borderRight:'1px solid #1e2d45',overflowY:'auto',padding:'12px 11px',scrollbarWidth:'thin',scrollbarColor:'#1e2d45 #07090f'},
   main:{flex:1,display:'flex',flexDirection:'column',minWidth:0},
+  // --- mobile-only tokens. Nothing below is referenced unless isMobile is true, so the
+  //     desktop layout above is byte-for-byte what it was. ---
+  topbarMobile:{background:'#0a0d18',borderBottom:'1px solid #1e2d45',padding:'8px 10px',display:'flex',alignItems:'center',gap:8,flexShrink:0},
+  sbMobile:{position:'fixed',top:0,left:0,bottom:0,width:'88vw',maxWidth:340,zIndex:300,background:'#07090f',borderRight:'1px solid #1e2d45',overflowY:'auto',WebkitOverflowScrolling:'touch',padding:'12px 11px',boxSizing:'border-box',boxShadow:'0 0 40px rgba(0,0,0,.7)'},
+  scrim:{position:'fixed',inset:0,background:'rgba(0,0,0,.55)',zIndex:290},
+  fab:{position:'fixed',left:12,bottom:16,zIndex:280,padding:'11px 16px',borderRadius:22,border:'1px solid #26456f',background:'#12203a',color:'#dbeafe',fontSize:13,fontWeight:700,cursor:'pointer',boxShadow:'0 6px 20px rgba(0,0,0,.5)'},
+  statsBarMobile:{padding:'9px 10px',background:'#0a0d18',borderBottom:'1px solid #1e2d45',display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'},
+  sortRowMobile:{display:'flex',gap:6,overflowX:'auto',padding:'8px 10px',borderBottom:'1px solid #1e2d45',WebkitOverflowScrolling:'touch'},
+  listMobile:{flex:1,overflowY:'auto',WebkitOverflowScrolling:'touch',padding:'10px 10px 74px'},
+  card:{background:'#0d1220',border:'1px solid #1a2740',borderRadius:10,padding:11,marginBottom:8},
+  cardTop:{display:'flex',alignItems:'center',gap:9},
+  cardStat:{display:'flex',flexDirection:'column',alignItems:'flex-end',minWidth:52,flexShrink:0},
+  cardMetaRow:{display:'flex',flexWrap:'wrap',gap:5,marginTop:9},
+  chip:{padding:'2px 7px',borderRadius:10,background:'#0b1424',border:'1px solid #16233a',color:'#94a3b8',fontSize:9.5,fontWeight:600,whiteSpace:'nowrap'},
+  pgMobile:{padding:'8px 10px 78px',borderTop:'1px solid #1e2d45',display:'flex',alignItems:'center',justifyContent:'center',gap:8,background:'#07090f'},
   fg:{marginBottom:14},
   fl:{fontSize:9,fontWeight:700,color:'#94a3b8',letterSpacing:'0.12em',textTransform:'uppercase',marginBottom:4,display:'block'},
   sel:{width:'100%',background:'#0d1220',border:'1px solid #1e2d45',borderRadius:5,color:'#e2e8f4',padding:'6px 7px',appearance:'none',cursor:'pointer',outline:'none',fontSize:11.5},
@@ -246,7 +261,10 @@ function Th({col,label,sort,onSort}){
 }
 
 export default function App(){
-  const isMobile=useMemo(()=>typeof window!=='undefined'&&window.matchMedia('(max-width: 768px)').matches,[]);
+  const isMobile=useIsMobile();
+  // Sidebar becomes an off-canvas drawer on mobile: a 260px fixed sidebar on a 390px
+  // phone leaves ~130px for the table, which is unusable.
+  const [filtersOpen,setFiltersOpen]=useState(false);
   const [all,setAll]=useState([]);
   const [loading,setLoading]=useState(true);
   const [sel,setSel]=useState(null);
@@ -575,20 +593,32 @@ export default function App(){
   return(
     <div style={T.app}>
       <style>{'@keyframes spin{to{transform:rotate(360deg)}}.rh:hover td{background:#0c1830!important;cursor:pointer}'}</style>
-      <div style={T.topbar}>
-        <div style={T.logo}><div style={T.dot}/>Scout Index</div>
-        <div style={{width:1,height:14,background:'#1e2d45'}}/>
-        <div style={{display:'flex',gap:2}}>
-          <button onClick={()=>setActiveTab('scout')} style={{padding:'4px 10px',borderRadius:5,border:`1px solid ${activeTab==='scout'?'#3b7de8':'transparent'}`,background:activeTab==='scout'?'#0e2040':'transparent',color:activeTab==='scout'?'#60a5fa':'#94a3b8',fontSize:10,fontWeight:600,cursor:'pointer'}}>Scout Index</button>
-          <button onClick={()=>setActiveTab('club')} style={{padding:'4px 10px',borderRadius:5,border:`1px solid ${activeTab==='club'?'#3b7de8':'transparent'}`,background:activeTab==='club'?'#0e2040':'transparent',color:activeTab==='club'?'#60a5fa':'#94a3b8',fontSize:10,fontWeight:600,cursor:'pointer'}}>Club Tool</button>
-          <button onClick={()=>setActiveTab('team')} style={{padding:'4px 10px',borderRadius:5,border:`1px solid ${activeTab==='team'?'#3b7de8':'transparent'}`,background:activeTab==='team'?'#0e2040':'transparent',color:activeTab==='team'?'#60a5fa':'#94a3b8',fontSize:10,fontWeight:600,cursor:'pointer'}}>Team Index</button>
+      <div style={isMobile?T.topbarMobile:T.topbar}>
+        <div style={T.logo}><div style={T.dot}/>{isMobile?'Scout':'Scout Index'}</div>
+        {!isMobile&&<div style={{width:1,height:14,background:'#1e2d45'}}/>}
+        <div style={isMobile
+          ?{display:'flex',gap:4,overflowX:'auto',flex:1,minWidth:0,WebkitOverflowScrolling:'touch'}
+          :{display:'flex',gap:2}}>
+          <button onClick={()=>setActiveTab('scout')} style={{padding:isMobile?'7px 12px':'4px 10px',borderRadius:5,...(isMobile?{flexShrink:0}:{}),border:`1px solid ${activeTab==='scout'?'#3b7de8':'transparent'}`,background:activeTab==='scout'?'#0e2040':'transparent',color:activeTab==='scout'?'#60a5fa':'#94a3b8',fontSize:isMobile?11:10,fontWeight:600,cursor:'pointer',...(isMobile?{whiteSpace:'nowrap'}:{})}}>Scout Index</button>
+          <button onClick={()=>setActiveTab('club')} style={{padding:isMobile?'7px 12px':'4px 10px',borderRadius:5,...(isMobile?{flexShrink:0}:{}),border:`1px solid ${activeTab==='club'?'#3b7de8':'transparent'}`,background:activeTab==='club'?'#0e2040':'transparent',color:activeTab==='club'?'#60a5fa':'#94a3b8',fontSize:isMobile?11:10,fontWeight:600,cursor:'pointer',...(isMobile?{whiteSpace:'nowrap'}:{})}}>Club Tool</button>
+          <button onClick={()=>setActiveTab('team')} style={{padding:isMobile?'7px 12px':'4px 10px',borderRadius:5,...(isMobile?{flexShrink:0}:{}),border:`1px solid ${activeTab==='team'?'#3b7de8':'transparent'}`,background:activeTab==='team'?'#0e2040':'transparent',color:activeTab==='team'?'#60a5fa':'#94a3b8',fontSize:isMobile?11:10,fontWeight:600,cursor:'pointer',...(isMobile?{whiteSpace:'nowrap'}:{})}}>Team Index</button>
         </div>
-        {rawMode&&<div style={{padding:'2px 8px',borderRadius:4,background:'#1e3a5f',color:'#60a5fa',fontSize:10,fontWeight:700}}>RAW MODE — no league weighting</div>}
-        <div style={{marginLeft:'auto',fontSize:9,color:'#94a3b8',background:'#0d1220',border:'1px solid #1e2d45',borderRadius:4,padding:'2px 6px'}}>{all.length.toLocaleString()} players</div>
+        {rawMode&&<div style={{padding:'2px 8px',borderRadius:4,background:'#1e3a5f',color:'#60a5fa',fontSize:10,fontWeight:700,...(isMobile?{flexShrink:0,whiteSpace:'nowrap'}:{})}}>{isMobile?'RAW':'RAW MODE — no league weighting'}</div>}
+        {!isMobile&&<div style={{marginLeft:'auto',fontSize:9,color:'#94a3b8',background:'#0d1220',border:'1px solid #1e2d45',borderRadius:4,padding:'2px 6px'}}>{all.length.toLocaleString()} players</div>}
       </div>
 
       {activeTab==='team'?<TeamIndex players={all}/>:activeTab==='club'?<ClubTool players={all}/>:(<div style={T.layout}>
-        <aside style={T.sb}>
+        {/* Mobile: the drawer is only mounted while open, so its inputs can't steal
+            focus or be tab-reachable behind the scrim. Desktop mounts as before. */}
+        {isMobile&&filtersOpen&&<div style={T.scrim} onClick={()=>setFiltersOpen(false)}/>}
+        {(!isMobile||filtersOpen)&&(
+        <aside style={isMobile?T.sbMobile:T.sb}>
+          {isMobile&&(
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
+              <div style={{fontSize:13,fontWeight:800,color:'#e2e8f4'}}>Filters</div>
+              <button onClick={()=>setFiltersOpen(false)} style={{padding:'6px 14px',borderRadius:6,border:'1px solid #26456f',background:'#12203a',color:'#dbeafe',fontSize:12,fontWeight:700,cursor:'pointer'}}>Done</button>
+            </div>
+          )}
           <div style={T.fg}>
             <div style={T.sw}><span style={T.si3}>⌕</span><input style={T.si2} placeholder="Player or team…" value={search} onChange={e=>{setSearch(e.target.value);setPage(0);}}/></div>
           </div>
@@ -973,17 +1003,21 @@ export default function App(){
 
           <button style={T.rb} onClick={reset}>Reset all filters</button>
         </aside>
+        )}
+        {isMobile&&!filtersOpen&&(
+          <button style={T.fab} onClick={()=>setFiltersOpen(true)}>&#9776; Filters</button>
+        )}
 
         <main style={T.main}>
-          <div style={T.statsBar}>
+          <div style={isMobile?T.statsBarMobile:T.statsBar}>
             <div style={T.si}><div style={T.sv}>{stats.count.toLocaleString()}</div><div style={T.sl2}>Found</div></div>
             <div style={T.sdv}/>
             <div style={T.si}><div style={T.sv}>{stats.avg.toFixed(1)}</div><div style={T.sl2}>Avg Score</div></div>
             <div style={T.sdv}/>
             <div style={T.si}><div style={T.sv}>{stats.avgAge.toFixed(1)}</div><div style={T.sl2}>Avg Age</div></div>
-            <div style={T.sdv}/>
-            <div style={T.si}><div style={T.sv}>{stats.elite}</div><div style={T.sl2}>Score 80+</div></div>
-            <div style={{marginLeft:'auto',display:'flex',gap:3,flexWrap:'wrap',alignItems:'center'}}>
+            {!isMobile&&<div style={T.sdv}/>}
+            {!isMobile&&<div style={T.si}><div style={T.sv}>{stats.elite}</div><div style={T.sl2}>Score 80+</div></div>}
+            <div style={isMobile?{display:'none'}:{marginLeft:'auto',display:'flex',gap:3,flexWrap:'wrap',alignItems:'center'}}>
               <div style={{position:'relative'}}>
                 <button onClick={()=>setShowColPicker(p=>!p)} style={{padding:'4px 9px',borderRadius:4,border:'1px solid #1e2d45',background:showColPicker?'#0e2040':'transparent',color:'#94a3b8',fontSize:10,fontWeight:600,cursor:'pointer'}}>⊞ Columns</button>
                 {showColPicker&&(
@@ -1008,10 +1042,69 @@ export default function App(){
             </div>
           </div>
 
-          <div style={T.tw}>
+          {isMobile&&(
+            <div style={T.sortRowMobile}>
+              {['careerScore','potentialScore','peakScore','xValue','xValueGapPct','age',...(scoreMode!=='complete'||roleFilter?['roleScore']:[])].map(col=>(
+                <button key={col} onClick={()=>onSort(col)} style={{flexShrink:0,padding:'7px 11px',borderRadius:5,border:`1px solid ${sort.col===col?'#3b7de8':'#1e2d45'}`,background:sort.col===col?'#0e2040':'transparent',color:sort.col===col?'#93c5fd':'#94a3b8',fontSize:10,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>
+                  {col==='careerScore'?'Career':col==='potentialScore'?'Potential':col==='peakScore'?'Peak':col==='xValue'?'xValue':col==='xValueGapPct'?'Value Gap':col==='age'?'Age':'Role'}{sort.col===col?(sort.asc?' \u2191':' \u2193'):''}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div style={isMobile?T.listMobile:T.tw}>
             {sorted.length===0
               ?<div style={T.es}><div style={{fontSize:26}}>⚽</div><div style={{fontSize:12,color:'#94a3b8'}}>{showYouth?'Youth league players not in current data — will appear after next pipeline rebuild':'No players match filters'}</div></div>
-              :(
+              :isMobile?(
+                /* A 17-column table cannot be read on a phone and horizontal scrolling
+                   hides exactly the columns that matter, so the rows become cards. Same
+                   data, same click-through to PlayerCard, same shortlist toggle. */
+                pageData.map((p,i)=>{
+                  const rcs=p.roleCareerScores||{};
+                  const bestEntry=Object.entries(rcs).sort((a,b)=>b[1]-a[1])[0];
+                  const bestRole=bestEntry?bestEntry[0]:'—';
+                  const ds=getDisplayScore(p)??p.careerScore;
+                  const roleModeScore=scoreMode!=='complete'?(rcs[scoreMode]||null):null;
+                  const promo=promotionBadge(p.careerScore,p.league);
+                  const starred=shortlist.includes(p.id);
+                  return(
+                    <div key={p.id} style={T.card} onClick={()=>setSel(p)}>
+                      <div style={T.cardTop}>
+                        <span style={{fontSize:9,color:'#475569',width:20,flexShrink:0}}>{page*PAGE+i+1}</span>
+                        <Photo name={p.name} team={p.team} size={38}/>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{display:'flex',alignItems:'center',gap:5}}>
+                            <span onClick={e=>{e.stopPropagation();toggleShortlist(p.id);}} style={{cursor:'pointer',fontSize:15,opacity:starred?1:0.3,flexShrink:0}}>{starred?'★':'☆'}</span>
+                            {(()=>{const passRaw=p.passportCountries&&p.passportCountries!=='nan'?p.passportCountries:'';const birthRaw=p.birthCountry&&p.birthCountry!=='nan'?p.birthCountry:'';const p1=(passRaw||birthRaw).split(',')[0].trim();const code=countryToIso2(p1);return code?<img src={'https://flagcdn.com/w20/'+code+'.png'} alt="" style={{width:15,height:11,objectFit:'cover',borderRadius:1,flexShrink:0}}/>:null;})()}
+                            <span style={{fontWeight:700,fontSize:13.5,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{p.name}</span>
+                          </div>
+                          <div style={{display:'flex',alignItems:'center',gap:5,marginTop:3}}>
+                            <Crest id={p.teamFotmobId} name={p.team} size={14}/>
+                            <span style={{fontSize:10.5,color:'#64748b',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{p.team} · {p.league}</span>
+                          </div>
+                        </div>
+                        <div style={T.cardStat}>
+                          <span style={{fontWeight:800,fontSize:18,color:scoreBandColor(ds),lineHeight:1}}>{ds.toFixed(1)}</span>
+                          <StarDisplay score={ds}/>
+                        </div>
+                      </div>
+                      <div style={T.cardMetaRow}>
+                        <span style={{...T.chip,color:'#93c5fd',background:'#0e1e38',borderColor:'#16305a'}}>{bestRole}</span>
+                        <span style={T.chip}>Age {p.age}</span>
+                        {p.foot&&p.foot!=='unknown'&&p.foot!=='nan'&&<span style={T.chip}>{formatFoot(p.foot)}</span>}
+                        {roleModeScore!=null&&<span style={{...T.chip,color:scoreBandColor(roleModeScore)}}>Role {roleModeScore.toFixed(1)}</span>}
+                        <span style={T.chip}>Peak {p.peakScore.toFixed(1)}</span>
+                        <span style={{...T.chip,color:'#22c55e'}}>Pot {(p.potentialScore||p.careerScore).toFixed(1)}</span>
+                        {p.xValue?<span style={{...T.chip,color:'#93c5fd'}}>xV {formatMV(p.xValue)}</span>:null}
+                        {p.marketValue>0&&<span style={T.chip}>MV {formatMV(p.marketValue)}</span>}
+                        {p.xValue&&p.marketValue>0&&p.xValueGapPct!=null&&<span style={{...T.chip,color:p.xValueGapPct>20?'#22c55e':p.xValueGapPct<-20?'#ef4444':'#94a3b8'}}>{p.xValueGapPct>0?'+':''}{p.xValueGapPct.toFixed(0)}% vs MV</span>}
+                        {p.contract&&p.contract!=='nan'&&<span style={{...T.chip,color:p.contractYear<=2026?'#fbbf24':'#94a3b8'}}>{p.contract}</span>}
+                        {promo&&<span style={{...T.chip,color:'#22c55e'}}>{promo}</span>}
+                      </div>
+                    </div>
+                  );
+                })
+              ):(
                 <table style={T.tbl}>
                   <thead style={T.th_}><tr>
                     <th style={{...T.th,width:30,textAlign:'center'}}>#</th>
@@ -1084,13 +1177,21 @@ export default function App(){
             }
           </div>
 
-          {totalPages>1&&(
+          {totalPages>1&&(isMobile?(
+            <div style={T.pgMobile}>
+              <button disabled={page===0} onClick={()=>{setPage(p=>Math.max(0,p-1));}}
+                style={{padding:'8px 16px',borderRadius:6,border:'1px solid #1e2d45',background:page===0?'transparent':'#0e2040',color:page===0?'#334155':'#93c5fd',fontSize:12,fontWeight:700,cursor:page===0?'default':'pointer'}}>Prev</button>
+              <span style={{fontSize:10.5,color:'#64748b'}}>{page+1} / {totalPages} · {sorted.length.toLocaleString()}</span>
+              <button disabled={page>=totalPages-1} onClick={()=>{setPage(p=>Math.min(totalPages-1,p+1));}}
+                style={{padding:'8px 16px',borderRadius:6,border:'1px solid #1e2d45',background:page>=totalPages-1?'transparent':'#0e2040',color:page>=totalPages-1?'#334155':'#93c5fd',fontSize:12,fontWeight:700,cursor:page>=totalPages-1?'default':'pointer'}}>Next</button>
+            </div>
+          ):(
             <div style={T.pg}>
               <span style={{fontSize:9,color:'#64748b',marginRight:4}}>{page*PAGE+1}–{Math.min((page+1)*PAGE,sorted.length)} of {sorted.length.toLocaleString()}</span>
               {[...Array(Math.min(totalPages,12))].map((_,i)=><button key={i} onClick={()=>setPage(i)} style={T.pb(page===i)}>{i+1}</button>)}
               {totalPages>12&&<span style={{color:'#64748b',fontSize:9}}>…{totalPages}</span>}
             </div>
-          )}
+          ))}
         </main>
       </div>)}
 
