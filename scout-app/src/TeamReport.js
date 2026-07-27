@@ -1,4 +1,4 @@
-// TeamReport.js v60 — Team All-in-One report. 1920x1080 PNG export.
+// TeamReport.js v61 — Team All-in-One report. 1920x1080 PNG export.
 //
 // v2: bigger team name; country flag + league logo beside the league name;
 //     mini coach profile in the header gap; XI is now formation-driven and
@@ -193,6 +193,14 @@
 // characters, which nothing can discard; vertical centring stays on height+line-height.
 // Departures — Replace gives xValue its own column beside FEE instead of burying it in
 // the meta line, so the two numbers the panel exists to compare have equal billing.
+//
+// v61: pill backgrounds were narrower than their own text — "No Significant Weaknesses"
+// ran off the end of its colour — because shrink-to-fit on these inline-blocks is not
+// reliable in this pipeline. Width is now COMPUTED from nameEmWidth, the same character
+// estimator the club name uses, with the text centred inside it; nothing is left for the
+// layout to work out. The xValue editor is also gated on either departures panel, so
+// choosing Departures — Replace no longer gives a fee box with no way to correct the
+// xValue it is compared against.
 
 import React, { useState, useMemo, useCallback } from 'react';
 import {
@@ -2038,6 +2046,18 @@ export function uncoveredSlots(xi) {
   return xi.filter(s => s.starter && (!s.depth || !s.depth.length)).map(s => s.slot.label);
 }
 
+// Pills with an explicitly computed width. Shrink-to-fit was leaving the background
+// narrower than the text — "No Significant Weaknesses" ran off the end of its own
+// colour — so the width is derived from the same character-width estimator used for
+// the club name, with generous side room, and the text is centred inside it.
+function pillHtml(text, tone, fontPx, sidePx) {
+  const w = Math.ceil(nameEmWidth(text) * fontPx) + sidePx * 2;
+  return `<span style="display:inline-block;width:${w}px;height:21px;line-height:21px;
+      text-align:center;font-size:${fontPx}px;font-weight:700;border-radius:11px;
+      margin-right:6px;margin-bottom:4px;white-space:nowrap;overflow:hidden;
+      background:${tone}1e;border:1px solid ${tone}59;color:${tone};">${esc(text)}</span>`;
+}
+
 function weaknessesPanelHtml(w, h, team, allTeams, xi, depthList, upgradeList, setPieces, extraAreas) {
   // Take five so set pieces can displace a metric on merit rather than by decree.
   // The old version forced it into slot 4 whenever it cleared the cutoff, which
@@ -2082,11 +2102,7 @@ function weaknessesPanelHtml(w, h, team, allTeams, xi, depthList, upgradeList, s
   // 5 fits one line at this pill size (5 x ~42px + gaps inside a 241px column).
   // Beyond that shows as "+N" rather than wrapping into a second row.
   const CAP = 5;
-  const pill = (text, tone) => `<span style="display:inline-block;font-size:10.5px;font-weight:700;
-      height:21px;line-height:21px;border-radius:10px;
-      margin-right:5px;margin-bottom:4px;
-      background:${tone}1e;border:1px solid ${tone}59;color:${tone};"
-    >&nbsp;&nbsp;${text}&nbsp;&nbsp;</span>`;
+  const pill = (text, tone) => pillHtml(text, tone, 10.5, 10);
 
   const depthPills = thinAll.length
     ? thinAll.slice(0, CAP).map(k => pill(k, '#f6a75c')).join('')
@@ -2111,11 +2127,7 @@ function weaknessesPanelHtml(w, h, team, allTeams, xi, depthList, upgradeList, s
             : (SEVERITY_COLOUR[x.severity] || SEVERITY_COLOUR.medium);
           // nowrap: "Trading Assets" was breaking onto a second line inside its
           // own pill and blowing the row height out.
-          return `<span style="display:inline-block;font-size:10px;font-weight:700;
-                    height:21px;line-height:21px;border-radius:11px;
-                    margin-right:6px;white-space:nowrap;
-                    background:${c}1e;border:1px solid ${c}59;color:${c};"
-                  >&nbsp;&nbsp;${esc(x.name)}&nbsp;&nbsp;</span>`;
+          return pillHtml(x.name, c, 10, 11);
         }).join('')}
       </div>
     </div>`;
@@ -3949,7 +3961,8 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
                 <div style={UI.note}>Accepts 10m, £10m, 750k or a bare number. Green beats xValue.</div>
               </div>
             )}
-            {shown.includes('Possible Departures') && departuresShown.length > 0 && (
+            {(shown.includes('Possible Departures') || shown.includes('Departures — Replace'))
+              && departuresShown.length > 0 && (
               <div style={UI.block}>
                 <span style={UI.label}>Departures — xValue</span>
                 {departuresShown.map(p => {
