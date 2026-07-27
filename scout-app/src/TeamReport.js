@@ -1,4 +1,4 @@
-// TeamReport.js v58 — Team All-in-One report. 1920x1080 PNG export.
+// TeamReport.js v59 — Team All-in-One report. 1920x1080 PNG export.
 //
 // v2: bigger team name; country flag + league logo beside the league name;
 //     mini coach profile in the header gap; XI is now formation-driven and
@@ -176,6 +176,16 @@
 // back, and a starred depth player shows a star in place of their age. Possible
 // Departures gets its own xValue editor, writing to the same override map as
 // Selling Assets — there is only ever one xValue per player on a card.
+//
+// v59: typing "£10m" as an xValue did nothing, because Number('10m') is NaN and the
+// override was silently discarded in favour of the model. parseMoney now accepts 10m,
+// £10m, 10.5m, 750k, 1,500,000 or a bare number, everywhere a value is typed. Flag
+// renamed to No Significant Weaknesses and forced green whatever severity is picked —
+// rendering a positive in red says the opposite of itself. All three pill rows now use
+// a fixed height with a matching line-height, which centres the text exactly; padding
+// alone sized the box from the font's full ascender/descender and left the glyphs
+// sitting high. New Departures — Replace panel: same three players, fee typed per
+// player against xValue, green when the fee beats the model.
 
 import React, { useState, useMemo, useCallback } from 'react';
 import {
@@ -1517,7 +1527,7 @@ function leagueTablePanelHtml(w, h, team, allTeams) {
 // Either bottom slot can hold any of these.
 export const BOTTOM_PANELS = ['Similar Teams', 'Key Players', 'Recruitment Recommendations',
                               'Coach Shortlist', 'Selling Assets', 'Youth Prospects',
-                              'Summary', 'Possible Departures', 'None'];
+                              'Summary', 'Possible Departures', 'Departures — Replace', 'None'];
 
 // Did they hit it? Rendered as a small badge beside the objective.
 // Where each objective expects a side to finish, as a fraction of the league
@@ -1556,7 +1566,8 @@ export function objectiveGap(objective, pointsRank, leagueSize) {
 // on it carries a severity that drives the colour.
 export const EXTRA_AREAS = ['Shape Flexibility', 'Contracts', 'Trading Assets',
                             'Athleticism', 'Physicality', 'Adjusting Style',
-                            'Sustainability', 'No Weaknesses'];
+                            'Sustainability', 'No Significant Weaknesses'];
+export const POSITIVE_AREAS = new Set(['No Significant Weaknesses']);
 export const SEVERITIES = ['low', 'medium', 'high'];
 const SEVERITY_COLOUR = { low: '#fbc701', medium: '#f59e0b', high: '#ef4444' };
 
@@ -2065,7 +2076,8 @@ function weaknessesPanelHtml(w, h, team, allTeams, xi, depthList, upgradeList, s
   // Beyond that shows as "+N" rather than wrapping into a second row.
   const CAP = 5;
   const pill = (text, tone) => `<span style="display:inline-block;font-size:10.5px;font-weight:700;
-      padding:3px 8px;border-radius:10px;margin-right:5px;margin-bottom:4px;
+      height:21px;line-height:21px;padding:0 9px;border-radius:10px;
+      margin-right:5px;margin-bottom:4px;
       background:${tone}1e;border:1px solid ${tone}59;color:${tone};">${text}</span>`;
 
   const depthPills = thinAll.length
@@ -2085,12 +2097,15 @@ function weaknessesPanelHtml(w, h, team, allTeams, xi, depthList, upgradeList, s
       <div style="font-size:8.5px;font-weight:700;letter-spacing:0.14em;color:#6f7c92;">OTHER</div>
       <div style="margin-top:7px;">
         ${extras.map(x => {
-          const c = SEVERITY_COLOUR[x.severity] || SEVERITY_COLOUR.medium;
+          // A positive note in a panel of problems: it gets green whatever severity
+          // was picked, because rendering it in red would say the opposite of itself.
+          const c = POSITIVE_AREAS.has(x.name) ? '#22c55e'
+            : (SEVERITY_COLOUR[x.severity] || SEVERITY_COLOUR.medium);
           // nowrap: "Trading Assets" was breaking onto a second line inside its
           // own pill and blowing the row height out.
           return `<span style="display:inline-block;font-size:10px;font-weight:700;
-                    padding:4px 10px;border-radius:11px;margin-right:6px;
-                    white-space:nowrap;line-height:1.1;
+                    height:21px;line-height:21px;padding:0 10px;border-radius:11px;
+                    margin-right:6px;white-space:nowrap;
                     background:${c}1e;border:1px solid ${c}59;color:${c};">${esc(x.name)}</span>`;
         }).join('')}
       </div>
@@ -2128,9 +2143,23 @@ export function likelyDepartures(squad, season, n = 3) {
 // xValue is overridable per player: the model is a model, and a real offer or a
 // known asking price beats it.
 // An override wins over the model, and '' clears back to it.
+// Accepts what a person actually types: 10m, £10m, 10.5m, 173k, 1,500,000 or a bare
+// number. Number('10m') is NaN, so the old version silently ignored anything with a
+// unit on it and fell back to the model — which is why typing £10m appeared to do
+// nothing at all.
+export function parseMoney(v) {
+  if (v == null) return null;
+  const t = String(v).trim().replace(/[£$€,\s]/g, '').toLowerCase();
+  if (!t) return null;
+  const m = t.match(/^(\d*\.?\d+)([mk])?$/);
+  if (!m) return null;
+  const n = Number(m[1]);
+  if (isNaN(n)) return null;
+  return m[2] === 'm' ? n * 1e6 : m[2] === 'k' ? n * 1e3 : n;
+}
 function xvFor(p, overrides = {}) {
-  const o = overrides[playerKey(p)];
-  if (o !== undefined && o !== '' && !isNaN(Number(o))) return Number(o);
+  const o = parseMoney(overrides[playerKey(p)]);
+  if (o != null) return o;
   const v = Number(p && p.xValue);
   return isNaN(v) || !v ? null : v;
 }
@@ -2172,6 +2201,56 @@ function sellingAssetsPanelHtml(w, h, rows, xValueOverrides = {}, photoOverrides
                       color:${xv == null ? '#55617a' : '#e8eef8'};">${
             xv == null ? '—' : formatMoney(xv)}</div>
           <div style="font-size:7px;font-weight:700;letter-spacing:0.14em;color:#6f7c92;margin-top:5px;">XVALUE</div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// Departures — Replace. Same three players as Possible Departures, but the question
+// is what they are worth against what was actually offered or agreed. The fee is typed
+// per player; xValue sits underneath as the reference, and the gap between them is the
+// whole point of the panel — green when the fee beats the model, red when it doesn't.
+function departuresReplacePanelHtml(w, h, rows, feeValues = {}, xValueOverrides = {}, photoOverrides = {}) {
+  if (!rows || !rows.length) {
+    return `<div style="position:absolute;inset:0;display:flex;align-items:center;
+             justify-content:center;font-size:12px;color:#55617a;">No players selected.</div>`;
+  }
+  const rowH = Math.floor((h - 4) / 3);
+  const VAL_W = 78;
+  const FACE = 40, FACE_X = 11, TEXT_X = FACE_X + FACE + 11;
+  const textW = w - TEXT_X - VAL_W - 18;
+  return rows.slice(0, 3).map((p, i) => {
+    const xv = xvFor(p, xValueOverrides);
+    const fee = parseMoney(feeValues[playerKey(p)]);
+    // No fee yet is a neutral state, not a bad one — it means undecided.
+    const col = fee == null ? '#c3ccdd'
+      : (xv != null && fee >= xv) ? '#4ade80' : '#f87171';
+    return `
+      <div style="position:absolute;left:0;top:${i * rowH + 2}px;width:${w}px;height:${rowH - 6}px;
+                  background:rgba(255,255,255,0.035);border:1px solid rgba(255,255,255,0.07);
+                  border-radius:9px;">
+        <div style="position:absolute;left:${FACE_X}px;top:50%;margin-top:-${FACE / 2}px;
+                    width:${FACE}px;height:${FACE}px;border-radius:50%;background-color:#1a2233;
+                    background-image:url('${photoOverrides[playerKey(p)] || src(photoUrl(p.name, p.team))}'), url('${SILHOUETTE}');
+                    background-size:cover, cover;background-position:center top, center top;
+                    background-repeat:no-repeat, no-repeat;
+                    border:1.5px solid rgba(190,203,224,0.26);"></div>
+        <div style="position:absolute;left:${TEXT_X}px;width:${textW}px;top:50%;margin-top:-16px;">
+          <div style="white-space:nowrap;line-height:1.15;font-size:14px;">
+            <span style="font-weight:700;color:#eaf0f8;">${esc(p.name)}</span>&nbsp;<span
+                  style="font-weight:600;color:#7c8798;">${p.age != null ? p.age : '—'}</span>${
+            natStamp(p, 14)}
+          </div>
+          <div style="font-size:10.5px;color:#8b98ad;margin-top:4px;line-height:1.15;white-space:nowrap;
+                      overflow:hidden;">${
+            esc(String(p.position || '').split(',')[0].trim())}${
+            xv != null ? `<span style="color:#6f7c92;"> · xV </span><span style="color:#93c5fd;">${
+              formatMoney(xv)}</span>` : ''}</div>
+        </div>
+        <div style="position:absolute;right:11px;top:50%;margin-top:-16px;width:${VAL_W}px;text-align:right;">
+          <div style="font-size:15px;font-weight:800;line-height:1;color:${col};">${
+            fee == null ? '—' : formatMoney(fee)}</div>
+          <div style="font-size:7px;font-weight:700;letter-spacing:0.14em;color:#6f7c92;margin-top:5px;">FEE</div>
         </div>
       </div>`;
   }).join('');
@@ -2599,6 +2678,7 @@ export function buildTeamReportElement(team, opts = {}) {
     hideLoanTags = false,          // drop the (L) marker in XI + Depth
     hideYouthScores = false,       // Youth Prospects pills only
     starKeys = null,               // playerKeys to mark with a star in XI + Depth
+    feeValues = {},                // playerKey -> typed transfer fee, for Departures — Replace
     xValueOverrides = {},          // playerKey -> typed xValue, beats the model
     depthList = null, upgradeList = null,
     xiSlotLists = null,
@@ -2675,6 +2755,10 @@ export function buildTeamReportElement(team, opts = {}) {
         if (kind === 'Selling Assets')
           return panel({ x, y: ROW_3, w: COL_W, h: ROW3_H, title: 'Selling Assets',
                          body: sellingAssetsPanelHtml(innerW, ih, selling, xValueOverrides, photoOverrides) });
+        if (kind === 'Departures — Replace')
+          return panel({ x, y: ROW_3, w: COL_W, h: ROW3_H, title: 'Departures — Replace',
+                         body: departuresReplacePanelHtml(innerW, ih, departures, feeValues,
+                                 xValueOverrides, photoOverrides) });
         if (kind === 'Possible Departures')
           return panel({ x, y: ROW_3, w: COL_W, h: ROW3_H, title: 'Possible Departures',
                          body: departuresPanelHtml(innerW, ih, departures, team.season, photoOverrides, xValueOverrides) });
@@ -3017,6 +3101,7 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
   const [hideLoanTags, setHideLoanTags] = useState(false);
   const [hideYouthScores, setHideYouthScores] = useState(false);
   const [starKeys, setStarKeys] = useState([]);
+  const [feeValues, setFeeValues] = useState({});
   // Similar Teams: the seven nearest are offered and any three chosen from them.
   // Empty means auto, i.e. whatever the model ranks top three.
   const [similarPicked, setSimilarPicked] = useState([]);
@@ -3260,7 +3345,7 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
     bottomLeft, bottomRight, summaryText,
     keyRows, recruitRows: recruitPicked, departureRows: departurePicked,
     sellRows: sellPicked.length ? sellPicked : null, xValueOverrides,
-    similarRows, youthRows, hideLoanTags, hideYouthScores, starKeys,
+    similarRows, youthRows, hideLoanTags, hideYouthScores, starKeys, feeValues,
     teamNameOverride,
     depthList: depthSel, upgradeList: upgradeSel,
     xiSlotLists: xiLists, xiOverridePool: xiPool,
@@ -3818,7 +3903,35 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
                     );
                   })}
                 </div>
-                <div style={UI.note}>Values are in the same units as the model — blank the box to use it.</div>
+                <div style={UI.note}>Accepts 10m, £10m, 750k or a bare number — blank the box to use the model.</div>
+              </div>
+            )}
+            {shown.includes('Departures — Replace') && departuresShown.length > 0 && (
+              <div style={UI.block}>
+                <span style={UI.label}>Departures — Replace: fee received</span>
+                {departuresShown.map(p => {
+                  const k = playerKey(p);
+                  const fee = parseMoney(feeValues[k]);
+                  const xv = xvFor(p, xValueOverrides);
+                  return (
+                    <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
+                      <span style={{ flex: 1, fontSize: 10.5, color: '#cbd5e1', whiteSpace: 'nowrap',
+                                     overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</span>
+                      <input value={feeValues[k] !== undefined ? feeValues[k] : ''}
+                        onChange={e => setFeeValues(o => ({ ...o, [k]: e.target.value }))}
+                        placeholder={xv ? `xV ${Math.round(xv / 1e6 * 10) / 10}m` : 'fee'}
+                        style={{ ...UI.select, width: 96, cursor: 'text',
+                                 color: fee == null ? '#cbd5e1'
+                                   : (xv != null && fee >= xv) ? '#4ade80' : '#f87171' }} />
+                      {feeValues[k] !== undefined && feeValues[k] !== '' && (
+                        <button onClick={() => setFeeValues(o => { const n = { ...o }; delete n[k]; return n; })}
+                          style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer',
+                                   padding: 0, fontSize: 12, lineHeight: 1 }}>×</button>
+                      )}
+                    </div>
+                  );
+                })}
+                <div style={UI.note}>Accepts 10m, £10m, 750k or a bare number. Green beats xValue.</div>
               </div>
             )}
             {shown.includes('Possible Departures') && departuresShown.length > 0 && (
@@ -3846,7 +3959,7 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
                     </div>
                   );
                 })}
-                <div style={UI.note}>Shared with Selling Assets — one xValue per player.</div>
+                <div style={UI.note}>Accepts 10m, £10m or 750k. Shared with Selling Assets — one xValue per player.</div>
               </div>
             )}
             {shown.includes('Possible Departures') && (
