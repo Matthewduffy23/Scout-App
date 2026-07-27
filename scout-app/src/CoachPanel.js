@@ -36,7 +36,7 @@ function OverrideInput({ label, value, onCommit }) {
   );
 }
 
-function CoachStatOverrides({ coachId, overrides, onFieldChange, onClear }) {
+function CoachStatOverrides({ coach, coachId, overrides, teams, onFieldChange, onClear }) {
   var isMobile = useIsMobile();
   return (
     <div style={{ margin: isMobile ? '4px 0 6px 0' : '4px 0 6px 52px', padding: '10px 12px', background: '#060c18', border: '1px solid #1e2d45', borderRadius: 7 }}>
@@ -75,7 +75,13 @@ function CoachStatOverrides({ coachId, overrides, onFieldChange, onClear }) {
           <input type="checkbox" checked={!!overrides.hideCostPer} onChange={function(e) { onFieldChange(coachId, 'hideCostPer', e.target.checked || undefined); }} />
           Hide £ Perf.
         </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#cbd5e1', cursor: 'pointer', paddingBottom: 4 }}>
+          <input type="checkbox" checked={!!overrides.unattached} onChange={function(e) { onFieldChange(coachId, 'unattached', e.target.checked || undefined); }} />
+          Unattached (crest → club history)
+        </label>
       </div>
+      <StatsSeasonPicker coach={coach} teams={teams} value={overrides.statsSeasonKey}
+        onChange={function(v) { onFieldChange(coachId, 'statsSeasonKey', v); }} />
       <button
         onClick={function() { onClear(coachId); }}
         style={{ marginTop: 8, fontSize: 10, color: '#f87171', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
@@ -123,6 +129,30 @@ function TeamSeasonSearch({ label, valueObj, teams, onPick, onClear }) {
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+
+// Season picker for "which tenure do the percentiles / season stats describe".
+// Blank = most recent, which is what both cards did before this existed. The value
+// is a team|season key so it survives a coach managing two clubs in one season.
+function StatsSeasonPicker({ coach, teams, value, onChange }) {
+  var rows = (coach.tenures || []).slice().sort(function(a, b) { return a.season < b.season ? 1 : -1; });
+  var sel = { fontSize: 11, background: '#080f1c', border: '1px solid #2b1e45', borderRadius: 4,
+              color: '#e2e8f4', padding: '4px 6px', width: 240 };
+  return (
+    <div style={{ marginTop: 8 }}>
+      <span style={{ fontSize: 9, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+        Season for percentiles / stats
+      </span>
+      <select style={sel} value={value || ''} onChange={function(e) { onChange(e.target.value || undefined); }}>
+        <option value="">Most recent (default)</option>
+        {rows.map(function(t, i) {
+          var k = t.team + '|' + t.season;
+          return <option key={k + i} value={k}>{t.team + ' · ' + t.season}</option>;
+        })}
+      </select>
     </div>
   );
 }
@@ -191,6 +221,8 @@ function CoachQuickOverrides({ coach, coachId, overrides, teams, onFieldChange, 
           Hide Score / Potential
         </label>
       </div>
+      <StatsSeasonPicker coach={coach} teams={teams} value={overrides.statsSeasonKey}
+        onChange={function(v) { onFieldChange(coachId, 'statsSeasonKey', v); }} />
       <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid #1a1030' }}>
         <span style={lbl}>GBE — pass route (managers have no points; tick one to pass)</span>
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginTop: 6 }}>
@@ -299,8 +331,10 @@ function CoachRow({ coach, teams, generatingId, generatingQuickId, expandedOverr
       </div>
       {isExpanded && (
         <CoachStatOverrides
+          coach={coach}
           coachId={coach.id}
           overrides={cardOverrides[coach.id] || {}}
+          teams={teams}
           onFieldChange={onFieldChange}
           onClear={onClear}
         />
@@ -556,6 +590,7 @@ export default function CoachPanel({ allTeams, allPlayers, onClose }) {
       };
       if (q.tenure && q.tenure.trim()) overrides.tenure = q.tenure.trim();
       if (q.unattached) overrides.unattached = true;
+      if (q.statsSeasonKey) overrides.statsSeasonKey = q.statsSeasonKey;
       if (q.hidePills) overrides.showScorePills = false;
       if (q.gbeC36 || q.gbeC24 || q.gbeExceptions) {
         overrides.gbe = {

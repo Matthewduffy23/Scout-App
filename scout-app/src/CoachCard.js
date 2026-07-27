@@ -4059,10 +4059,83 @@ function _rankIn(pool, row, field) {
   return { rank: greater + 1, size: peers.length };
 }
 
+
+// ─── Unattached-manager header helpers ─────────────────────────────────────
+// Shared with CoachQuickCard.js so both cards abbreviate and order identically.
+
+// Tier abbreviations. The data's league strings have no trailing period here
+// ("England 4"), so match on that shape and fall back to a generated code rather
+// than printing the raw "England 4" on the card.
+const LEAGUE_ABBREV = {
+  'England 1': 'PL',   'England 2': 'CH',   'England 3': 'L1',  'England 4': 'L2',
+  'England 5': 'NL',   'England 6': 'NLN',  'England 7': 'NLS',
+  'Scotland 1': 'SPFL','Scotland 2': 'SC1', 'Scotland 3': 'SC2',
+  'Spain 1': 'LaLiga', 'Spain 2': 'LaLiga2',
+  'Germany 1': 'BL',   'Germany 2': 'BL2',  'Germany 3': 'BL3',
+  'Italy 1': 'SerieA', 'Italy 2': 'SerieB',
+  'France 1': 'L1',    'France 2': 'L2',
+  'Portugal 1': 'LigaPT', 'Netherlands 1': 'Eredivisie', 'Belgium 1': 'JPL',
+  'Wales 1': 'CymruP', 'Northern Ireland 1': 'NIFL', 'Ireland 1': 'LOI',
+  'Turkey 1': 'SuperLig', 'USA 1': 'MLS', 'Mexico 1': 'LigaMX',
+};
+
+export function abbrevLeague(league) {
+  const raw = String(league || '').trim().replace(/\.$/, '');
+  if (!raw) return '';
+  if (LEAGUE_ABBREV[raw]) return LEAGUE_ABBREV[raw];
+  // Generic: "Denmark 2" -> "DEN2". Keeps the row narrow when a league isn't mapped,
+  // which matters more than perfect naming on a 440px header block.
+  const m = raw.match(/^(.*?)\s*(\d+)$/);
+  if (m) return m[1].slice(0, 3).toUpperCase() + m[2];
+  return raw.slice(0, 8);
+}
+
+// Two-digit season pair. Handles "2024-25" and "2024-2025" alike.
+export function shortSeason(season) {
+  const t = String(season || '').trim();
+  const m = t.match(/^(\d{4})\D+(\d{2,4})$/);
+  if (!m) return t;
+  return m[1].slice(2) + '-' + m[2].slice(-2);
+}
+
+// Sorted newest-first, deduped on team+season so a club listed twice for one
+// season (a mid-season move recorded in both rows) shows once.
+export function tenureHistory(tenureRows, limit) {
+  const seen = new Set();
+  const out = [];
+  for (const r of [...(tenureRows || [])].sort((a, b) => (a.season < b.season ? 1 : -1))) {
+    if (!r || !r.team) continue;
+    const k = r.team + '|' + r.season;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(r);
+    if (limit && out.length >= limit) break;
+  }
+  return out;
+}
+
+// Picks which tenure row drives percentiles / team context / the stat row.
+// Default is the most recent, which is what both cards did before this existed.
+export function resolveStatsRow(sortedDesc, tenureRows, statsSeasonKey) {
+  if (statsSeasonKey) {
+    const hit = (tenureRows || []).find(
+      r => r && (r.team + '|' + r.season) === statsSeasonKey);
+    if (hit) return hit;
+  }
+  return sortedDesc[0] || (tenureRows || [])[0] || {};
+}
+
 export function buildCoachCardElement(coach, tenureRows, traits, overrides = {}) {
   const age = computeAge(coach.dob);
   const sortedDesc = [...tenureRows].sort((a, b) => (a.season < b.season ? 1 : -1));
   const latest = sortedDesc[0] || {};
+  // Percentiles and the season stats describe ONE season. Default stays the most
+  // recent (what this card always did); overrides.statsSeasonKey selects another.
+  const statsRow = resolveStatsRow(sortedDesc, tenureRows, overrides.statsSeasonKey);
+  const statsSeasonPicked = !!overrides.statsSeasonKey
+    && statsRow && (statsRow.team + '|' + statsRow.season) === overrides.statsSeasonKey
+    && statsRow !== sortedDesc[0];
+  const unattached = !!overrides.unattached;
   const _pool = (overrides.allTeams && overrides.allTeams.length) ? overrides.allTeams : tenureRows;
   const _ptsR = _rankIn(_pool, latest, 'points') || (latest.pointsRank != null && latest.leagueSize != null ? { rank: latest.pointsRank, size: latest.leagueSize } : null);
   const _xptsR = _rankIn(_pool, latest, 'expectedPoints');
@@ -4084,9 +4157,9 @@ export function buildCoachCardElement(coach, tenureRows, traits, overrides = {})
 
   // Resolve overrideable stat values — panel supplies xG/xGA as per-90 rates,
   // card multiplies by matches to get season totals (matching the xG p90 × matches formula)
-  const resolvedMatches = overrides.games != null ? overrides.games : (latest.matches ?? null);
-  const resolvedGF      = overrides.gf    != null ? overrides.gf    : (latest.goalsFor ?? null);
-  const resolvedGA      = overrides.ga    != null ? overrides.ga    : (latest.goalsAgainst ?? null);
+  const resolvedMatches = overrides.games != null ? overrides.games : (statsRow.matches ?? null);
+  const resolvedGF      = overrides.gf    != null ? overrides.gf    : (statsRow.goalsFor ?? null);
+  const resolvedGA      = overrides.ga    != null ? overrides.ga    : (statsRow.goalsAgainst ?? null);
   const resolvedXG      = overrides.xgP90 != null
     ? (Number(overrides.xgP90) * (resolvedMatches || 1)).toFixed(1)
     : (latest.xGoalsFor ?? latest.xGF ?? latest.xgf) != null
@@ -4094,19 +4167,40 @@ export function buildCoachCardElement(coach, tenureRows, traits, overrides = {})
       : null;
   const resolvedXGA     = overrides.xgaP90 != null
     ? (Number(overrides.xgaP90) * (resolvedMatches || 1)).toFixed(1)
-    : (latest.xGoalsAgainst ?? latest.xGA ?? latest.xga) != null
-      ? Number(latest.xGoalsAgainst ?? latest.xGA ?? latest.xga).toFixed(1)
+    : (statsRow.xGoalsAgainst ?? statsRow.xGA ?? statsRow.xga) != null
+      ? Number(statsRow.xGoalsAgainst ?? statsRow.xGA ?? statsRow.xga).toFixed(1)
       : null;
   const resolvedPPG     = overrides.ppg != null
     ? Number(overrides.ppg).toFixed(2)
-    : latest.points != null && latest.matches
-      ? (latest.points / latest.matches).toFixed(2)
-      : latest.ppg != null ? Number(latest.ppg).toFixed(2) : null;
+    : statsRow.points != null && statsRow.matches
+      ? (statsRow.points / statsRow.matches).toFixed(2)
+      : statsRow.ppg != null ? Number(statsRow.ppg).toFixed(2) : null;
   const resolvedCostPer = overrides.costPer != null ? overrides.costPer : null;
+  // Unattached: there is no current club, so the crest slot lists clubs managed,
+  // newest first — (crest) Crawley 24-25 L2. Same six-row cap as the quick card.
+  const HIST_MAX = 6;
+  const histRows = unattached ? tenureHistory(tenureRows, HIST_MAX) : [];
+  const HIST_ROW_H = 32;
+  const histBlockHtml = !unattached ? "" : `
+    <div style="position:absolute;left:738px;top:${Math.max(28, 125 - (histRows.length * HIST_ROW_H) / 2)}px;width:420px;">
+      ${histRows.map(r => `
+        <div style="display:flex;align-items:center;gap:13px;height:${HIST_ROW_H}px;">
+          ${teamCrestUrl(r.team)
+            ? `<div style="width:26px;height:26px;flex-shrink:0;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${teamCrestUrl(r.team)}');"></div>`
+            : `<div style="width:26px;height:26px;flex-shrink:0;"></div>`}
+          <span style="font-size:21px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:238px;">${r.team || ""}</span>
+          <span style="font-size:18px;font-weight:500;color:#d9d9d9;white-space:nowrap;">${shortSeason(r.season)}</span>
+          <span style="font-size:17px;font-weight:600;color:#9aa3b8;white-space:nowrap;">${abbrevLeague(r.league)}</span>
+        </div>`).join("")}
+    </div>`;
+
+  // Names the season the percentiles and season stats describe, when it isn't
+  // simply the latest tenure.
+  const statsNoteHtml = !statsSeasonPicked ? "" : `
+    <div style="position:absolute;left:24px;bottom:10px;font-size:16px;font-weight:600;color:#9aa3b8;white-space:nowrap;">*${statsRow.team || ""} ${shortSeason(statsRow.season)}</div>`;
+
   const getTraitScore = (key) => (traitOverrides[key] != null ? traitOverrides[key] * 10 : traits?.[key]);
-  // Percentile chart reflects the RECENT season only (aligns the bars + value labels
-  // with the header's latest team, instead of blending every tenure season).
-  const _mgRows = sortedDesc.length ? [sortedDesc[0]] : tenureRows;
+  const _mgRows = [statsRow];
   const metricGroups = computeCoachMetricGroups(_mgRows) || {
     Attack: [],
     Defence: [],
@@ -4154,7 +4248,7 @@ export function buildCoachCardElement(coach, tenureRows, traits, overrides = {})
 
     <!-- NAME / ROLE / FLAG / AGE -->
     <div style="position:absolute;left:248px;top:24px;width:880px;font-size:53.2px;font-weight:700;line-height:1.05;letter-spacing:-0.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${coach.name || ""}</div>
-    <div style="position:absolute;left:248px;top:87px;font-size:26.6px;font-weight:600;color:#fff;">Head Coach</div>
+    <div style="position:absolute;left:248px;top:87px;font-size:26.6px;font-weight:600;color:#fff;">Head Coach${unattached ? ` <span style="color:#9aa3b8;">(Unattached)</span>` : ""}</div>
     ${natIso2 ? `<div style="position:absolute;left:248px;top:155px;width:47px;height:28px;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${natIso2}.png');"></div>` : ""}
     <div style="position:absolute;left:${natIso2 ? 310 : 248}px;top:153px;display:flex;align-items:baseline;gap:18px;">
       <span style="font-size:26.6px;font-weight:600;color:#fff;white-space:nowrap;">${age != null ? `${age} years old` : ""}</span>
@@ -4162,13 +4256,15 @@ export function buildCoachCardElement(coach, tenureRows, traits, overrides = {})
     </div>
 
     <!-- CREST (bigger) / TEAM / LEAGUE + FLAG / TENURE -->
+    ${unattached ? histBlockHtml : `
     ${teamCrestUrl(latest.team) ? `<div style="position:absolute;left:738px;top:28px;width:155px;height:195px;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${teamCrestUrl(latest.team)}');"></div>` : ""}
     <div style="position:absolute;left:904px;top:44px;font-size:34px;font-weight:700;color:#fff;">${latest.team || ""}</div>
     <div style="position:absolute;left:904px;top:99px;display:flex;align-items:center;gap:10px;">
       <span style="font-size:21.3px;font-weight:500;color:#fff;white-space:nowrap;">${latest.league || ""}</span>
       ${leagueIso2 ? `<div style="width:31px;height:19px;flex-shrink:0;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${leagueIso2}.png');"></div>` : ""}
     </div>
-    <div style="position:absolute;left:904px;top:148px;font-size:21.3px;color:#d9d9d9;">${coach.tenure || ""}</div>
+    <div style="position:absolute;left:904px;top:148px;font-size:21.3px;color:#d9d9d9;">${coach.tenure || ""}</div>`}
+    ${statsNoteHtml}
 
     <!-- HEADER VERTICAL SEPARATOR -->
     <div style="position:absolute;left:1164px;top:45px;width:3px;height:155px;background:#737373;"></div>

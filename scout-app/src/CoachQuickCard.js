@@ -10,7 +10,7 @@ import { deliverPng } from './utils';
 import {
   computeAge, countryToIso2, leagueToCountry, teamCrestUrl, fadeHexToBG,
   FOTMOB_PHOTO_BASE, ensureMontserratEmbedded, MONTSERRAT_EMBED_CSS,
-} from './CoachCard';
+  abbrevLeague, shortSeason, tenureHistory, resolveStatsRow } from './CoachCard';
 
 // ── player-card visual constants (copied verbatim so styling matches exactly) ──
 const BG        = '#0a0f1c';
@@ -416,7 +416,13 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
 
   // LEFT percentile bars — RECENT season only (matches the header's latest team,
   // rather than blending every tenure season).
-  const _mgRows = sortedDesc.length ? [sortedDesc[0]] : tenureRows;
+  // Percentiles, the stat row and Team Context all describe ONE season. Default is
+  // the most recent (unchanged); overrides.statsSeasonKey picks another tenure.
+  const statsRow = resolveStatsRow(sortedDesc, tenureRows, overrides.statsSeasonKey);
+  const statsSeasonPicked = !!overrides.statsSeasonKey
+    && statsRow && (statsRow.team + '|' + statsRow.season) === overrides.statsSeasonKey
+    && statsRow !== sortedDesc[0];
+  const _mgRows = [statsRow];
   const mg = computeCoachMetricGroups(_mgRows) || { Attack: [], Defence: [], Possession: [] };
   const totalRows = mg.Attack.length + mg.Defence.length + mg.Possession.length;
   const activeSections = ['Attack','Defence','Possession'].filter(k => mg[k] && mg[k].length > 0).length;
@@ -442,13 +448,13 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
   const formation = overrides.formation || (Array.isArray(coach.formations) ? coach.formations[0] : coach.formation) || '—';
   const infoRows = [['Formation:', formation], ['Contract:', coach.contract || '—'], ['Clubs:', coach.clubs ?? '—'], ['Agent:', overrides.agent || coach.agent || '—']];
   const stat = (v) => (v == null ? '—' : String(v));
-  const ppg = latest.points != null && latest.matches ? (latest.points/latest.matches).toFixed(2) : '—';
+  const ppg = statsRow.points != null && statsRow.matches ? (statsRow.points/statsRow.matches).toFixed(2) : '—';
   const _pool = (overrides.allTeams && overrides.allTeams.length) ? overrides.allTeams : tenureRows;
-  const _ptsR = _rankIn(_pool, latest, 'points') || (latest.pointsRank != null && latest.leagueSize != null ? { rank: latest.pointsRank, size: latest.leagueSize } : null);
-  const _xptsR = _rankIn(_pool, latest, 'expectedPoints');
+  const _ptsR = _rankIn(_pool, statsRow, 'points') || (statsRow.pointsRank != null && statsRow.leagueSize != null ? { rank: statsRow.pointsRank, size: statsRow.leagueSize } : null);
+  const _xptsR = _rankIn(_pool, statsRow, 'expectedPoints');
   const _rankStr = (r) => r ? `${r.rank}<span style="color:#5b6577;font-weight:600;">/${r.size}</span>` : '—';
   const statRow = [
-    ['Games', stat(latest.matches)], ['GF', stat(latest.goalsFor)], ['GA', stat(latest.goalsAgainst)],
+    ['Games', stat(statsRow.matches)], ['GF', stat(statsRow.goalsFor)], ['GA', stat(statsRow.goalsAgainst)],
     ['Pts', _rankStr(_ptsR)],
     ['xPts', _rankStr(_xptsR)],
     ['PPG', ppg],
@@ -522,6 +528,30 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
   const tenure = overrides.tenure || coach.tenure || '';
   const unattached = !!overrides.unattached;
 
+  // Unattached: no single current club, so the 740-1180px header slot lists the
+  // clubs managed, newest first — (crest) Crawley 24-25 L2. Six rows is what fits
+  // in the 210px the big crest used to occupy without shrinking the type.
+  const HIST_MAX = 6;
+  const histRows = unattached ? tenureHistory(tenureRows, HIST_MAX) : [];
+  const HIST_ROW_H = 34;
+  const histBlockHtml = !unattached ? '' : `
+      <div style="position:absolute;left:740px;top:${Math.max(24, 132 - (histRows.length * HIST_ROW_H) / 2)}px;width:440px;">
+        ${histRows.map(r => `
+          <div style="display:flex;align-items:center;gap:14px;height:${HIST_ROW_H}px;">
+            ${teamCrestUrl(r.team)
+              ? `<div style="width:28px;height:28px;flex-shrink:0;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${teamCrestUrl(r.team)}');"></div>`
+              : `<div style="width:28px;height:28px;flex-shrink:0;"></div>`}
+            <span style="font-size:22px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:250px;">${r.team || ''}</span>
+            <span style="font-size:19px;font-weight:500;color:#c4cbd9;white-space:nowrap;">${shortSeason(r.season)}</span>
+            <span style="font-size:18px;font-weight:600;color:#9aa3b8;white-space:nowrap;">${abbrevLeague(r.league)}</span>
+          </div>`).join('')}
+      </div>`;
+
+  // Footnote naming which season the left-hand percentiles and stat row describe,
+  // shown only when it is not simply the most recent tenure.
+  const statsNoteHtml = !statsSeasonPicked ? '' : `
+      <div style="position:absolute;left:24px;bottom:10px;font-size:16px;font-weight:600;color:#9aa3b8;white-space:nowrap;">*${statsRow.team || ''} ${shortSeason(statsRow.season)}</div>`;
+
   const container = document.createElement('div');
   container.style.cssText = `width:1920px;height:1080px;background:${BG};font-family:'Montserrat',sans-serif;color:#fff;position:relative;overflow:hidden;box-sizing:border-box;`;
   container.innerHTML = `
@@ -544,13 +574,14 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
         ${statRow.map(([lab, val]) => `<div style="display:flex;align-items:baseline;gap:6px;"><span style="font-size:27.9px;font-weight:700;color:#fff;">${val}</span><span style="font-size:16px;font-weight:500;color:#9aa3b8;text-transform:uppercase;letter-spacing:.04em;">${lab}</span></div>`).join('')}
       </div>
 
+      ${unattached ? histBlockHtml : `
       ${teamCrestUrl(latest.team) ? `<div style="position:absolute;left:740px;top:22px;width:155px;height:210px;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${teamCrestUrl(latest.team)}');filter:drop-shadow(0 1px 2px rgba(0,0,0,0.3));"></div>` : ''}
       <div style="position:absolute;left:915px;top:90px;width:266px;font-size:32px;font-weight:800;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${overrides.teamOverride || latest.team || ''}</div>
       <div style="position:absolute;left:915px;top:140px;display:flex;align-items:center;">
         <span style="font-size:21px;font-weight:500;color:#fff;white-space:nowrap;">${latest.league || ''}</span>
         ${leagueIso2 ? `<div style="width:32px;height:20px;flex-shrink:0;margin-left:24px;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${leagueIso2}.png');border-radius:2px;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15);"></div>` : ''}
       </div>
-      ${tenure ? `<div style="position:absolute;left:915px;top:178px;font-size:20px;font-weight:500;color:#9aa3b8;white-space:nowrap;">${tenure}</div>` : ''}
+      ${tenure ? `<div style="position:absolute;left:915px;top:178px;font-size:20px;font-weight:500;color:#9aa3b8;white-space:nowrap;">${tenure}</div>` : ''}`}
 
       <div style="position:absolute;left:1188px;top:36px;width:2px;height:210px;background:rgba(255,255,255,0.14);"></div>
       ${infoBox}
@@ -582,6 +613,7 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
         <div style="display:flex;"><div style="width:188px;flex-shrink:0;"></div><div style="flex:1;text-align:center;font-size:14px;font-weight:700;color:${LABEL_COL};padding-top:6px;">Percentile Rank</div></div>
       </div>
 
+      ${statsNoteHtml}
       <div style="position:absolute;left:944px;top:${LEFT_TOP}px;width:2px;height:${1080-LEFT_TOP}px;background:rgba(255,255,255,0.14);"></div>
 
       <div style="position:absolute;top:${STYLE_TOP}px;left:984px;width:${STYLE_PANEL_W}px;height:${ROW1_PANEL_H}px;background:${PANEL_BG};border:1px solid ${PANEL_BORDER};border-radius:${PANEL_RADIUS}px;padding:${PANEL_PAD}px;box-sizing:border-box;overflow:hidden;box-shadow:${PANEL_SHADOW};">
