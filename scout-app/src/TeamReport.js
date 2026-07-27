@@ -1,4 +1,4 @@
-// TeamReport.js v59 — Team All-in-One report. 1920x1080 PNG export.
+// TeamReport.js v60 — Team All-in-One report. 1920x1080 PNG export.
 //
 // v2: bigger team name; country flag + league logo beside the league name;
 //     mini coach profile in the header gap; XI is now formation-driven and
@@ -186,6 +186,13 @@
 // alone sized the box from the font's full ascender/descender and left the glyphs
 // sitting high. New Departures — Replace panel: same three players, fee typed per
 // player against xValue, green when the fee beats the model.
+//
+// v60: pill text sat left of centre with glyphs spilling past the right border — the
+// `padding` shorthand is applied unevenly on these inline-blocks, the same class of
+// problem as the dropped margin-left and spacer spans. Horizontal space is now nbsp
+// characters, which nothing can discard; vertical centring stays on height+line-height.
+// Departures — Replace gives xValue its own column beside FEE instead of burying it in
+// the meta line, so the two numbers the panel exists to compare have equal billing.
 
 import React, { useState, useMemo, useCallback } from 'react';
 import {
@@ -2076,9 +2083,10 @@ function weaknessesPanelHtml(w, h, team, allTeams, xi, depthList, upgradeList, s
   // Beyond that shows as "+N" rather than wrapping into a second row.
   const CAP = 5;
   const pill = (text, tone) => `<span style="display:inline-block;font-size:10.5px;font-weight:700;
-      height:21px;line-height:21px;padding:0 9px;border-radius:10px;
+      height:21px;line-height:21px;border-radius:10px;
       margin-right:5px;margin-bottom:4px;
-      background:${tone}1e;border:1px solid ${tone}59;color:${tone};">${text}</span>`;
+      background:${tone}1e;border:1px solid ${tone}59;color:${tone};"
+    >&nbsp;&nbsp;${text}&nbsp;&nbsp;</span>`;
 
   const depthPills = thinAll.length
     ? thinAll.slice(0, CAP).map(k => pill(k, '#f6a75c')).join('')
@@ -2104,9 +2112,10 @@ function weaknessesPanelHtml(w, h, team, allTeams, xi, depthList, upgradeList, s
           // nowrap: "Trading Assets" was breaking onto a second line inside its
           // own pill and blowing the row height out.
           return `<span style="display:inline-block;font-size:10px;font-weight:700;
-                    height:21px;line-height:21px;padding:0 10px;border-radius:11px;
+                    height:21px;line-height:21px;border-radius:11px;
                     margin-right:6px;white-space:nowrap;
-                    background:${c}1e;border:1px solid ${c}59;color:${c};">${esc(x.name)}</span>`;
+                    background:${c}1e;border:1px solid ${c}59;color:${c};"
+                  >&nbsp;&nbsp;${esc(x.name)}&nbsp;&nbsp;</span>`;
         }).join('')}
       </div>
     </div>`;
@@ -2216,7 +2225,8 @@ function departuresReplacePanelHtml(w, h, rows, feeValues = {}, xValueOverrides 
              justify-content:center;font-size:12px;color:#55617a;">No players selected.</div>`;
   }
   const rowH = Math.floor((h - 4) / 3);
-  const VAL_W = 78;
+  const COL_XV = 62, COL_FEE = 72, COL_GAP = 8;
+  const VAL_W = COL_XV + COL_FEE + COL_GAP;
   const FACE = 40, FACE_X = 11, TEXT_X = FACE_X + FACE + 11;
   const textW = w - TEXT_X - VAL_W - 18;
   return rows.slice(0, 3).map((p, i) => {
@@ -2244,13 +2254,18 @@ function departuresReplacePanelHtml(w, h, rows, feeValues = {}, xValueOverrides 
           <div style="font-size:10.5px;color:#8b98ad;margin-top:4px;line-height:1.15;white-space:nowrap;
                       overflow:hidden;">${
             esc(String(p.position || '').split(',')[0].trim())}${
-            xv != null ? `<span style="color:#6f7c92;"> · xV </span><span style="color:#93c5fd;">${
-              formatMoney(xv)}</span>` : ''}</div>
+            bestRole(p) ? ` <span style="color:#a7b4c8;">${esc(bestRole(p))}</span>` : ''}</div>
         </div>
-        <div style="position:absolute;right:11px;top:50%;margin-top:-16px;width:${VAL_W}px;text-align:right;">
-          <div style="font-size:15px;font-weight:800;line-height:1;color:${col};">${
-            fee == null ? '—' : formatMoney(fee)}</div>
-          <div style="font-size:7px;font-weight:700;letter-spacing:0.14em;color:#6f7c92;margin-top:5px;">FEE</div>
+        <div style="position:absolute;right:11px;top:50%;margin-top:-16px;width:${VAL_W}px;">
+          <div style="display:inline-block;width:${COL_XV}px;text-align:right;vertical-align:top;">
+            <div style="font-size:13px;font-weight:800;line-height:1;color:#93c5fd;">${
+              xv == null ? '—' : formatMoney(xv)}</div>
+            <div style="font-size:7px;font-weight:700;letter-spacing:0.14em;color:#6f7c92;margin-top:5px;">XVALUE</div>
+          </div><div style="display:inline-block;width:${COL_FEE}px;text-align:right;vertical-align:top;">
+            <div style="font-size:15px;font-weight:800;line-height:1;color:${col};">${
+              fee == null ? '—' : formatMoney(fee)}</div>
+            <div style="font-size:7px;font-weight:700;letter-spacing:0.14em;color:#6f7c92;margin-top:5px;">FEE</div>
+          </div>
         </div>
       </div>`;
   }).join('');
