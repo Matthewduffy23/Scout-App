@@ -74,7 +74,25 @@ const DECAY = 0.45; // matches build_players.py's recency decay for the "weighte
 const T = {
   layout: { display: 'flex', gap: 0, minHeight: '100vh', background: '#0a0e17', color: '#e2e8f4', fontFamily: 'system-ui,-apple-system,sans-serif' },
   sb: { width: 260, flexShrink: 0, borderRight: '1px solid #1e2d45', padding: 14, overflowY: 'auto', maxHeight: '100vh', boxSizing: 'border-box' },
+  // Drawer: off to one side of the viewport rather than in the flex row, so the table
+  // gets the full width instead of the ~130px the fixed sidebar used to leave it.
+  sbMobile: { position: 'fixed', top: 0, left: 0, bottom: 0, width: '86vw', maxWidth: 330,
+              zIndex: 60, background: '#0a0e17', borderRight: '1px solid #1e2d45',
+              padding: 14, overflowY: 'auto', boxSizing: 'border-box',
+              boxShadow: '0 0 40px rgba(0,0,0,.6)' },
+  scrim: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,.55)', zIndex: 55 },
   main: { flex: 1, padding: 14, overflowX: 'auto' },
+  mainMobile: { flex: 1, padding: 10, minWidth: 0, boxSizing: 'border-box' },
+  // Card list replaces the table: a 10-column table cannot be read on a phone, and
+  // horizontal scrolling hides the columns that matter.
+  card: { background: '#0d1220', border: '1px solid #1a2740', borderRadius: 10,
+          padding: 11, marginBottom: 8 },
+  cardTop: { display: 'flex', alignItems: 'center', gap: 9 },
+  cardStat: { display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 44 },
+  fabBtn: { position: 'fixed', left: 12, bottom: 16, zIndex: 50, padding: '11px 16px',
+            borderRadius: 22, border: '1px solid #26456f', background: '#12203a',
+            color: '#dbeafe', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+            boxShadow: '0 6px 20px rgba(0,0,0,.5)' },
   fg: { marginBottom: 14 },
   fl: { fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.04em', display: 'block', marginBottom: 4 },
   sel: { width: '100%', background: '#0d1220', border: '1px solid #1e2d45', borderRadius: 5, color: '#e2e8f4', padding: '6px 7px', outline: 'none', fontSize: 11.5, cursor: 'pointer' },
@@ -83,6 +101,10 @@ const T = {
   cl: (on) => ({ fontSize: 11, color: on ? '#e2e8f4' : '#94a3b8' }),
   dv: { height: 1, background: '#1e2d45', margin: '10px 0' },
   statsBar: { padding: '10px 16px', background: '#0a0d18', borderBottom: '1px solid #1e2d45', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' },
+  statsBarMobile: { padding: '9px 10px', background: '#0a0d18', borderBottom: '1px solid #1e2d45',
+                    display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' },
+  sortRowMobile: { display: 'flex', gap: 6, overflowX: 'auto', padding: '8px 10px',
+                   WebkitOverflowScrolling: 'touch' },
   si: { display: 'flex', flexDirection: 'column', gap: 1 },
   sv: { fontSize: 16, fontWeight: 800, color: '#f1f5f9', lineHeight: 1 },
   sl2: { fontSize: 8, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.1em' },
@@ -110,7 +132,25 @@ function scoreColor(v) {
   return '#ef4444';
 }
 
+// Live viewport check. The desktop layout is a 260px fixed sidebar beside a wide
+// table, which on a 390px phone leaves ~130px for the table and pushes everything
+// off-screen horizontally — the sidebar becomes a drawer and the table becomes cards.
+function useIsMobile(bp = 768) {
+  const [m, setM] = useState(() => typeof window !== 'undefined'
+    && window.matchMedia(`(max-width: ${bp}px)`).matches);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const q = window.matchMedia(`(max-width: ${bp}px)`);
+    const on = (e) => setM(e.matches);
+    q.addEventListener ? q.addEventListener('change', on) : q.addListener(on);
+    return () => (q.removeEventListener ? q.removeEventListener('change', on) : q.removeListener(on));
+  }, [bp]);
+  return m;
+}
+
 export default function TeamIndex({ players = [] }) {
+  const isMobile = useIsMobile();
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [all, setAll] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selTeam, setSelTeam] = useState(null);
@@ -463,7 +503,19 @@ export default function TeamIndex({ players = [] }) {
 
   return (
     <div style={T.layout}>
-      <aside style={T.sb}>
+      {/* On mobile the drawer is only mounted when open, so its inputs can't be
+          tabbed into or read out while it is hidden. */}
+      {isMobile && filtersOpen && (
+        <div style={T.scrim} onClick={() => setFiltersOpen(false)} />
+      )}
+      {(!isMobile || filtersOpen) && (
+      <aside style={isMobile ? T.sbMobile : T.sb}>
+        {isMobile && (
+          <button onClick={() => setFiltersOpen(false)}
+            style={{ width: '100%', marginBottom: 12, padding: '9px 0', borderRadius: 7,
+                     border: '1px solid #26456f', background: '#12203a', color: '#dbeafe',
+                     fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Done</button>
+        )}
         <div style={{ ...T.fg, display: 'flex', gap: 6 }}>
           <button onClick={() => setShowCoaches(true)} style={{ flex: 1, padding: '6px 10px', borderRadius: 5, border: '1px solid #1e2d45', background: 'transparent', color: '#93c5fd', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>👔 Coaches</button>
         </div>
@@ -706,9 +758,13 @@ export default function TeamIndex({ players = [] }) {
           })}
         </div>
       </aside>
+      )}
+      {isMobile && !filtersOpen && (
+        <button style={T.fabBtn} onClick={() => setFiltersOpen(true)}>☰ Filters</button>
+      )}
 
-      <main style={T.main}>
-        <div style={T.statsBar}>
+      <main style={isMobile ? T.mainMobile : T.main}>
+        <div style={isMobile ? T.statsBarMobile : T.statsBar}>
           <div style={T.si}><div style={T.sv}>{sorted.length.toLocaleString()}</div><div style={T.sl2}>Found</div></div>
           <div style={T.sdv} />
           <div style={T.si}><div style={T.sv}>{(sorted.reduce((s, t) => s + (getDisplayScore(t) || 0), 0) / (sorted.length || 1)).toFixed(1)}</div><div style={T.sl2}>Avg Score</div></div>
@@ -716,9 +772,12 @@ export default function TeamIndex({ players = [] }) {
           <div style={T.si}><div style={T.sv}>{(sorted.reduce((s, t) => s + (t.avgAge || 0), 0) / (sorted.length || 1)).toFixed(1)}</div><div style={T.sl2}>Avg Age</div></div>
           <div style={T.sdv} />
           <div style={T.si}><div style={T.sv}>{sorted.filter(t => (getDisplayScore(t) || 0) >= 80).length}</div><div style={T.sl2}>Score 80+</div></div>
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: 3, flexWrap: 'wrap', alignItems: 'center' }}>
+          <div style={isMobile
+            ? { width: '100%', display: 'flex', gap: 5, overflowX: 'auto', paddingBottom: 2,
+                WebkitOverflowScrolling: 'touch' }
+            : { marginLeft: 'auto', display: 'flex', gap: 3, flexWrap: 'wrap', alignItems: 'center' }}>
             {['overall', 'attack', 'defence', 'possession', 'pressing', 'avgAge', 'mvPerf', 'totalMV', 'avgXValue'].map(col => (
-              <button key={col} onClick={() => onSort(col)} style={{ padding: '4px 9px', borderRadius: 4, border: `1px solid ${sort.col === col ? '#3b7de8' : '#1e2d45'}`, background: sort.col === col ? '#0e2040' : 'transparent', color: sort.col === col ? '#93c5fd' : '#94a3b8', fontSize: 10, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              <button key={col} onClick={() => onSort(col)} style={{ flexShrink: 0, padding: isMobile ? '7px 11px' : '4px 9px', borderRadius: 4, border: `1px solid ${sort.col === col ? '#3b7de8' : '#1e2d45'}`, background: sort.col === col ? '#0e2040' : 'transparent', color: sort.col === col ? '#93c5fd' : '#94a3b8', fontSize: 10, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
                 {col === 'overall' ? 'Overall' : col === 'attack' ? 'Attack' : col === 'defence' ? 'Defence' : col === 'possession' ? 'Possession' : col === 'pressing' ? 'Pressing' : col === 'avgAge' ? 'Avg Age' : col === 'avgXValue' ? 'Avg xValue' : col === 'totalMV' ? 'Squad MV' : '£ Perf'}{sort.col === col ? (sort.asc ? ' ↑' : ' ↓') : ''}
               </button>
             ))}
@@ -728,7 +787,53 @@ export default function TeamIndex({ players = [] }) {
         <div style={T.tw}>
           {sorted.length === 0
             ? <div style={T.es}><div style={{ fontSize: 26 }}>⚽</div><div style={{ fontSize: 12, color: '#94a3b8' }}>No teams match filters</div></div>
-            : (
+            /* Mobile: cards instead of a 10-column table. Everything that matters on a
+               phone — crest, name, league, headline score and a way into both reports —
+               with no horizontal scrolling. */
+            : isMobile ? (
+                  <div>
+                    {paged.map((t, i) => {
+                      const avgXV = getAvgXValue(t.team, t.league);
+                      const totMV = getTotalMV(t.team, t.league);
+                      const mvPerf = getMVPerf(t.team, t.league);
+                      const open = (setter) => setter({ ...t, crest: teamCrest(t.team),
+                        avgXValue: avgXV, totalMV: totMV, mvPerf });
+                      return (
+                        <div key={t.team + t.league + t.season + i} style={T.card}>
+                          <div style={T.cardTop}>
+                            <span style={{ color: '#475569', fontSize: 11, minWidth: 18 }}>
+                              {page * PAGE_SIZE + i + 1}</span>
+                            {teamCrest(t.team) && (
+                              <img src={teamCrest(t.team)} alt="" style={{ width: 26, height: 26, objectFit: 'contain' }}
+                                   onError={e => { e.target.style.display = 'none'; }} />
+                            )}
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontWeight: 700, fontSize: 14, whiteSpace: 'nowrap',
+                                            overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.team}</div>
+                              <div style={{ fontSize: 10.5, color: '#64748b' }}>{t.league} · {t.season}</div>
+                            </div>
+                            <div style={T.cardStat}>
+                              <span style={{ fontWeight: 800, fontSize: 17, color: scoreBandColor(getDisplayScore(t)) }}>
+                                {getDisplayScore(t) != null ? Math.round(getDisplayScore(t)) : '—'}</span>
+                              <span style={{ fontSize: 8, color: '#475569', letterSpacing: '.08em' }}>
+                                {scoreMode.toUpperCase()}</span>
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+                            <button onClick={() => open(setSelTeam)}
+                              style={{ flex: 1, padding: '9px 0', borderRadius: 7, border: '1px solid #1e2d45',
+                                       background: '#111a2c', color: '#cbd5e1', fontSize: 12,
+                                       fontWeight: 700, cursor: 'pointer' }}>Details</button>
+                            <button onClick={() => open(setReportTeam)}
+                              style={{ flex: 1, padding: '9px 0', borderRadius: 7, border: '1px solid #26456f',
+                                       background: '#12203a', color: '#93c5fd', fontSize: 12,
+                                       fontWeight: 700, cursor: 'pointer' }}>Report</button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+            ) : (
               <table style={T.tbl}>
                 <thead style={T.th_}><tr>
                   <th style={{ ...T.th, width: 30, textAlign: 'center' }}>#</th>
