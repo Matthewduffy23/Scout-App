@@ -1,4 +1,4 @@
-// TeamReport.js v57 — Team All-in-One report. 1920x1080 PNG export.
+// TeamReport.js v58 — Team All-in-One report. 1920x1080 PNG export.
 //
 // v2: bigger team name; country flag + league logo beside the league name;
 //     mini coach profile in the header gap; XI is now formation-driven and
@@ -169,6 +169,13 @@
 // evicting a genuinely worse metric. Possible Departures reads LOAN instead of a
 // parent-club expiry for loanees, and shows xValue only, overridable like Selling
 // Assets.
+//
+// v58: three more OTHER flags — Adjusting Style, Sustainability, No Weaknesses.
+// Players can be starred in XI + Depth: the star takes the exact slot the rating
+// occupies, so with scores hidden it marks who matters without putting a number
+// back, and a starred depth player shows a star in place of their age. Possible
+// Departures gets its own xValue editor, writing to the same override map as
+// Selling Assets — there is only ever one xValue per player on a card.
 
 import React, { useState, useMemo, useCallback } from 'react';
 import {
@@ -1067,7 +1074,11 @@ const SLOT_H = 138;
 const FACE = 62;
 function xiPanelHtml(w, h, xi, opts = {}) {
   const { hideScores = false, metaMode = 'age', season = null, photoOverrides = {},
-          hideLoanTags = false } = opts;
+          hideLoanTags = false, starKeys = null } = opts;
+  // With scores hidden the rating slot is empty, so a star can mark the players
+  // worth pointing at without putting a number back on the card.
+  const starred = starKeys instanceof Set ? starKeys
+    : new Set(Array.isArray(starKeys) ? starKeys : []);
   const loanTag = hideLoanTags ? '' : LOAN_TAG;
   const loanTagSm = hideLoanTags ? '' : LOAN_TAG_SM;
   const faceUrl = (pl) => (pl && photoOverrides[playerKey(pl)]) || (pl ? photoUrl(pl.name, pl.team) : '');
@@ -1110,7 +1121,12 @@ function xiPanelHtml(w, h, xi, opts = {}) {
 
     // Score hangs off the photo's right edge, absolutely placed — so the name
     // below can centre on the PHOTO rather than on photo+score combined.
-    const score = (sc == null || hideScores) ? '' :
+    // The star occupies exactly the position the number would, so nothing shifts.
+    const starHere = starter && starred.has(playerKey(starter));
+    const score = starHere
+      ? `<div style="position:absolute;left:50%;margin-left:${FACE / 2 + 7}px;top:17px;
+                   font-size:23px;line-height:1;color:#fbbf24;">★</div>`
+      : (sc == null || hideScores) ? '' :
       `<div style="position:absolute;left:50%;margin-left:${FACE / 2 + 7}px;top:19px;
                    font-size:22px;font-weight:800;line-height:1;
                    color:${gradeColor(sc)};">${Math.round(sc)}</div>`;
@@ -1123,6 +1139,7 @@ function xiPanelHtml(w, h, xi, opts = {}) {
       `<div style="font-size:12.5px;color:#93a1b5;line-height:1.42;white-space:nowrap;
                    overflow:hidden;text-overflow:ellipsis;">${d.onLoan ? loanTagSm : ''}${esc(d.name)}${
         (() => {
+          if (starred.has(playerKey(d))) return ' <span style="color:#fbbf24;">★</span>';
           if (metaMode === 'none') return '';
           // Depth players have no ring to carry a score, so this is where it goes —
           // and it replaces the age rather than sitting alongside it.
@@ -1538,7 +1555,8 @@ export function objectiveGap(objective, pointsRank, leagueSize) {
 // Judgement calls that no metric captures. Each is off by default; when switched
 // on it carries a severity that drives the colour.
 export const EXTRA_AREAS = ['Shape Flexibility', 'Contracts', 'Trading Assets',
-                            'Athleticism', 'Physicality'];
+                            'Athleticism', 'Physicality', 'Adjusting Style',
+                            'Sustainability', 'No Weaknesses'];
 export const SEVERITIES = ['low', 'medium', 'high'];
 const SEVERITY_COLOUR = { low: '#fbc701', medium: '#f59e0b', high: '#ef4444' };
 
@@ -2580,6 +2598,7 @@ export function buildTeamReportElement(team, opts = {}) {
     youthRows = null,              // null = auto (squad under-23s by potential)
     hideLoanTags = false,          // drop the (L) marker in XI + Depth
     hideYouthScores = false,       // Youth Prospects pills only
+    starKeys = null,               // playerKeys to mark with a star in XI + Depth
     xValueOverrides = {},          // playerKey -> typed xValue, beats the model
     depthList = null, upgradeList = null,
     xiSlotLists = null,
@@ -2627,7 +2646,7 @@ export function buildTeamReportElement(team, opts = {}) {
                    vacancyTarget)}
 
       ${panel({ x: PAD, y: BODY_TOP, w: LEFT_W, h: LEFT_H,
-                title: 'XI + Depth', right: formation, body: xiPanelHtml(xiW, xiH, xi, { hideScores: hidePlayerScores, metaMode, season: team.season, photoOverrides, hideLoanTags }) })}
+                title: 'XI + Depth', right: formation, body: xiPanelHtml(xiW, xiH, xi, { hideScores: hidePlayerScores, metaMode, season: team.season, photoOverrides, hideLoanTags, starKeys }) })}
 
       ${panel({ x: COL_A_X, y: ROW_1, w: COL_W, h: ROW1_H,
                 title: 'Performance', body: radarPanelHtml(innerW, ROW1_H - PANEL_PAD * 2 - TITLE_H, team, allTeams) })}
@@ -2681,7 +2700,8 @@ export function buildTeamReportElement(team, opts = {}) {
 // slot with a clear button, and clicking it opens a search filtered to players
 // who actually suit that position (best fits first). Choosing someone already in
 // another slot SWAPS the two rather than leaving a hole.
-function XiSlotEditor({ xi, pool, lists, setLists, teamName, photoOverrides = {}, setPhotoOverrides = () => {} }) {
+function XiSlotEditor({ xi, pool, lists, setLists, teamName, photoOverrides = {}, setPhotoOverrides = () => {},
+                       starKeys = [], setStarKeys = () => {} }) {
   const [openSlot, setOpenSlot] = useState(null);
   const [q, setQ] = useState('');
   const [anyPos, setAnyPos] = useState(false);
@@ -2779,6 +2799,13 @@ function XiSlotEditor({ xi, pool, lists, setLists, teamName, photoOverrides = {}
                   {/* Photo override. Turns blue once set, and right-click clears it —
                       photoUrl() derives its address from name+team, so a player the
                       repo doesn't have has no other route to a face. */}
+                  {/* Star. Shows in place of the rating, so it reads as a highlight
+                      rather than an extra mark competing with a number. */}
+                  <span onClick={() => setStarKeys(ids =>
+                      ids.includes(k) ? ids.filter(x => x !== k) : [...ids, k])}
+                    title={starKeys.includes(k) ? 'Starred — click to clear' : 'Star this player'}
+                    style={{ marginLeft: 8, cursor: 'pointer', fontSize: 12, lineHeight: 1,
+                             color: starKeys.includes(k) ? '#fbbf24' : '#3a4557' }}>★</span>
                   <label title={photoOverrides[k] ? 'Photo set — right-click to clear' : 'Upload a photo for this player'}
                     onContextMenu={e => { e.preventDefault();
                       setPhotoOverrides(o => { const n = { ...o }; delete n[k]; return n; }); }}
@@ -2989,6 +3016,7 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
   const [hideShortlistScores, setHideShortlistScores] = useState(false);
   const [hideLoanTags, setHideLoanTags] = useState(false);
   const [hideYouthScores, setHideYouthScores] = useState(false);
+  const [starKeys, setStarKeys] = useState([]);
   // Similar Teams: the seven nearest are offered and any three chosen from them.
   // Empty means auto, i.e. whatever the model ranks top three.
   const [similarPicked, setSimilarPicked] = useState([]);
@@ -3217,6 +3245,7 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
   const keyRows = keyMode === 'manual' ? manualPicked : topPlayers(squad, 3, team.season);
   const autoDepartures = useMemo(() => likelyDepartures(squad, team.season, 3), [squad, team]);
   const departurePicked = departureKeys === null ? autoDepartures : findByKeys(squad, departureKeys);
+  const departuresShown = departurePicked.length ? departurePicked : autoDepartures;
   const shown = [bottomLeft, bottomRight];
 
   const unmapped = useMemo(() => reportUnmappedTokens(squad), [squad]);
@@ -3231,7 +3260,7 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
     bottomLeft, bottomRight, summaryText,
     keyRows, recruitRows: recruitPicked, departureRows: departurePicked,
     sellRows: sellPicked.length ? sellPicked : null, xValueOverrides,
-    similarRows, youthRows, hideLoanTags, hideYouthScores,
+    similarRows, youthRows, hideLoanTags, hideYouthScores, starKeys,
     teamNameOverride,
     depthList: depthSel, upgradeList: upgradeSel,
     xiSlotLists: xiLists, xiOverridePool: xiPool,
@@ -3472,7 +3501,7 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
                   Include players from other clubs
                 </span>
               </div>
-              <XiSlotEditor photoOverrides={photoOverrides} setPhotoOverrides={setPhotoOverrides} xi={xi} pool={xiPool} lists={xiLists}
+              <XiSlotEditor starKeys={starKeys} setStarKeys={setStarKeys} photoOverrides={photoOverrides} setPhotoOverrides={setPhotoOverrides} xi={xi} pool={xiPool} lists={xiLists}
                             setLists={setXiLists} teamName={team.team} />
               <div style={UI.note}>
                 ▲▼ reorders, × removes. Removing everyone leaves the position blank.
@@ -3790,6 +3819,34 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
                   })}
                 </div>
                 <div style={UI.note}>Values are in the same units as the model — blank the box to use it.</div>
+              </div>
+            )}
+            {shown.includes('Possible Departures') && departuresShown.length > 0 && (
+              <div style={UI.block}>
+                <span style={UI.label}>Departures — xValue</span>
+                {departuresShown.map(p => {
+                  const k = playerKey(p);
+                  const overridden = xValueOverrides[k] !== undefined && xValueOverrides[k] !== '';
+                  return (
+                    <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
+                      <span style={{ flex: 1, fontSize: 10.5, color: '#cbd5e1', whiteSpace: 'nowrap',
+                                     overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</span>
+                      <input value={xValueOverrides[k] !== undefined ? xValueOverrides[k] : ''}
+                        onChange={e => setXValueOverrides(o => ({ ...o, [k]: e.target.value }))}
+                        placeholder={p.xValue ? String(Math.round(p.xValue)) : 'xValue'}
+                        inputMode="numeric"
+                        style={{ ...UI.select, width: 96, cursor: 'text',
+                                 color: overridden ? '#93c5fd' : '#cbd5e1' }} />
+                      {overridden && (
+                        <button onClick={() => setXValueOverrides(o => { const n = { ...o }; delete n[k]; return n; })}
+                          title="Back to the model's xValue"
+                          style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer',
+                                   padding: 0, fontSize: 12, lineHeight: 1 }}>×</button>
+                      )}
+                    </div>
+                  );
+                })}
+                <div style={UI.note}>Shared with Selling Assets — one xValue per player.</div>
               </div>
             )}
             {shown.includes('Possible Departures') && (
