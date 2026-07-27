@@ -41,7 +41,18 @@ const POSITION_COLOR_TIERS = {
 };
 const PITCH_DOT_DEFAULT = '#a3a3a3';
 
-function pitchDiagramSvg(player) {
+function pitchDiagramSvg(player, manualColors) {
+  // A manual tier map (same shape and tier names as the scouting card's picker)
+  // wins outright; with none set, fall back to the automatic token walk below so
+  // existing cards render exactly as they did.
+  if (manualColors && Object.keys(manualColors).length) {
+    const dc = {};
+    for (const slot of Object.keys(PITCH_SLOTS)) {
+      const tier = manualColors[slot];
+      dc[slot] = tier ? (POSITION_COLOR_TIERS[tier] || tier) : PITCH_DOT_DEFAULT;
+    }
+    return pitchSvgFromColors(dc);
+  }
   const posTokens = (player.position || '').split(',').map(t => t.trim()).filter(Boolean);
   const tierOrder = ['Primary', 'Secondary', 'Third', 'Fourth', 'Fifth', 'Sixth', 'Seventh'];
   const dotColors = {};
@@ -55,6 +66,10 @@ function pitchDiagramSvg(player) {
     dotColors[slot] = POSITION_COLOR_TIERS[tierOrder[tierIdx]];
     tierIdx++;
   }
+  return pitchSvgFromColors(dotColors);
+}
+
+function pitchSvgFromColors(dotColors) {
   const dots = Object.entries(PITCH_SLOTS).map(([slot, [x, y]]) =>
     `<circle cx="${x}" cy="${y}" r="14" fill="${dotColors[slot]}" filter="url(#dotShadow)"/>`
   ).join('');
@@ -873,13 +888,29 @@ function buildQuickCardElement(player, players, manual = {}) {
   const strengths = sd.strengths || player.latestStrengths || [];
   const weaknesses = sd.weaknesses || player.latestWeaknesses || [];
 
-  const band = player.gbeBand || 6;
-  const domPts    = player.gbeDomPts    ?? 0;
-  const contPts   = player.gbeContPts   ?? 0;
-  const lqPts     = player.gbeLqPts     ?? [12,10,8,6,4,2][Math.max(0,Math.min(5,band-1))];
-  const finishPts = player.gbeFinishPts ?? 0;
-  const progPts   = player.gbeProgPts   ?? 0;
-  const gbeTotal  = player.gbeTotal     ?? (domPts+contPts+lqPts+finishPts+progPts);
+  // Manual GBE values. The pipeline can't see everything that counts (loan spells
+  // recorded oddly, continental minutes missing from the CSV), so each component is
+  // individually overridable. Blank falls through to the derived value, and the
+  // total recomputes from whatever the parts end up being unless it too is set.
+  const _g = manual.gbeOv || {};
+  const _num = (v, fb) => (v === '' || v == null || isNaN(Number(v)) ? fb : Number(v));
+  const band = _num(_g.band, player.gbeBand || 6);
+  const domPts    = _num(_g.domPts,    player.gbeDomPts    ?? 0);
+  const contPts   = _num(_g.contPts,   player.gbeContPts   ?? 0);
+  // League Quality points are a function of the band, so overriding the band must
+  // move them. Only fall back to the pipeline's stored figure when the band is the
+  // pipeline's own; otherwise derive from the band actually in use.
+  const _bandOv = _g.band !== '' && _g.band != null;
+  const lqPts     = _num(_g.lqPts,
+    _bandOv ? [12,10,8,6,4,2][Math.max(0,Math.min(5,band-1))]
+            : (player.gbeLqPts ?? [12,10,8,6,4,2][Math.max(0,Math.min(5,band-1))]));
+  const finishPts = _num(_g.finishPts, player.gbeFinishPts ?? 0);
+  const progPts   = _num(_g.progPts,   player.gbeProgPts   ?? 0);
+  const _gbeDirty = ['band','domPts','contPts','lqPts','finishPts','progPts']
+    .some(k => _g[k] !== '' && _g[k] != null);
+  const gbeTotal  = _num(_g.total,
+    _gbeDirty ? (domPts+contPts+lqPts+finishPts+progPts)
+              : (player.gbeTotal ?? (domPts+contPts+lqPts+finishPts+progPts)));
   // Home nation players get an automatic pass regardless of points total —
   // mirrors PlayerCard.js's exact HOME_NATIONS check.
   const HOME_NATIONS = new Set(['england','scotland','wales','ireland','northern ireland','republic of ireland']);
@@ -1055,7 +1086,7 @@ function buildQuickCardElement(player, players, manual = {}) {
       ${manual.showPitchPosition ? `
       <!-- PITCH POSITION (replaces GBE) -->
       <div style="position:absolute;top:24px;left:1510px;width:390px;height:260px;display:flex;align-items:center;justify-content:center;">
-        <div style="width:100%;max-width:390px;">${pitchDiagramSvg(player)}</div>
+        <div style="width:100%;max-width:390px;">${pitchDiagramSvg(player, manual.positionColors)}</div>
       </div>` : `
       <!-- GBE -->
       <div style="position:absolute;top:24px;left:1510px;width:390px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.10);border-radius:12px;padding:20px 24px;">
@@ -1160,9 +1191,12 @@ export default function QuickCardModal({ player, players, onClose }) {
   const [headerColorOverride, setHeaderColorOverride] = useState('');
   const [showPitchPosition, setShowPitchPosition] = useState(false);
   const [escOverride, setEscOverride] = useState(false);
+  const [positionColors, setPositionColors] = useState({});
+  const [gbeOv, setGbeOv] = useState({});
+  const [showGbeEdit, setShowGbeEdit] = useState(false);
   const [escReason, setEscReason] = useState('');
   const [seasonOverride, setSeasonOverride] = useState('');
-  const BIO_MAX_LENGTH = scoutStatus ? 248 : 350;
+  const BIO_MAX_LENGTH = scoutStatus ? 223 : 315;
 
   // Distinct season+club rows this player has data for, newest first, for the
   // season-override dropdown. Deduped by season+league (matching PlayerCard's tab
@@ -1184,7 +1218,7 @@ export default function QuickCardModal({ player, players, onClose }) {
   const handleDownload = async () => {
     setDownloading(true);
     const { toPng } = await import('html-to-image');
-    const el = buildQuickCardElement(player, players, { agentOverride, nameOverride, valueOverride, heightOverride, teamOverride, posLabelOverride, uploadedPhotoDataUrl, biography, halfTeamContext, showForecast, scoutStatus, showScorePills, headerColorOverride, showPitchPosition, useBestRoleCareer, seasonOverride, shiftTeamText, escOverride, escReason });
+    const el = buildQuickCardElement(player, players, { agentOverride, nameOverride, valueOverride, heightOverride, teamOverride, posLabelOverride, uploadedPhotoDataUrl, biography, halfTeamContext, showForecast, scoutStatus, showScorePills, headerColorOverride, showPitchPosition, useBestRoleCareer, seasonOverride, shiftTeamText, escOverride, escReason, positionColors, gbeOv });
     try {
       const cardNode = el.querySelector('#qc-card-root') || el;
       const opts = {
@@ -1290,6 +1324,74 @@ export default function QuickCardModal({ player, players, onClose }) {
         <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12,textAlign:'left'}}>
           <input type="checkbox" id="qc-pitch" checked={showPitchPosition} onChange={e=>setShowPitchPosition(e.target.checked)} style={{cursor:'pointer'}} />
           <label htmlFor="qc-pitch" style={{fontSize:11.5,color:'#cbd5e1',cursor:'pointer'}}>Replace GBE card with pitch position diagram</label>
+        </div>
+
+        {/* Position colours — only meaningful when the pitch replaces GBE, so it
+            stays hidden until that toggle is on. */}
+        {showPitchPosition && (
+          <div style={{marginBottom:12,textAlign:'left',border:'1px solid #1e2d45',borderRadius:6,padding:10}}>
+            <div style={{fontSize:11,fontWeight:700,color:'#cbd5e1',marginBottom:6}}>Position colours</div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:6}}>
+              {[['GK','Goalkeeper'],['LB','Left Back'],['LCB','Left Centre Back'],['RCB','Right Centre Back'],
+                ['RB','Right Back'],['LWB','Left Wingback'],['RWB','Right Wingback'],['DM','Defensive Mid'],
+                ['CM','Central Mid'],['AM','Attacking Mid'],['LW','Left Winger'],['RW','Right Winger'],
+                ['ST','Striker']].map(([slot,label])=>(
+                <div key={slot}>
+                  <div style={{fontSize:9.5,color:'#9ca3af',marginBottom:2}}>{label}</div>
+                  <select style={{...qcInputStyle,fontSize:10.5,padding:'5px 7px'}}
+                    value={positionColors[slot]||''}
+                    onChange={e=>{
+                      const next={...positionColors};
+                      if(e.target.value) next[slot]=e.target.value; else delete next[slot];
+                      setPositionColors(next);
+                    }}>
+                    <option value="">Auto / Default (Grey)</option>
+                    <option value="Primary">Primary (Dark Green)</option>
+                    <option value="Secondary">Secondary (Green)</option>
+                    <option value="Third">Third (Light Green)</option>
+                    <option value="Fourth">Fourth (Yellow)</option>
+                    <option value="Fifth">Fifth (Amber)</option>
+                    <option value="Sixth">Sixth (Orange)</option>
+                    <option value="Seventh">Seventh (Red)</option>
+                  </select>
+                </div>
+              ))}
+            </div>
+            <div style={{fontSize:10,color:'#64748b',marginTop:6,lineHeight:1.4}}>
+              Leave every slot on Auto to keep the automatic colouring from the player's positions.
+            </div>
+          </div>
+        )}
+
+        {/* GBE calculator overrides — collapsed by default so the panel stays short. */}
+        <div style={{marginBottom:12,textAlign:'left'}}>
+          <button onClick={()=>setShowGbeEdit(v=>!v)}
+            style={{width:'100%',padding:'7px 0',borderRadius:6,border:'1px solid #1e2d45',background:'transparent',color:'#93c5fd',fontSize:11,fontWeight:700,cursor:'pointer'}}>
+            {showGbeEdit ? '▾' : '▸'} Edit GBE calculation
+          </button>
+          {showGbeEdit && (
+            <div style={{marginTop:8,border:'1px solid #1e2d45',borderRadius:6,padding:10}}>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:6}}>
+                {[['band','League Band (1-6)'],['domPts','Domestic Apps pts'],['contPts','Continental pts'],
+                  ['lqPts','League Quality pts'],['finishPts','League Finish pts'],['progPts','Finish/Prog pts'],
+                  ['total','Total pts (overrides sum)']].map(([k,label])=>(
+                  <div key={k}>
+                    <div style={{fontSize:9.5,color:'#9ca3af',marginBottom:2}}>{label}</div>
+                    <input type="number" style={{...qcInputStyle,fontSize:10.5,padding:'5px 7px'}}
+                      value={gbeOv[k]==null?'':gbeOv[k]} placeholder="Auto"
+                      onChange={e=>{
+                        const next={...gbeOv};
+                        if(e.target.value==='') delete next[k]; else next[k]=e.target.value;
+                        setGbeOv(next);
+                      }} />
+                  </div>
+                ))}
+              </div>
+              <div style={{fontSize:10,color:'#64748b',marginTop:6,lineHeight:1.4}}>
+                Blank uses the calculated value. Editing any component re-totals automatically; set Total only to force a figure that doesn't match its parts.
+              </div>
+            </div>
+          )}
         </div>
 
         <div style={{marginBottom:12,textAlign:'left'}}>

@@ -579,7 +579,7 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
 
   // Optional Biography — when set, it replaces the Impact tile (same slot), matching
   // the player quick card's biography behaviour (350-char cap, no scout-status here).
-  const bioText = overrides.biography ? String(overrides.biography).slice(0, 350) : '';
+  const bioText = overrides.biography ? String(overrides.biography).slice(0, 315) : '';
 
   const pill = (v) => { if (v == null) return ''; const c = pillColor(v); return `<span style="display:inline-flex;align-items:center;justify-content:center;line-height:1;min-width:18px;font-size:19px;font-weight:800;padding:7px 13px;border-radius:7px;background:${c.bg};color:${c.fg};">${Math.round(v)}</span>`; };
 

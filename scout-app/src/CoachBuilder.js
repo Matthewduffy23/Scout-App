@@ -8,6 +8,7 @@
 import React, { useState, useMemo } from 'react';
 import { useIsMobile } from './utils';
 import { newCoachId, upsertCoach } from './coachStorage';
+import { computeCoachTraits, traitScoreToTen } from './coachMetrics';
 
 const FORMATIONS = ['4-3-3', '4-4-2', '4-2-3-1', '4-1-4-1', '4-1-3-2', '4-2-2-2', '3-5-2', '3-4-3', '3-4-2-1', '5-4-1', '5-3-2'];
 const TRAIT_KEYS = ['possession', 'pressing', 'passing', 'adaptability', 'youthDevelopment', 'attacking', 'setPieces', 'defensive', 'directness'];
@@ -48,6 +49,20 @@ export default function CoachBuilder({ allTeams = [], existingCoach = null, onCl
   const [potentialLabel, setPotentialLabel] = useState(existingCoach?.potentialLabel || '');
   const [form, setForm] = useState(existingCoach?.form || ['W', 'W', 'D', 'L', 'W']); // last 5, oldest->newest
   const [traitOverrides, setTraitOverrides] = useState(existingCoach?.traitOverrides || {});
+  // Auto trait values for the tenures currently selected, so each row can show the
+  // number the card would use when the override is off — otherwise you're typing a
+  // 1-10 replacement with no idea what you're replacing.
+  const autoTraitTen = useMemo(() => {
+    if (!tenures.length || !allTeams.length) return {};
+    const rows = tenures
+      .map(t => allTeams.find(x => x.team === t.team && x.league === t.league && x.season === t.season))
+      .filter(Boolean);
+    if (!rows.length) return {};
+    const traits = computeCoachTraits(rows, allTeams) || {};
+    const out = {};
+    Object.keys(traits).forEach(k => { out[k] = traitScoreToTen(traits[k]); });
+    return out;
+  }, [tenures, allTeams]);
 
   // Toggle a formation on/off (max 3). Order of selection becomes primary/secondary/tertiary.
   const toggleFormation = (f) => {
@@ -88,7 +103,7 @@ export default function CoachBuilder({ allTeams = [], existingCoach = null, onCl
     setTraitOverrides(prev => {
       const next = { ...prev };
       if (next[key] != null) delete next[key];
-      else next[key] = 5;
+      else next[key] = autoTraitTen[key] != null ? autoTraitTen[key] : 5;
       return next;
     });
   };
@@ -328,6 +343,10 @@ export default function CoachBuilder({ allTeams = [], existingCoach = null, onCl
               <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <input type="checkbox" checked={traitOverrides[key] != null} onChange={() => toggleTraitOverride(key)} />
                 <span style={{ fontSize: 10, color: '#94a3b8', flex: 1 }}>{TRAIT_LABELS[key]}</span>
+                <span style={{ fontSize: 10, fontWeight: 700, color: autoTraitTen[key] == null ? '#475569' : '#64748b', minWidth: 16, textAlign: 'right' }}
+                  title="Auto-computed value (1-10)">
+                  {autoTraitTen[key] == null ? '—' : autoTraitTen[key]}
+                </span>
                 {traitOverrides[key] != null && (
                   <input type="number" min={1} max={10} value={traitOverrides[key]} onChange={e => setTraitOverrides(prev => ({ ...prev, [key]: Number(e.target.value) }))} style={{ width: 40, background: '#0d1220', border: '1px solid #1e2d45', borderRadius: 4, color: '#e2e8f4', fontSize: 11, padding: '2px 4px' }} />
                 )}
