@@ -157,6 +157,95 @@ function StatsSeasonPicker({ coach, teams, value, onChange }) {
   );
 }
 
+
+// League-finish editor. Two jobs: override the auto-computed rank for a season the
+// data covers, and add seasons it doesn't cover at all (a current campaign that
+// isn't in teams_final.json yet can only come from manual entry).
+// Both rank AND size are required — the chart scales position against league size,
+// so a rank on its own can't be placed on the axis.
+function CareerFinishEditor({ coach, overrides, coachId, onFieldChange }) {
+  var ovs = overrides.finishOverrides || {};
+  var extras = Array.isArray(overrides.extraFinish) ? overrides.extraFinish : [];
+  var rows = (coach.tenures || []).slice().sort(function(a, b) { return a.season < b.season ? 1 : -1; });
+
+  var num = { width: 46, background: '#080f1c', border: '1px solid #2b1e45', borderRadius: 4,
+              color: '#e2e8f4', fontSize: 11, padding: '3px 5px' };
+  var txt = Object.assign({}, num, { width: 82 });
+  var lab = { fontSize: 10.5, color: '#94a3b8', width: 150, whiteSpace: 'nowrap',
+              overflow: 'hidden', textOverflow: 'ellipsis' };
+
+  function setOv(season, key, val) {
+    var next = Object.assign({}, ovs);
+    var cur = Object.assign({}, next[season] || {});
+    if (val === '') delete cur[key]; else cur[key] = val;
+    if (cur.rank == null && cur.size == null) delete next[season]; else next[season] = cur;
+    onFieldChange(coachId, 'finishOverrides', Object.keys(next).length ? next : undefined);
+  }
+  function setExtra(i, key, val) {
+    var next = extras.map(function(e, j) {
+      if (j !== i) return e;
+      var copy = Object.assign({}, e);
+      copy[key] = val;
+      return copy;
+    });
+    onFieldChange(coachId, 'extraFinish', next);
+  }
+  function addExtra() {
+    onFieldChange(coachId, 'extraFinish', extras.concat([{ season: '', team: '', rank: '', size: '' }]));
+  }
+  function removeExtra(i) {
+    var next = extras.filter(function(_, j) { return j !== i; });
+    onFieldChange(coachId, 'extraFinish', next.length ? next : undefined);
+  }
+
+  return (
+    <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px solid #1a1030' }}>
+      <span style={{ fontSize: 9, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+        League finish — blank uses auto
+      </span>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 6 }}>
+        {rows.map(function(t, i) {
+          var cur = ovs[t.season] || {};
+          return (
+            <div key={t.season + i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={lab}>{t.team + ' · ' + t.season}</span>
+              <input type="number" min="1" style={num} placeholder="Pos"
+                value={cur.rank == null ? '' : cur.rank}
+                onChange={function(e) { setOv(t.season, 'rank', e.target.value); }} />
+              <span style={{ fontSize: 10, color: '#475569' }}>of</span>
+              <input type="number" min="2" style={num} placeholder="Teams"
+                value={cur.size == null ? '' : cur.size}
+                onChange={function(e) { setOv(t.season, 'size', e.target.value); }} />
+            </div>
+          );
+        })}
+        {extras.map(function(e, i) {
+          return (
+            <div key={'x' + i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input type="text" style={txt} placeholder="2025-26"
+                value={e.season || ''} onChange={function(ev) { setExtra(i, 'season', ev.target.value); }} />
+              <input type="text" style={{ ...txt, width: 62 }} placeholder="Club"
+                value={e.team || ''} onChange={function(ev) { setExtra(i, 'team', ev.target.value); }} />
+              <input type="number" min="1" style={num} placeholder="Pos"
+                value={e.rank || ''} onChange={function(ev) { setExtra(i, 'rank', ev.target.value); }} />
+              <span style={{ fontSize: 10, color: '#475569' }}>of</span>
+              <input type="number" min="2" style={num} placeholder="Teams"
+                value={e.size || ''} onChange={function(ev) { setExtra(i, 'size', ev.target.value); }} />
+              <button type="button" onClick={function() { removeExtra(i); }}
+                style={{ background: 'none', border: 'none', color: '#f87171', fontSize: 13, cursor: 'pointer', padding: '0 4px' }}>x</button>
+            </div>
+          );
+        })}
+      </div>
+      <button type="button" onClick={addExtra}
+        style={{ marginTop: 6, padding: '4px 10px', background: '#0e2040', border: '1px solid #2b1e45',
+                 borderRadius: 4, color: '#93c5fd', fontSize: 10.5, cursor: 'pointer' }}>
+        + Season outside data
+      </button>
+    </div>
+  );
+}
+
 function CoachQuickOverrides({ coach, coachId, overrides, teams, onFieldChange, onClear }) {
   var isMobile = useIsMobile();
   var latestT = (coach.tenures || []).slice().sort(function(a, b) { return a.season < b.season ? 1 : -1; })[0];
@@ -233,6 +322,9 @@ function CoachQuickOverrides({ coach, coachId, overrides, teams, onFieldChange, 
           <option value="finish">League finish</option>
         </select>
       </div>
+      {overrides.careerMode === 'finish' && (
+        <CareerFinishEditor coach={coach} overrides={overrides} coachId={coachId} onFieldChange={onFieldChange} />
+      )}
       <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid #1a1030' }}>
         <span style={lbl}>GBE — pass route (managers have no points; tick one to pass)</span>
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginTop: 6 }}>
@@ -602,6 +694,8 @@ export default function CoachPanel({ allTeams, allPlayers, onClose }) {
       if (q.unattached) overrides.unattached = true;
       if (q.statsSeasonKey) overrides.statsSeasonKey = q.statsSeasonKey;
       if (q.careerMode) overrides.careerMode = q.careerMode;
+      if (q.finishOverrides) overrides.finishOverrides = q.finishOverrides;
+      if (q.extraFinish) overrides.extraFinish = q.extraFinish;
       if (q.hidePills) overrides.showScorePills = false;
       if (q.gbeC36 || q.gbeC24 || q.gbeExceptions) {
         overrides.gbe = {

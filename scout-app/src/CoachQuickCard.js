@@ -459,14 +459,30 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
   // Match each scored season back to its tenure row so league finish can be ranked
   // against that division's peers in `_pool` (falls back to a stored pointsRank).
   const _careerPool = (overrides.allTeams && overrides.allTeams.length) ? overrides.allTeams : tenureRows;
+  const finishOv = overrides.finishOverrides || {};
   const careerPts = [...perSeason].reverse().map(s => {
     const row = tenureRows.find(r => String(r.season) === String(s.season)) || null;
     const finish = row
       ? (_rankIn(_careerPool, row, 'points')
          || (row.pointsRank != null && row.leagueSize != null ? { rank: row.pointsRank, size: row.leagueSize } : null))
       : null;
-    return { season: s.season, sc: s.sc, finish };
+    const ov = finishOv[String(s.season)];
+    const manual = ov && ov.rank && ov.size
+      ? { rank: Number(ov.rank), size: Number(ov.size) }
+      : null;
+    return { season: s.season, sc: s.sc, finish: manual || finish };
   });
+  // Seasons the data doesn't cover at all. They carry no score, so they only join
+  // the series in finish mode — appending them in score mode would plot a null.
+  if (careerMode === 'finish' && Array.isArray(overrides.extraFinish)) {
+    for (const e of overrides.extraFinish) {
+      if (!e || !e.season || !e.rank || !e.size) continue;
+      if (careerPts.some(p => String(p.season) === String(e.season))) continue;
+      careerPts.push({ season: e.season, sc: null,
+                       finish: { rank: Number(e.rank), size: Number(e.size) } });
+    }
+    careerPts.sort((a, b) => (String(a.season) < String(b.season) ? -1 : 1));
+  }
 
   // LEFT percentile bars — RECENT season only (matches the header's latest team,
   // rather than blending every tenure season).
@@ -676,7 +692,7 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
       </div>
 
       <div style="position:absolute;top:${STYLE_TOP}px;left:${984 + STYLE_PANEL_W + PANEL_GAP_H}px;width:${CAREER_PANEL_W}px;height:${ROW1_PANEL_H}px;background:${PANEL_BG};border:1px solid ${PANEL_BORDER};border-radius:${PANEL_RADIUS}px;padding:${PANEL_PAD}px;box-sizing:border-box;overflow:hidden;box-shadow:${PANEL_SHADOW};">
-        <div style="font-size:22px;font-weight:700;color:${ACCENT_PINK};margin-bottom:14px;">Career${careerMode === 'finish' ? ' <span style="font-size:15px;font-weight:600;color:#9aa3b8;">— League Finish</span>' : ''}</div>
+        <div style="font-size:22px;font-weight:700;color:${ACCENT_PINK};margin-bottom:14px;">Career</div>
         ${careerHtml}
       </div>
 
