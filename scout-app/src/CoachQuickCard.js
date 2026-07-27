@@ -123,8 +123,51 @@ function styleHexSvg(rows, maxWidth = 404) {
 }
 
 // CAREER line chart — mirrors player careerTrajectorySvg styling (per-season scores)
-function careerChartSvg(points, w = 404, h = 284) {
+// Career chart, league-finish variant. Y is inverted so 1st sits at the top, and
+// each season is scaled against its OWN league size — finishing 3rd of 24 and 3rd
+// of 20 are not the same achievement, so the dot height reflects the percentile
+// within that division rather than the raw position number.
+function finishChartSvg(points, w, h) {
+  const usable = points.filter(p => p.finish && p.finish.rank && p.finish.size > 1);
+  if (!usable.length) {
+    return `<div style="font-size:13px;color:#5e6678;padding:6px 0;">No league finish data for these seasons.</div>`;
+  }
+  const small = usable.length === 1;
+  const pad = { t: 18, r: 16, b: 26, l: 16 };
+  const pw = w - pad.l - pad.r, ph = h - pad.t - pad.b;
+  const DATA_X = 0.82, dataW = pw * DATA_X;
+  const n = usable.length;
+  // pctOf: 100 = won the league, 0 = bottom.
+  const pctOf = f => ((f.size - f.rank) / (f.size - 1)) * 100;
+  const xS = i => pad.l + (n === 1 ? dataW / 2 : (i / (n - 1)) * dataW);
+  const yS = pct => pad.t + ph - (pct / 100) * ph;
+  const GUIDES = [[100, '1st'], [50, 'Mid'], [0, 'Last']];
+  const guideLines = GUIDES.map(([pct, label]) => {
+    const y = yS(pct);
+    return `<line x1="${pad.l}" y1="${y.toFixed(1)}" x2="${pad.l + pw}" y2="${y.toFixed(1)}" stroke="rgba(255,255,255,0.15)" stroke-width="1" stroke-dasharray="3,3"/><text x="${(pad.l + pw - 3).toFixed(1)}" y="${(y - 3).toFixed(1)}" font-family="Montserrat,sans-serif" font-size="9" font-weight="700" fill="rgba(255,255,255,0.4)" text-anchor="end">${label}</text>`;
+  }).join('');
+  const linePts = usable.map((p, i) => `${xS(i).toFixed(1)},${yS(pctOf(p.finish)).toFixed(1)}`).join(' ');
+  const dots = usable.map((p, i) => {
+    const pct = pctOf(p.finish);
+    const cx = xS(i), cy = yS(pct), col = scoreTierColor(pct);
+    const sLbl = String(p.season).replace(/^20/, '');
+    return `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="5" fill="${col}" stroke="#07090f" stroke-width="1.5"/><text x="${cx.toFixed(1)}" y="${(cy - 11).toFixed(1)}" font-family="Montserrat,sans-serif" font-size="11" font-weight="700" fill="${col}" text-anchor="middle">${p.finish.rank}/${p.finish.size}</text><text x="${cx.toFixed(1)}" y="${(pad.t + ph + 17).toFixed(1)}" font-family="Montserrat,sans-serif" font-size="10" font-weight="600" fill="#5e6678" text-anchor="middle">${sLbl}</text>`;
+  }).join('');
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
+    ${guideLines}
+    <line x1="${pad.l}" y1="${pad.t + ph}" x2="${pad.l + pw}" y2="${pad.t + ph}" stroke="#1e2a3e" stroke-width="1"/>
+    <polyline points="${linePts}" fill="none" stroke="#a78bfa" stroke-width="2.5"/>
+    ${dots}
+    ${small ? `<text x="${pad.l}" y="${pad.t - 6}" font-family="Montserrat,sans-serif" font-size="10" font-weight="600" fill="#5e6678">Small Sample</text>` : ''}
+  </svg>`;
+}
+
+function careerChartSvg(points, w = 404, h = 284, mode = 'score') {
   if (!points.length) return `<div style="font-size:13px;color:#5e6678;padding:6px 0;">Not enough season history.</div>`;
+  // League-finish mode plots position instead of score. It needs its own axis
+  // (inverted — 1st at the top), and the score band lines are meaningless here,
+  // so it gets a separate renderer rather than a pile of conditionals.
+  if (mode === 'finish') return finishChartSvg(points, w, h);
   const small = points.length === 1;
   const pad = { t: 18, r: 16, b: 26, l: 16 };
   const pw = w - pad.l - pad.r, ph = h - pad.t - pad.b;
@@ -412,7 +455,18 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
   ].map(([l, v]) => [l, v == null ? 0 : v]).sort((a, b) => b[1] - a[1]);
 
   // Career line points (oldest -> newest)
-  const careerPts = [...perSeason].reverse().map(s => ({ season: s.season, sc: s.sc }));
+  const careerMode = overrides.careerMode === 'finish' ? 'finish' : 'score';
+  // Match each scored season back to its tenure row so league finish can be ranked
+  // against that division's peers in `_pool` (falls back to a stored pointsRank).
+  const _careerPool = (overrides.allTeams && overrides.allTeams.length) ? overrides.allTeams : tenureRows;
+  const careerPts = [...perSeason].reverse().map(s => {
+    const row = tenureRows.find(r => String(r.season) === String(s.season)) || null;
+    const finish = row
+      ? (_rankIn(_careerPool, row, 'points')
+         || (row.pointsRank != null && row.leagueSize != null ? { rank: row.pointsRank, size: row.leagueSize } : null))
+      : null;
+    return { season: s.season, sc: s.sc, finish };
+  });
 
   // LEFT percentile bars — RECENT season only (matches the header's latest team,
   // rather than blending every tenure season).
@@ -503,7 +557,7 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
   const ROW2_PANEL_H = PANEL_PAD*2 + STYLE_HEADER_H + 5*52 + 28; // taller tiles (bottom stays within 1080)
 
   const styleHtml = styleHexSvg(styleRows, STYLE_PANEL_W - PANEL_PAD*2);
-  const careerHtml = careerChartSvg(careerPts, CAREER_PANEL_W - PANEL_PAD*2, hexH);
+  const careerHtml = careerChartSvg(careerPts, CAREER_PANEL_W - PANEL_PAD*2, hexH, careerMode);
   const _radarInnerH = ROW2_PANEL_H - PANEL_PAD * 2 - 40;
   const radarHtml = `<div style="height:${_radarInnerH}px;display:flex;align-items:center;justify-content:center;">${impactRadarSvg(rowA, rowB, radarPool, labelA, labelB, subA, subB)}</div>`;
 
@@ -622,7 +676,7 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
       </div>
 
       <div style="position:absolute;top:${STYLE_TOP}px;left:${984 + STYLE_PANEL_W + PANEL_GAP_H}px;width:${CAREER_PANEL_W}px;height:${ROW1_PANEL_H}px;background:${PANEL_BG};border:1px solid ${PANEL_BORDER};border-radius:${PANEL_RADIUS}px;padding:${PANEL_PAD}px;box-sizing:border-box;overflow:hidden;box-shadow:${PANEL_SHADOW};">
-        <div style="font-size:22px;font-weight:700;color:${ACCENT_PINK};margin-bottom:14px;">Career</div>
+        <div style="font-size:22px;font-weight:700;color:${ACCENT_PINK};margin-bottom:14px;">Career${careerMode === 'finish' ? ' <span style="font-size:15px;font-weight:600;color:#9aa3b8;">— League Finish</span>' : ''}</div>
         ${careerHtml}
       </div>
 

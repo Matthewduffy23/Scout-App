@@ -223,6 +223,16 @@ function CoachQuickOverrides({ coach, coachId, overrides, teams, onFieldChange, 
       </div>
       <StatsSeasonPicker coach={coach} teams={teams} value={overrides.statsSeasonKey}
         onChange={function(v) { onFieldChange(coachId, 'statsSeasonKey', v); }} />
+      <div style={{ marginTop: 8 }}>
+        <span style={{ fontSize: 9, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Career chart</span>
+        <select
+          style={{ fontSize: 11, background: '#080f1c', border: '1px solid #2b1e45', borderRadius: 4, color: '#e2e8f4', padding: '4px 6px', width: 240 }}
+          value={overrides.careerMode || 'score'}
+          onChange={function(e) { onFieldChange(coachId, 'careerMode', e.target.value === 'score' ? undefined : e.target.value); }}>
+          <option value="score">Cumulative score (default)</option>
+          <option value="finish">League finish</option>
+        </select>
+      </div>
       <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid #1a1030' }}>
         <span style={lbl}>GBE — pass route (managers have no points; tick one to pass)</span>
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginTop: 6 }}>
@@ -591,6 +601,7 @@ export default function CoachPanel({ allTeams, allPlayers, onClose }) {
       if (q.tenure && q.tenure.trim()) overrides.tenure = q.tenure.trim();
       if (q.unattached) overrides.unattached = true;
       if (q.statsSeasonKey) overrides.statsSeasonKey = q.statsSeasonKey;
+      if (q.careerMode) overrides.careerMode = q.careerMode;
       if (q.hidePills) overrides.showScorePills = false;
       if (q.gbeC36 || q.gbeC24 || q.gbeExceptions) {
         overrides.gbe = {
