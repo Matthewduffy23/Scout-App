@@ -71,7 +71,7 @@ export function Crest({id,name,size=20}){
 // Plain DOM rather than React so the standalone export functions in CoachCard.js
 // and CoachQuickCard.js can call it too — they aren't components.
 // ---------------------------------------------------------------------------
-function isTouchDevice(){
+export function isTouchDevice(){
   return typeof window !== 'undefined'
     && window.matchMedia('(pointer: coarse)').matches;
 }
@@ -189,4 +189,47 @@ export async function deliverJson(text, filename){
   a.remove();
   setTimeout(()=>URL.revokeObjectURL(url), 20000);
   return 'downloaded';
+}
+
+// ---------------------------------------------------------------------------
+// Squad loader.
+//
+// On mobile App.js only holds one position group at a time, so Team Report's XI
+// can never be filled — it can see strikers but no keeper, defenders or midfield.
+//
+// Loading every chunk the way desktop does is what crashed iOS in the first place,
+// but the culprit was Promise.all holding ~15 parsed chunks in memory at once, not
+// the row count. Fetching sequentially and filtering to the one club before moving
+// on means peak memory is a single chunk — the same cost as one position group,
+// which is already known to be safe — while what's retained is ~30 players.
+// ---------------------------------------------------------------------------
+const _squadCache = {};
+
+function normLeagueName(l){ return String(l||'').trim().replace(/\.$/,'').toLowerCase(); }
+
+export async function loadSquad(team, league, onProgress){
+  const key = `${String(team).toLowerCase()}|${normLeagueName(league)}`;
+  if(_squadCache[key]) return _squadCache[key];
+
+  let manifest = null;
+  try { const r = await fetch('/players_manifest.json'); if(r.ok) manifest = await r.json(); } catch(e){}
+  const files = manifest
+    ? Object.values(manifest).flat()
+    : ['gk','cb','fb','cm','att','cf'].map(f=>`players_${f}.json`);
+
+  const squad = [];
+  for(let i=0;i<files.length;i++){
+    if(onProgress) onProgress(i+1, files.length);
+    let rows = null;
+    try { rows = await fetch(`/${files[i]}`).then(r=>r.json()); } catch(e){ continue; }
+    for(const p of rows){
+      if(p && String(p.team).toLowerCase() === String(team).toLowerCase()
+           && normLeagueName(p.league) === normLeagueName(league)){
+        squad.push(p);
+      }
+    }
+    rows = null; // drop the chunk before fetching the next one
+  }
+  _squadCache[key] = squad;
+  return squad;
 }

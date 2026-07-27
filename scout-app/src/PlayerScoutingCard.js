@@ -4,7 +4,7 @@
 // Uses html2canvas to screenshot an offscreen DOM node and trigger a PNG download.
 
 import { scoreBandColor, scoreLabel, scoreToStars, ROLE_KEY_LABELS, formatMV, formatFoot, LEAGUE_STRENGTHS } from './constants';
-import { deliverPng } from './utils';
+import { deliverPng, isTouchDevice } from './utils';
 
 const PHOTO_BASE = 'https://raw.githubusercontent.com/Matthewduffy23/scouting-photos/main/photos/';
 const CREST_BASE = 'https://raw.githubusercontent.com/Matthewduffy23/scouting-photos/main/crests/';
@@ -1141,10 +1141,10 @@ export function buildCardElement(player, manual = {}) {
 
       <!-- CURRENT / POTENTIAL LEVEL -->
       <div style="position:absolute;top:894px;left:938px;font-size:26.6px;font-weight:700;color:#fff;">CURRENT LEVEL</div>
-      <div style="position:absolute;top:940px;left:941px;">${starsHtml(manual.currentScore ?? player.careerScore, 40, manual.currentStarsOverride != null && manual.currentStarsOverride !== '' ? Number(manual.currentStarsOverride) : null, !!manual.iphoneExport)}</div>
+      <div style="position:absolute;top:940px;left:941px;">${starsHtml(manual.currentScore ?? player.careerScore, 40, manual.currentStarsOverride != null && manual.currentStarsOverride !== '' ? Number(manual.currentStarsOverride) : null, (!!manual.iphoneExport || isTouchDevice()))}</div>
       <div style="position:absolute;top:948px;left:${manual.iphoneExport ? '1155px' : '1133px'};font-size:20px;font-weight:500;color:#c0c0c0;">${manual.currentLevel || scoreLabel(player.careerScore)}</div>
       <div style="position:absolute;top:995px;left:938px;font-size:26.6px;font-weight:700;color:#fff;">POTENTIAL LEVEL</div>
-      <div style="position:absolute;top:1033px;left:937px;">${starsHtml(manual.potentialScore ?? player.potentialScore ?? player.careerScore, 40, manual.potentialStarsOverride != null && manual.potentialStarsOverride !== '' ? Number(manual.potentialStarsOverride) : null, !!manual.iphoneExport)}</div>
+      <div style="position:absolute;top:1033px;left:937px;">${starsHtml(manual.potentialScore ?? player.potentialScore ?? player.careerScore, 40, manual.potentialStarsOverride != null && manual.potentialStarsOverride !== '' ? Number(manual.potentialStarsOverride) : null, (!!manual.iphoneExport || isTouchDevice()))}</div>
       <div style="position:absolute;top:1039px;left:${manual.iphoneExport ? '1155px' : '1133px'};font-size:20px;font-weight:500;color:#c0c0c0;">${manual.potentialLevel || scoreLabel(player.potentialScore || player.careerScore)}</div>
 
       <!-- TEMP build marker (remove once font is confirmed) -->

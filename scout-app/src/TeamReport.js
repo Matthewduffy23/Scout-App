@@ -210,7 +210,7 @@ import {
 import { loadCoaches } from './coachStorage';
 import { FOTMOB_PHOTO_BASE, countryToIso2, computeAge, fadeHexToBG } from './CoachCard';
 import { computeCoachScore } from './CoachQuickCard';
-import { useIsMobile, deliverPng } from './utils';
+import { useIsMobile, deliverPng, loadSquad } from './utils';
 
 // ─── Canvas geometry ───────────────────────────────────────────────────────
 const W = 1920;
@@ -3099,8 +3099,32 @@ function PlayerPicker({ pool, picked, onPick, onRemove, max = 3, placeholder }) 
   );
 }
 // ─── Modal ─────────────────────────────────────────────────────────────────
-export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], players = [], onClose }) {
+export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], players: playersProp = [], onClose }) {
   const isMobile = useIsMobile();
+
+  // --- Squad backfill -------------------------------------------------------
+  // On mobile only one position group is in memory, so the XI can never be filled
+  // from `playersProp` alone. Pull this club's players out of every chunk, one
+  // chunk at a time, and merge them in. Cached per club for the session.
+  const [squadExtra, setSquadExtra] = useState(null);
+  const [squadLoading, setSquadLoading] = useState(false);
+  const [squadStep, setSquadStep] = useState('');
+  const [squadError, setSquadError] = useState('');
+
+  const players = useMemo(() => {
+    if (!squadExtra || !squadExtra.length) return playersProp;
+    const seen = new Set(playersProp.map(playerKey));
+    return playersProp.concat(squadExtra.filter(p => !seen.has(playerKey(p))));
+  }, [playersProp, squadExtra]);
+
+  const fetchSquad = useCallback(() => {
+    setSquadLoading(true); setSquadError(''); setSquadStep('');
+    loadSquad(team.team, team.league, (i, n) => setSquadStep(`${i}/${n}`))
+      .then(rows => { setSquadExtra(rows); })
+      .catch(e => setSquadError(String((e && e.message) || e)))
+      .finally(() => { setSquadLoading(false); setSquadStep(''); });
+  }, [team]);
+
   const [downloading, setDownloading] = useState(false);
   const [progress, setProgress] = useState('');
   const [error, setError] = useState('');
@@ -4102,7 +4126,22 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
             <div style={{ ...note, color: '#fbc701', background: 'rgba(251,199,1,0.08)',
                           border: '1px solid rgba(251,199,1,0.25)' }}>
               Only {groupsPresent} position group{groupsPresent === 1 ? '' : 's'} loaded — the XI
-              will be incomplete. Switch the position filter to "All" to load every group.
+              will be incomplete.
+              <button onClick={fetchSquad} disabled={squadLoading}
+                style={{ display: 'block', width: '100%', marginTop: 8, padding: '9px 0',
+                         borderRadius: 6, border: '1px solid #3b7de8',
+                         background: squadLoading ? '#1e2d45' : '#0e2040',
+                         color: '#93c5fd', fontSize: 12, fontWeight: 700,
+                         cursor: squadLoading ? 'default' : 'pointer' }}>
+                {squadLoading ? `Loading squad… ${squadStep}` : `Load full ${team.team} squad`}
+              </button>
+              {squadError && <div style={{ marginTop: 6, color: '#f87171' }}>Squad load failed: {squadError}</div>}
+            </div>
+          )}
+          {squadExtra && squadExtra.length > 0 && (
+            <div style={{ ...note, color: '#4ade80', background: 'rgba(74,222,128,0.08)',
+                          border: '1px solid rgba(74,222,128,0.25)', textAlign: 'left' }}>
+              Loaded {squadExtra.length} {team.team} players across all position groups.
             </div>
           )}
           {unmappedKeys.length > 0 && (
