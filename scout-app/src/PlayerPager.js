@@ -38,7 +38,7 @@ import { formatMV, formatFoot } from './constants';
 import { useIsMobile, deliverPng, photoUrl } from './utils';
 import {
   scoreWheel, headerInk, preloadImages, fitNameSize, pillHtml,
-  styleHexSvg, gradeColor, radarColor, teamOptions, personFlagUrl,
+  styleHexSvg, gradeColor, radarColor, teamOptions, personFlagUrl, nameEmWidth,
   HEADER_COLOURS, HEADER_COLOUR_NAMES,
 } from './TeamReport';
 import { fadeHexToBG, countryToIso2 } from './CoachCard';
@@ -79,15 +79,20 @@ const NAME_X = 172;
 // between the rings and the rule.
 const NAME_MAX_W = 462;
 const RULE_1 = 644;
-const RULE_2 = 1338;
+// 1338 gave GBE the whole 538px coach slot and left the position block 360px for
+// a 188px pitch plus two position names. "Defensive Midfielder" is ~190px at 19px
+// nowrap, so it ran straight out of its 138px column and across the pitch.
+// GBE does not need 538: four small counters fit two-up in 432, which hands 106px
+// back to the block that actually needed it.
+const RULE_2 = 1444;
 const WHEEL_X = 650;
 const WHEEL_W = 296;
 const RULE_MID = 946;
 const PITCH_X = 968;                     // TeamReport's trend slot
-const PITCH_W = 360;
+const PITCH_W = 466;
 const HDR_LABEL_Y = 114;
-const GBE_X = 1358;                      // TeamReport's coach slot
-const GBE_W = 538;
+const GBE_X = 1464;
+const GBE_W = 432;
 
 // ─── Palette — same values as TeamReport/QuickCard ─────────────────────────
 const ACCENT_PINK = '#ff66c4';
@@ -554,7 +559,7 @@ function positionPitchSvg(player, w, h, manualColors, pcts, heatmap, heatOpacity
 const PB_PITCH_H = 122;
 const PB_PITCH_W = Math.round(PB_PITCH_H * (320 / 208));   // 188
 const PB_GAP = 20;
-const PB_TEXT_W = 138;
+const PB_TEXT_W = 236;
 
 function positionBlockHtml(player, x, w, ink, manualColors, pcts, heatmap, heatOpacity, shownSlots) {
   // Derived from the SLOTS THE PITCH DRAWS, not from the raw position string.
@@ -567,6 +572,13 @@ function positionBlockHtml(player, x, w, ink, manualColors, pcts, heatmap, heatO
   const full = (sl) => POS_FULL[sl] || POSITION_LABELS[sl] || sl || '—';
 
   const textW = PB_TEXT_W;
+  // The position names are nowrap, so a long one has to be MEASURED rather than
+  // assumed to fit — "Attacking Midfielder" and "Defensive Midfielder" are both
+  // wider at 19px than the column they sat in, which is how they ended up drawn
+  // over the pitch. nameEmWidth is the same estimator the club name uses.
+  const longest = Math.max(nameEmWidth(full(primary)),
+                           secondary ? nameEmWidth(full(secondary)) : 0);
+  const posFs = Math.max(13, Math.min(19, Math.floor(textW / (longest || 1))));
   const groupW = textW + PB_GAP + PB_PITCH_W;
   // Nudged 14px left of centre: the block sits between RULE_MID and RULE_2, and
   // the right-hand rule butts straight onto the GBE tiles while the left one has
@@ -576,11 +588,11 @@ function positionBlockHtml(player, x, w, ink, manualColors, pcts, heatmap, heatO
     <div style="position:absolute;left:${left}px;top:28px;width:${textW}px;">
       <div style="font-size:8px;font-weight:700;letter-spacing:0.14em;color:${ink.muted};
                   white-space:nowrap;">POSITION</div>
-      <div style="margin-top:9px;font-size:19px;font-weight:800;color:${ink.primary};
+      <div style="margin-top:9px;font-size:${posFs}px;font-weight:800;color:${ink.primary};
                   line-height:1.05;white-space:nowrap;">${esc(full(primary))}</div>
       <div style="margin-top:14px;font-size:8px;font-weight:700;letter-spacing:0.14em;
                   color:${ink.muted};white-space:nowrap;">SECONDARY POSITION</div>
-      <div style="margin-top:9px;font-size:19px;font-weight:800;color:${ink.muted};
+      <div style="margin-top:9px;font-size:${posFs}px;font-weight:800;color:${ink.muted};
                   line-height:1.05;white-space:nowrap;">${secondary ? esc(full(secondary)) : '&mdash;'}</div>
     </div>
     <div style="position:absolute;left:${left + textW + PB_GAP}px;top:14px;
@@ -891,7 +903,7 @@ function viewPanelBody(w, h, text) {
   // 17px at 1.5 gave 6 lines in a 155px tile and the sixth clipped mid-word.
   // 15px at 1.45 gives 7 lines with room to spare, and ~68 characters a line
   // instead of ~50 — a third more copy in the same box.
-  return `<div style="position:absolute;inset:0;font-size:15px;line-height:1.45;
+  return `<div style="position:absolute;inset:0;font-size:14px;line-height:1.44;
             font-weight:500;color:#e2e8f4;overflow:hidden;">${esc(text)}</div>`;
 }
 
@@ -958,49 +970,45 @@ function headerHtml(player, ctx, opts) {
          in Effaghe) was clipped by overflow:hidden. 1.18 with a taller box gives
          the tail somewhere to go; the box still clips, but only a name that
          defeats the 22px floor. -->
-    <div style="position:absolute;left:${NAME_X}px;top:8px;width:${NAME_MAX_W}px;height:62px;
+    <div style="position:absolute;left:${NAME_X}px;top:6px;width:${NAME_MAX_W}px;height:64px;
                 display:flex;align-items:flex-end;overflow:hidden;">
       <div style="font-size:${fitNameSize(displayName, NAME_MAX_W)}px;font-weight:800;letter-spacing:-0.8px;
                   line-height:1.18;color:${ink.primary};white-space:nowrap;">${esc(displayName)}</div>
     </div>
 
-    <!-- club crest, club, league badge, league flag, abbreviated league -->
-    <div style="position:absolute;left:${NAME_X}px;top:74px;display:flex;align-items:center;
+    <!-- Club, league and the player's own details on ONE row. Split across two
+         they left the nationality flag stranded above a lone age, and cost a whole
+         row of the band. The league FLAG is dropped: DEN2 already names the
+         country and the badge already identifies the competition, so it was the
+         third thing on the row saying "Denmark". -->
+    <div style="position:absolute;left:${NAME_X}px;top:78px;display:flex;align-items:center;
                 white-space:nowrap;">
-      ${crest ? `<div style="width:24px;height:24px;flex-shrink:0;background-size:contain;
+      ${crest ? `<div style="width:23px;height:23px;flex-shrink:0;background-size:contain;
                   background-repeat:no-repeat;background-position:center;
                   background-image:url('${src(crest)}');"></div>` : ''}
-      <span style="font-size:21px;font-weight:700;color:${ink.secondary};${crest ? 'margin-left:10px;' : ''}">${esc(truncateText(displayTeam, 18))}</span>
-      ${logo ? `<div style="width:21px;height:21px;flex-shrink:0;background-size:contain;
+      <span style="font-size:20px;font-weight:700;color:${ink.secondary};${crest ? 'margin-left:9px;' : ''}">${esc(truncateText(displayTeam, 16))}</span>
+      ${logo ? `<div style="width:19px;height:19px;flex-shrink:0;background-size:contain;
                   background-repeat:no-repeat;background-position:center;
-                  background-image:url('${src(logo)}');margin-left:14px;"></div>` : ''}
-      ${flag ? `<div style="width:24px;height:15px;flex-shrink:0;background-size:cover;
-                  background-position:center;border-radius:2px;margin-left:9px;
-                  box-shadow:inset 0 0 0 1px rgba(255,255,255,0.18);
-                  background-image:url('${src(flag)}');"></div>` : ''}
-      <span style="font-size:13px;font-weight:800;letter-spacing:0.08em;
-                   color:${ink.muted};margin-left:9px;">${esc(leagueAbbrev(league))}</span>
-    </div>
+                  background-image:url('${src(logo)}');margin-left:11px;"></div>` : ''}
+      <span style="font-size:12.5px;font-weight:800;letter-spacing:0.08em;
+                   color:${ink.muted};margin-left:8px;">${esc(leagueAbbrev(league))}</span>
 
-    <!-- Who he is: nationality, age, height, foot. A separate row from the season
-         counters below, because these describe the player and those describe one
-         season — run together they read as a single twelve-item strip. -->
-    <div style="position:absolute;left:${NAME_X}px;top:101px;display:flex;align-items:center;
-                white-space:nowrap;">
-      ${natFlag ? `<div style="width:22px;height:14px;flex-shrink:0;background-size:cover;
-                  background-position:center;border-radius:2px;margin-right:10px;
+      <span style="width:1px;height:16px;background:${ink.rule};margin:0 14px;flex-shrink:0;"></span>
+
+      ${natFlag ? `<div style="width:21px;height:13px;flex-shrink:0;background-size:cover;
+                  background-position:center;border-radius:2px;margin-right:9px;
                   box-shadow:inset 0 0 0 1px rgba(255,255,255,0.18);
                   background-image:url('${src(natFlag)}');"></div>` : ''}
       ${[player.age != null ? String(player.age) : null,
          cmToFeet(player.height),
          (player.foot && player.foot !== 'unknown' && player.foot !== 'nan') ? formatFoot(player.foot) : null,
         ].filter(Boolean).map((v, i) => `
-        ${i ? `<span style="color:${ink.muted};margin:0 9px;font-size:11px;">&middot;</span>` : ''}
-        <span style="font-size:13px;font-weight:700;color:${ink.soft};">${esc(v)}</span>`).join('')}
+        ${i ? `<span style="color:${ink.muted};margin:0 8px;font-size:11px;">&middot;</span>` : ''}
+        <span style="font-size:12.5px;font-weight:700;color:${ink.soft};">${esc(v)}</span>`).join('')}
     </div>
 
     <!-- Apps / Gls / Asts / xG / xA / Mins -->
-    <div style="position:absolute;left:${NAME_X}px;top:124px;display:flex;align-items:baseline;
+    <div style="position:absolute;left:${NAME_X}px;top:113px;display:flex;align-items:baseline;
                 white-space:nowrap;">
       ${cells.map(([lab, val], i) => `
         <span style="${i ? 'margin-left:18px;' : ''}font-size:15px;font-weight:800;
@@ -1068,7 +1076,7 @@ function headerHtml(player, ctx, opts) {
                 display:flex;align-items:center;white-space:nowrap;overflow:hidden;">
       <span style="flex-shrink:0;font-size:8px;font-weight:700;letter-spacing:0.14em;
                    color:${ink.muted};">GBE CALCULATION</span>
-      <span style="flex:1;min-width:0;overflow:hidden;text-align:right;padding:0 12px;">
+      <span style="flex:1;min-width:0;overflow:hidden;text-align:right;padding:0 10px;">
         ${gbe.homeNation ? `<span style="font-size:8px;font-weight:700;letter-spacing:0.13em;
                      color:${ink.muted};">AUTO PASS &middot; HOME NATION</span>` : ''}
         ${gbe.panelEligible ? `<span style="font-size:8px;font-weight:700;letter-spacing:0.13em;
@@ -1086,35 +1094,40 @@ function headerHtml(player, ctx, opts) {
       </span>
     </div>
     ${(() => {
-      const TW = 124, TG = 14;
+      // Two-up rather than four across. Each counter needs a caption, a figure and
+      // a track; stacked two-by-two that costs 210px of width instead of 538, and
+      // the caption and figure share one line rather than each owning a row.
+      const TW = 210, TGX = 12, TH = 38, TGY = 8;
       return [['DOMESTIC', gbe.domPts, 12], ['CONTINENTAL', gbe.contPts, 8],
               ['LEAGUE BAND', gbe.lqPts, 12], ['FINISH / PROG', gbe.finishPts + gbe.progPts, 10]]
         .map(([label, val, max], i) => {
           const got = Math.max(0, Math.min(max, val));
           const done = got >= max;
           const tone = done ? '#3da65b' : ink.secondary;
-          const gap = 2.5;
-          const inner = TW - 24;
+          const gap = 2;
+          const inner = TW - 22;
           const pipW = (inner - (max - 1) * gap) / max;
           const pips = Array.from({ length: max }, (_, k) => `
-            <div style="width:${pipW.toFixed(2)}px;height:6px;border-radius:2px;
+            <div style="width:${pipW.toFixed(2)}px;height:5px;border-radius:1.5px;
                         margin-left:${k ? gap : 0}px;
                         background:${k < got ? tone : ink.track};"></div>`).join('');
           return `
-        <div style="position:absolute;left:${GBE_X + i * (TW + TG)}px;top:42px;width:${TW}px;height:78px;
-                    box-sizing:border-box;padding:11px 12px;border-radius:9px;
+        <div style="position:absolute;left:${GBE_X + (i % 2) * (TW + TGX)}px;
+                    top:${44 + Math.floor(i / 2) * (TH + TGY)}px;width:${TW}px;height:${TH}px;
+                    box-sizing:border-box;padding:7px 11px;border-radius:7px;
                     border:1px solid ${done ? 'rgba(61,166,91,0.42)' : ink.rule};
                     background:${done ? 'rgba(61,166,91,0.09)' : 'rgba(255,255,255,0.05)'};">
-          <div style="font-size:7.5px;font-weight:700;letter-spacing:0.13em;color:${ink.muted};
-                      white-space:nowrap;">${label}</div>
-          <div style="margin-top:11px;display:flex;align-items:baseline;white-space:nowrap;">
-            <span style="font-size:23px;font-weight:800;line-height:1;
-                         color:${got === 0 ? ink.muted : ink.primary};">${got}</span>
-            <span style="margin-left:3px;font-size:12px;font-weight:700;color:${ink.muted};">/${max}</span>
-            ${done ? `<span style="margin-left:auto;font-size:7.5px;font-weight:800;
-                         letter-spacing:0.12em;color:#3da65b;">MAX</span>` : ''}
+          <div style="display:flex;align-items:baseline;justify-content:space-between;
+                      white-space:nowrap;line-height:1;">
+            <span style="font-size:7.5px;font-weight:700;letter-spacing:0.13em;
+                         color:${ink.muted};">${label}</span>
+            <span>
+              <span style="font-size:14px;font-weight:800;
+                           color:${got === 0 ? ink.muted : ink.primary};">${got}</span><span
+                    style="font-size:9.5px;font-weight:700;color:${ink.muted};">/${max}</span>
+            </span>
           </div>
-          <div style="display:flex;margin-top:12px;">${pips}</div>
+          <div style="display:flex;margin-top:8px;">${pips}</div>
         </div>`;
         }).join('');
     })()}`;
@@ -1359,7 +1372,7 @@ function Check({ label, value, onChange }) {
 
 const ALL_PITCH_SLOTS = ['GK', 'LB', 'LCB', 'CB', 'RCB', 'RB', 'LWB', 'RWB',
                          'DM', 'CM', 'AM', 'LW', 'RW', 'ST'];
-const VIEW_MAX_LENGTH = 420;
+const VIEW_MAX_LENGTH = 500;
 const SEASON_SORT = ['2018-19', '2019-20', '2020-21', '2021-22', '2022-23', '2023-24', '2024-25', '2025-26'];
 
 export default function PlayerPagerModal({ player, players = [], onClose }) {
