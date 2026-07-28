@@ -48,7 +48,6 @@ import {
   scoreTierColor, barRow,
   TOKEN_TO_POS_KEY, POSITION_LABELS, METRIC_LABEL_MAP,
   POSITION_TEAM_CONTEXT_CATS, TEAM_CONTEXT_BANDS, computeEscReasons, ESC_REASON_OPTIONS,
-  scoreLeagueTier,
 } from './QuickCard';
 import { computeClubFit, computeSimilarPlayers, simGroup } from './clubFit';
 
@@ -266,28 +265,30 @@ function percentilePanelBody(w, h, sd, isGK) {
               justify-content:center;color:#475569;font-size:13px;">No percentile data for this season.</div>`;
   }
   const activeSections = keys.filter(k => groups[k] && groups[k].length > 0).length;
-  const SECTION_H = 40;          // heading + its margins, quick card's rhythm
-  // Measured, not estimated: the axis row is 22px, its Avg sub-label 14px and the
-  // "Percentile Rank" caption 20px plus margins — ~68px, where this reserved 48.
-  // With 30 metric rows the 20px shortfall pushed the caption past overflow:hidden
-  // and sheared the top off it. 70 leaves a pixel of slack.
-  const AXIS_H = 70;
+  const SECTION_H = 42;          // 23px heading at 1.2 + 8/6 margins, measured
+  // Measured: axis row 22px + Avg sub-label 14px + caption 20px + margins ~= 68.
+  // Under-reserving sheared the caption; over-reserving left a band of dead space.
+  const AXIS_H = 68;
   const budget = h - AXIS_H - activeSections * SECTION_H;
   // Cap was a flat 34, which suited an outfielder's ~28 rows but left a keeper's
   // ten sitting in the top half of an 815px column with 300px of dead space under
   // them. The ceiling now scales with how many rows there are, so a short list
   // spreads out instead of bunching at the top.
   const maxRowH = totalRows <= 12 ? 62 : totalRows <= 18 ? 46 : 34;
-  const rowH = Math.max(8, Math.min(maxRowH, Math.floor(budget / totalRows) - 1));
-  const slack = Math.max(0, budget - totalRows * (rowH + 1));
-  const extraGap = totalRows > 0 ? Math.min(6, Math.floor(slack / totalRows)) : 0;
+  // Fractional, not floored. Flooring 20.7 to 19 threw away 0.7px on every one of
+  // thirty rows — 21px of dead space at the foot of the column — and the leftover
+  // was too small to redistribute as an integer gap. CSS takes decimal px happily,
+  // so the rows now divide the budget exactly. The -2 keeps the caption clear of
+  // the overflow edge.
+  const rowH = Math.max(8, Math.min(maxRowH, (budget - 2) / totalRows - 1));
+  const extraGap = 0;
 
   const bars = (k) => (groups[k] || []).map(([label, pct, val]) => {
     const display = METRIC_LABEL_MAP[label] || label;
     const isPct = /%/.test(display);
     const n = typeof val === 'number' ? val : parseFloat(val);
     const shown = !isNaN(n) ? n.toFixed(isPct ? 1 : 2) : val;
-    return barRow(display, pct, shown, rowH, extraGap);
+    return barRow(display, pct, shown, Number(rowH.toFixed(2)), extraGap);
   }).join('');
 
   // Quick card sizes these at 24px in a 920px column; 21px is the same weight
@@ -435,6 +436,29 @@ export function extractHeat(dataUrl) {
       img.src = dataUrl;
     } catch (e) { resolve(dataUrl); }
   });
+}
+
+// Score -> the badge of the English tier that score corresponds to. The cut-offs
+// are the career chart's own (CAREER_LEAGUE_BANDS) so the badge and the chart's
+// dashed lines can't disagree.
+//
+// T5L is deliberately absent. It's a chart band meaning "top-five-league level",
+// which has no single crest to show — a player at 70 sits above the Championship
+// and below the Premier League, and this resolves him to the Championship badge:
+// the highest tier he'd certainly hold down, rather than one he might not.
+const TIER_LEAGUE = [
+  [72, 'England 1.'], [61, 'England 2.'], [57, 'England 3.'],
+  [54, 'England 4.'], [50, 'England 5.'],
+];
+function tierLeagueKey(score) {
+  const v = Number(score);
+  if (isNaN(v)) return null;
+  for (const [min, key] of TIER_LEAGUE) if (v >= min) return key;
+  return null;
+}
+function tierLeagueLogo(score) {
+  const key = tierLeagueKey(score);
+  return key ? leagueLogo(key) : null;
 }
 
 // ─── Position pitch ────────────────────────────────────────────────────────
@@ -888,16 +912,20 @@ function strengthsPanelBody(w, h, sd, posKey, opts = {}) {
               justify-content:center;font-size:12px;color:#55617a;">No percentile data for this season.</div>`;
   }
   const dropped = new Set(swDrop);
+  // Manual entries go FIRST. Appended after the derived ones they were being cut
+  // by the slice: Titraoui already had six derived strengths, so anything typed in
+  // fell outside the six-slot cap and silently never appeared. A hand-entered
+  // trait is a deliberate act and outranks a computed one.
   const strengths = [
+    ...swAddStr.map(x => ({ label: x.label, tone: SW_TONES[x.tone] || SW_TONES.Green })),
     ...rows.filter(r => r.pct >= SW_HI && !dropped.has(r.label))
            .sort((a, b) => b.pct - a.pct)
            .map(r => ({ label: r.label, tone: SW_TONES.Green })),
-    ...swAddStr.map(x => ({ label: x.label, tone: SW_TONES[x.tone] || SW_TONES.Green })),
   ].slice(0, 6);
   const weaknesses = [
+    ...swAddWeak.map(x => ({ label: x.label, pct: Number(x.pct) || 0 })),
     ...rows.filter(r => r.pct <= SW_LO && !dropped.has(r.label))
            .sort((a, b) => a.pct - b.pct),
-    ...swAddWeak.map(x => ({ label: x.label, pct: Number(x.pct) || 0 })),
   ].slice(0, 4);
 
   // Strengths as pills — a strength is a claim, and a bar invites the reader to
@@ -1193,17 +1221,13 @@ function headerHtml(player, ctx, opts) {
           value: v, label, colour: scoreTierColor(v), ink, big: true, labelY: HDR_LABEL_Y,
         });
         if (!showTierBadge) return wheel;
-        const tier = scoreLeagueTier(v);
-        if (!tier) return wheel;
+        const badge = tierLeagueLogo(v);
+        if (!badge) return wheel;
         return wheel + `
-      <div style="position:absolute;left:${cx - step / 2}px;top:${HDR_LABEL_Y + 13}px;
-                  width:${step}px;text-align:center;">
-        <span style="display:inline-block;font-size:7.5px;font-weight:700;
-                     letter-spacing:0.1em;padding:2.5px 8px;border-radius:9px;
-                     white-space:nowrap;color:${scoreTierColor(v)};
-                     background:${scoreTierColor(v)}1c;
-                     border:1px solid ${scoreTierColor(v)}55;">${esc(tier.name.toUpperCase())}</span>
-      </div>`;
+      <div style="position:absolute;left:${cx - step / 2}px;top:${HDR_LABEL_Y + 10}px;
+                  width:${step}px;height:22px;background-size:contain;
+                  background-repeat:no-repeat;background-position:center;
+                  background-image:url('${src(badge)}');"></div>`;
       }).join('');
     })()}
 
@@ -1318,6 +1342,10 @@ export function pagerImageUrls(player, ctx, uploadedPhotoDataUrl, clubRows = [])
   // references left in the render and would blank out in the export.
   const nf = personFlagUrl(player);
   if (nf) urls.push(nf);
+  for (const v of [player.careerScore, player.potentialScore]) {
+    const b = tierLeagueLogo(v);
+    if (b) urls.push(b);
+  }
   for (const r of (clubRows || [])) {
     urls.push(r.name ? photoUrl(r.name, r.team) : teamCrest(r.team));
     if (r.league) urls.push(leagueFlag(r.league));
