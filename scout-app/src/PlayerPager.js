@@ -71,12 +71,13 @@ const ROW_2 = ROW_1 + ROW1_H + GAP;            // 522
 const ROW_3 = ROW_2 + ROW2_H + GAP;            // 826
 const LEFT_H = ROW_3 + ROW3_H - BODY_TOP;      // 889
 
-const NAME_X = PAD + 128;
+// Pushed right to clear the bigger photo, which now runs 14..158.
+const NAME_X = 172;
 // 410 was TeamReport's, sized for club names. Player names run longer
 // ("Alexander-Arnold"), so the identity block takes 66px back off the wheel
 // span — two wheels never needed 372, and moving them right also opens the gap
 // between the rings and the rule.
-const NAME_MAX_W = 476;
+const NAME_MAX_W = 462;
 const RULE_1 = 644;
 const RULE_2 = 1338;
 const WHEEL_X = 650;
@@ -467,22 +468,21 @@ function positionPitchSvg(player, w, h, manualColors, pcts, heatmap, heatOpacity
     if (i < 0) return heatmap ? '' : `<circle cx="${x}" cy="${y}" r="3.6" fill="${GHOST}"/>`;
     const col = colourFor(slot, i);
     const pct = pcts && pcts[slot] != null && pcts[slot] !== '' ? Number(pcts[slot]) : null;
-    const label = `${Math.round(pct)}%`;
-    const chipW = label.length * 6.4 + 8;
+    // The share IS the disc size. A number chip under every disc was a second
+    // label competing with the position code for the same 40px, and the reader
+    // has to do the comparing anyway — area does it for them at a glance.
+    // 13 at 0% up to 23 at 100%, so even a 5% cameo still holds a readable code.
+    const r = pct == null ? 18 : 13 + (Math.max(0, Math.min(100, pct)) / 100) * 10;
+    const fs = Math.max(9, Math.min(13, r * 0.68));
     return `
       <g filter="url(#ppShadow)">
-        <circle cx="${x}" cy="${y}" r="19" fill="${col}"/>
-        <circle cx="${x}" cy="${y}" r="19" fill="none" stroke="rgba(7,9,15,0.55)" stroke-width="2"/>
+        <circle cx="${x}" cy="${y}" r="${r.toFixed(1)}" fill="${col}"/>
+        <circle cx="${x}" cy="${y}" r="${r.toFixed(1)}" fill="none"
+                stroke="rgba(7,9,15,0.55)" stroke-width="2"/>
       </g>
-      <text x="${x}" y="${y + 4.6}" text-anchor="middle" font-family="Montserrat,sans-serif"
-            font-size="12.5" font-weight="800" fill="#07090f" letter-spacing="0.3">${slot}</text>${
-      pct == null ? '' : `
-      <g filter="url(#ppShadow)">
-        <rect x="${x - chipW / 2}" y="${y + 21}" width="${chipW}" height="15" rx="7.5"
-              fill="#07090f" fill-opacity="0.82" stroke="${col}" stroke-width="1.1"/>
-      </g>
-      <text x="${x}" y="${y + 31.6}" text-anchor="middle" font-family="Montserrat,sans-serif"
-            font-size="9.5" font-weight="800" fill="${col}">${label}</text>`}`;
+      <text x="${x}" y="${y + fs * 0.36}" text-anchor="middle" font-family="Montserrat,sans-serif"
+            font-size="${fs.toFixed(1)}" font-weight="800" fill="#07090f"
+            letter-spacing="0.3">${slot}</text>`;
   }).join('');
 
   // Heat under the markings, clipped to the pitch, deliberately faint: a backdrop
@@ -560,10 +560,9 @@ function positionBlockHtml(player, x, w, ink, manualColors, pcts, heatmap, heatO
                   white-space:nowrap;">POSITION</div>
       <div style="margin-top:8px;font-size:19px;font-weight:800;color:${ink.primary};
                   line-height:1.05;white-space:nowrap;">${esc(full)}</div>
-      <div style="margin-top:7px;font-size:11px;font-weight:700;letter-spacing:0.08em;
-                  color:${ink.soft};white-space:nowrap;">${esc(short)}${
-        others.length ? `<span style="color:${ink.muted};font-weight:600;"> &middot; ${esc(others.join(' '))}</span>` : ''
-      }</div>
+      ${others.length ? `<div style="margin-top:4px;font-size:19px;font-weight:800;
+                  color:${ink.muted};line-height:1.05;white-space:nowrap;">${
+        esc(POS_FULL[others[0]] || others[0])}</div>` : ''}
     </div>
     <div style="position:absolute;left:${left + textW + PB_GAP}px;top:14px;
                 width:${PB_PITCH_W}px;height:${PB_PITCH_H}px;">
@@ -923,20 +922,24 @@ function headerHtml(player, ctx, opts) {
          image sits straight on the band and the gradient shows through. Still
          cover-cropped from the top, because a centred crop on a head-and-
          shoulders portrait cuts the chin off. -->
-    <div style="position:absolute;left:${PAD - 4}px;top:14px;width:124px;height:124px;
+    <div style="position:absolute;left:14px;top:6px;width:144px;height:144px;
                 background-image:url('${src(photo)}');background-size:cover;
                 background-position:center top;background-repeat:no-repeat;"></div>
 
-    <div style="position:absolute;left:${NAME_X}px;top:14px;width:${NAME_MAX_W}px;height:56px;
+    <!-- line-height 1.0 sat the baseline on the box floor, so a descender ("g"
+         in Effaghe) was clipped by overflow:hidden. 1.18 with a taller box gives
+         the tail somewhere to go; the box still clips, but only a name that
+         defeats the 22px floor. -->
+    <div style="position:absolute;left:${NAME_X}px;top:16px;width:${NAME_MAX_W}px;height:64px;
                 display:flex;align-items:flex-end;overflow:hidden;">
       <div style="font-size:${fitNameSize(displayName, NAME_MAX_W)}px;font-weight:800;letter-spacing:-0.8px;
-                  line-height:1.0;color:${ink.primary};white-space:nowrap;">${esc(displayName)}</div>
+                  line-height:1.18;color:${ink.primary};white-space:nowrap;">${esc(displayName)}</div>
     </div>
 
     <!-- club crest, club, league badge, league flag, league. The crest leads:
          it is the fastest identifier on the row and TeamReport puts the badge
          first for the same reason. -->
-    <div style="position:absolute;left:${NAME_X}px;top:76px;display:flex;align-items:center;
+    <div style="position:absolute;left:${NAME_X}px;top:84px;display:flex;align-items:center;
                 white-space:nowrap;">
       ${crest ? `<div style="width:24px;height:24px;flex-shrink:0;background-size:contain;
                   background-repeat:no-repeat;background-position:center;
@@ -953,7 +956,7 @@ function headerHtml(player, ctx, opts) {
     </div>
 
     <!-- Apps / Gls / Asts / xG / xA / Mins, on TeamReport's PTS baseline -->
-    <div style="position:absolute;left:${NAME_X}px;top:113px;display:flex;align-items:baseline;
+    <div style="position:absolute;left:${NAME_X}px;top:119px;display:flex;align-items:baseline;
                 white-space:nowrap;">
       ${cells.map(([lab, val], i) => `
         <span style="${i ? 'margin-left:19px;' : ''}font-size:15px;font-weight:800;
@@ -1034,19 +1037,34 @@ function headerHtml(player, ctx, opts) {
       return [['DOMESTIC', gbe.domPts, 12], ['CONTINENTAL', gbe.contPts, 8],
               ['LEAGUE BAND', gbe.lqPts, 12], ['FINISH / PROG', gbe.finishPts + gbe.progPts, 10]]
         .map(([label, val, max], i) => {
-          const pct = Math.max(0, Math.min(100, (val / max) * 100));
+          const got = Math.max(0, Math.min(max, val));
+          const done = got >= max;
+          // Points are counted, not measured, so they're drawn as pips rather
+          // than as a continuous bar. A bar at 10/12 is a length the reader has
+          // to estimate against a scale; twelve pips with ten lit is a figure
+          // they can read without one, and it matches how the GBE rules are
+          // actually written. Pips flex to the tile so 8 and 12 both fill it.
+          const gap = 2;
+          const pipW = (TW - 22 - (max - 1) * gap) / max;
+          const pips = Array.from({ length: max }, (_, k) => `
+            <div style="width:${pipW.toFixed(2)}px;height:5px;border-radius:1.5px;
+                        margin-left:${k ? gap : 0}px;
+                        background:${k < got ? (done ? '#3da65b' : ink.secondary) : ink.track};"></div>`).join('');
           return `
-        <div style="position:absolute;left:${GBE_X + i * (TW + TG)}px;top:54px;width:${TW}px;height:62px;
+        <div style="position:absolute;left:${GBE_X + i * (TW + TG)}px;top:52px;width:${TW}px;height:64px;
                     box-sizing:border-box;padding:9px 11px;border-radius:8px;
-                    border:1px solid ${ink.rule};background:rgba(255,255,255,0.05);">
-          <div style="font-size:7.5px;font-weight:700;letter-spacing:0.13em;color:${ink.muted};
-                      white-space:nowrap;">${label}</div>
-          <div style="margin-top:7px;font-size:17px;font-weight:800;color:${ink.primary};
-                      line-height:1;white-space:nowrap;">${val}<span
-              style="font-size:11px;font-weight:600;color:${ink.muted};">/${max}</span></div>
-          <div style="margin-top:8px;height:4px;border-radius:2px;background:${ink.track};overflow:hidden;">
-            <div style="width:${pct.toFixed(0)}%;height:100%;background:${ink.secondary};border-radius:2px;"></div>
+                    border:1px solid ${done ? 'rgba(61,166,91,0.45)' : ink.rule};
+                    background:${done ? 'rgba(61,166,91,0.10)' : 'rgba(255,255,255,0.05)'};">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;
+                      white-space:nowrap;">
+            <span style="font-size:7.5px;font-weight:700;letter-spacing:0.13em;
+                         color:${ink.muted};">${label}</span>
+            <span style="font-size:7.5px;font-weight:700;color:${done ? '#3da65b' : ink.muted};">${
+              done ? 'MAX' : `/${max}`}</span>
           </div>
+          <div style="margin-top:6px;font-size:21px;font-weight:800;line-height:1;
+                      color:${got === 0 ? ink.muted : ink.primary};">${got}</div>
+          <div style="display:flex;margin-top:9px;">${pips}</div>
         </div>`;
         }).join('');
     })()}`;
