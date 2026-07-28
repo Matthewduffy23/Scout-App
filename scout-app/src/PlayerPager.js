@@ -338,6 +338,51 @@ const shortPos = (tok) => POS_SHORT[String(tok || '').trim().toUpperCase()] || S
 const ROLE_SUFFIX = /\s+(GK|CB|LCB|RCB|FB|LB|RB|LWB|RWB|DM|DMF|CM|CMF|AM|AMF|WNG|LW|RW|ATT|ST|CF)$/i;
 const roleBase = (name) => String(name || '').replace(ROLE_SUFFIX, '').trim();
 
+// ─── Heatmap extraction ────────────────────────────────────────────────────
+// Heatmaps arrive as opaque PNGs with a pitch baked in — a flat pale green plus
+// white lines. Compositing that onto the header can't work: mix-blend-mode is
+// exactly the sort of CSS property this render pipeline drops silently, so it
+// would look right on screen and break in the export.
+//
+// So the background is removed at upload time instead, on a canvas, before the
+// image ever reaches the card. The test is warmth: heat runs yellow -> red, all
+// of which have red far above blue, while pale green (206,230,196) and white
+// lines (255,255,255) have red and blue nearly equal. Alpha therefore comes from
+// (R-B), squared so the faint wash at the edges falls away faster than the hot
+// core, leaving the blobs on transparency with the pitch and its lines gone.
+//
+// The card then draws its OWN pitch underneath in the header's palette, which is
+// what makes the heat sit in the design rather than on top of it.
+export function extractHeat(dataUrl) {
+  return new Promise((resolve) => {
+    try {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const maxW = 1000;
+          const scale = Math.min(1, maxW / img.width);
+          const c = document.createElement('canvas');
+          c.width = Math.max(1, Math.round(img.width * scale));
+          c.height = Math.max(1, Math.round(img.height * scale));
+          const g = c.getContext('2d');
+          g.drawImage(img, 0, 0, c.width, c.height);
+          const data = g.getImageData(0, 0, c.width, c.height);
+          const px = data.data;
+          for (let i = 0; i < px.length; i += 4) {
+            const warmth = (px[i] - px[i + 2]) / 130;      // red over blue
+            const a = Math.max(0, Math.min(1, warmth));
+            px[i + 3] = Math.round(255 * a * a);
+          }
+          g.putImageData(data, 0, 0);
+          resolve(c.toDataURL('image/png'));
+        } catch (e) { resolve(dataUrl); }   // tainted canvas etc — use it raw
+      };
+      img.onerror = () => resolve(dataUrl);
+      img.src = dataUrl;
+    } catch (e) { resolve(dataUrl); }
+  });
+}
+
 // ─── Position pitch ────────────────────────────────────────────────────────
 // A different system to QuickCard's pitchDiagramSvg, which is built for a 390px
 // slot on a dark panel. Shrunk to 150px on a coloured band it read as noise:
@@ -349,25 +394,19 @@ const roleBase = (name) => String(name || '').replace(ROLE_SUFFIX, '').trim();
 // rather than on top of it, and every mark on it carries information. Tier
 // colours and the token-to-slot mapping are QuickCard's, so a player reads the
 // same on both cards.
+// One landscape slot set, attacking right. The upright version is gone: a pitch
+// is landscape, every heatmap is landscape, and switching orientation between the
+// two modes meant one card drew the same information two different shapes.
+// Coordinates are on a 320x208 viewBox — 1.54:1, the real ratio — so nothing
+// stretches whatever sits behind it.
 const PP_SLOTS = {
-  GK:  [100, 270],
-  LCB: [56, 226], CB: [100, 232], RCB: [144, 226],
-  LB:  [24, 214], RB: [176, 214],
-  LWB: [24, 170], RWB: [176, 170],
-  DM:  [100, 186], CM: [100, 148], AM: [100, 106],
-  LW:  [30, 88], RW: [170, 88],
-  ST:  [100, 46],
-};
-// Landscape equivalents, attacking right. Only used when a heatmap is loaded —
-// see positionBlockHtml for why the orientation follows the content.
-const PP_SLOTS_H = {
-  GK:  [26, 100],
-  LCB: [64, 58], CB: [64, 100], RCB: [64, 142],
-  LB:  [56, 24], RB: [56, 176],
-  LWB: [108, 24], RWB: [108, 176],
-  DM:  [104, 100], CM: [148, 100], AM: [196, 100],
-  LW:  [224, 30], RW: [224, 170],
-  ST:  [264, 100],
+  GK:  [26, 104],
+  LCB: [70, 58], CB: [70, 104], RCB: [70, 150],
+  LB:  [62, 22], RB: [62, 186],
+  LWB: [116, 22], RWB: [116, 186],
+  DM:  [112, 104], CM: [158, 104], AM: [208, 104],
+  LW:  [238, 28], RW: [238, 180],
+  ST:  [280, 104],
 };
 const PP_TOKEN_TO_SLOT = {
   GK: 'GK', RB: 'RB', RWB: 'RWB', LCB: 'LCB', CB: 'CB', RCB: 'RCB', LB: 'LB', LWB: 'LWB',
@@ -406,118 +445,89 @@ export function occupiedSlots(player, manualColors) {
   return out;
 }
 
-function positionPitchSvg(player, w, h, manualColors, pcts, heatmap, heatOpacity) {
-  const slots = occupiedSlots(player, manualColors);
+function positionPitchSvg(player, w, h, manualColors, pcts, heatmap, heatOpacity, shownSlots) {
+  const slots = (shownSlots && shownSlots.length) ? shownSlots : occupiedSlots(player, manualColors);
   const colourFor = (slot, i) => {
     if (manualColors && manualColors[slot]) return PP_TIERS[manualColors[slot]] || manualColors[slot];
     return PP_TIERS[PP_TIER_ORDER[Math.min(i, PP_TIER_ORDER.length - 1)]];
   };
 
-  const land = !!heatmap;
-  const SLOTS = land ? PP_SLOTS_H : PP_SLOTS;
-  const VB = land ? [300, 200] : [200, 300];
-  const R = land ? 15 : 16;
+  const VB = [320, 208];
+  const GHOST = 'rgba(255,255,255,0.11)';
+  const MARK = 'rgba(255,255,255,0.26)';
 
-  const GHOST = 'rgba(255,255,255,0.13)';
-  const MARK = 'rgba(255,255,255,0.24)';
-  const dots = Object.keys(SLOTS).map(slot => {
-    const [x, y] = SLOTS[slot];
+  const dots = Object.keys(PP_SLOTS).map(slot => {
+    const [x, y] = PP_SLOTS[slot];
     const i = slots.indexOf(slot);
-    // With a heatmap behind it the ghost dots are clutter over the data, so only
-    // the player's own positions draw.
-    if (i < 0) return land ? '' : `<circle cx="${x}" cy="${y}" r="4.5" fill="${GHOST}"/>`;
+    if (i < 0) return heatmap ? '' : `<circle cx="${x}" cy="${y}" r="4" fill="${GHOST}"/>`;
     const col = colourFor(slot, i);
     const pct = pcts && pcts[slot] != null && pcts[slot] !== '' ? Number(pcts[slot]) : null;
-    return `<circle cx="${x}" cy="${y}" r="${R}" fill="${col}" stroke="rgba(0,0,0,0.45)" stroke-width="1.2"/>
-      <text x="${x}" y="${y + 4.5}" text-anchor="middle" font-family="Montserrat,sans-serif"
-            font-size="11" font-weight="800" fill="#07090f">${slot}</text>${
+    // The share sits INSIDE the disc under the code. Outside it, two adjacent
+    // positions print their figures on top of each other.
+    return `<circle cx="${x}" cy="${y}" r="17" fill="${col}" stroke="rgba(0,0,0,0.45)" stroke-width="1.2"/>
+      <text x="${x}" y="${pct == null ? y + 4.5 : y + 1}" text-anchor="middle"
+            font-family="Montserrat,sans-serif" font-size="11" font-weight="800"
+            fill="#07090f">${slot}</text>${
       pct == null ? '' : `
-      <text x="${x}" y="${y + R + 14}" text-anchor="middle" font-family="Montserrat,sans-serif"
-            font-size="10.5" font-weight="800" fill="${col}">${Math.round(pct)}%</text>`}`;
+      <text x="${x}" y="${y + 11}" text-anchor="middle" font-family="Montserrat,sans-serif"
+            font-size="8.5" font-weight="700" fill="rgba(0,0,0,0.62)">${Math.round(pct)}%</text>`}`;
   }).join('');
 
-  // The heatmap goes UNDER the markings and the dots, clipped to the pitch
-  // rectangle so a slightly-off crop can't bleed past the touchline. Drawn over
-  // the same faint white base the tile system uses, so a transparent PNG picks up
-  // the header's own colour through it rather than carrying its own green.
-  const clipId = `pp-pitch-clip-${land ? 'h' : 'v'}`;
+  // Heat sits under the markings, clipped to the pitch, deliberately faint. It is
+  // a backdrop saying "he operates here", not a chart to be read off — anything
+  // stronger competes with the position discs, which are the point of the tile.
   const heatLayer = heatmap ? `
-      <clipPath id="${clipId}"><rect x="1" y="1" width="${VB[0] - 2}" height="${VB[1] - 2}" rx="10"/></clipPath>
+      <clipPath id="pp-heat-clip"><rect x="1" y="1" width="${VB[0] - 2}" height="${VB[1] - 2}" rx="9"/></clipPath>
       <image href="${heatmap}" x="1" y="1" width="${VB[0] - 2}" height="${VB[1] - 2}"
-             preserveAspectRatio="none" opacity="${heatOpacity}" clip-path="url(#${clipId})"/>` : '';
-
-  const marks = land
-    ? `<line x1="150" y1="8" x2="150" y2="192"/>
-       <circle cx="150" cy="100" r="30"/>
-       <rect x="8" y="52" width="42" height="96" rx="2"/>
-       <rect x="250" y="52" width="42" height="96" rx="2"/>
-       <rect x="8" y="76" width="17" height="48" rx="1"/>
-       <rect x="275" y="76" width="17" height="48" rx="1"/>`
-    : `<line x1="8" y1="150" x2="192" y2="150"/>
-       <circle cx="100" cy="150" r="30"/>
-       <rect x="52" y="8" width="96" height="42" rx="2"/>
-       <rect x="52" y="250" width="96" height="42" rx="2"/>
-       <rect x="76" y="8" width="48" height="17" rx="1"/>
-       <rect x="76" y="275" width="48" height="17" rx="1"/>`;
+             preserveAspectRatio="none" opacity="${heatOpacity}" clip-path="url(#pp-heat-clip)"/>` : '';
 
   return `<svg width="${w}" height="${h}" viewBox="0 0 ${VB[0]} ${VB[1]}" xmlns="http://www.w3.org/2000/svg">
-      <rect x="1" y="1" width="${VB[0] - 2}" height="${VB[1] - 2}" rx="10"
-            fill="rgba(255,255,255,0.045)" stroke="${MARK}" stroke-width="1.5"/>
+      <rect x="1" y="1" width="${VB[0] - 2}" height="${VB[1] - 2}" rx="9"
+            fill="rgba(255,255,255,0.045)" stroke="${MARK}" stroke-width="1.4"/>
       ${heatLayer}
-      <rect x="1" y="1" width="${VB[0] - 2}" height="${VB[1] - 2}" rx="10"
-            fill="none" stroke="${MARK}" stroke-width="1.5"/>
-      <g fill="none" stroke="${MARK}" stroke-width="1.5">${marks}</g>
-      <circle cx="${VB[0] / 2}" cy="${VB[1] / 2}" r="2.5" fill="${MARK}"/>
+      <g fill="none" stroke="${MARK}" stroke-width="1.4">
+        <rect x="1" y="1" width="${VB[0] - 2}" height="${VB[1] - 2}" rx="9"/>
+        <line x1="160" y1="6" x2="160" y2="202"/>
+        <circle cx="160" cy="104" r="30"/>
+        <rect x="6" y="52" width="44" height="104" rx="2"/>
+        <rect x="270" y="52" width="44" height="104" rx="2"/>
+        <rect x="6" y="80" width="17" height="48" rx="1"/>
+        <rect x="297" y="80" width="17" height="48" rx="1"/>
+      </g>
+      <circle cx="160" cy="104" r="2.5" fill="${MARK}"/>
       ${dots}
     </svg>`;
 }
 
-// Position block: the pitch, plus the position stated in words.
-//
-// The pair is CENTRED in the slot rather than pinned to its edges. The first
-// version put the text hard left at 968 and the pitch hard right at 1259, which
-// left ~90px of dead air between two things that belong together and made the
-// pitch read as though it had drifted into the GBE column. Text and pitch now sit
-// as one group with a fixed 20px gap, centred in the 360px slot, and the pitch is
-// sized off the band's depth rather than a guessed number.
-const PB_PITCH_H = 112;
-const PB_GAP = 20;
+// The pitch now takes the height the band allows and the width that follows from
+// the true ratio, rather than being sized to leave a comfortable text column and
+// ending up a thumbnail. 182x118 against the old 75x112 is 2.4x the area.
+const PB_PITCH_H = 118;
+const PB_PITCH_W = Math.round(PB_PITCH_H * (320 / 208));   // 182
+const PB_GAP = 16;
 
-function positionBlockHtml(player, x, w, ink, manualColors, pcts, heatmap, heatOpacity) {
+function positionBlockHtml(player, x, w, ink, manualColors, pcts, heatmap, heatOpacity, shownSlots) {
   const toks = String(player.position || '').split(',').map(t => t.trim().toUpperCase()).filter(Boolean);
   const primary = toks[0] || '';
   const short = shortPos(primary);
   const full = POS_FULL[short] || POSITION_LABELS[primary] || short || '—';
   const others = toks.slice(1).map(shortPos).filter((v, i, a) => v && v !== short && a.indexOf(v) === i);
 
-  // ORIENTATION FOLLOWS THE CONTENT.
-  // Upright is right for a position map: thirteen slots need vertical spread and
-  // the band is short, and it leaves room to state the position in words.
-  // A heatmap is landscape and always will be — every tool that makes one draws
-  // it that way — so rotating it to fit an upright box would both distort it and
-  // squeeze it into 75px. In heatmap mode the pitch turns landscape instead,
-  // which is its natural shape, and gets 168px rather than 75. The text column
-  // gives up 16px to pay for it.
-  const land = !!heatmap;
-  const pitchW = land ? 168 : Math.round(PB_PITCH_H * (200 / 300));   // 168 or 75
-  const textW = land ? 160 : 176;
-
-  const groupW = textW + PB_GAP + pitchW;
-  const left = x + Math.max(0, Math.round((w - groupW) / 2));
+  const textW = w - PB_PITCH_W - PB_GAP;
   return `
-    <div style="position:absolute;left:${left}px;top:44px;width:${textW}px;">
+    <div style="position:absolute;left:${x}px;top:42px;width:${textW}px;">
       <div style="font-size:8px;font-weight:700;letter-spacing:0.14em;color:${ink.muted};
                   white-space:nowrap;">POSITION</div>
-      <div style="margin-top:8px;font-size:${land ? 18 : 20}px;font-weight:800;color:${ink.primary};
+      <div style="margin-top:8px;font-size:19px;font-weight:800;color:${ink.primary};
                   line-height:1.05;white-space:nowrap;">${esc(full)}</div>
       <div style="margin-top:7px;font-size:11px;font-weight:700;letter-spacing:0.08em;
                   color:${ink.soft};white-space:nowrap;">${esc(short)}${
         others.length ? `<span style="color:${ink.muted};font-weight:600;"> &middot; ${esc(others.join(' '))}</span>` : ''
       }</div>
     </div>
-    <div style="position:absolute;left:${left + textW + PB_GAP}px;top:19px;
-                width:${pitchW}px;height:${PB_PITCH_H}px;">
-      ${positionPitchSvg(player, pitchW, PB_PITCH_H, manualColors, pcts, heatmap, heatOpacity)}
+    <div style="position:absolute;left:${x + textW + PB_GAP}px;top:16px;
+                width:${PB_PITCH_W}px;height:${PB_PITCH_H}px;">
+      ${positionPitchSvg(player, PB_PITCH_W, PB_PITCH_H, manualColors, pcts, heatmap, heatOpacity, shownSlots)}
     </div>`;
 }
 
@@ -826,7 +836,7 @@ function headerHtml(player, ctx, opts) {
   const { sd, statsRow, league, team } = ctx;
   const {
     headerColour, nameOverride, teamOverride, positionColors, gbeOv,
-    showPitch, isGK, positionPcts, heatmapDataUrl, heatOpacity,
+    showPitch, isGK, positionPcts, heatmapDataUrl, heatOpacity, shownSlots,
   } = opts;
 
   const spec = headerColour;
@@ -939,7 +949,7 @@ function headerHtml(player, ctx, opts) {
 
     <!-- Position, in the trend line's slot: stated in words, with an upright
          pitch beside it. -->
-    ${showPitch ? positionBlockHtml(player, PITCH_X, PITCH_W, ink, positionColors, positionPcts, heatmapDataUrl, heatOpacity) : `
+    ${showPitch ? positionBlockHtml(player, PITCH_X, PITCH_W, ink, positionColors, positionPcts, heatmapDataUrl, heatOpacity, shownSlots) : `
     <div style="position:absolute;left:${PITCH_X}px;top:34px;width:${PITCH_W}px;">
       ${[['POSITION', POSITION_LABELS[rawTok] || rawTok || '—'],
          ['FOOT', player.foot && player.foot !== 'unknown' && player.foot !== 'nan' ? formatFoot(player.foot) : '—'],
@@ -1030,7 +1040,7 @@ export function buildPlayerPagerElement(player, opts = {}) {
     clubsMode = 'clubs', hideFitScores = false,
     showForecast = false, useBestRoleCareer = false, showPitch = true,
     positionColors = {}, positionPcts = {}, gbeOv = {}, improveNotes = [],
-    heatmapDataUrl = '', heatOpacity = 0.9,
+    heatmapDataUrl = '', heatOpacity = 0.42, shownSlots = null,
   } = opts;
   IMG = images || {};
 
@@ -1085,7 +1095,7 @@ export function buildPlayerPagerElement(player, opts = {}) {
 
       ${headerHtml(player, ctx, {
         headerColour: HEADER_COLOURS[headerColourName], nameOverride, teamOverride,
-        uploadedPhotoDataUrl, positionColors, gbeOv, showPitch, isGK, positionPcts, heatmapDataUrl, heatOpacity,
+        uploadedPhotoDataUrl, positionColors, gbeOv, showPitch, isGK, positionPcts, heatmapDataUrl, heatOpacity, shownSlots,
       })}
 
       ${panel({
@@ -1235,6 +1245,8 @@ function Check({ label, value, onChange }) {
   );
 }
 
+const ALL_PITCH_SLOTS = ['GK', 'LB', 'LCB', 'CB', 'RCB', 'RB', 'LWB', 'RWB',
+                         'DM', 'CM', 'AM', 'LW', 'RW', 'ST'];
 const VIEW_MAX_LENGTH = 300;
 const SEASON_SORT = ['2018-19', '2019-20', '2020-21', '2021-22', '2022-23', '2023-24', '2024-25', '2025-26'];
 
@@ -1255,8 +1267,10 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
   const [useBestRoleCareer, setUseBestRoleCareer] = useState(false);
   const [showPitch, setShowPitch] = useState(true);
   const [positionPcts, setPositionPcts] = useState({});
+  const [heatRaw, setHeatRaw] = useState('');
   const [heatmapDataUrl, setHeatmapDataUrl] = useState('');
-  const [heatOpacity, setHeatOpacity] = useState(90);
+  const [heatExtract, setHeatExtract] = useState(true);
+  const [heatOpacity, setHeatOpacity] = useState(42);
   const [gbeOv, setGbeOv] = useState({});
   const [showGbeEdit, setShowGbeEdit] = useState(false);
 
@@ -1274,7 +1288,14 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
 
   // Only the slots actually drawn on the pitch get a box, so a percentage can
   // never be entered against a position the card doesn't show.
-  const pagerSlots = useMemo(() => occupiedSlots(player, {}), [player]);
+  // Slots the pitch draws = the player's own tokens PLUS anything switched on by
+  // hand. A player listed only as CF can still be shown at AM and LW with a share
+  // against each, which is the point of tracking minutes by position at all.
+  const autoSlots = useMemo(() => occupiedSlots(player, {}), [player]);
+  const [extraSlots, setExtraSlots] = useState([]);
+  const pagerSlots = useMemo(
+    () => [...autoSlots, ...extraSlots.filter(sl => !autoSlots.includes(sl))],
+    [autoSlots, extraSlots]);
   const pctTotal = useMemo(
     () => pagerSlots.reduce((a, k) => a + (Number(positionPcts[k]) || 0), 0),
     [pagerSlots, positionPcts]);
@@ -1360,7 +1381,7 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
     headerColourName, seasonOverride, nameOverride, teamOverride,
     uploadedPhotoDataUrl, viewText, clubRows,
     clubsMode, hideFitScores, positionPcts,
-    heatmapDataUrl, heatOpacity: Number(heatOpacity) / 100,
+    heatmapDataUrl, heatOpacity: Number(heatOpacity) / 100, shownSlots: pagerSlots,
     clubsCoreOnly: !peakFit,
     showForecast, useBestRoleCareer, showPitch, gbeOv,
   });
@@ -1554,74 +1575,100 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <label style={{ flex: 1, cursor: 'pointer', fontSize: 11, fontWeight: 700,
                               padding: '7px 10px', borderRadius: 5, textAlign: 'center',
-                              border: `1px solid ${heatmapDataUrl ? '#3b7de8' : '#1e2d45'}`,
-                              background: heatmapDataUrl ? '#0e2040' : 'transparent',
-                              color: heatmapDataUrl ? '#60a5fa' : '#8b98ad' }}>
-                {heatmapDataUrl ? 'Heatmap loaded ✓' : 'Upload heatmap'}
+                              border: `1px solid ${heatRaw ? '#3b7de8' : '#1e2d45'}`,
+                              background: heatRaw ? '#0e2040' : 'transparent',
+                              color: heatRaw ? '#60a5fa' : '#8b98ad' }}>
+                {heatRaw ? 'Heatmap loaded ✓' : 'Upload heatmap'}
                 <input type="file" accept="image/*" style={{ display: 'none' }}
                   onChange={e => {
                     const f = e.target.files && e.target.files[0];
                     if (!f) return;
                     const r = new FileReader();
-                    r.onload = ev => setHeatmapDataUrl(String(ev.target.result));
+                    r.onload = async (ev) => {
+                      const raw = String(ev.target.result);
+                      setHeatRaw(raw);
+                      setHeatmapDataUrl(heatExtract ? await extractHeat(raw) : raw);
+                    };
                     r.readAsDataURL(f);
                     e.target.value = '';
                   }} />
               </label>
-              {heatmapDataUrl && (
-                <button onClick={() => setHeatmapDataUrl('')}
+              {heatRaw && (
+                <button onClick={() => { setHeatRaw(''); setHeatmapDataUrl(''); }}
                   style={{ padding: '7px 10px', background: 'none', border: '1px solid #1e2d45',
                            borderRadius: 5, color: '#f87171', fontSize: 11, cursor: 'pointer' }}>✕</button>
               )}
             </div>
-            {heatmapDataUrl && (
-              <div style={{ display: 'flex', alignItems: 'center', marginTop: 7 }}>
-                <span style={{ fontSize: 10.5, color: '#94a3b8', width: 54, flexShrink: 0 }}>Opacity</span>
-                <input type="range" min="30" max="100" value={heatOpacity}
-                  onChange={e => setHeatOpacity(e.target.value)}
-                  style={{ flex: 1, accentColor: '#3b7de8' }} />
-                <span style={{ fontSize: 10.5, color: '#64748b', width: 34, textAlign: 'right' }}>{heatOpacity}%</span>
-              </div>
+            {heatRaw && (
+              <>
+                <div style={{ marginTop: 8 }}>
+                  <Check label="Strip the pitch background (keep the heat only)"
+                         value={heatExtract}
+                         onChange={async (v) => {
+                           setHeatExtract(v);
+                           setHeatmapDataUrl(v ? await extractHeat(heatRaw) : heatRaw);
+                         }} />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center' }}>
+                  <span style={{ fontSize: 10.5, color: '#94a3b8', width: 54, flexShrink: 0 }}>Strength</span>
+                  <input type="range" min="15" max="100" value={heatOpacity}
+                    onChange={e => setHeatOpacity(e.target.value)}
+                    style={{ flex: 1, accentColor: '#3b7de8' }} />
+                  <span style={{ fontSize: 10.5, color: '#64748b', width: 34, textAlign: 'right' }}>{heatOpacity}%</span>
+                </div>
+                <div style={UI.note}>
+                  Sits behind the pitch as a backdrop — it should read as where he
+                  operates, not as a chart competing with the position discs.
+                </div>
+              </>
             )}
-            <div style={UI.note}>
-              {heatmapDataUrl
-                ? 'Pitch switches to landscape — a heatmap is landscape, and rotating it would distort it.'
-                : 'Export it with a transparent background: the header colour then shows through instead of the heatmap carrying its own green.'}
-            </div>
           </div>
 
           <div style={UI.block}>
-            <span style={UI.label}>Position split (optional)</span>
-            {pagerSlots.length ? (
-              <>
-                {pagerSlots.map(slot => (
-                  <div key={slot} style={{ display: 'flex', alignItems: 'center', marginBottom: 5 }}>
-                    <span style={{ width: 44, flexShrink: 0, fontSize: 11, fontWeight: 800,
-                                   color: '#93c5fd' }}>{slot}</span>
-                    <input value={positionPcts[slot] ?? ''} inputMode="numeric" placeholder="—"
-                      onChange={e => {
-                        const v = e.target.value.replace(/[^\d]/g, '').slice(0, 3);
-                        setPositionPcts(o => {
-                          const n = { ...o };
-                          if (v === '') delete n[slot]; else n[slot] = v;
-                          return n;
-                        });
-                      }}
-                      style={{ ...UI.input, width: 70, flex: '0 0 auto' }} />
-                    <span style={{ fontSize: 11, color: '#64748b', marginLeft: 8 }}>
-                      % of minutes
-                    </span>
-                  </div>
-                ))}
-                <div style={UI.note}>
-                  {pctTotal === 0
-                    ? 'Blank leaves the pitch unlabelled.'
-                    : `${pctTotal}% assigned${pctTotal > 100 ? ' — over 100' : ''}`}
-                </div>
-              </>
-            ) : (
-              <div style={UI.note}>No recognised position tokens for this player.</div>
-            )}
+            <span style={UI.label}>Positions shown &amp; minutes split</span>
+            <div style={{ display: 'flex', flexWrap: 'wrap', marginBottom: 8 }}>
+              {ALL_PITCH_SLOTS.map(sl => {
+                const on = pagerSlots.includes(sl);
+                const locked = autoSlots.includes(sl);
+                return (
+                  <button key={sl}
+                    onClick={() => {
+                      if (locked) return;
+                      setExtraSlots(list => on ? list.filter(x => x !== sl) : [...list, sl]);
+                      if (on) setPositionPcts(o => { const n = { ...o }; delete n[sl]; return n; });
+                    }}
+                    title={locked ? 'From the player\u2019s own position data' : ''}
+                    style={{ padding: '3px 8px', marginRight: 5, marginBottom: 5, borderRadius: 10,
+                             border: `1px solid ${on ? '#3b7de8' : '#1e2d45'}`,
+                             background: on ? '#0e2040' : 'transparent',
+                             color: on ? '#60a5fa' : '#8b98ad', opacity: locked ? 0.75 : 1,
+                             fontSize: 10, fontWeight: 700,
+                             cursor: locked ? 'default' : 'pointer' }}>{sl}</button>
+                );
+              })}
+            </div>
+            {pagerSlots.map(slot => (
+              <div key={slot} style={{ display: 'flex', alignItems: 'center', marginBottom: 5 }}>
+                <span style={{ width: 44, flexShrink: 0, fontSize: 11, fontWeight: 800,
+                               color: '#93c5fd' }}>{slot}</span>
+                <input value={positionPcts[slot] ?? ''} inputMode="numeric" placeholder="—"
+                  onChange={e => {
+                    const v = e.target.value.replace(/[^\d]/g, '').slice(0, 3);
+                    setPositionPcts(o => {
+                      const n = { ...o };
+                      if (v === '') delete n[slot]; else n[slot] = v;
+                      return n;
+                    });
+                  }}
+                  style={{ ...UI.input, width: 70, flex: '0 0 auto' }} />
+                <span style={{ fontSize: 11, color: '#64748b', marginLeft: 8 }}>% of minutes</span>
+              </div>
+            ))}
+            <div style={UI.note}>
+              {!pagerSlots.length ? 'Switch on the positions he plays.'
+                : pctTotal === 0 ? 'Blank leaves the discs unlabelled.'
+                : `${pctTotal}% assigned${pctTotal > 100 ? ' — over 100' : ''}`}
+            </div>
           </div>
 
           <Check label={clubsMode === 'players' ? 'Hide match % beside players' : 'Hide fit score beside clubs'}
