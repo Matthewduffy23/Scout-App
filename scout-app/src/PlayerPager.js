@@ -453,58 +453,92 @@ function positionPitchSvg(player, w, h, manualColors, pcts, heatmap, heatOpacity
   };
 
   const VB = [320, 208];
-  const GHOST = 'rgba(255,255,255,0.11)';
-  const MARK = 'rgba(255,255,255,0.26)';
+  const GHOST = 'rgba(255,255,255,0.10)';
+  // Markings sit ABOVE the heat and have to hold their own against a bright blob,
+  // so they're drawn at 0.42 rather than the 0.26 that reads fine on an empty
+  // pitch. Two weights: the boundary and halfway line carry the shape, the boxes
+  // and arcs are furniture and stay a step back.
+  const LINE = 'rgba(255,255,255,0.42)';
+  const LINE_SOFT = 'rgba(255,255,255,0.30)';
 
-  const dots = Object.keys(PP_SLOTS).map(slot => {
+  const discs = Object.keys(PP_SLOTS).map(slot => {
     const [x, y] = PP_SLOTS[slot];
     const i = slots.indexOf(slot);
-    if (i < 0) return heatmap ? '' : `<circle cx="${x}" cy="${y}" r="4" fill="${GHOST}"/>`;
+    if (i < 0) return heatmap ? '' : `<circle cx="${x}" cy="${y}" r="3.6" fill="${GHOST}"/>`;
     const col = colourFor(slot, i);
     const pct = pcts && pcts[slot] != null && pcts[slot] !== '' ? Number(pcts[slot]) : null;
-    // The share sits INSIDE the disc under the code. Outside it, two adjacent
-    // positions print their figures on top of each other.
-    return `<circle cx="${x}" cy="${y}" r="17" fill="${col}" stroke="rgba(0,0,0,0.45)" stroke-width="1.2"/>
-      <text x="${x}" y="${pct == null ? y + 4.5 : y + 1}" text-anchor="middle"
-            font-family="Montserrat,sans-serif" font-size="11" font-weight="800"
-            fill="#07090f">${slot}</text>${
+    const label = `${Math.round(pct)}%`;
+    const chipW = label.length * 6.4 + 8;
+    return `
+      <g filter="url(#ppShadow)">
+        <circle cx="${x}" cy="${y}" r="19" fill="${col}"/>
+        <circle cx="${x}" cy="${y}" r="19" fill="none" stroke="rgba(7,9,15,0.55)" stroke-width="2"/>
+      </g>
+      <text x="${x}" y="${y + 4.6}" text-anchor="middle" font-family="Montserrat,sans-serif"
+            font-size="12.5" font-weight="800" fill="#07090f" letter-spacing="0.3">${slot}</text>${
       pct == null ? '' : `
-      <text x="${x}" y="${y + 11}" text-anchor="middle" font-family="Montserrat,sans-serif"
-            font-size="8.5" font-weight="700" fill="rgba(0,0,0,0.62)">${Math.round(pct)}%</text>`}`;
+      <g filter="url(#ppShadow)">
+        <rect x="${x - chipW / 2}" y="${y + 21}" width="${chipW}" height="15" rx="7.5"
+              fill="#07090f" fill-opacity="0.82" stroke="${col}" stroke-width="1.1"/>
+      </g>
+      <text x="${x}" y="${y + 31.6}" text-anchor="middle" font-family="Montserrat,sans-serif"
+            font-size="9.5" font-weight="800" fill="${col}">${label}</text>`}`;
   }).join('');
 
-  // Heat sits under the markings, clipped to the pitch, deliberately faint. It is
-  // a backdrop saying "he operates here", not a chart to be read off — anything
-  // stronger competes with the position discs, which are the point of the tile.
+  // Heat under the markings, clipped to the pitch, deliberately faint: a backdrop
+  // saying "he operates here", not a chart to be read off.
   const heatLayer = heatmap ? `
-      <clipPath id="pp-heat-clip"><rect x="1" y="1" width="${VB[0] - 2}" height="${VB[1] - 2}" rx="9"/></clipPath>
-      <image href="${heatmap}" x="1" y="1" width="${VB[0] - 2}" height="${VB[1] - 2}"
-             preserveAspectRatio="none" opacity="${heatOpacity}" clip-path="url(#pp-heat-clip)"/>` : '';
+      <image href="${heatmap}" x="4" y="4" width="312" height="200"
+             preserveAspectRatio="none" opacity="${heatOpacity}" clip-path="url(#ppClip)"/>` : '';
 
   return `<svg width="${w}" height="${h}" viewBox="0 0 ${VB[0]} ${VB[1]}" xmlns="http://www.w3.org/2000/svg">
-      <rect x="1" y="1" width="${VB[0] - 2}" height="${VB[1] - 2}" rx="9"
-            fill="rgba(255,255,255,0.045)" stroke="${MARK}" stroke-width="1.4"/>
+      <defs>
+        <clipPath id="ppClip"><rect x="4" y="4" width="312" height="200" rx="8"/></clipPath>
+        <filter id="ppShadow" x="-50%" y="-50%" width="200%" height="200%">
+          <feDropShadow dx="0" dy="1.5" stdDeviation="1.6" flood-color="#000" flood-opacity="0.45"/>
+        </filter>
+        <linearGradient id="ppTurf" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="rgba(255,255,255,0.075)"/>
+          <stop offset="100%" stop-color="rgba(255,255,255,0.025)"/>
+        </linearGradient>
+      </defs>
+
+      <rect x="4" y="4" width="312" height="200" rx="8" fill="url(#ppTurf)"/>
       ${heatLayer}
-      <g fill="none" stroke="${MARK}" stroke-width="1.4">
-        <rect x="1" y="1" width="${VB[0] - 2}" height="${VB[1] - 2}" rx="9"/>
-        <line x1="160" y1="6" x2="160" y2="202"/>
-        <circle cx="160" cy="104" r="30"/>
-        <rect x="6" y="52" width="44" height="104" rx="2"/>
-        <rect x="270" y="52" width="44" height="104" rx="2"/>
-        <rect x="6" y="80" width="17" height="48" rx="1"/>
-        <rect x="297" y="80" width="17" height="48" rx="1"/>
+
+      <g fill="none" stroke="${LINE}" stroke-width="1.6">
+        <rect x="4" y="4" width="312" height="200" rx="8"/>
+        <line x1="160" y1="4" x2="160" y2="204"/>
       </g>
-      <circle cx="160" cy="104" r="2.5" fill="${MARK}"/>
-      ${dots}
+      <g fill="none" stroke="${LINE_SOFT}" stroke-width="1.4">
+        <circle cx="160" cy="104" r="31"/>
+        <rect x="4" y="49" width="54" height="110"/>
+        <rect x="262" y="49" width="54" height="110"/>
+        <rect x="4" y="79" width="20" height="50"/>
+        <rect x="296" y="79" width="20" height="50"/>
+        <path d="M 58 87 A 22 22 0 0 1 58 121"/>
+        <path d="M 262 87 A 22 22 0 0 0 262 121"/>
+        <path d="M 4 14 A 10 10 0 0 0 14 4"/>
+        <path d="M 306 4 A 10 10 0 0 0 316 14"/>
+        <path d="M 4 194 A 10 10 0 0 1 14 204"/>
+        <path d="M 316 194 A 10 10 0 0 0 306 204"/>
+      </g>
+      <g fill="${LINE_SOFT}">
+        <circle cx="160" cy="104" r="2.4"/>
+        <circle cx="40" cy="104" r="2.2"/>
+        <circle cx="280" cy="104" r="2.2"/>
+      </g>
+      ${discs}
     </svg>`;
 }
 
 // The pitch now takes the height the band allows and the width that follows from
 // the true ratio, rather than being sized to leave a comfortable text column and
 // ending up a thumbnail. 182x118 against the old 75x112 is 2.4x the area.
-const PB_PITCH_H = 118;
-const PB_PITCH_W = Math.round(PB_PITCH_H * (320 / 208));   // 182
-const PB_GAP = 16;
+const PB_PITCH_H = 122;
+const PB_PITCH_W = Math.round(PB_PITCH_H * (320 / 208));   // 188
+const PB_GAP = 20;
+const PB_TEXT_W = 138;
 
 function positionBlockHtml(player, x, w, ink, manualColors, pcts, heatmap, heatOpacity, shownSlots) {
   const toks = String(player.position || '').split(',').map(t => t.trim().toUpperCase()).filter(Boolean);
@@ -513,9 +547,15 @@ function positionBlockHtml(player, x, w, ink, manualColors, pcts, heatmap, heatO
   const full = POS_FULL[short] || POSITION_LABELS[primary] || short || '—';
   const others = toks.slice(1).map(shortPos).filter((v, i, a) => v && v !== short && a.indexOf(v) === i);
 
-  const textW = w - PB_PITCH_W - PB_GAP;
+  // Text and pitch are one CENTRED group. Sizing the text column as "whatever is
+  // left" pinned the pitch hard against the right-hand rule and left the block
+  // looking like it had slid into the GBE column. A fixed text width and a
+  // centred group gives equal air either side.
+  const textW = PB_TEXT_W;
+  const groupW = textW + PB_GAP + PB_PITCH_W;
+  const left = x + Math.max(0, Math.round((w - groupW) / 2));
   return `
-    <div style="position:absolute;left:${x}px;top:42px;width:${textW}px;">
+    <div style="position:absolute;left:${left}px;top:42px;width:${textW}px;">
       <div style="font-size:8px;font-weight:700;letter-spacing:0.14em;color:${ink.muted};
                   white-space:nowrap;">POSITION</div>
       <div style="margin-top:8px;font-size:19px;font-weight:800;color:${ink.primary};
@@ -525,7 +565,7 @@ function positionBlockHtml(player, x, w, ink, manualColors, pcts, heatmap, heatO
         others.length ? `<span style="color:${ink.muted};font-weight:600;"> &middot; ${esc(others.join(' '))}</span>` : ''
       }</div>
     </div>
-    <div style="position:absolute;left:${x + textW + PB_GAP}px;top:16px;
+    <div style="position:absolute;left:${left + textW + PB_GAP}px;top:14px;
                 width:${PB_PITCH_W}px;height:${PB_PITCH_H}px;">
       ${positionPitchSvg(player, PB_PITCH_W, PB_PITCH_H, manualColors, pcts, heatmap, heatOpacity, shownSlots)}
     </div>`;
@@ -883,7 +923,7 @@ function headerHtml(player, ctx, opts) {
          image sits straight on the band and the gradient shows through. Still
          cover-cropped from the top, because a centred crop on a head-and-
          shoulders portrait cuts the chin off. -->
-    <div style="position:absolute;left:${PAD}px;top:19px;width:112px;height:112px;
+    <div style="position:absolute;left:${PAD - 4}px;top:14px;width:124px;height:124px;
                 background-image:url('${src(photo)}');background-size:cover;
                 background-position:center top;background-repeat:no-repeat;"></div>
 
