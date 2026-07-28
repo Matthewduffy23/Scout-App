@@ -32,18 +32,19 @@
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
-  MONTSERRAT_EMBED_CSS, leagueDisplayName, leagueLogo, leagueFlag,
+  MONTSERRAT_EMBED_CSS, leagueDisplayName, leagueLogo, leagueFlag, teamCrest,
 } from './cardAssets';
 import { formatMV, formatFoot } from './constants';
 import { useIsMobile, deliverPng, photoUrl } from './utils';
 import {
-  scoreWheel, headerInk, preloadImages, fitNameSize,
+  scoreWheel, headerInk, preloadImages, fitNameSize, statRow,
+  styleHexSvg, radarColor, gradeColor,
   HEADER_COLOURS, HEADER_COLOUR_NAMES,
 } from './TeamReport';
 import { fadeHexToBG, countryToIso2 } from './CoachCard';
 import {
-  pitchDiagramSvg, careerTrajectorySvg, teamRangeBarHtml, gbeThresholdBar,
-  rolesDotsSvg, scoreTierColor, barRow,
+  pitchDiagramSvg, careerTrajectorySvg, teamRangeBarHtml,
+  scoreTierColor, barRow,
   TOKEN_TO_POS_KEY, POSITION_LABELS, METRIC_LABEL_MAP,
 } from './QuickCard';
 import { computeClubFit, simGroup } from './clubFit';
@@ -221,8 +222,8 @@ function percentilePanelBody(w, h, sd, isGK) {
               justify-content:center;color:#475569;font-size:13px;">No percentile data for this season.</div>`;
   }
   const activeSections = keys.filter(k => groups[k] && groups[k].length > 0).length;
-  const SECTION_H = 32;          // heading + its margins
-  const AXIS_H = 44;             // percent scale + "Percentile Rank" caption
+  const SECTION_H = 40;          // heading + its margins, quick card's rhythm
+  const AXIS_H = 48;             // percent scale + "Percentile Rank" caption
   const budget = h - AXIS_H - activeSections * SECTION_H;
   const rowH = Math.max(8, Math.min(34, Math.floor(budget / totalRows) - 1));
   const slack = Math.max(0, budget - totalRows * (rowH + 1));
@@ -236,7 +237,9 @@ function percentilePanelBody(w, h, sd, isGK) {
     return barRow(display, pct, shown, rowH, extraGap);
   }).join('');
 
-  const heading = (t) => `<div style="font-size:15px;font-weight:800;color:#f3f5f7;margin:6px 0 5px;">${t}</div>`;
+  // Quick card sizes these at 24px in a 920px column; 21px is the same weight
+  // and colour stepped down for a 716px one.
+  const heading = (t) => `<div style="font-size:21px;font-weight:800;color:#f3f5f7;margin:8px 0 6px;">${t}</div>`;
 
   return `
     <div style="position:absolute;inset:0;overflow:hidden;">
@@ -249,27 +252,29 @@ function percentilePanelBody(w, h, sd, isGK) {
           ${[0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map(p => `
             <span style="position:absolute;left:${p}%;top:0;
                          transform:translateX(${p === 0 ? '0' : p === 100 ? '-100%' : '-50%'});
-                         font-size:10px;font-weight:600;color:#c4cbd9;">${p}%</span>`).join('')}
-          <span style="position:absolute;left:50%;top:12px;transform:translateX(-50%);
-                       font-size:8px;font-weight:600;color:#5e6678;text-transform:uppercase;
+                         font-size:11.5px;font-weight:600;color:#c4cbd9;">${p}%</span>`).join('')}
+          <span style="position:absolute;left:50%;top:14px;transform:translateX(-50%);
+                       font-size:9px;font-weight:600;color:#5e6678;text-transform:uppercase;
                        letter-spacing:.05em;">Avg</span>
         </div>
       </div>
       <div style="display:flex;">
         <div style="width:188px;flex-shrink:0;"></div>
-        <div style="flex:1;text-align:center;font-size:12px;font-weight:700;color:#e8eef8;padding-top:4px;">Percentile Rank</div>
+        <div style="flex:1;text-align:center;font-size:13.5px;font-weight:700;color:#e8eef8;padding-top:5px;">Percentile Rank</div>
       </div>
     </div>`;
 }
 
 // ─── Areas to Improve ──────────────────────────────────────────────────────
-// The four weakest metrics this season, as the same bars the percentile column
-// uses, plus whatever qualitative weaknesses the pipeline tagged. Metrics are
-// taken across all three groups and deduped by DISPLAY label — several raw
-// column names map to one display name, and two identical-looking bars in a
-// four-slot panel reads as a defect rather than a signal (same reason
-// TeamReport dedupes PPDA out of its version).
-const IMPROVE_CEILING = 50;      // only show a metric if it's actually below par
+// TeamReport's weaknesses bars, verbatim: 32px rows, label left, figure right in
+// radarColor, 5px track underneath at full panel width. Not barRow — barRow is
+// the quick card's language and carries a 188px label gutter and a 50% midline
+// tick, neither of which belongs in a 498px tile beside a hex chart.
+//
+// Metrics are deduped by DISPLAY label before ranking: several raw Wyscout
+// columns collapse to one display name, and two identical-looking bars in a
+// four-slot panel reads as a defect. Same reason TeamReport dedupes PPDA.
+const IMPROVE_CEILING = 50;      // only bar a metric that is actually below par
 
 function improvePanelBody(w, h, sd, player, manualNotes) {
   const groups = sd.g || {};
@@ -281,7 +286,7 @@ function improvePanelBody(w, h, sd, player, manualNotes) {
       const label = METRIC_LABEL_MAP[entry[0]] || entry[0];
       if (seen.has(label)) continue;
       seen.add(label);
-      rows.push([label, Number(entry[1]) || 0, entry[2]]);
+      rows.push([label, Number(entry[1]) || 0]);
     }
   }
   rows.sort((a, b) => a[1] - b[1]);
@@ -291,66 +296,89 @@ function improvePanelBody(w, h, sd, player, manualNotes) {
     ? manualNotes
     : (sd.weaknesses || player.latestWeaknesses || []);
 
-  const bars = worst.map(([label, pct, raw]) => {
-    const n = typeof raw === 'number' ? raw : parseFloat(raw);
-    const isPct = /%/.test(label);
-    const shown = !isNaN(n) ? n.toFixed(isPct ? 1 : 2) : raw;
-    return barRow(label, pct, shown, 20, 4);
-  }).join('');
+  const ROW_H = 32;
+  const bars = worst.map(([name, p], i) => `
+    <div style="position:absolute;left:0;top:${i * ROW_H}px;width:${w}px;height:${ROW_H - 8}px;">
+      <span style="position:absolute;left:0;right:40px;top:0;font-size:11.5px;font-weight:600;
+                   color:#c8d2e0;white-space:nowrap;overflow:hidden;">${esc(name)}</span>
+      <span style="position:absolute;right:0;top:-1px;font-size:13px;font-weight:800;
+                   color:${radarColor(p)};">${Math.round(p)}</span>
+      <div style="position:absolute;left:0;right:0;top:17px;height:5px;border-radius:3px;
+                  background:rgba(255,255,255,0.08);overflow:hidden;">
+        <div style="width:${Math.max(2, Math.min(100, p))}%;height:100%;
+                    background:${radarColor(p)};border-radius:3px;"></div>
+      </div>
+    </div>`).join('');
 
-  const tags = weaknesses.slice(0, 5).map(s => `
-    <span style="font-size:12px;background:rgba(248,113,113,0.10);color:#f87171;
-                 border:1px solid rgba(248,113,113,0.30);border-radius:12px;
-                 padding:3px 10px;display:inline-block;margin:0 6px 6px 0;">${esc(s)}</span>`).join('');
+  // Qualitative tags sit below the bars on their own labelled row, exactly the
+  // way TeamReport's "ALSO" strip sits below its metric bars.
+  const tagTop = worst.length * ROW_H + 8;
+  const tags = weaknesses.slice(0, 5).map(t => `
+    <span style="display:inline-block;height:21px;line-height:21px;padding:0 11px;
+                 border-radius:11px;margin-right:6px;margin-bottom:4px;white-space:nowrap;
+                 font-size:10.5px;font-weight:700;background:#f871711e;
+                 border:1px solid #f8717159;color:#f87171;">${esc(t)}</span>`).join('');
 
   if (!bars && !tags) {
     return `<div style="position:absolute;inset:0;display:flex;align-items:center;
-              justify-content:center;color:#475569;font-size:13px;">No significant weaknesses.</div>`;
+              justify-content:center;font-size:12px;color:#55617a;">No significant weaknesses.</div>`;
   }
-  return `
-    <div style="position:absolute;inset:0;overflow:hidden;">
+  return `<div style="position:absolute;inset:0;">
       ${bars}
-      ${tags ? `<div style="margin-top:${bars ? 10 : 0}px;">${tags}</div>` : ''}
+      ${tags ? `<div style="position:absolute;left:0;top:${tagTop}px;width:${w}px;">
+        <div style="font-size:8.5px;font-weight:700;letter-spacing:0.14em;color:#6f7c92;">ALSO</div>
+        <div style="margin-top:7px;">${tags}</div>
+      </div>` : ''}
     </div>`;
 }
 
 // ─── Potential Clubs UK ────────────────────────────────────────────────────
-// Rows are computed in the component (computeClubFit walks the whole position
-// pool, which is not something to do inside a render function that runs twice
-// per export) and passed in already ranked.
+// Row geometry ported line for line from TeamReport's Similar Teams panel —
+// same 9px card, same #n index at 10px, same 26px crest at x=32, same 68px text
+// column, same 50px centred value column with its caption underneath. Only the
+// caption word changes, because these are fit scores rather than match scores.
 function clubsPanelBody(w, h, rows, coreOnly) {
   if (!rows || !rows.length) {
     return `<div style="position:absolute;inset:0;display:flex;align-items:center;
-              justify-content:center;color:#475569;font-size:13px;text-align:center;">
-              No UK club fits — the position pool for this player isn't loaded.</div>`;
+              justify-content:center;font-size:12px;color:#55617a;text-align:center;">
+              No UK club fits — the position pool isn't loaded.</div>`;
   }
-  const shown = rows.slice(0, 5);
-  const rowH = Math.floor((h - (coreOnly ? 16 : 0)) / shown.length);
-  const body = shown.map((r, i) => {
-    const col = scoreTierColor(r.finalFit);
+  const shown = rows.slice(0, 4);
+  const rowH = Math.floor((h - (coreOnly ? 14 : 0) - 4) / shown.length);
+  const VAL_W = 50;
+  const body = shown.map((t, i) => {
+    const col = gradeColor(t.finalFit);
+    const crest = teamCrest(t.team);
     return `
-      <div style="display:flex;align-items:center;height:${rowH}px;">
-        <span style="width:18px;flex-shrink:0;font-size:11px;font-weight:800;color:#475569;">${i + 1}</span>
-        <div style="flex:1;min-width:0;">
-          <div style="font-size:14px;font-weight:700;color:#e2e8f4;white-space:nowrap;">${esc(r.team)}</div>
-          <div style="font-size:10px;font-weight:600;color:#64748b;white-space:nowrap;">${esc(leagueDisplayName(r.league) || r.league)}</div>
+      <div style="position:absolute;left:0;top:${i * rowH + 2}px;width:${w}px;height:${rowH - 6}px;
+                  background:rgba(255,255,255,0.035);border:1px solid rgba(255,255,255,0.07);
+                  border-radius:9px;">
+        <span style="position:absolute;left:10px;top:50%;margin-top:-6px;font-size:10px;
+                     font-weight:700;color:#475569;">#${i + 1}</span>
+        ${crest ? `<div style="position:absolute;left:32px;top:50%;margin-top:-13px;width:26px;height:26px;
+                     background-image:url('${src(crest)}');background-size:contain;
+                     background-repeat:no-repeat;background-position:center;"></div>` : ''}
+        <div style="position:absolute;left:68px;right:${VAL_W + 18}px;top:50%;margin-top:-15px;">
+          <div style="font-size:13px;font-weight:700;color:#eaf0f8;line-height:1.15;white-space:nowrap;
+                      ">${esc(t.team)}</div>
+          <div style="font-size:10px;color:#8b98ad;margin-top:4px;line-height:1.15;white-space:nowrap;
+                      overflow:hidden;">${esc(leagueDisplayName(t.league) || t.league)}</div>
         </div>
-        <div style="width:132px;flex-shrink:0;height:6px;border-radius:3px;
-                    background:rgba(255,255,255,0.10);overflow:hidden;margin:0 10px;">
-          <div style="width:${Math.max(0, Math.min(100, r.finalFit))}%;height:100%;
-                      background:${col};border-radius:3px;"></div>
+        <div style="position:absolute;right:10px;top:50%;margin-top:-15px;width:${VAL_W}px;
+                    text-align:center;">
+          <div style="font-size:15px;font-weight:800;color:${col};line-height:1.05;">${Math.round(t.finalFit)}</div>
+          <div style="font-size:7.5px;font-weight:600;letter-spacing:0.06em;color:#55617a;
+                      margin-top:3px;line-height:1;">fit</div>
         </div>
-        <span style="width:44px;flex-shrink:0;text-align:right;font-size:17px;
-                     font-weight:900;color:${col};">${Math.round(r.finalFit)}</span>
       </div>`;
   }).join('');
 
   // Stated on the card, not just in the editor. Without the peak-fit blend the
-  // number is the core alone and reads a few points high — a reader comparing
-  // this against ScoutBoard deserves to know which of the two they're looking at.
+  // number is the core alone and reads a few points high — anyone comparing this
+  // against ScoutBoard deserves to know which of the two they are looking at.
   const note = coreOnly
-    ? `<div style="position:absolute;left:0;bottom:0;font-size:9px;font-weight:600;
-                   color:#475569;letter-spacing:0.04em;">CORE FIT ONLY — CLUB SIMILARITY NOT LOADED</div>`
+    ? `<div style="position:absolute;left:0;bottom:0;font-size:8px;font-weight:700;
+                   letter-spacing:0.14em;color:#475569;">CORE FIT ONLY — CLUB SIMILARITY NOT LOADED</div>`
     : '';
   return `<div style="position:absolute;inset:0;overflow:hidden;">${body}${note}</div>`;
 }
@@ -381,6 +409,7 @@ function headerHtml(player, ctx, opts) {
   const displayName = (nameOverride && nameOverride.trim()) || player.name;
   const displayTeam = (teamOverride && teamOverride.trim()) || team;
   const photo = opts.uploadedPhotoDataUrl || photoUrl(player.name, player.team);
+  const crest = teamCrest(team);
   const logo = leagueLogo(league);
   const flag = leagueFlag(league);
   const natIso = countryToIso2(player.birthCountry);
@@ -428,18 +457,23 @@ function headerHtml(player, ctx, opts) {
                   line-height:1.0;color:${ink.primary};white-space:nowrap;">${esc(displayName)}</div>
     </div>
 
-    <!-- club + league badge + league flag -->
-    <div style="position:absolute;left:${NAME_X}px;top:78px;display:flex;align-items:center;
+    <!-- club crest, club, league badge, league flag, league. The crest leads:
+         it is the fastest identifier on the row and TeamReport puts the badge
+         first for the same reason. -->
+    <div style="position:absolute;left:${NAME_X}px;top:76px;display:flex;align-items:center;
                 white-space:nowrap;">
-      <span style="font-size:21px;font-weight:700;color:${ink.secondary};">${esc(truncateText(displayTeam, 20))}</span>
-      ${logo ? `<div style="width:23px;height:23px;flex-shrink:0;background-size:contain;
+      ${crest ? `<div style="width:24px;height:24px;flex-shrink:0;background-size:contain;
                   background-repeat:no-repeat;background-position:center;
-                  background-image:url('${src(logo)}');margin-left:12px;"></div>` : ''}
+                  background-image:url('${src(crest)}');"></div>` : ''}
+      <span style="font-size:21px;font-weight:700;color:${ink.secondary};${crest ? 'margin-left:10px;' : ''}">${esc(truncateText(displayTeam, 18))}</span>
+      ${logo ? `<div style="width:21px;height:21px;flex-shrink:0;background-size:contain;
+                  background-repeat:no-repeat;background-position:center;
+                  background-image:url('${src(logo)}');margin-left:14px;"></div>` : ''}
       ${flag ? `<div style="width:26px;height:16px;flex-shrink:0;background-size:cover;
-                  background-position:center;border-radius:2px;margin-left:9px;
+                  background-position:center;border-radius:2px;margin-left:8px;
                   box-shadow:inset 0 0 0 1px rgba(255,255,255,0.18);
                   background-image:url('${src(flag)}');"></div>` : ''}
-      <span style="font-size:14px;font-weight:600;color:${ink.muted};margin-left:9px;">${esc(leagueDisplayName(league) || league)}</span>
+      <span style="font-size:14px;font-weight:600;color:${ink.muted};margin-left:8px;">${esc(leagueDisplayName(league) || league)}</span>
     </div>
 
     <!-- Apps / Gls / Asts / xG / xA / Mins, on TeamReport's PTS baseline -->
@@ -478,10 +512,14 @@ function headerHtml(player, ctx, opts) {
                 background:${ink.rule};"></div>
 
     <!-- Pitch diagram in the trend line's slot. Fixed 3:2 box so the SVG's own
-         330x220 viewBox scales without distortion. -->
+         330x220 viewBox scales without distortion, and its caption sits on
+         HDR_LABEL_Y with the wheel labels so the band reads as one row. -->
     ${showPitch ? `
-    <div style="position:absolute;left:${PITCH_X + (PITCH_W - 153) / 2}px;top:25px;
-                width:153px;height:102px;">${pitchDiagramSvg(player, positionColors)}</div>`
+    <div style="position:absolute;left:${PITCH_X + (PITCH_W - 156) / 2}px;top:26px;
+                width:156px;height:104px;">${pitchDiagramSvg(player, positionColors)}</div>
+    <div style="position:absolute;left:${PITCH_X}px;top:${HDR_LABEL_Y}px;width:${PITCH_W}px;
+                text-align:center;font-size:8px;font-weight:700;letter-spacing:0.15em;
+                color:${ink.muted};">POSITIONS</div>`
     : `
     <div style="position:absolute;left:${PITCH_X}px;top:34px;width:${PITCH_W}px;">
       ${[['POSITION', POSITION_LABELS[rawTok] || rawTok || '—'],
@@ -495,44 +533,55 @@ function headerHtml(player, ctx, opts) {
                     color:${ink.secondary};white-space:nowrap;">${esc(truncateText(v, 24))}</div>`).join('')}
     </div>`}
 
-    <!-- GBE in the coach profile's slot -->
-    <div style="position:absolute;left:${GBE_X}px;top:26px;width:${GBE_W}px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;
-                  white-space:nowrap;margin-bottom:12px;">
-        <span style="font-size:8px;font-weight:700;letter-spacing:0.14em;color:${ink.muted};">GBE CALCULATION</span>
-        <span style="display:flex;align-items:center;">
-          <span style="font-size:14px;font-weight:800;color:${ink.secondary};">${gbe.total} pts</span>
-          <span style="margin-left:10px;font-size:11px;font-weight:800;color:${gbe.colour};
-                       background:${gbe.colour}22;border:1px solid ${gbe.colour};border-radius:5px;
-                       padding:3px 10px;">${gbe.status}</span>
-        </span>
-      </div>
-      <div style="display:flex;flex-direction:column;gap:4px;">
-        ${gbeThresholdBar('Domestic Apps', gbe.domPts, 12)}
-        ${gbeThresholdBar('Continental', gbe.contPts, 8)}
-        ${gbeThresholdBar('League Band', gbe.lqPts, 12)}
-        ${gbeThresholdBar('Finish/Prog', gbe.finishPts + gbe.progPts, 10)}
-      </div>
-      ${gbe.homeNation
-        ? `<div style="margin-top:5px;font-size:8.5px;font-weight:700;letter-spacing:0.1em;color:#3da65b;">AUTO PASS — HOME NATION</div>`
-        : gbe.panelEligible
-        ? `<div style="margin-top:5px;font-size:8.5px;font-weight:700;letter-spacing:0.1em;color:#f0c56a;">ELIGIBLE FOR EXCEPTIONS PANEL</div>`
-        : ''}
-    </div>`;
+    <!-- GBE in the coach profile's slot, built from TeamReport's statRow — the
+         same label / track / figure row the club-facts strip uses, so the right
+         end of the band matches the left. The old version stacked
+         gbeThresholdBar four deep with its own tick circles and ran the
+         home-nation note out of the 150px band and into the panels below. Rows
+         are 18px on an 18px pitch: 46 + 4x18 = 118, inside the 28..128 rules. -->
+    <div style="position:absolute;left:${GBE_X}px;top:26px;width:${GBE_W}px;height:18px;">
+      <span style="position:absolute;left:0;top:4px;font-size:8px;font-weight:700;
+                   letter-spacing:0.14em;color:${ink.muted};">GBE CALCULATION</span>
+      <span style="position:absolute;right:0;top:0;display:flex;align-items:center;white-space:nowrap;">
+        ${gbe.homeNation ? `<span style="font-size:8px;font-weight:700;letter-spacing:0.13em;
+                     color:${gbe.colour};margin-right:12px;">AUTO — HOME NATION</span>` : ''}
+        ${gbe.panelEligible ? `<span style="font-size:8px;font-weight:700;letter-spacing:0.13em;
+                     color:${gbe.colour};margin-right:12px;">EXCEPTIONS PANEL</span>` : ''}
+        <span style="font-size:15px;font-weight:800;color:${ink.secondary};">${gbe.total}</span>
+        <span style="font-size:8px;font-weight:700;letter-spacing:0.13em;color:${ink.muted};
+                     margin-left:5px;">PTS</span>
+        <span style="margin-left:11px;font-size:11px;font-weight:800;color:${gbe.colour};
+                     background:${gbe.colour}22;border:1px solid ${gbe.colour};border-radius:5px;
+                     padding:3px 11px;">${gbe.status}</span>
+      </span>
+    </div>
+    ${[['DOMESTIC APPS', gbe.domPts, 12], ['CONTINENTAL', gbe.contPts, 8],
+       ['LEAGUE BAND', gbe.lqPts, 12], ['FINISH / PROG', gbe.finishPts + gbe.progPts, 10]]
+      .map(([label, val, max], i) => statRow({
+        x: GBE_X, y: 46 + i * 18, w: GBE_W, label,
+        value: `${val}<span style="color:${ink.muted};font-weight:600;">/${max}</span>`,
+        pct: (val / max) * 100,
+        colour: gradeColor((val / max) * 100),
+        ink, labelW: 92, valueW: 46,
+      })).join('')}`;
 }
 
 // ─── Image preload ─────────────────────────────────────────────────────────
 // Four remote references only — nothing like TeamReport's ~16 — but the same
 // treatment, because html-to-image refetches every remote image on each of the
 // two render passes and a cold GitHub fetch is slower than the render.
-export function pagerImageUrls(player, ctx, uploadedPhotoDataUrl) {
+export function pagerImageUrls(player, ctx, uploadedPhotoDataUrl, clubRows = []) {
   const urls = [
     uploadedPhotoDataUrl ? '' : photoUrl(player.name, player.team),
     leagueLogo(ctx.league),
     leagueFlag(ctx.league),
+    teamCrest(ctx.team),
   ];
   const iso = countryToIso2(player.birthCountry);
   if (iso) urls.push(`https://flagcdn.com/w80/${iso}.png`);
+  // Potential Clubs crests. Without these they would be the only remote
+  // references left in the render and would blank out in the export.
+  for (const r of (clubRows || [])) urls.push(teamCrest(r.team));
   return [...new Set(urls.filter(u => u && !u.startsWith('data:')))];
 }
 
@@ -567,25 +616,22 @@ export function buildPlayerPagerElement(player, opts = {}) {
   const leftInnerW = LEFT_W - PANEL_PAD * 2;              // 716
   const leftInnerH = LEFT_H - PANEL_PAD * 2 - TITLE_H;    // 815
 
-  // Style. rolesDotsSvg is built for an 880px column and hard-codes a 280px
-  // label gutter; handed 498 directly the ten dots would overlap each other.
-  // So it's rendered at its native width and scaled down as a unit — the
-  // proportions the function was designed around are preserved exactly, and it
-  // stays the same function the quick card calls rather than a re-tuned copy.
-  const ROLES_NATIVE_W = 880;
-  const ROLES_ROW_H = 56;
+  // Style. TeamReport's own hex chart, called with the player's role scores in
+  // place of a club's style axes. The previous version scaled QuickCard's
+  // lollipop chart down to fit, which meant this tile alone was speaking the
+  // quick card's visual language while every other tile spoke TeamReport's.
+  // styleHexSvg flexes its own row height to the box, so no scaling is needed.
   const qcRoles = player.qcRoleCareerScores || player.qcLatestRoles || player.roleCareerScores;
-  const roleList = qcRoles && Object.keys(qcRoles).length
-    ? Object.entries(qcRoles).sort((a, b) => b[1] - a[1]).slice(0, 6)
+  const roleRows = qcRoles && Object.keys(qcRoles).length
+    ? Object.entries(qcRoles)
+        .map(([k, v]) => [k, Number(v) || 0])
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 6)
     : [];
-  const rolesScale = innerW / ROLES_NATIVE_W;
-  const rolesHtml = roleList.length
-    ? `<div style="position:absolute;left:0;top:0;width:${ROLES_NATIVE_W}px;
-                   transform:scale(${rolesScale.toFixed(4)});transform-origin:top left;">
-         ${rolesDotsSvg(roleList, ROLES_NATIVE_W, ROLES_ROW_H)}
-       </div>`
+  const rolesHtml = roleRows.length
+    ? `<div style="position:absolute;left:0;top:2px;">${styleHexSvg(roleRows, innerW, row1InnerH)}</div>`
     : `<div style="position:absolute;inset:0;display:flex;align-items:center;
-                   justify-content:center;color:#475569;font-size:13px;">No role scores.</div>`;
+                   justify-content:center;font-size:12px;color:#55617a;">No role scores.</div>`;
 
   container.innerHTML = `
     <div id="pp-card-root" style="width:${W}px;height:${H}px;overflow:hidden;background:${BG};
@@ -598,7 +644,7 @@ export function buildPlayerPagerElement(player, opts = {}) {
 
       ${panel({
         x: PAD, y: BODY_TOP, w: LEFT_W, h: LEFT_H,
-        title: 'Percentile Rank',
+        title: 'Performance',
         right: `${ctx.seasonKey || ''}${ctx.team ? ` · ${truncateText(ctx.team, 22)}` : ''}`,
         body: percentilePanelBody(leftInnerW, leftInnerH, sd, isGK),
       })}
@@ -826,7 +872,7 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
     let el = null;
     try {
       const { toPng } = await import('html-to-image');
-      const urls = pagerImageUrls(player, ctx, uploadedPhotoDataUrl);
+      const urls = pagerImageUrls(player, ctx, uploadedPhotoDataUrl, clubRows);
       const images = await preloadImages(urls, (d, t) => setProgress(`Images ${d}/${t}`));
       setProgress('Rendering…');
       el = buildPlayerPagerElement(player, { ...buildOpts(), images });

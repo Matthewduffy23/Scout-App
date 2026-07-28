@@ -332,7 +332,7 @@ export function headerInk(spec) {
 // age, squad cost. Label left on a fixed column, track bar, value right. Sharing
 // the geometry is what makes the header read as designed rather than as three
 // separate widgets that happen to sit next to each other.
-function statRow({ x, y, w, label, value, pct, colour, ink, rank, labelW = 74, valueW = 42 }) {
+export function statRow({ x, y, w, label, value, pct, colour, ink, rank, labelW = 74, valueW = 42 }) {
   const barL = x + labelW;
   const barR = x + w - valueW - 10;
   const fill = Math.max(0, Math.min(100, Number(pct) || 0));
@@ -573,7 +573,7 @@ const TITLE_H = 34;
 // smooth gradient reads better than the five hard bands scoreColor() applies
 // to the team-level numbers (those stay banded to match TeamIndex's table).
 const RAMP = [[0, [239, 68, 68]], [50, [251, 199, 1]], [100, [0, 191, 99]]];
-function gradeColor(v) {
+export function gradeColor(v) {
   if (v == null || isNaN(v)) return '#64748b';
   const x = Math.max(0, Math.min(100, Number(v)));
   let a = RAMP[0], b = RAMP[RAMP.length - 1];
@@ -1251,7 +1251,7 @@ export function radarPercentiles(team, allTeams) {
 
 // Feature Y's seven-stop ramp, linearly interpolated.
 const RADAR_RAMP = ['#be2a3e', '#e25f48', '#f88f4d', '#f4d166', '#90b960', '#4b9b5f', '#22763f'];
-function radarColor(p) {
+export function radarColor(p) {
   const x = Math.max(0, Math.min(100, p)) / 100 * (RADAR_RAMP.length - 1);
   const i = Math.min(RADAR_RAMP.length - 2, Math.floor(x)), t = x - i;
   const hex = (c) => [1, 3, 5].map(k => parseInt(c.slice(k, k + 2), 16));
@@ -1322,7 +1322,7 @@ function radarPanelHtml(w, h, team, allTeams) {
 // NOTE: t.attributes is a list of attribute NAMES (tags like "Possession"), not
 // 0-100 values, so it can't drive this. The numbers come from the season's own
 // percentiles instead — the four headline splits plus two metricGroups entries.
-function styleHexSvg(rows, maxWidth, maxHeight) {
+export function styleHexSvg(rows, maxWidth, maxHeight) {
   const R = 11;
   const hex = (cx, cy, opacity, col) => {
     const pts = Array.from({ length: 6 }, (_, i) => {
