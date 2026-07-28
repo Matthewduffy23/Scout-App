@@ -474,15 +474,14 @@ function positionPitchSvg(player, w, h, manualColors, pcts, heatmap, heatOpacity
     // 13 at 0% up to 23 at 100%, so even a 5% cameo still holds a readable code.
     const r = pct == null ? 18 : 13 + (Math.max(0, Math.min(100, pct)) / 100) * 10;
     const fs = Math.max(9, Math.min(13, r * 0.68));
+    // No ring: a dark stroke round a bright disc on a dark pitch drew a halo and
+    // made every position look outlined rather than placed. The drop shadow alone
+    // gives the lift. Type down to 700 too — 800 at this size was heavier than
+    // anything else on the card.
     return `
-      <g filter="url(#ppShadow)">
-        <circle cx="${x}" cy="${y}" r="${r.toFixed(1)}" fill="${col}"/>
-        <circle cx="${x}" cy="${y}" r="${r.toFixed(1)}" fill="none"
-                stroke="rgba(7,9,15,0.55)" stroke-width="2"/>
-      </g>
-      <text x="${x}" y="${y + fs * 0.36}" text-anchor="middle" font-family="Montserrat,sans-serif"
-            font-size="${fs.toFixed(1)}" font-weight="800" fill="#07090f"
-            letter-spacing="0.3">${slot}</text>`;
+      <circle cx="${x}" cy="${y}" r="${r.toFixed(1)}" fill="${col}" filter="url(#ppShadow)"/>
+      <text x="${x}" y="${y + fs * 0.35}" text-anchor="middle" font-family="Montserrat,sans-serif"
+            font-size="${fs.toFixed(1)}" font-weight="700" fill="#07090f">${slot}</text>`;
   }).join('');
 
   // Heat under the markings, clipped to the pitch, deliberately faint: a backdrop
@@ -557,12 +556,14 @@ function positionBlockHtml(player, x, w, ink, manualColors, pcts, heatmap, heatO
   // the wheels' air beside it, so true centre reads right-heavy.
   const left = x + Math.max(0, Math.round((w - groupW) / 2)) - 14;
   return `
-    <div style="position:absolute;left:${left}px;top:40px;width:${textW}px;">
+    <div style="position:absolute;left:${left}px;top:28px;width:${textW}px;">
       <div style="font-size:8px;font-weight:700;letter-spacing:0.14em;color:${ink.muted};
                   white-space:nowrap;">POSITION</div>
       <div style="margin-top:9px;font-size:19px;font-weight:800;color:${ink.primary};
                   line-height:1.05;white-space:nowrap;">${esc(full(primary))}</div>
-      <div style="margin-top:5px;font-size:19px;font-weight:800;color:${ink.muted};
+      <div style="margin-top:14px;font-size:8px;font-weight:700;letter-spacing:0.14em;
+                  color:${ink.muted};white-space:nowrap;">SECONDARY POSITION</div>
+      <div style="margin-top:9px;font-size:19px;font-weight:800;color:${ink.muted};
                   line-height:1.05;white-space:nowrap;">${secondary ? esc(full(secondary)) : '&mdash;'}</div>
     </div>
     <div style="position:absolute;left:${left + textW + PB_GAP}px;top:14px;
@@ -815,7 +816,10 @@ function clubsPanelBody(w, h, rows, coreOnly, mode, hideScores) {
   const body = shown.map((t, i) => {
     const figure = isPlayers ? t.simPct : t.finalFit;
     const col = gradeColor(figure);
-    const crest = teamCrest(t.team);
+    // A similar-players row is about the PLAYER, so it carries his face. Showing
+    // his club's badge instead put three different clubs down the left of a panel
+    // whose subject is three people, and it read as a club list.
+    const badge = isPlayers ? photoUrl(t.name, t.team) : teamCrest(t.team);
     const title = isPlayers ? t.name : t.team;
     // A player row's second line is his club and league; a club row's is just the
     // league. Both stay one nowrap line so nothing wraps into the crest.
@@ -828,9 +832,12 @@ function clubsPanelBody(w, h, rows, coreOnly, mode, hideScores) {
                   border-radius:9px;">
         <span style="position:absolute;left:10px;top:50%;margin-top:-6px;font-size:10px;
                      font-weight:700;color:#475569;">#${i + 1}</span>
-        ${crest ? `<div style="position:absolute;left:32px;top:50%;margin-top:-13px;width:26px;height:26px;
-                     background-image:url('${src(crest)}');background-size:contain;
-                     background-repeat:no-repeat;background-position:center;"></div>` : ''}
+        ${badge ? `<div style="position:absolute;left:32px;top:50%;margin-top:-14px;
+                     width:28px;height:28px;background-image:url('${src(badge)}');
+                     background-size:${isPlayers ? 'cover' : 'contain'};
+                     background-repeat:no-repeat;
+                     background-position:center ${isPlayers ? 'top' : 'center'};
+                     ${isPlayers ? 'border-radius:50%;background-color:#1a2233;' : ''}"></div>` : ''}
         <div style="position:absolute;left:68px;right:${VAL_W + 18}px;top:50%;margin-top:-15px;">
           <div style="font-size:13px;font-weight:700;color:#eaf0f8;line-height:1.15;white-space:nowrap;
                       ">${esc(title)}</div>
@@ -923,7 +930,7 @@ function headerHtml(player, ctx, opts) {
          image sits straight on the band and the gradient shows through. Still
          cover-cropped from the top, because a centred crop on a head-and-
          shoulders portrait cuts the chin off. -->
-    <div style="position:absolute;left:14px;top:6px;width:144px;height:144px;
+    <div style="position:absolute;left:14px;top:5px;width:140px;height:140px;
                 background-image:url('${src(photo)}');background-size:cover;
                 background-position:center top;background-repeat:no-repeat;"></div>
 
@@ -1016,7 +1023,7 @@ function headerHtml(player, ctx, opts) {
          that isn't drawn. A maxed component turns its tile green and says MAX.
          Tiles run 44..124 inside the 28..128 band rules; 124 wide on a 14px
          gutter fills the 538px slot exactly. -->
-    <div style="position:absolute;left:${GBE_X}px;top:20px;width:${GBE_W}px;height:18px;">
+    <div style="position:absolute;left:${GBE_X}px;top:14px;width:${GBE_W}px;height:20px;">
       <span style="position:absolute;left:0;top:4px;width:170px;font-size:8px;font-weight:700;
                    letter-spacing:0.14em;color:${ink.muted};white-space:nowrap;">GBE CALCULATION</span>
       <span style="position:absolute;right:0;top:0;display:flex;align-items:center;white-space:nowrap;">
@@ -1051,7 +1058,7 @@ function headerHtml(player, ctx, opts) {
                         margin-left:${k ? gap : 0}px;
                         background:${k < got ? tone : ink.track};"></div>`).join('');
           return `
-        <div style="position:absolute;left:${GBE_X + i * (TW + TG)}px;top:44px;width:${TW}px;height:80px;
+        <div style="position:absolute;left:${GBE_X + i * (TW + TG)}px;top:42px;width:${TW}px;height:78px;
                     box-sizing:border-box;padding:11px 12px;border-radius:9px;
                     border:1px solid ${done ? 'rgba(61,166,91,0.42)' : ink.rule};
                     background:${done ? 'rgba(61,166,91,0.09)' : 'rgba(255,255,255,0.05)'};">
@@ -1085,7 +1092,9 @@ export function pagerImageUrls(player, ctx, uploadedPhotoDataUrl, clubRows = [])
   if (iso) urls.push(`https://flagcdn.com/w80/${iso}.png`);
   // Potential Clubs crests. Without these they would be the only remote
   // references left in the render and would blank out in the export.
-  for (const r of (clubRows || [])) urls.push(teamCrest(r.team));
+  for (const r of (clubRows || [])) {
+    urls.push(r.name ? photoUrl(r.name, r.team) : teamCrest(r.team));
+  }
   return [...new Set(urls.filter(u => u && !u.startsWith('data:')))];
 }
 
@@ -1334,9 +1343,11 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
 
   const [clubsMode, setClubsMode] = useState('clubs');   // clubs | players
   const [hideFitScores, setHideFitScores] = useState(false);
-  // null = auto (whatever the model ranks). An array = the user has taken over,
-  // and is authoritative including its order.
-  const [manualRows, setManualRows] = useState(null);
+  // Kept PER MODE. A single list meant a club list could still be on screen after
+  // switching to Similar Players — the clear-on-switch effect fired, but anything
+  // added before the switch came back the moment you switched back, and a stale
+  // render could show both at once. Two independent lists cannot cross over.
+  const [manualByMode, setManualByMode] = useState({ clubs: null, players: null });
   const [rowQuery, setRowQuery] = useState('');
 
   const [peakFit, setPeakFit] = useState(null);
@@ -1406,12 +1417,18 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
     }
   }, [player, players, peakFit, clubsMode]);
 
-  // Switching mode drops a manual list built for the other one — a club list is
-  // not a player list, and silently carrying it across would print clubs under a
-  // "Similar Players" heading.
-  useEffect(() => { setManualRows(null); setRowQuery(''); }, [clubsMode]);
+  useEffect(() => { setRowQuery(''); }, [clubsMode]);
 
-  const clubRows = manualRows || autoRows.slice(0, 3);
+  const manualRows = manualByMode[clubsMode];
+  const setManualRows = useCallback(
+    (rows) => setManualByMode(m => ({ ...m, [clubsMode]: rows })), [clubsMode]);
+
+  // Belt and braces: only rows of the right shape for the current mode are drawn,
+  // so nothing stale can reach the card even if state gets out of step.
+  const clubRows = useMemo(() => {
+    const rows = manualRows || autoRows.slice(0, 3);
+    return (rows || []).filter(r => r && (clubsMode === 'players' ? !!r.name : !r.name));
+  }, [manualRows, autoRows, clubsMode]);
 
   // Ranked candidates first, then ANY club in the data. Restricting the picker to
   // the model's own shortlist meant a club you actually wanted to put on the card
