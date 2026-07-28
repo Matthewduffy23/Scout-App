@@ -849,7 +849,7 @@ function clubsPanelBody(w, h, rows, coreOnly, mode, hideScores) {
   if (!rows || !rows.length) {
     return `<div style="position:absolute;inset:0;display:flex;align-items:center;
               justify-content:center;font-size:12px;color:#55617a;text-align:center;">
-              ${isPlayers ? 'No comparable UK players' : 'No UK club fits'} —
+              ${isPlayers ? 'No comparable players' : 'No club fits'} —
               the position pool isn't loaded.</div>`;
   }
   const shown = rows.slice(0, 3);
@@ -1187,7 +1187,7 @@ export function buildPlayerPagerElement(player, opts = {}) {
     images = {}, headerColourName = 'Default', seasonOverride = '',
     nameOverride = '', teamOverride = '', uploadedPhotoDataUrl = '',
     viewText = '', clubRows = [], clubsCoreOnly = true,
-    clubsMode = 'clubs', hideFitScores = false,
+    clubsMode = 'clubs', hideFitScores = false, ukOnly = true,
     showForecast = false, useBestRoleCareer = false, showPitch = true,
     positionColors = {}, positionPcts = {}, gbeOv = {}, improveNotes = [],
     heatmapDataUrl = '', heatOpacity = 0.3, shownSlots = null,
@@ -1284,7 +1284,10 @@ export function buildPlayerPagerElement(player, opts = {}) {
 
       ${panel({
         x: COL_A_X, y: ROW_3, w: COL_W, h: ROW3_H,
-        title: clubsMode === 'players' ? 'Similar Players UK' : 'Potential Clubs UK',
+        title: clubsMode === 'players' ? 'Similar Players' : 'Potential Clubs',
+        // Scope goes in the panel's right-hand slot rather than the title, so the
+        // heading stays the same length whichever way it's set.
+        right: ukOnly ? 'UK' : 'WORLDWIDE',
         body: clubsPanelBody(innerW, row3InnerH, clubRows, clubsCoreOnly, clubsMode, hideFitScores),
       })}
       ${panel({
@@ -1430,6 +1433,9 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
 
   const [clubsMode, setClubsMode] = useState('clubs');   // clubs | players
   const [hideFitScores, setHideFitScores] = useState(false);
+  // UK by default because that's the working case; the toggle exists for the
+  // times the honest answer is somewhere else.
+  const [ukOnly, setUkOnly] = useState(true);
   // Kept PER MODE. A single list meant a club list could still be on screen after
   // switching to Similar Players — the clear-on-switch effect fired, but anything
   // added before the switch came back the moment you switched back, and a stale
@@ -1496,15 +1502,17 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
   const autoRows = useMemo(() => {
     try {
       return clubsMode === 'players'
-        ? computeSimilarPlayers(player, players || [], { ukOnly: true, topN: 8 })
-        : computeClubFit(player, players || [], { ukOnly: true, topN: 8, peakFitByTeam: peakFit });
+        ? computeSimilarPlayers(player, players || [], { ukOnly, topN: 8 })
+        : computeClubFit(player, players || [], { ukOnly, topN: 8, peakFitByTeam: peakFit });
     } catch (e) {
       console.error('[PlayerPager] ranking failed:', e);
       return [];
     }
-  }, [player, players, peakFit, clubsMode]);
+  }, [player, players, peakFit, clubsMode, ukOnly]);
 
   useEffect(() => { setRowQuery(''); }, [clubsMode]);
+  // A UK shortlist is not a worldwide one, so changing scope drops the manual list.
+  useEffect(() => { setManualByMode({ clubs: null, players: null }); }, [ukOnly]);
 
   const manualRows = manualByMode[clubsMode];
   const setManualRows = useCallback(
@@ -1561,7 +1569,7 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
   const buildOpts = () => ({
     headerColourName, seasonOverride, nameOverride, teamOverride,
     uploadedPhotoDataUrl, viewText, clubRows,
-    clubsMode, hideFitScores, positionPcts,
+    clubsMode, hideFitScores, ukOnly, positionPcts,
     heatmapDataUrl, heatOpacity: Number(heatOpacity) / 100, shownSlots: pagerSlots,
     heightOverride, footOverride,
     clubsCoreOnly: !peakFit,
@@ -1694,6 +1702,121 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
                  value={useBestRoleCareer} onChange={setUseBestRoleCareer} />
 
           <div style={{ ...UI.block, marginTop: 10 }}>
+            <span style={UI.label}>Height &amp; foot</span>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input value={heightOverride} onChange={e => setHeightOverride(e.target.value)}
+                     placeholder={cmToFeet(player.height) || 'Height'}
+                     style={{ ...UI.input, flex: 1 }} />
+              <input value={footOverride} onChange={e => setFootOverride(e.target.value)}
+                     placeholder={(player.foot && player.foot !== 'unknown' && player.foot !== 'nan')
+                                    ? formatFoot(player.foot) : 'Foot'}
+                     style={{ ...UI.input, flex: 1 }} />
+            </div>
+            <div style={UI.note}>Blank uses the pipeline value.</div>
+          </div>
+
+          <div style={UI.block}>
+            <span style={UI.label}>Heatmap (optional)</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <label style={{ flex: 1, cursor: 'pointer', fontSize: 11, fontWeight: 700,
+                            padding: '7px 10px', borderRadius: 5, textAlign: 'center',
+                            border: `1px solid ${heatRaw ? '#3b7de8' : '#1e2d45'}`,
+                            background: heatRaw ? '#0e2040' : 'transparent',
+                            color: heatRaw ? '#60a5fa' : '#8b98ad' }}>
+              {heatRaw ? 'Heatmap loaded ✓' : 'Upload heatmap'}
+              <input type="file" accept="image/*" style={{ display: 'none' }}
+                onChange={e => {
+                  const f = e.target.files && e.target.files[0];
+                  if (!f) return;
+                  const r = new FileReader();
+                  r.onload = async (ev) => {
+                    const raw = String(ev.target.result);
+                    setHeatRaw(raw);
+                    setHeatmapDataUrl(heatExtract ? await extractHeat(raw) : raw);
+                  };
+                  r.readAsDataURL(f);
+                  e.target.value = '';
+                }} />
+            </label>
+            {heatRaw && (
+              <button onClick={() => { setHeatRaw(''); setHeatmapDataUrl(''); }}
+                style={{ padding: '7px 10px', background: 'none', border: '1px solid #1e2d45',
+                         borderRadius: 5, color: '#f87171', fontSize: 11, cursor: 'pointer' }}>✕</button>
+            )}
+          </div>
+          {heatRaw && (
+            <>
+              <div style={{ marginTop: 8 }}>
+                <Check label="Strip the pitch background (keep the heat only)"
+                       value={heatExtract}
+                       onChange={async (v) => {
+                         setHeatExtract(v);
+                         setHeatmapDataUrl(v ? await extractHeat(heatRaw) : heatRaw);
+                       }} />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center' }}>
+                <span style={{ fontSize: 10.5, color: '#94a3b8', width: 54, flexShrink: 0 }}>Strength</span>
+                <input type="range" min="15" max="100" value={heatOpacity}
+                  onChange={e => setHeatOpacity(e.target.value)}
+                  style={{ flex: 1, accentColor: '#3b7de8' }} />
+                <span style={{ fontSize: 10.5, color: '#64748b', width: 34, textAlign: 'right' }}>{heatOpacity}%</span>
+              </div>
+              <div style={UI.note}>
+                Sits behind the pitch as a backdrop — it should read as where he
+                operates, not as a chart competing with the position discs.
+              </div>
+            </>
+          )}
+          </div>
+
+          <div style={UI.block}>
+          <span style={UI.label}>Positions shown &amp; minutes split</span>
+          <div style={{ display: 'flex', flexWrap: 'wrap', marginBottom: 8 }}>
+            {ALL_PITCH_SLOTS.map(sl => {
+              const on = pagerSlots.includes(sl);
+              const locked = autoSlots.includes(sl);
+              return (
+                <button key={sl}
+                  onClick={() => {
+                    if (locked) return;
+                    setExtraSlots(list => on ? list.filter(x => x !== sl) : [...list, sl]);
+                    if (on) setPositionPcts(o => { const n = { ...o }; delete n[sl]; return n; });
+                  }}
+                  title={locked ? 'From the player\u2019s own position data' : ''}
+                  style={{ padding: '3px 8px', marginRight: 5, marginBottom: 5, borderRadius: 10,
+                           border: `1px solid ${on ? '#3b7de8' : '#1e2d45'}`,
+                           background: on ? '#0e2040' : 'transparent',
+                           color: on ? '#60a5fa' : '#8b98ad', opacity: locked ? 0.75 : 1,
+                           fontSize: 10, fontWeight: 700,
+                           cursor: locked ? 'default' : 'pointer' }}>{sl}</button>
+              );
+            })}
+          </div>
+          {pagerSlots.map(slot => (
+            <div key={slot} style={{ display: 'flex', alignItems: 'center', marginBottom: 5 }}>
+              <span style={{ width: 44, flexShrink: 0, fontSize: 11, fontWeight: 800,
+                             color: '#93c5fd' }}>{slot}</span>
+              <input value={positionPcts[slot] ?? ''} inputMode="numeric" placeholder="—"
+                onChange={e => {
+                  const v = e.target.value.replace(/[^\d]/g, '').slice(0, 3);
+                  setPositionPcts(o => {
+                    const n = { ...o };
+                    if (v === '') delete n[slot]; else n[slot] = v;
+                    return n;
+                  });
+                }}
+                style={{ ...UI.input, width: 70, flex: '0 0 auto' }} />
+              <span style={{ fontSize: 11, color: '#64748b', marginLeft: 8 }}>% of minutes</span>
+            </div>
+          ))}
+          <div style={UI.note}>
+            {!pagerSlots.length ? 'Switch on the positions he plays.'
+              : pctTotal === 0 ? 'Blank leaves the discs unlabelled.'
+              : `${pctTotal}% assigned${pctTotal > 100 ? ' — over 100' : ''}`}
+          </div>
+          </div>
+
+          <div style={{ ...UI.block, marginTop: 10 }}>
             <span style={UI.label}>Player photo</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <label style={{ flex: 1, cursor: 'pointer', fontSize: 11, fontWeight: 700,
@@ -1768,107 +1891,6 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
                            fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>{lbl}</button>
               ))}
             </div>
-
-            <div style={UI.block}>
-            <span style={UI.label}>Heatmap (optional)</span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <label style={{ flex: 1, cursor: 'pointer', fontSize: 11, fontWeight: 700,
-                              padding: '7px 10px', borderRadius: 5, textAlign: 'center',
-                              border: `1px solid ${heatRaw ? '#3b7de8' : '#1e2d45'}`,
-                              background: heatRaw ? '#0e2040' : 'transparent',
-                              color: heatRaw ? '#60a5fa' : '#8b98ad' }}>
-                {heatRaw ? 'Heatmap loaded ✓' : 'Upload heatmap'}
-                <input type="file" accept="image/*" style={{ display: 'none' }}
-                  onChange={e => {
-                    const f = e.target.files && e.target.files[0];
-                    if (!f) return;
-                    const r = new FileReader();
-                    r.onload = async (ev) => {
-                      const raw = String(ev.target.result);
-                      setHeatRaw(raw);
-                      setHeatmapDataUrl(heatExtract ? await extractHeat(raw) : raw);
-                    };
-                    r.readAsDataURL(f);
-                    e.target.value = '';
-                  }} />
-              </label>
-              {heatRaw && (
-                <button onClick={() => { setHeatRaw(''); setHeatmapDataUrl(''); }}
-                  style={{ padding: '7px 10px', background: 'none', border: '1px solid #1e2d45',
-                           borderRadius: 5, color: '#f87171', fontSize: 11, cursor: 'pointer' }}>✕</button>
-              )}
-            </div>
-            {heatRaw && (
-              <>
-                <div style={{ marginTop: 8 }}>
-                  <Check label="Strip the pitch background (keep the heat only)"
-                         value={heatExtract}
-                         onChange={async (v) => {
-                           setHeatExtract(v);
-                           setHeatmapDataUrl(v ? await extractHeat(heatRaw) : heatRaw);
-                         }} />
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center' }}>
-                  <span style={{ fontSize: 10.5, color: '#94a3b8', width: 54, flexShrink: 0 }}>Strength</span>
-                  <input type="range" min="15" max="100" value={heatOpacity}
-                    onChange={e => setHeatOpacity(e.target.value)}
-                    style={{ flex: 1, accentColor: '#3b7de8' }} />
-                  <span style={{ fontSize: 10.5, color: '#64748b', width: 34, textAlign: 'right' }}>{heatOpacity}%</span>
-                </div>
-                <div style={UI.note}>
-                  Sits behind the pitch as a backdrop — it should read as where he
-                  operates, not as a chart competing with the position discs.
-                </div>
-              </>
-            )}
-          </div>
-
-          <div style={UI.block}>
-            <span style={UI.label}>Positions shown &amp; minutes split</span>
-            <div style={{ display: 'flex', flexWrap: 'wrap', marginBottom: 8 }}>
-              {ALL_PITCH_SLOTS.map(sl => {
-                const on = pagerSlots.includes(sl);
-                const locked = autoSlots.includes(sl);
-                return (
-                  <button key={sl}
-                    onClick={() => {
-                      if (locked) return;
-                      setExtraSlots(list => on ? list.filter(x => x !== sl) : [...list, sl]);
-                      if (on) setPositionPcts(o => { const n = { ...o }; delete n[sl]; return n; });
-                    }}
-                    title={locked ? 'From the player\u2019s own position data' : ''}
-                    style={{ padding: '3px 8px', marginRight: 5, marginBottom: 5, borderRadius: 10,
-                             border: `1px solid ${on ? '#3b7de8' : '#1e2d45'}`,
-                             background: on ? '#0e2040' : 'transparent',
-                             color: on ? '#60a5fa' : '#8b98ad', opacity: locked ? 0.75 : 1,
-                             fontSize: 10, fontWeight: 700,
-                             cursor: locked ? 'default' : 'pointer' }}>{sl}</button>
-                );
-              })}
-            </div>
-            {pagerSlots.map(slot => (
-              <div key={slot} style={{ display: 'flex', alignItems: 'center', marginBottom: 5 }}>
-                <span style={{ width: 44, flexShrink: 0, fontSize: 11, fontWeight: 800,
-                               color: '#93c5fd' }}>{slot}</span>
-                <input value={positionPcts[slot] ?? ''} inputMode="numeric" placeholder="—"
-                  onChange={e => {
-                    const v = e.target.value.replace(/[^\d]/g, '').slice(0, 3);
-                    setPositionPcts(o => {
-                      const n = { ...o };
-                      if (v === '') delete n[slot]; else n[slot] = v;
-                      return n;
-                    });
-                  }}
-                  style={{ ...UI.input, width: 70, flex: '0 0 auto' }} />
-                <span style={{ fontSize: 11, color: '#64748b', marginLeft: 8 }}>% of minutes</span>
-              </div>
-            ))}
-            <div style={UI.note}>
-              {!pagerSlots.length ? 'Switch on the positions he plays.'
-                : pctTotal === 0 ? 'Blank leaves the discs unlabelled.'
-                : `${pctTotal}% assigned${pctTotal > 100 ? ' — over 100' : ''}`}
-            </div>
-          </div>
 
           <Check label={clubsMode === 'players' ? 'Hide match % beside players' : 'Hide fit score beside clubs'}
                    value={hideFitScores} onChange={setHideFitScores} />
