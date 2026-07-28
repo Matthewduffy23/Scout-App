@@ -37,13 +37,13 @@ import {
 import { formatMV, formatFoot } from './constants';
 import { useIsMobile, deliverPng, photoUrl } from './utils';
 import {
-  scoreWheel, headerInk, preloadImages, fitNameSize, statRow, pillHtml,
-  styleHexSvg, gradeColor,
+  scoreWheel, headerInk, preloadImages, fitNameSize, pillHtml,
+  styleHexSvg, gradeColor, radarColor,
   HEADER_COLOURS, HEADER_COLOUR_NAMES,
 } from './TeamReport';
 import { fadeHexToBG, countryToIso2 } from './CoachCard';
 import {
-  pitchDiagramSvg, careerTrajectorySvg, teamRangeBarHtml,
+  careerTrajectorySvg, teamRangeBarHtml,
   scoreTierColor, barRow,
   TOKEN_TO_POS_KEY, POSITION_LABELS, METRIC_LABEL_MAP,
   POSITION_TEAM_CONTEXT_CATS, TEAM_CONTEXT_BANDS,
@@ -297,102 +297,227 @@ function teamContextBody(w, h, player, posKey) {
     </div>`;
 }
 
+// ─── Position pitch ────────────────────────────────────────────────────────
+// A different system to QuickCard's pitchDiagramSvg, which is built for a 390px
+// slot on a dark panel. Shrunk to 150px on a coloured band it read as noise:
+// thirteen dots, ten of them grey and meaningless, on an opaque #0d1117 box that
+// looked pasted onto the gradient.
+//
+// This draws only the positions the player actually plays, labelled, on a
+// transparent outline in the band's own rule colour — so it sits IN the header
+// rather than on top of it, and every mark on it carries information. Tier
+// colours and the token-to-slot mapping are QuickCard's, so a player reads the
+// same on both cards.
+const PP_SLOTS = {
+  GK:  [28, 100],
+  LCB: [74, 60],  CB: [74, 100], RCB: [74, 140],
+  LB:  [62, 24],  RB: [62, 176],
+  LWB: [122, 24], RWB: [122, 176],
+  DM:  [114, 100], CM: [152, 100], AM: [198, 100],
+  LW:  [234, 30], RW: [234, 170],
+  ST:  [268, 100],
+};
+const PP_TOKEN_TO_SLOT = {
+  GK: 'GK', RB: 'RB', RWB: 'RWB', LCB: 'LCB', CB: 'CB', RCB: 'RCB', LB: 'LB', LWB: 'LWB',
+  DMF: 'DM', LDMF: 'DM', RDMF: 'DM', LCMF: 'CM', RCMF: 'CM', CMF: 'CM', AMF: 'AM',
+  RAMF: 'RW', RWF: 'RW', RW: 'RW', LAMF: 'LW', LWF: 'LW', LW: 'LW', CF: 'ST',
+};
+const PP_TIERS = { Primary: '#00bf63', Secondary: '#7ed957', Third: '#c1ff72',
+                   Fourth: '#ffde59', Fifth: '#ffbd59', Sixth: '#ff914d', Seventh: '#ff3131' };
+const PP_TIER_ORDER = ['Primary', 'Secondary', 'Third', 'Fourth', 'Fifth', 'Sixth', 'Seventh'];
+
+function positionPitchSvg(player, w, h, ink, manualColors) {
+  const line = (ink && ink.rule) || 'rgba(255,255,255,0.13)';
+  const filled = {};
+  if (manualColors && Object.keys(manualColors).length) {
+    for (const slot of Object.keys(manualColors)) {
+      const tier = manualColors[slot];
+      if (tier && PP_SLOTS[slot]) filled[slot] = PP_TIERS[tier] || tier;
+    }
+  } else {
+    const toks = String(player.position || '').split(',').map(t => t.trim().toUpperCase()).filter(Boolean);
+    let i = 0;
+    for (const tok of toks) {
+      const slot = PP_TOKEN_TO_SLOT[tok];
+      if (!slot || filled[slot] || i >= PP_TIER_ORDER.length) continue;
+      filled[slot] = PP_TIERS[PP_TIER_ORDER[i]];
+      i += 1;
+    }
+  }
+  const dots = Object.keys(filled).map(slot => {
+    const [x, y] = PP_SLOTS[slot];
+    return `<circle cx="${x}" cy="${y}" r="15" fill="${filled[slot]}"/>
+      <text x="${x}" y="${y + 3.5}" text-anchor="middle" font-family="Montserrat,sans-serif"
+            font-size="9.5" font-weight="800" fill="#07090f">${slot}</text>`;
+  }).join('');
+
+  return `<svg width="${w}" height="${h}" viewBox="0 0 300 200" xmlns="http://www.w3.org/2000/svg">
+      <g fill="none" stroke="${line}" stroke-width="1.4">
+        <rect x="6" y="6" width="288" height="188" rx="4"/>
+        <line x1="150" y1="6" x2="150" y2="194"/>
+        <circle cx="150" cy="100" r="26"/>
+        <rect x="6" y="62" width="34" height="76"/>
+        <rect x="260" y="62" width="34" height="76"/>
+      </g>
+      ${dots}
+    </svg>`;
+}
+
 // ─── Strengths & Weaknesses ────────────────────────────────────────────────
-// Pills rather than bars. The Performance column on the left already draws every
-// percentile bar this player has; repeating four of them here said nothing new.
-// What a reader wants from this tile is the verdict, which is what the pipeline's
-// strengths/weaknesses lists already are.
+// Ported from the Streamlit position pages' STYLE_MAP (01_Center_Backs.py et al),
+// including the two things that made those pages' output readable and mine not:
 //
-// Pills are TeamReport's pillHtml, so the width is computed from nameEmWidth
-// rather than left to shrink-to-fit — the mechanism TeamReport arrived at in v61
-// after its own pills kept rendering narrower than their text.
+//  1. The LABELS. "Accurate passes, %" is "Passing Retention", not "Retention",
+//     and it differs by position — PAdj Interceptions reads "Interceptions" for
+//     a centre back but "Defensive positioning" for a full back or midfielder.
+//  2. The EXCLUSIONS. A metric whose sw entry is null is deliberately not
+//     eligible: Shots per 90 says nothing about a full back, Smart Passes nothing
+//     about a winger, Deep Completions nothing about anyone. Metrics absent from
+//     a position's map are equally ineligible. That is why the Streamlit output
+//     never claimed a striker was weak at long passing.
 //
-// WORDING. The pipeline emits stats-export names ("Non-penalty goals per 90").
-// This maps them to what a scout would actually say. Several columns collapse to
-// one term on purpose — xG and non-penalty goals are both "Goal Threat" — so
-// the list is deduped AFTER mapping. Anything unmapped falls through a generic
-// tidy (drop "per 90", drop Accurate/Successful, ", %" -> " %") rather than being
-// hidden, so a new metric shows up looking slightly raw instead of vanishing.
-// Extend the table as the wording gets refined.
-const SIMPLE_TERMS = {
-  'Non-penalty goals per 90': 'Goal Threat', 'Goals: Non-Penalty': 'Goal Threat',
-  'xG per 90': 'Goal Threat', 'xG': 'Goal Threat',
-  'Shots per 90': 'Shot Volume', 'Shots': 'Shot Volume',
-  'Shots on target, %': 'Shot Accuracy', 'Shooting Accuracy %': 'Shot Accuracy',
-  'Touches in box per 90': 'Box Presence', 'Touches in Opposition Box': 'Box Presence',
-  'xA per 90': 'Chance Creation', 'Expected Assists': 'Chance Creation',
-  'Key passes per 90': 'Chance Creation', 'Key passes': 'Chance Creation',
-  'Smart passes per 90': 'Incisive Passing', 'Smart Passes': 'Incisive Passing',
-  'Dribbles per 90': 'Dribbling', 'Dribbles': 'Dribbling',
-  'Successful dribbles, %': 'Dribbling', 'Dribbling Success %': 'Dribbling',
-  'Progressive runs per 90': 'Ball Carrying', 'Progressive Runs': 'Ball Carrying',
-  'Accelerations per 90': 'Ball Carrying', 'Accelerations': 'Ball Carrying',
-  'Crosses per 90': 'Crossing', 'Crosses': 'Crossing',
-  'Accurate crosses, %': 'Crossing', 'Crossing Accuracy %': 'Crossing',
-  'Passes per 90': 'Passing Volume', 'Passes': 'Passing Volume',
-  'Accurate passes, %': 'Retention', 'Passing %': 'Retention',
-  'Progressive passes per 90': 'Ball Progression', 'Progressive Passes': 'Ball Progression',
-  'Accurate progressive passes, %': 'Ball Progression', 'Progressive Passing %': 'Ball Progression',
-  'Passes to final third per 90': 'Final Third Passing', 'Passes to Final 3rd': 'Final Third Passing',
-  'Accurate passes to final third, %': 'Final Third Passing', 'Passes to Final 3rd %': 'Final Third Passing',
-  'Passes to penalty area per 90': 'Box Service', 'Passes to Penalty Area': 'Box Service',
-  'Accurate passes to penalty area, %': 'Box Service', 'Pass to Penalty Area %': 'Box Service',
-  'Deep completions per 90': 'Box Service', 'Deep Completions': 'Box Service',
-  'Long passes per 90': 'Long Passing', 'Long Passes': 'Long Passing',
-  'Accurate long passes, %': 'Long Passing', 'Long Passing %': 'Long Passing',
-  'Forward passes per 90': 'Forward Passing', 'Forward Passes': 'Forward Passing',
-  'Accurate forward passes, %': 'Forward Passing', 'Forward Passing %': 'Forward Passing',
-  'Aerial duels per 90': 'Aerial Duels', 'Aerial Duels': 'Aerial Duels',
-  'Aerial duels won, %': 'Aerial Duels', 'Aerial Duel Success %': 'Aerial Duels',
-  'Defensive duels per 90': 'Defensive Activity', 'Defensive Duels': 'Defensive Activity',
-  'Defensive duels won, %': 'Duelling', 'Defensive Duel Success %': 'Duelling',
-  'Offensive duels per 90': 'Duelling', 'Offensive Duels': 'Duelling',
-  'Offensive duels won, %': 'Duelling', 'Offensive Duel Success %': 'Duelling',
-  'PAdj Interceptions': 'Interceptions', 'PAdj. Interceptions': 'Interceptions',
-  'Shots blocked per 90': 'Blocking', 'Shots Blocked': 'Blocking',
-  'Conversion %': 'Finishing',
+// HI/LO thresholds are the Streamlit ones verbatim: 70 and 30.
+const SW_HI = 70;
+const SW_LO = 30;
+
+const SW_LABELS = {
+  GK: {
+    "Long Passes per 90": null,
+    "Passes per 90": "Passing Involvement",
+    "Accurate passes, %": "Passing Retention",
+  },
+  CB: {
+    "Defensive duels per 90": "Defensive Duel Attempts",
+    "Aerial duels won, %": "Aerial Duels",
+    "Defensive duels won, %": "Tackling %",
+    "Long Passes per 90": null,
+    "PAdj Interceptions": "Interceptions",
+    "Accurate forward passes, %": "Forward Passing Accuracy",
+    "Dribbles per 90": "Dribble Volume",
+    "Successful dribbles, %": "Dribbling Efficiency",
+    "Progressive runs per 90": "Progressive Runs",
+    "Passes per 90": "Passing Involvement",
+    "Accurate passes, %": "Passing Retention",
+    "Progressive passes per 90": "Ball progression via passes",
+    "Shots blocked per 90": null,
+  },
+  FB: {
+    "Defensive duels per 90": "Defensive Duel Attempts",
+    "Aerial duels won, %": "Aerial Duels",
+    "Defensive duels won, %": "Tackling %",
+    "Long passes per 90": null,
+    "xG per 90": "Goal Threat",
+    "Shots per 90": null,
+    "PAdj Interceptions": "Defensive positioning",
+    "Accurate forward passes, %": "Forward Passing Accuracy",
+    "Dribbles per 90": "Dribble Volume",
+    "Successful dribbles, %": "Dribbling Efficiency",
+    "Touches in box per 90": "Penalty-box Coverage",
+    "Progressive runs per 90": "Progressive Runs",
+    "Passes per 90": "Passing Involvement",
+    "Accurate passes, %": "Passing Retention",
+    "xA per 90": "Creativity",
+    "Passes to penalty area per 90": "Passes to Penalty Area",
+    "Deep completions per 90": null,
+    "Progressive passes per 90": "Ball progression via passes",
+    "Smart passes per 90": null,
+  },
+  CM: {
+    "Defensive duels per 90": "Defensive Duel Attempts",
+    "Aerial duels won, %": "Aerial Duels",
+    "Defensive duels won, %": "Tackling %",
+    "Long Passes per 90": null,
+    "Non-penalty goals per 90": "Scoring Goals",
+    "xG per 90": "Goal Threat",
+    "Shots per 90": null,
+    "PAdj Interceptions": "Defensive positioning",
+    "Accurate forward passes, %": "Forward Passing Accuracy",
+    "Dribbles per 90": "Dribble Volume",
+    "Successful dribbles, %": "Dribbling Efficiency",
+    "Touches in box per 90": "Penalty-box Coverage",
+    "Progressive runs per 90": "Progressive Runs",
+    "Passes per 90": "Passing Involvement",
+    "Accurate passes, %": "Passing Retention",
+    "xA per 90": "Creativity",
+    "Passes to penalty area per 90": "Passes to Penalty Area",
+    "Deep completions per 90": null,
+    "Progressive passes per 90": "Ball progression via passes",
+    "Smart passes per 90": null,
+  },
+  ATT: {
+    "Defensive duels per 90": "Defensive Duels",
+    "Aerial duels won, %": "Aerial Duels",
+    "Aerial duels per 90": null,
+    "Non-penalty goals per 90": "Scoring Goals",
+    "xG per 90": "Attacking Positioning",
+    "Shots per 90": "Shot Volume",
+    "Goal conversion, %": "Finishing",
+    "Crosses per 90": "Crossing",
+    "Dribbles per 90": "Dribble Volume",
+    "Successful dribbles, %": "Dribbling Efficiency",
+    "Touches in box per 90": "Penalty-box Coverage",
+    "Progressive runs per 90": "Progressive Runs",
+    "Passes per 90": "Involvement",
+    "Accurate passes, %": "Retention",
+    "xA per 90": "Creativity",
+    "Passes to penalty area per 90": "Passes to Penalty Area",
+    "Deep completions per 90": null,
+    "Progressive passes per 90": null,
+    "Smart passes per 90": null,
+  },
+  CF: {
+    "Defensive duels per 90": "Defensive Duel Attempts",
+    "Aerial duels won, %": "Aerial Duels",
+    "xG per 90": "Goal Threat",
+    "Shots per 90": "Shot Volume",
+    "Crosses per 90": null,
+    "Dribbles per 90": "Dribble Volume",
+    "Successful dribbles, %": "Dribbling Efficiency",
+    "Touches in box per 90": "Penalty-box Coverage",
+    "Progressive runs per 90": "Progressive Runs",
+    "Passes per 90": "Involvement",
+    "Accurate passes, %": "Passing Retention",
+    "xA per 90": "Creativity",
+    "Passes to penalty area per 90": "Passes to Penalty Area",
+    "Deep completions per 90": null,
+    "Goal conversion, %": "Finishing",
+    "Smart passes per 90": null,
+  },};
+
+// The pipeline's `g` groups store abbreviated labels ("Pass %"), not the Wyscout
+// column names STYLE_MAP is keyed on ("Accurate passes, %"). This maps one to the
+// other. Lookups are lowercased because the Streamlit maps are inconsistent about
+// capitalising "Long Passes per 90" vs "Long passes per 90".
+const G_LABEL_TO_COLUMN = {
+  'Crosses': 'Crosses per 90', 'Cross %': 'Accurate crosses, %',
+  'Non-penalty goals': 'Non-penalty goals per 90', 'Goals: Non-Penalty': 'Non-penalty goals per 90',
+  'xG': 'xG per 90', 'Conversion %': 'Goal conversion, %',
+  'xA': 'xA per 90', 'Expected Assists': 'xA per 90',
+  'Shots': 'Shots per 90', 'Shot %': 'Shots on target, %',
+  'Touches in Box': 'Touches in box per 90', 'Touches in Opposition Box': 'Touches in box per 90',
+  'Progressive Runs': 'Progressive runs per 90', 'Accelerations': 'Accelerations per 90',
+  'Aerial Duels': 'Aerial duels per 90', 'Aerial Duel %': 'Aerial duels won, %',
+  'Defensive Duels': 'Defensive duels per 90', 'Defensive Duel %': 'Defensive duels won, %',
+  'PAdj Interceptions': 'PAdj Interceptions', 'PAdj. Interceptions': 'PAdj Interceptions',
+  'Shots Blocked': 'Shots blocked per 90',
+  'Dribbles': 'Dribbles per 90', 'Dribble %': 'Successful dribbles, %',
+  'Deep Completions': 'Deep completions per 90',
+  'Passes': 'Passes per 90', 'Pass %': 'Accurate passes, %',
+  'Forward Passes': 'Forward passes per 90', 'Forward Pass %': 'Accurate forward passes, %',
+  'Long Passes': 'Long passes per 90', 'Long Pass %': 'Accurate long passes, %',
+  'Key Passes': 'Key passes per 90', 'Key passes': 'Key passes per 90',
+  'Smart Passes': 'Smart passes per 90',
+  'Passes to F3rd': 'Passes to final third per 90', 'Passes to F3rd %': 'Accurate passes to final third, %',
+  'Passes to Box': 'Passes to penalty area per 90', 'Passes to Box %': 'Accurate passes to penalty area, %',
+  'Progressive Passes': 'Progressive passes per 90', 'Prog Pass %': 'Accurate progressive passes, %',
 };
 
-function simpleTerm(raw) {
-  const t = String(raw || '').trim();
-  if (SIMPLE_TERMS[t]) return SIMPLE_TERMS[t];
-  const viaLabel = METRIC_LABEL_MAP[t];
-  if (viaLabel && SIMPLE_TERMS[viaLabel]) return SIMPLE_TERMS[viaLabel];
-  return t.replace(' per 90', '').replace('Accurate ', '')
-          .replace('Successful ', '').replace(', %', ' %').trim();
-}
+// { label, pct } for every metric this position is allowed to be judged on.
+function swEligible(sd, posKey) {
+  const table = SW_LABELS[posKey] || SW_LABELS.CM;
+  const lower = {};
+  for (const k of Object.keys(table)) lower[k.toLowerCase()] = table[k];
 
-// Map, dedupe, cap. Dedupe is on the SIMPLIFIED term, which is the whole point:
-// "xG" and "Non-penalty goals" arriving as two strengths is one strength.
-function simplifyList(list, max) {
-  const seen = new Set();
-  const out = [];
-  for (const raw of (list || [])) {
-    const t = simpleTerm(raw);
-    if (!t || seen.has(t)) continue;
-    seen.add(t);
-    out.push(t);
-    if (out.length >= max) break;
-  }
-  return out;
-}
-
-// Where the two lists come from.
-//
-// NOT sd.strengths / player.latestStrengths. Those are what QuickCard reads —
-// and QuickCard assigns them on one line and never renders them, so the field
-// was never actually exercised; on real data it comes back empty and the panel
-// printed "No profile data". The percentile groups are the same evidence those
-// lists would have been built from, and they are guaranteed present because the
-// Performance column on the left is drawn from them.
-//
-// A strength is a metric at or above STRONG_PCT, a weakness at or below WEAK_PCT.
-// If a player clears neither bar the list falls back to his own best/worst so the
-// tile is never empty — a genuinely average player still has a top three.
-const STRONG_PCT = 70;
-const WEAK_PCT = 30;
-
-function metricPercentiles(sd) {
   const groups = sd.g || {};
   const out = [];
   for (const k of ['A', 'D', 'P']) {
@@ -400,74 +525,64 @@ function metricPercentiles(sd) {
       if (!Array.isArray(entry) || entry.length < 2) continue;
       const pct = Number(entry[1]);
       if (isNaN(pct)) continue;
-      out.push([entry[0], pct]);
+      const col = G_LABEL_TO_COLUMN[entry[0]] || entry[0];
+      const label = lower[String(col).toLowerCase()];
+      if (!label) continue;              // null or absent = not eligible
+      out.push({ label, pct });
     }
   }
-  return out;
-}
-
-// Map to plain terms, dedupe on the SIMPLIFIED name, cap. Dedupe after mapping is
-// the point: xG and non-penalty goals arriving as two strengths is one strength.
-function termsFrom(pairs, max) {
-  const seen = new Set();
-  const out = [];
-  for (const [raw] of pairs) {
-    const t = simpleTerm(raw);
-    if (!t || seen.has(t)) continue;
-    seen.add(t);
-    out.push(t);
-    if (out.length >= max) break;
+  // Best percentile wins per label, same de-dupe the Streamlit pages do.
+  const best = {};
+  for (const r of out) {
+    if (best[r.label] == null || r.pct > best[r.label]) best[r.label] = r.pct;
   }
-  return out;
+  return Object.keys(best).map(label => ({ label, pct: best[label] }));
 }
 
-function deriveProfile(sd, max = 5) {
-  const rows = metricPercentiles(sd);
-  if (!rows.length) return { strengths: [], weaknesses: [] };
-  const desc = rows.slice().sort((a, b) => b[1] - a[1]);
-  const asc = rows.slice().sort((a, b) => a[1] - b[1]);
-  let strengths = termsFrom(desc.filter(r => r[1] >= STRONG_PCT), max);
-  let weaknesses = termsFrom(asc.filter(r => r[1] <= WEAK_PCT), max);
-  if (!strengths.length) strengths = termsFrom(desc, 3);
-  if (!weaknesses.length) weaknesses = termsFrom(asc, 3);
-  // A metric can't be both. Ordering favours the strength, since the top of the
-  // range is the more useful claim.
-  const claimed = new Set(strengths);
-  weaknesses = weaknesses.filter(t => !claimed.has(t));
-  return { strengths, weaknesses };
-}
-
-function strengthsPanelBody(w, h, sd, player, manualNotes) {
-  const derived = deriveProfile(sd, 5);
-  const pipelineStr = simplifyList(sd.strengths || player.latestStrengths || [], 5);
-  const pipelineWeak = simplifyList(sd.weaknesses || player.latestWeaknesses || [], 5);
-  // Pipeline lists win where they exist, because they're editorial; derived is the
-  // floor, not the override.
-  const strengths = pipelineStr.length ? pipelineStr : derived.strengths;
-  const weaknesses = (manualNotes && manualNotes.length)
-    ? simplifyList(manualNotes, 5)
-    : (pipelineWeak.length ? pipelineWeak : derived.weaknesses);
-
-  if (!strengths.length && !weaknesses.length) {
+function strengthsPanelBody(w, h, sd, posKey) {
+  const rows = swEligible(sd, posKey);
+  if (!rows.length) {
     return `<div style="position:absolute;inset:0;display:flex;align-items:center;
               justify-content:center;font-size:12px;color:#55617a;">No percentile data for this season.</div>`;
   }
+  const strengths = rows.filter(r => r.pct >= SW_HI).sort((a, b) => b.pct - a.pct).slice(0, 6);
+  const weaknesses = rows.filter(r => r.pct <= SW_LO).sort((a, b) => a.pct - b.pct).slice(0, 3);
 
-  const group = (title, items, tone, empty) => `
-      <div style="font-size:8.5px;font-weight:700;letter-spacing:0.14em;color:#6f7c92;">${title}</div>
-      <div style="margin-top:9px;">${
-        items.length
-          ? items.map(t => pillHtml(t, tone, 11, 11)).join('')
-          : `<span style="font-size:11px;color:#8b98ad;">${empty}</span>`
-      }</div>`;
+  // Strengths as pills — a strength is a claim, and a bar invites the reader to
+  // compare five things that are all simply good.
+  const strengthsHtml = strengths.length
+    ? strengths.map(r => pillHtml(r.label, '#22c55e', 11, 11)).join('')
+    : `<span style="font-size:11px;color:#8b98ad;">None above the ${SW_HI}th percentile</span>`;
 
-  const half = Math.floor(h / 2);
+  // Weaknesses stay as bars, in TeamReport's exact weakness-bar language: 32px
+  // rows, label left, figure right in radarColor, 5px track at full width. A
+  // weakness needs its magnitude shown — 29th percentile and 4th are different
+  // problems, and a pill flattens them into the same statement.
+  const BAR_H = 32;
+  const weakHtml = weaknesses.length
+    ? weaknesses.map((r, i) => `
+      <div style="position:absolute;left:0;top:${i * BAR_H}px;width:${w}px;height:${BAR_H - 8}px;">
+        <span style="position:absolute;left:0;right:40px;top:0;font-size:11.5px;font-weight:600;
+                     color:#c8d2e0;white-space:nowrap;overflow:hidden;">${esc(r.label)}</span>
+        <span style="position:absolute;right:0;top:-1px;font-size:13px;font-weight:800;
+                     color:${radarColor(r.pct)};">${Math.round(r.pct)}</span>
+        <div style="position:absolute;left:0;right:0;top:17px;height:5px;border-radius:3px;
+                    background:rgba(255,255,255,0.08);overflow:hidden;">
+          <div style="width:${Math.max(2, Math.min(100, r.pct))}%;height:100%;
+                      background:${radarColor(r.pct)};border-radius:3px;"></div>
+        </div>
+      </div>`).join('')
+    : `<span style="font-size:11px;color:#8b98ad;">None below the ${SW_LO}th percentile</span>`;
+
+  const WEAK_TOP = 92;
   return `<div style="position:absolute;inset:0;">
       <div style="position:absolute;left:0;top:0;width:${w}px;">
-        ${group('STRENGTHS', strengths, '#22c55e', 'None standing out')}
+        <div style="font-size:8.5px;font-weight:700;letter-spacing:0.14em;color:#6f7c92;">STRENGTHS</div>
+        <div style="margin-top:9px;">${strengthsHtml}</div>
       </div>
-      <div style="position:absolute;left:0;top:${half}px;width:${w}px;">
-        ${group('WEAKNESSES', weaknesses, '#f87171', 'No significant weaknesses')}
+      <div style="position:absolute;left:0;top:${WEAK_TOP}px;width:${w}px;">
+        <div style="font-size:8.5px;font-weight:700;letter-spacing:0.14em;color:#6f7c92;">WEAKNESSES</div>
+        <div style="position:relative;margin-top:11px;height:${h - WEAK_TOP - 24}px;">${weakHtml}</div>
       </div>
     </div>`;
 }
@@ -655,14 +770,11 @@ function headerHtml(player, ctx, opts) {
     <div style="position:absolute;left:${RULE_MID}px;top:28px;width:1px;height:100px;
                 background:${ink.rule};"></div>
 
-    <!-- Pitch diagram in the trend line's slot. Top and bottom are flush with
-         the 28..128 band rules and it carries the same 1px rule border as they
-         do, so it reads as a module of the band rather than an image dropped on
-         top of it. 150x100 is the SVG's own 3:2, so nothing distorts. -->
+    <!-- Positions, in the trend line's slot. Transparent outline in the band's
+         own rule colour, only the slots the player plays, each labelled. -->
     ${showPitch ? `
-    <div style="position:absolute;left:${PITCH_X + (PITCH_W - 150) / 2}px;top:28px;
-                width:150px;height:100px;border-radius:8px;overflow:hidden;
-                border:1px solid ${ink.rule};">${pitchDiagramSvg(player, positionColors)}</div>`
+    <div style="position:absolute;left:${PITCH_X + (PITCH_W - 165) / 2}px;top:29px;
+                width:165px;height:110px;">${positionPitchSvg(player, 165, 110, ink, positionColors)}</div>`
     : `
     <div style="position:absolute;left:${PITCH_X}px;top:34px;width:${PITCH_W}px;">
       ${[['POSITION', POSITION_LABELS[rawTok] || rawTok || '—'],
@@ -676,14 +788,14 @@ function headerHtml(player, ctx, opts) {
                     color:${ink.secondary};white-space:nowrap;">${esc(truncateText(v, 24))}</div>`).join('')}
     </div>`}
 
-    <!-- GBE in the coach profile's slot.
-         Four full-width rows gave each component a ~380px track to express a
-         value like 10/12, which left the right third of the band reading as
-         empty runway next to a dense identity block on the left. Two columns of
-         two put the tracks at a length the eye actually measures and fills the
-         slot the way the coach block does on a Team Report.
-         Bars stay on ink.secondary: these are reference figures, and the PASS
-         badge is the only thing here that should carry a verdict colour. -->
+    <!-- GBE in the coach profile's slot, as four tiles.
+         Bare statRows on a gradient had no edges, so four labels and four
+         figures floated in the band with nothing holding them together and read
+         as scruff. Each component now sits in its own bordered tile — same
+         1px rule, same 8px radius and same faint white fill as the panels below,
+         so the block belongs to the card's tile system rather than being loose
+         type on a gradient. Four across at 127px fills the 538px slot exactly.
+         Tiles run 54..116, inside the 28..128 band rules. -->
     <div style="position:absolute;left:${GBE_X}px;top:26px;width:${GBE_W}px;height:20px;">
       <span style="position:absolute;left:0;top:5px;width:150px;font-size:8px;font-weight:700;
                    letter-spacing:0.14em;color:${ink.muted};white-space:nowrap;">GBE CALCULATION</span>
@@ -701,19 +813,25 @@ function headerHtml(player, ctx, opts) {
       </span>
     </div>
     ${(() => {
-      const COL_W_GBE = 254;
-      const COL_GAP = 30;
+      const TW = 127, TG = 10;
       return [['DOMESTIC', gbe.domPts, 12], ['CONTINENTAL', gbe.contPts, 8],
               ['LEAGUE BAND', gbe.lqPts, 12], ['FINISH / PROG', gbe.finishPts + gbe.progPts, 10]]
-        .map(([label, val, max], i) => statRow({
-          x: GBE_X + (i % 2) * (COL_W_GBE + COL_GAP),
-          y: 64 + Math.floor(i / 2) * 34,
-          w: COL_W_GBE, label,
-          value: `${val}<span style="color:${ink.muted};font-weight:600;">/${max}</span>`,
-          pct: (val / max) * 100,
-          colour: ink.secondary,
-          ink, labelW: 104, valueW: 42,
-        })).join('');
+        .map(([label, val, max], i) => {
+          const pct = Math.max(0, Math.min(100, (val / max) * 100));
+          return `
+        <div style="position:absolute;left:${GBE_X + i * (TW + TG)}px;top:54px;width:${TW}px;height:62px;
+                    box-sizing:border-box;padding:9px 11px;border-radius:8px;
+                    border:1px solid ${ink.rule};background:rgba(255,255,255,0.05);">
+          <div style="font-size:7.5px;font-weight:700;letter-spacing:0.13em;color:${ink.muted};
+                      white-space:nowrap;">${label}</div>
+          <div style="margin-top:7px;font-size:17px;font-weight:800;color:${ink.primary};
+                      line-height:1;white-space:nowrap;">${val}<span
+              style="font-size:11px;font-weight:600;color:${ink.muted};">/${max}</span></div>
+          <div style="margin-top:8px;height:4px;border-radius:2px;background:${ink.track};overflow:hidden;">
+            <div style="width:${pct.toFixed(0)}%;height:100%;background:${ink.secondary};border-radius:2px;"></div>
+          </div>
+        </div>`;
+        }).join('');
     })()}`;
 }
 
@@ -817,7 +935,7 @@ export function buildPlayerPagerElement(player, opts = {}) {
       })}
       ${panel({
         x: COL_B_X, y: ROW_2, w: COL_W, h: ROW2_H, title: 'Strengths & Weaknesses',
-        body: strengthsPanelBody(innerW, row2InnerH, sd, player, improveNotes),
+        body: strengthsPanelBody(innerW, row2InnerH, sd, posKey),
       })}
 
       ${panel({
