@@ -552,6 +552,25 @@ function seasonEndYearQC(sn) {
   return y ? Number(y[1]) : null;
 }
 
+// The career chart's tier lines, lifted to module scope so anything else that
+// wants to say "this score is Championship level" uses the identical cut-offs.
+// A second copy of these numbers elsewhere would drift the first time one moved.
+export const CAREER_LEAGUE_BANDS = [
+  ['PL', 72], ['T5L', 68], ['Champ', 61], ['L1', 57], ['L2', 54], ['NL', 50],
+];
+export const CAREER_BAND_NAMES = {
+  PL: 'Premier League', T5L: 'Top 5 League', Champ: 'Championship',
+  L1: 'League One', L2: 'League Two', NL: 'National League',
+};
+export function scoreLeagueTier(score) {
+  const v = Number(score);
+  if (isNaN(v)) return null;
+  for (const [key, min] of CAREER_LEAGUE_BANDS) {
+    if (v >= min) return { key, name: CAREER_BAND_NAMES[key] };
+  }
+  return { key: 'BNL', name: 'Below National League' };
+}
+
 export function careerTrajectorySvg(player, w = 420, h = 284, showForecast = false, posKey = 'CF', useBestRole = false) {
   const currentAge = Number(player.age) || 25;
 
@@ -634,9 +653,7 @@ export function careerTrajectorySvg(player, w = 420, h = 284, showForecast = fal
   // NOTE: assumed "L2" for the fifth band (League Two) since that's the tier
   // constants.js actually defines between League One and National League —
   // flag if "Ligue 1" was meant literally, that's a different scale entirely.
-  const LEAGUE_BANDS = [
-    ['PL', 72], ['T5L', 68], ['Champ', 61], ['L1', 57], ['L2', 54], ['NL', 50],
-  ];
+  const LEAGUE_BANDS = CAREER_LEAGUE_BANDS;
   // Quality-tier bands — used INSTEAD of LEAGUE_BANDS when in best-role mode.
   // Role scores aren't calibrated against league-tier thresholds the same way
   // cumulative career scores are, so PL/Champ/L1 labels would be a category

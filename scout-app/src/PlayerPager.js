@@ -48,6 +48,7 @@ import {
   scoreTierColor, barRow,
   TOKEN_TO_POS_KEY, POSITION_LABELS, METRIC_LABEL_MAP,
   POSITION_TEAM_CONTEXT_CATS, TEAM_CONTEXT_BANDS, computeEscReasons, ESC_REASON_OPTIONS,
+  scoreLeagueTier,
 } from './QuickCard';
 import { computeClubFit, computeSimilarPlayers, simGroup } from './clubFit';
 
@@ -1052,7 +1053,7 @@ function headerHtml(player, ctx, opts) {
   const {
     headerColour, nameOverride, teamOverride, positionColors, gbeOv,
     showPitch, isGK, positionPcts, heatmapDataUrl, heatOpacity, shownSlots,
-    heightOverride, footOverride, showXValue, xValueOverride,
+    heightOverride, footOverride, showXValue, xValueOverride, showTierBadge,
   } = opts;
 
   const spec = headerColour;
@@ -1181,13 +1182,29 @@ function headerHtml(player, ctx, opts) {
         ['POTENTIAL', player.potentialScore, 33],
       ];
       const step = WHEEL_W / all.length;
-      return all.map(([label, v, r], i) => scoreWheel({
-        cx: WHEEL_X + step * i + step / 2,
-        cy: 66,
-        r,
-        stroke: 8,
-        value: v, label, colour: scoreTierColor(v), ink, big: true, labelY: HDR_LABEL_Y,
-      })).join('');
+      // Optional tier key under each wheel. The thresholds are the career chart's
+      // own (scoreLeagueTier), so the badge and the dashed lines in the Career
+      // panel can never disagree about what 72 means. Subtle by design — it is a
+      // key to a number already on screen, not a second headline.
+      return all.map(([label, v, r], i) => {
+        const cx = WHEEL_X + step * i + step / 2;
+        const wheel = scoreWheel({
+          cx, cy: 64, r, stroke: 8,
+          value: v, label, colour: scoreTierColor(v), ink, big: true, labelY: HDR_LABEL_Y,
+        });
+        if (!showTierBadge) return wheel;
+        const tier = scoreLeagueTier(v);
+        if (!tier) return wheel;
+        return wheel + `
+      <div style="position:absolute;left:${cx - step / 2}px;top:${HDR_LABEL_Y + 13}px;
+                  width:${step}px;text-align:center;">
+        <span style="display:inline-block;font-size:7.5px;font-weight:700;
+                     letter-spacing:0.1em;padding:2.5px 8px;border-radius:9px;
+                     white-space:nowrap;color:${scoreTierColor(v)};
+                     background:${scoreTierColor(v)}1c;
+                     border:1px solid ${scoreTierColor(v)}55;">${esc(tier.name.toUpperCase())}</span>
+      </div>`;
+      }).join('');
     })()}
 
     <div style="position:absolute;left:${RULE_MID}px;top:28px;width:1px;height:100px;
@@ -1319,6 +1336,7 @@ export function buildPlayerPagerElement(player, opts = {}) {
     positionColors = {}, positionPcts = {}, gbeOv = {}, improveNotes = [],
     heatmapDataUrl = '', heatOpacity = 0.3, shownSlots = null,
     heightOverride = '', footOverride = '', showXValue = false, xValueOverride = '',
+    showTierBadge = false,
     swDrop = [], swAddStr = [], swAddWeak = [],
   } = opts;
   IMG = images || {};
@@ -1361,7 +1379,14 @@ export function buildPlayerPagerElement(player, opts = {}) {
   // translated position rather than the role string's own suffix, so a RAMF
   // reads RW and a role whose suffix disagrees with the player can't print a
   // position he doesn't play.
-  const posShort = shortPos(rawTok);
+  // The suffix follows the position the card is actually claiming — the primary
+  // slot after the minutes-share ordering — not the first token in the raw string.
+  // Switching Titraoui's primary to CM left Style still reading "Ball Carrier DM",
+  // so the two halves of the card disagreed about what he is.
+  const primarySlot = orderSlots(
+    (shownSlots && shownSlots.length) ? shownSlots : occupiedSlots(player, positionColors),
+    positionPcts)[0];
+  const posShort = primarySlot || shortPos(rawTok);
   const roleRows = qcRoles && Object.keys(qcRoles).length
     ? Object.entries(qcRoles)
         .map(([k, v]) => [`${roleBase(k)}${posShort ? `  ${posShort}` : ''}`, Number(v) || 0])
@@ -1383,7 +1408,7 @@ export function buildPlayerPagerElement(player, opts = {}) {
       ${headerHtml(player, ctx, {
         headerColour: HEADER_COLOURS[headerColourName], nameOverride, teamOverride,
         uploadedPhotoDataUrl, positionColors, gbeOv, showPitch, isGK, positionPcts, heatmapDataUrl, heatOpacity, shownSlots,
-        heightOverride, footOverride, showXValue, xValueOverride,
+        heightOverride, footOverride, showXValue, xValueOverride, showTierBadge,
       })}
 
       ${panel({
@@ -1541,7 +1566,7 @@ const ALL_PITCH_SLOTS = ['GK', 'LB', 'CB', 'RB', 'LWB', 'RWB',
 // The note shares a 498px line with a flag and a league name, so it has to be
 // short enough that the row never wraps.
 const CLUB_NOTE_MAX = 26;
-const VIEW_MAX_LENGTH = 430;
+const VIEW_MAX_LENGTH = 440;
 const SEASON_SORT = ['2018-19', '2019-20', '2020-21', '2021-22', '2022-23', '2023-24', '2024-25', '2025-26'];
 
 export default function PlayerPagerModal({ player, players = [], onClose }) {
@@ -1574,6 +1599,7 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
   const [heightOverride, setHeightOverride] = useState('');
   const [footOverride, setFootOverride] = useState('');
   const [showXValue, setShowXValue] = useState(false);
+  const [showTierBadge, setShowTierBadge] = useState(false);
   const [xValueOverride, setXValueOverride] = useState('');
 
   const [clubsMode, setClubsMode] = useState('clubs');   // clubs | players
@@ -1731,7 +1757,7 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
     uploadedPhotoDataUrl, viewText, clubRows,
     clubsMode, hideFitScores, ukOnly, positionPcts,
     heatmapDataUrl, heatOpacity: Number(heatOpacity) / 100, shownSlots: pagerSlots,
-    heightOverride, footOverride, showXValue, xValueOverride,
+    heightOverride, footOverride, showXValue, xValueOverride, showTierBadge,
     clubsCoreOnly: !peakFit,
     showForecast, useBestRoleCareer, showPitch, gbeOv,
   });
@@ -1854,6 +1880,8 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
             </div>
           </div>
 
+          <Check label="League tier key under Overall & Potential"
+                 value={showTierBadge} onChange={setShowTierBadge} />
           <Check label="Pitch diagram in the header (off = position / foot / xValue / contract)"
                  value={showPitch} onChange={setShowPitch} />
           <Check label="Career forecast (dashed line to potential)"
