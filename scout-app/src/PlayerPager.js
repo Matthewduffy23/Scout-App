@@ -305,9 +305,13 @@ function percentilePanelBody(w, h, sd, isGK) {
 // row's own bottom margin, which the first estimate didn't account for.
 const TC_ROW_H = 74;
 
-function teamContextBody(w, h, player, posKey) {
+function teamContextBody(w, h, player, posKey, sd) {
   const cats = POSITION_TEAM_CONTEXT_CATS[posKey] || POSITION_TEAM_CONTEXT_CATS.CM;
-  const tc = player.teamContext || {};
+  // Season context if the pipeline stored any for this season, else the player's
+  // own. A 2025 export was describing the 2026 club otherwise — and for a player
+  // who moved, that is a different club entirely.
+  const tc = (sd && sd.teamContext && Object.keys(sd.teamContext).length)
+    ? sd.teamContext : (player.teamContext || {});
   const n = cats.filter(c => tc[c] != null && TEAM_CONTEXT_BANDS[c]).length;
   if (!n) {
     return `<div style="position:absolute;inset:0;display:flex;align-items:center;
@@ -317,7 +321,7 @@ function teamContextBody(w, h, player, posKey) {
   const renderW = Math.round(w / scale);
   return `<div style="position:absolute;inset:0;overflow:hidden;">
       <div style="width:${renderW}px;transform:scale(${scale.toFixed(4)});transform-origin:top left;">
-        ${teamRangeBarHtml(player, posKey, renderW)}
+        ${teamRangeBarHtml({ ...player, teamContext: tc }, posKey, renderW)}
       </div>
     </div>`;
 }
@@ -425,15 +429,20 @@ export function extractHeat(dataUrl) {
 // stretches whatever sits behind it.
 const PP_SLOTS = {
   GK:  [26, 104],
-  LCB: [70, 58], CB: [70, 104], RCB: [70, 150],
+  CB:  [70, 104],
   LB:  [62, 22], RB: [62, 186],
   LWB: [116, 22], RWB: [116, 186],
   DM:  [112, 104], CM: [158, 104], AM: [208, 104],
   LW:  [238, 28], RW: [238, 180],
   ST:  [280, 104],
 };
+// LCB, CB and RCB collapse to ONE slot. Wyscout emits the side a centre back
+// happened to line up on, not a different position — a player listed "CB, RCB"
+// was drawing two discs and printing "Centre Back" twice, once as his primary and
+// once as his secondary. Which side he's comfortable on is a shading question,
+// which the manual position-colour override already answers.
 const PP_TOKEN_TO_SLOT = {
-  GK: 'GK', RB: 'RB', RWB: 'RWB', LCB: 'LCB', CB: 'CB', RCB: 'RCB', LB: 'LB', LWB: 'LWB',
+  GK: 'GK', RB: 'RB', RWB: 'RWB', LCB: 'CB', CB: 'CB', RCB: 'CB', LB: 'LB', LWB: 'LWB',
   DMF: 'DM', LDMF: 'DM', RDMF: 'DM', LCMF: 'CM', RCMF: 'CM', CMF: 'CM', AMF: 'AM',
   RAMF: 'RW', RWF: 'RW', RW: 'RW', LAMF: 'LW', LWF: 'LW', LW: 'LW', CF: 'ST',
 };
@@ -1276,7 +1285,13 @@ export function buildPlayerPagerElement(player, opts = {}) {
   // lollipop chart down to fit, which meant this tile alone was speaking the
   // quick card's visual language while every other tile spoke TeamReport's.
   // styleHexSvg flexes its own row height to the box, so no scaling is needed.
-  const qcRoles = player.qcRoleCareerScores || player.qcLatestRoles || player.roleCareerScores;
+  // The SEASON's roles win over the career ones. Picking 2025 from the dropdown
+  // moved the bars and the header but left Style and Team Context showing the
+  // career/latest figures, so the card claimed to be one season and drew another.
+  // Same precedence QuickCard uses: season roles if the season has any.
+  const seasonRoles = sd.roles && Object.keys(sd.roles).length ? sd.roles : null;
+  const qcRoles = seasonRoles
+    || player.qcRoleCareerScores || player.qcLatestRoles || player.roleCareerScores;
   // "Ball Playing CB" -> "Ball Playing · CB", where the CB is the PLAYER's
   // translated position rather than the role string's own suffix, so a RAMF
   // reads RW and a role whose suffix disagrees with the player can't print a
@@ -1331,7 +1346,7 @@ export function buildPlayerPagerElement(player, opts = {}) {
 
       ${panel({
         x: COL_A_X, y: ROW_2, w: COL_W, h: ROW2_H, title: 'Team Context',
-        body: teamContextBody(innerW, row2InnerH, player, posKey),
+        body: teamContextBody(innerW, row2InnerH, player, posKey, sd),
       })}
       ${panel({
         x: COL_B_X, y: ROW_2, w: COL_W, h: ROW2_H, title: 'Strengths & Weaknesses',
@@ -1456,7 +1471,7 @@ function Check({ label, value, onChange }) {
   );
 }
 
-const ALL_PITCH_SLOTS = ['GK', 'LB', 'LCB', 'CB', 'RCB', 'RB', 'LWB', 'RWB',
+const ALL_PITCH_SLOTS = ['GK', 'LB', 'CB', 'RB', 'LWB', 'RWB',
                          'DM', 'CM', 'AM', 'LW', 'RW', 'ST'];
 // The note shares a 498px line with a flag and a league name, so it has to be
 // short enough that the row never wraps.

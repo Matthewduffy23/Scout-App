@@ -537,24 +537,45 @@ export function gbeThresholdBar(label, val, max, w = 220) {
 // offsets from player.sh (season history) the same way the full career chart does.
 const SEASON_ORDER = ['2018-19','2019-20','2020-21','2021-22','2022-23','2023-24','2024-25','2025-26'];
 
+// Season label -> the calendar year it ENDS in. '2024-25' -> 2025, '2025' -> 2025.
+// SEASON_ORDER only lists split-year labels, so a calendar-year league (Brazil,
+// USA, Scandinavia) returned indexOf === -1 for every season it had: the sort
+// gave them all the same key 99 and the age offset was 0 for all of them, so a
+// Brazilian's whole career plotted as a vertical stack at his current age. This
+// derives the year from the label instead of looking it up in a fixed list, so
+// both season shapes work and no list has to be maintained per season.
+function seasonEndYearQC(sn) {
+  const t = String(sn || '').trim();
+  const m = t.match(/^(\d{4})\s*[-/]\s*(\d{2,4})$/);
+  if (m) return m[2].length === 2 ? Number(m[1].slice(0, 2) + m[2]) : Number(m[2]);
+  const y = t.match(/(\d{4})/);
+  return y ? Number(y[1]) : null;
+}
+
 export function careerTrajectorySvg(player, w = 420, h = 284, showForecast = false, posKey = 'CF', useBestRole = false) {
   const currentAge = Number(player.age) || 25;
-  const currentSeasonIdx = SEASON_ORDER.indexOf('2025-26');
 
   const byS = {};
   (player.sh || []).forEach(hEntry => {
     if (hEntry.sc == null) return;
     if (!byS[hEntry.s] || hEntry.sc > byS[hEntry.s].sc) byS[hEntry.s] = hEntry;
   });
-  const rawHistory = Object.values(byS)
-    .filter(hEntry => hEntry.sc != null && !hEntry.displayOnly)
+  const entries = Object.values(byS).filter(hEntry => hEntry.sc != null && !hEntry.displayOnly);
+  // The reference season is the player's own most recent one, not a hardcoded
+  // '2025-26' — that constant would have needed editing every summer anyway.
+  const years = entries.map(e => seasonEndYearQC(e.s)).filter(y => y != null);
+  const currentEnd = years.length ? Math.max(...years) : null;
+
+  const rawHistory = entries
     .sort((a, b) => {
+      const ya = seasonEndYearQC(a.s), yb = seasonEndYearQC(b.s);
+      if (ya != null && yb != null) return ya - yb;
       const ai = SEASON_ORDER.indexOf(a.s), bi = SEASON_ORDER.indexOf(b.s);
       return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
     })
     .map(hEntry => {
-      const idx = SEASON_ORDER.indexOf(hEntry.s);
-      const offset = idx === -1 ? 0 : idx - currentSeasonIdx;
+      const y = seasonEndYearQC(hEntry.s);
+      const offset = (y != null && currentEnd != null) ? y - currentEnd : 0;
       return { ...hEntry, age: currentAge + offset };
     });
 
