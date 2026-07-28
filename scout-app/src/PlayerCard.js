@@ -32,6 +32,7 @@ import { openOnePager } from './PlayerOnePager';
 import { Photo, Crest, useIsMobile, deliverPng } from './utils';
 import ScoutingCardModal from './ScoutingCardModal';
 import QuickCardModal from './QuickCard';
+import PlayerPagerModal from './PlayerPager';
 
 const INTERNATIONAL_LEAGUES = new Set(['UEFA WC Qualifiers.','UEFA U21 Euros.','UEFA U19 Euros.','Asia WC Qualifiers.','AFCON.','AFCON U20.','AFCON U17.','AFCON Qualifiers.','S.America Qualifiers.','U20 World Cup.','U17 World Cup.']);
 const CONTINENTAL_LEAGUES = new Set(['Conference League.','Conference League Qualifiers.','Europa League.','Europa League Qualifiers.','Champions League.','Champions League Qualifiers.','Asia Champions League.','Africa Champions League.','Copa Libertadores.','U20 Copa.','Club World Cup.','UEFA Youth League.']);
@@ -998,6 +999,7 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
   const [rawModeLocal,setRawModeLocal]=useState(false);
   const [showScoutingCard,setShowScoutingCard]=useState(false);
   const [showQuickCard,setShowQuickCard]=useState(false);
+  const [showPlayerPager,setShowPlayerPager]=useState(false);
   const rawMode = rawModeProp || rawModeLocal; // external prop takes precedence
   // sd must resolve the SAME season+league entry the user actually selected via
   // the tabs — seasonsDetail[season] alone only ever holds one club per season
@@ -1091,6 +1093,9 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
             </button>
             <button onClick={()=>setShowQuickCard(true)} style={{background:'#0e2a1c',border:'1px solid #22c55e',color:'#86efac',borderRadius:6,padding:'0 10px',height:isMobile?36:28,flex:isMobile?1:'0 0 auto',justifyContent:'center',display:'flex',alignItems:'center',gap:5,fontSize:11,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>
               <span style={{fontSize:13}}>⚡</span> Quick Card
+            </button>
+            <button onClick={()=>setShowPlayerPager(true)} style={{background:'#101a33',border:'1px solid #3b7de8',color:'#93c5fd',borderRadius:6,padding:'0 10px',height:isMobile?36:28,flex:isMobile?1:'0 0 auto',justifyContent:'center',display:'flex',alignItems:'center',gap:5,fontSize:11,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>
+              <span style={{fontSize:13}}>📄</span> Pager
             </button>
             <button onClick={onClose} style={{background:'none',border:'1px solid #1e2d45',color:'#94a3b8',borderRadius:6,width:isMobile?36:28,height:isMobile?36:28,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,cursor:'pointer'}}>×</button>
           </div>
@@ -1397,6 +1402,7 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
       </div>
       {showScoutingCard&&<ScoutingCardModal player={player} onClose={()=>setShowScoutingCard(false)}/>}
       {showQuickCard&&<QuickCardModal player={player} players={players} onClose={()=>setShowQuickCard(false)}/>}
+      {showPlayerPager&&<PlayerPagerModal player={player} players={players} onClose={()=>setShowPlayerPager(false)}/>}
     </div>
   );
 }

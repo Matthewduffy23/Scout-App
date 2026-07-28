@@ -41,7 +41,7 @@ const POSITION_COLOR_TIERS = {
 };
 const PITCH_DOT_DEFAULT = '#a3a3a3';
 
-function pitchDiagramSvg(player, manualColors) {
+export function pitchDiagramSvg(player, manualColors) {
   // A manual tier map (same shape and tier names as the scouting card's picker)
   // wins outright; with none set, fall back to the automatic token walk below so
   // existing cards render exactly as they did.
@@ -131,7 +131,7 @@ const TREND_ROLES = {
   ...APP_ROLES,
   CF: ['Goal Threat CF', 'Link Up CF'],
 };
-const TOKEN_TO_POS_KEY = {
+export const TOKEN_TO_POS_KEY = {
   GK:'GK', CB:'CB', LCB:'CB', RCB:'CB',
   LB:'FB', RB:'FB', LWB:'FB', RWB:'FB',
   DMF:'CM', LDMF:'CM', RDMF:'CM', LCMF:'CM', RCMF:'CM',
@@ -142,7 +142,7 @@ const ROLE_DISPLAY_NAMES = {
   'Deep Playmaker CM': 'Deep Playmaker',
   'Advanced Playmaker CM': 'Adv. Playmaker CM',
 };
-const METRIC_LABEL_MAP = {
+export const METRIC_LABEL_MAP = {
   'Crosses per 90':'Crosses','Crosses':'Crosses',
   'Accurate crosses, %':'Crossing Accuracy %','Crossing accuracy':'Crossing Accuracy %',
   'Non-penalty goals per 90':'Goals: Non-Penalty','Non-penalty goals':'Goals: Non-Penalty',
@@ -178,7 +178,7 @@ const METRIC_LABEL_MAP = {
   'Accurate progressive passes, %':'Progressive Passing %',
   'Smart passes per 90':'Smart Passes','Smart passes':'Smart Passes',
 };
-const POSITION_LABELS = {
+export const POSITION_LABELS = {
   'GK':'Goalkeeper (GK)',
   'RB':'Right Back (RB)', 'RWB':'Right Wingback (RWB)',
   'LCB':'Centre Back (CB)', 'CB':'Centre Back (CB)', 'RCB':'Centre Back (CB)',
@@ -344,13 +344,13 @@ function photoUrl(name, team) {
 }
 function interp(a, b, t) { return [0,1,2].map(i => Math.round(a[i]+(b[i]-a[i])*t)); }
 function parseRgb(s) { return s.match(/\d+/g).map(Number); }
-function barColor(pct) {
+export function barColor(pct) {
   const t = Math.max(0, Math.min(1, pct/100));
   const RED = parseRgb(BAR_RED), GOLD = parseRgb(BAR_GOLD), GREEN = parseRgb(BAR_GREEN);
   const rgb = t <= 0.5 ? interp(RED,GOLD,t/0.5) : interp(GOLD,GREEN,(t-0.5)/0.5);
   return `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
 }
-function scoreTierColor(score) {
+export function scoreTierColor(score) {
   const v = Number(score);
   if (isNaN(v)) return '#a3a3a3';
   if (v >= 79) return '#00bf63';
@@ -379,7 +379,7 @@ function cmToFeet(cm) {
   const inches = totalInches % 12;
   return `${feet}'${inches}"`;
 }
-function barRow(label, pct, rawVal, rowH = 18, extraGap = 0) {
+export function barRow(label, pct, rawVal, rowH = 18, extraGap = 0) {
   const p = Math.max(0, Math.min(100, pct || 0));
   const bc = barColor(p);
   const barH = Math.max(13, Math.round(rowH * 0.95));
@@ -396,7 +396,7 @@ function barRow(label, pct, rawVal, rowH = 18, extraGap = 0) {
 }
 
 // ─── Lollipop chart for ALL role scores ──────────────────────────────────────
-function rolesDotsSvg(sortedRoles, w = 880, rowH = 56) {
+export function rolesDotsSvg(sortedRoles, w = 880, rowH = 56) {
   if (!sortedRoles.length) return '';
   const labelW = 280;
   const numDots = 10;
@@ -517,7 +517,7 @@ const ESC_REASON_OPTIONS = [
   'Exceptional talent panel',
 ];
 
-function gbeThresholdBar(label, val, max, w = 220) {
+export function gbeThresholdBar(label, val, max, w = 220) {
   const p = Math.max(0, Math.min(100, (val / max) * 100));
   const pass = val >= max * 0.5;
   return `
@@ -537,7 +537,7 @@ function gbeThresholdBar(label, val, max, w = 220) {
 // offsets from player.sh (season history) the same way the full career chart does.
 const SEASON_ORDER = ['2018-19','2019-20','2020-21','2021-22','2022-23','2023-24','2024-25','2025-26'];
 
-function careerTrajectorySvg(player, w = 420, h = 284, showForecast = false, posKey = 'CF', useBestRole = false) {
+export function careerTrajectorySvg(player, w = 420, h = 284, showForecast = false, posKey = 'CF', useBestRole = false) {
   const currentAge = Number(player.age) || 25;
   const currentSeasonIdx = SEASON_ORDER.indexOf('2025-26');
 
@@ -767,7 +767,7 @@ function rolesRankedSvgHtml(maxWidth = 408, roles = PLACEHOLDER_ROLES) {
   return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">${rows}</svg>`;
 }
 
-function teamRangeBarHtml(player, posKey, w = 560) {
+export function teamRangeBarHtml(player, posKey, w = 560) {
   const cats = POSITION_TEAM_CONTEXT_CATS[posKey] || POSITION_TEAM_CONTEXT_CATS.CM;
   const tc = player.teamContext || {};
   // Skip any category the player's team data doesn't cover, rather than

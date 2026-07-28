@@ -320,7 +320,7 @@ export const HEADER_COLOUR_NAMES = Object.keys(HEADER_COLOURS);
 
 // Text palette for the band. A light header needs dark type or the white text
 // disappears; everything else keeps the original colours.
-function headerInk(spec) {
+export function headerInk(spec) {
   return (spec && spec.light)
     ? { primary: '#0b1220', secondary: '#25324a', muted: '#55627a', soft: '#46536b',
         rule: 'rgba(0,0,0,0.13)', track: 'rgba(0,0,0,0.10)' }
@@ -384,7 +384,7 @@ export function fitNameSize(text, maxW = NAME_MAX_W, maxPx = 52, minPx = 22) {
   return Math.max(minPx, Math.min(maxPx, Math.floor(maxW / em)));
 }
 
-function scoreWheel({ cx, cy, r, stroke, value, label, colour, ink, big, labelY }) {
+export function scoreWheel({ cx, cy, r, stroke, value, label, colour, ink, big, labelY }) {
   const c = 2 * Math.PI * r;
   const pct = Math.max(0, Math.min(100, Number(value) || 0));
   const size = r * 2 + stroke + 2;
