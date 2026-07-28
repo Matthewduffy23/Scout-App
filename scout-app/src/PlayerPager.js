@@ -1090,6 +1090,13 @@ function headerHtml(player, ctx, opts) {
          (heightOverride && heightOverride.trim()) || cmToFeet(player.height),
          (footOverride && footOverride.trim())
            || ((player.foot && player.foot !== 'unknown' && player.foot !== 'nan') ? formatFoot(player.foot) : null),
+         // Off unless asked for: a model estimate sitting in the identity row
+         // reads as fact, and it is the one number here that is inferred rather
+         // than recorded.
+         showXValue
+           ? ((xValueOverride && xValueOverride.trim())
+              || (player.xValue > 0 ? formatMV(player.xValue) : null))
+           : null,
         ].filter(Boolean).map((v, i) => `
         ${i ? `<span style="color:${ink.muted};margin:0 8px;font-size:11px;">&middot;</span>` : ''}
         <span style="font-size:12.5px;font-weight:700;color:${ink.soft};">${esc(v)}</span>`).join('')}
@@ -1320,7 +1327,7 @@ export function buildPlayerPagerElement(player, opts = {}) {
       ${headerHtml(player, ctx, {
         headerColour: HEADER_COLOURS[headerColourName], nameOverride, teamOverride,
         uploadedPhotoDataUrl, positionColors, gbeOv, showPitch, isGK, positionPcts, heatmapDataUrl, heatOpacity, shownSlots,
-        heightOverride, footOverride,
+        heightOverride, footOverride, showXValue, xValueOverride,
       })}
 
       ${panel({
@@ -1478,7 +1485,7 @@ const ALL_PITCH_SLOTS = ['GK', 'LB', 'CB', 'RB', 'LWB', 'RWB',
 // The note shares a 498px line with a flag and a league name, so it has to be
 // short enough that the row never wraps.
 const CLUB_NOTE_MAX = 26;
-const VIEW_MAX_LENGTH = 475;
+const VIEW_MAX_LENGTH = 430;
 const SEASON_SORT = ['2018-19', '2019-20', '2020-21', '2021-22', '2022-23', '2023-24', '2024-25', '2025-26'];
 
 export default function PlayerPagerModal({ player, players = [], onClose }) {
@@ -1510,6 +1517,8 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
   const [clubNotes, setClubNotes] = useState({});
   const [heightOverride, setHeightOverride] = useState('');
   const [footOverride, setFootOverride] = useState('');
+  const [showXValue, setShowXValue] = useState(false);
+  const [xValueOverride, setXValueOverride] = useState('');
 
   const [clubsMode, setClubsMode] = useState('clubs');   // clubs | players
   const [hideFitScores, setHideFitScores] = useState(false);
@@ -1882,6 +1891,16 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
                      style={{ ...UI.input, flex: 1 }} />
             </div>
             <div style={UI.note}>Blank uses the pipeline value.</div>
+
+            <div style={{ marginTop: 10 }}>
+              <Check label="Show xValue in the identity row"
+                     value={showXValue} onChange={setShowXValue} />
+              {showXValue && (
+                <input value={xValueOverride} onChange={e => setXValueOverride(e.target.value)}
+                       placeholder={player.xValue > 0 ? formatMV(player.xValue) : 'xValue'}
+                       style={UI.input} />
+              )}
+            </div>
           </div>
 
           <div style={UI.block}>
