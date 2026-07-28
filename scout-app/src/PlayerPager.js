@@ -1072,18 +1072,18 @@ function headerHtml(player, ctx, opts) {
       <span style="font-size:20px;font-weight:700;color:${ink.secondary};${crest ? 'margin-left:9px;' : ''}">${esc(truncateText(displayTeam, 16))}</span>
       ${logo ? `<div style="width:19px;height:19px;flex-shrink:0;background-size:contain;
                   background-repeat:no-repeat;background-position:center;
-                  background-image:url('${src(logo)}');margin-left:11px;"></div>` : ''}
+                  background-image:url('${src(logo)}');margin-left:14px;"></div>` : ''}
       ${flag ? `<div style="width:22px;height:14px;flex-shrink:0;background-size:cover;
-                  background-position:center;border-radius:2px;margin-left:8px;
+                  background-position:center;border-radius:2px;margin-left:12px;
                   box-shadow:inset 0 0 0 1px rgba(255,255,255,0.18);
                   background-image:url('${src(flag)}');"></div>` : ''}
       <span style="font-size:12.5px;font-weight:800;letter-spacing:0.08em;
-                   color:${ink.muted};margin-left:8px;">${esc(leagueAbbrev(league))}</span>
+                   color:${ink.muted};margin-left:12px;">${esc(leagueAbbrev(league))}</span>
 
-      <span style="width:1px;height:16px;background:${ink.rule};margin:0 14px;flex-shrink:0;"></span>
+      <span style="width:1px;height:16px;background:${ink.rule};margin:0 11px 0 14px;flex-shrink:0;"></span>
 
       ${natFlag ? `<div style="width:21px;height:13px;flex-shrink:0;background-size:cover;
-                  background-position:center;border-radius:2px;margin-right:9px;
+                  background-position:center;border-radius:2px;margin-right:8px;
                   box-shadow:inset 0 0 0 1px rgba(255,255,255,0.18);
                   background-image:url('${src(natFlag)}');"></div>` : ''}
       ${[player.age != null ? `${player.age} y.o.` : null,
@@ -1285,12 +1285,14 @@ export function buildPlayerPagerElement(player, opts = {}) {
   // lollipop chart down to fit, which meant this tile alone was speaking the
   // quick card's visual language while every other tile spoke TeamReport's.
   // styleHexSvg flexes its own row height to the box, so no scaling is needed.
-  // The SEASON's roles win over the career ones. Picking 2025 from the dropdown
-  // moved the bars and the header but left Style and Team Context showing the
-  // career/latest figures, so the card claimed to be one season and drew another.
-  // Same precedence QuickCard uses: season roles if the season has any.
-  const seasonRoles = sd.roles && Object.keys(sd.roles).length ? sd.roles : null;
-  const qcRoles = seasonRoles
+  // sd.roles is the APP role set — three broad buckets per position ("Ball
+  // Playing CB", "Wide CB", "Box Defender"). The Style panel wants the QC set,
+  // which is the six-way split a scout actually reads (Aggressor, Ball Carrier,
+  // Progresser, Aerial, Ball Player, Stopper). Reaching for sd.roles to make the
+  // season dropdown affect this panel swapped one for the other and halved the
+  // rows. Season-specific QC scores are used if the pipeline ever stores them;
+  // until then this is career QC, same as it always was.
+  const qcRoles = (sd.qcRoles && Object.keys(sd.qcRoles).length ? sd.qcRoles : null)
     || player.qcRoleCareerScores || player.qcLatestRoles || player.roleCareerScores;
   // "Ball Playing CB" -> "Ball Playing · CB", where the CB is the PLAYER's
   // translated position rather than the role string's own suffix, so a RAMF
@@ -1508,7 +1510,6 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
   const [clubNotes, setClubNotes] = useState({});
   const [heightOverride, setHeightOverride] = useState('');
   const [footOverride, setFootOverride] = useState('');
-  const [showGbeEdit, setShowGbeEdit] = useState(false);
 
   const [clubsMode, setClubsMode] = useState('clubs');   // clubs | players
   const [hideFitScores, setHideFitScores] = useState(false);
@@ -2003,48 +2004,43 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
             </div>
           </div>
 
-          <div style={{ ...UI.block, marginTop: 4 }}>
-            <div onClick={() => setShowGbeEdit(v => !v)}
-                 style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                          cursor: 'pointer', marginBottom: 6 }}>
-              <span style={{ ...UI.label, marginBottom: 0 }}>
-                GBE — {gbe.total} pts · {gbe.status}
+          <div style={UI.block}>
+            <span style={UI.label}>
+              GBE &amp; ESC — {gbe.total} pts &middot;{' '}
+              <span style={{ color: gbe.pass ? '#4ade80' : gbe.panelEligible ? '#f0c56a' : '#f87171' }}>
+                {gbe.status}
               </span>
-              <span style={{ color: '#64748b', fontSize: 11 }}>{showGbeEdit ? '−' : '+'}</span>
+            </span>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {[['band', 'Band'], ['domPts', 'Domestic'], ['contPts', 'Continental'],
+                ['lqPts', 'League Qual'], ['finishPts', 'Finish'], ['progPts', 'Prog'],
+                ['total', 'Total']].map(([k, lbl]) => (
+                <input key={k} value={gbeOv[k] ?? ''} placeholder={lbl} inputMode="numeric"
+                       onChange={e => setG(k, e.target.value.replace(/[^\d]/g, ''))}
+                       style={{ ...UI.input, width: 'calc(33.33% - 4px)', flex: '0 0 auto' }} />
+              ))}
             </div>
-            {showGbeEdit && (
-              <>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {[['band', 'Band'], ['domPts', 'Domestic'], ['contPts', 'Continental'],
-                    ['lqPts', 'League Qual'], ['finishPts', 'Finish'], ['progPts', 'Prog'],
-                    ['total', 'Total']].map(([k, lbl]) => (
-                    <input key={k} value={gbeOv[k] ?? ''} placeholder={lbl} inputMode="numeric"
-                           onChange={e => setG(k, e.target.value.replace(/[^\d]/g, ''))}
-                           style={{ ...UI.input, width: 'calc(33.33% - 4px)', flex: '0 0 auto' }} />
-                  ))}
-                </div>
-                <div style={UI.note}>
-                  Blank falls through to the pipeline value. Changing Band moves League Qual with it.
-                </div>
-                <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #16233a' }}>
-                  <Check label="Force ESC eligible"
-                         value={!!gbeOv.escOverride}
-                         onChange={v => setG('escOverride', v ? true : '')} />
-                  {!!gbeOv.escOverride && (
-                    <select value={gbeOv.escReason || ''}
-                            onChange={e => setG('escReason', e.target.value)}
-                            style={{ ...UI.input, cursor: 'pointer' }}>
-                      <option value="">Auto — use the detected reason</option>
-                      {ESC_REASON_OPTIONS.map(r => <option key={r} value={r}>{r}</option>)}
-                    </select>
-                  )}
-                  <div style={UI.note}>
-                    Shows the ESC line when the data can&rsquo;t see the route in — loan
-                    spells recorded oddly, continental minutes missing from the CSV.
-                  </div>
-                </div>
-              </>
-            )}
+            <div style={UI.note}>
+              Blank falls through to the pipeline value. Changing Band moves League Qual with it.
+            </div>
+
+            <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #16233a' }}>
+              <Check label="Force ESC eligible"
+                     value={!!gbeOv.escOverride}
+                     onChange={v => setG('escOverride', v ? true : '')} />
+              {!!gbeOv.escOverride && (
+                <select value={gbeOv.escReason || ''}
+                        onChange={e => setG('escReason', e.target.value)}
+                        style={{ ...UI.input, cursor: 'pointer' }}>
+                  <option value="">Auto — use the detected reason</option>
+                  {ESC_REASON_OPTIONS.map(r => <option key={r} value={r}>{r}</option>)}
+                </select>
+              )}
+              <div style={UI.note}>
+                Shows the ESC line when the data can&rsquo;t see the route in — loan spells
+                recorded oddly, continental minutes missing from the CSV.
+              </div>
+            </div>
           </div>
 
           <div style={UI.block}>
@@ -2056,6 +2052,18 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
                            border: `1px solid ${clubsMode === v ? '#3b7de8' : '#1e2d45'}`,
                            background: clubsMode === v ? '#0e2040' : 'transparent',
                            color: clubsMode === v ? '#60a5fa' : '#94a3b8',
+                           fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>{lbl}</button>
+              ))}
+            </div>
+
+            <span style={UI.label}>Scope</span>
+            <div style={{ display: 'flex', marginBottom: 10 }}>
+              {[[true, 'UK only'], [false, 'Worldwide']].map(([v, lbl], i) => (
+                <button key={lbl} onClick={() => setUkOnly(v)}
+                  style={{ flex: 1, padding: '6px 0', marginLeft: i ? 6 : 0, borderRadius: 5,
+                           border: `1px solid ${ukOnly === v ? '#3b7de8' : '#1e2d45'}`,
+                           background: ukOnly === v ? '#0e2040' : 'transparent',
+                           color: ukOnly === v ? '#60a5fa' : '#94a3b8',
                            fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>{lbl}</button>
               ))}
             </div>
