@@ -39,6 +39,7 @@ import { useIsMobile, deliverPng, photoUrl } from './utils';
 import {
   scoreWheel, headerInk, preloadImages, fitNameSize, pillHtml,
   styleHexSvg, gradeColor, radarColor, teamOptions, personFlagUrl, nameEmWidth,
+  foldIncludes,
   HEADER_COLOURS, HEADER_COLOUR_NAMES,
 } from './TeamReport';
 import { fadeHexToBG, countryToIso2 } from './CoachCard';
@@ -46,7 +47,7 @@ import {
   careerTrajectorySvg, teamRangeBarHtml,
   scoreTierColor, barRow,
   TOKEN_TO_POS_KEY, POSITION_LABELS, METRIC_LABEL_MAP,
-  POSITION_TEAM_CONTEXT_CATS, TEAM_CONTEXT_BANDS, computeEscReasons,
+  POSITION_TEAM_CONTEXT_CATS, TEAM_CONTEXT_BANDS, computeEscReasons, ESC_REASON_OPTIONS,
 } from './QuickCard';
 import { computeClubFit, computeSimilarPlayers, simGroup } from './clubFit';
 
@@ -588,12 +589,25 @@ function positionBlockHtml(player, x, w, ink, manualColors, pcts, heatmap, heatO
     <div style="position:absolute;left:${left}px;top:28px;width:${textW}px;">
       <div style="font-size:8px;font-weight:700;letter-spacing:0.14em;color:${ink.muted};
                   white-space:nowrap;">POSITION</div>
-      <div style="margin-top:9px;font-size:${posFs}px;font-weight:800;color:${ink.primary};
-                  line-height:1.05;white-space:nowrap;">${esc(full(primary))}</div>
+      <!-- A dot in the disc's own colour ties the name to the mark on the pitch.
+           The NAMES stay white-then-grey rather than taking the tier colours: two
+           more saturated greens beside the wheels would read as another score,
+           and the hierarchy here is primary vs secondary, which weight already
+           says. The dot carries the link without adding a third colour voice. -->
+      <div style="margin-top:9px;display:flex;align-items:center;white-space:nowrap;">
+        <span style="width:9px;height:9px;border-radius:50%;flex-shrink:0;
+                     background:${PP_TIERS.Primary};margin-right:9px;"></span>
+        <span style="font-size:${posFs}px;font-weight:800;color:${ink.primary};
+                     line-height:1.05;">${esc(full(primary))}</span>
+      </div>
       <div style="margin-top:14px;font-size:8px;font-weight:700;letter-spacing:0.14em;
                   color:${ink.muted};white-space:nowrap;">SECONDARY POSITION</div>
-      <div style="margin-top:9px;font-size:${posFs}px;font-weight:800;color:${ink.muted};
-                  line-height:1.05;white-space:nowrap;">${secondary ? esc(full(secondary)) : '&mdash;'}</div>
+      <div style="margin-top:9px;display:flex;align-items:center;white-space:nowrap;">
+        ${secondary ? `<span style="width:9px;height:9px;border-radius:50%;flex-shrink:0;
+                     background:${PP_TIERS.Secondary};margin-right:9px;"></span>` : ''}
+        <span style="font-size:${posFs}px;font-weight:800;color:${ink.muted};
+                     line-height:1.05;">${secondary ? esc(full(secondary)) : '&mdash;'}</span>
+      </div>
     </div>
     <div style="position:absolute;left:${left + textW + PB_GAP}px;top:14px;
                 width:${PB_PITCH_W}px;height:${PB_PITCH_H}px;">
@@ -900,10 +914,15 @@ function viewPanelBody(w, h, text) {
     return `<div style="position:absolute;inset:0;display:flex;align-items:center;
               justify-content:center;color:#3d4a5e;font-size:13px;">No view written.</div>`;
   }
-  // 17px at 1.5 gave 6 lines in a 155px tile and the sixth clipped mid-word.
-  // 15px at 1.45 gives 7 lines with room to spare, and ~68 characters a line
-  // instead of ~50 — a third more copy in the same box.
-  return `<div style="position:absolute;inset:0;font-size:14px;line-height:1.44;
+  // Raising the character cap without proving the tile could hold it is what kept
+  // clipping the last line. The type is sized to the copy instead: a full-length
+  // view steps down until it fits, so no length can overflow. Capacities at 155px
+  // of tile — 15px: ~490 chars, 14px: ~525, 13px: ~650 — all above the 475 cap
+  // at their own band, with the step chosen so the text never fills the last line
+  // to its edge.
+  const n = String(text).length;
+  const fs = n > 380 ? 13 : n > 280 ? 14 : 15;
+  return `<div style="position:absolute;inset:0;font-size:${fs}px;line-height:1.45;
             font-weight:500;color:#e2e8f4;overflow:hidden;">${esc(text)}</div>`;
 }
 
@@ -916,6 +935,7 @@ function headerHtml(player, ctx, opts) {
   const {
     headerColour, nameOverride, teamOverride, positionColors, gbeOv,
     showPitch, isGK, positionPcts, heatmapDataUrl, heatOpacity, shownSlots,
+    heightOverride, footOverride,
   } = opts;
 
   const spec = headerColour;
@@ -990,6 +1010,10 @@ function headerHtml(player, ctx, opts) {
       ${logo ? `<div style="width:19px;height:19px;flex-shrink:0;background-size:contain;
                   background-repeat:no-repeat;background-position:center;
                   background-image:url('${src(logo)}');margin-left:11px;"></div>` : ''}
+      ${flag ? `<div style="width:22px;height:14px;flex-shrink:0;background-size:cover;
+                  background-position:center;border-radius:2px;margin-left:8px;
+                  box-shadow:inset 0 0 0 1px rgba(255,255,255,0.18);
+                  background-image:url('${src(flag)}');"></div>` : ''}
       <span style="font-size:12.5px;font-weight:800;letter-spacing:0.08em;
                    color:${ink.muted};margin-left:8px;">${esc(leagueAbbrev(league))}</span>
 
@@ -999,9 +1023,10 @@ function headerHtml(player, ctx, opts) {
                   background-position:center;border-radius:2px;margin-right:9px;
                   box-shadow:inset 0 0 0 1px rgba(255,255,255,0.18);
                   background-image:url('${src(natFlag)}');"></div>` : ''}
-      ${[player.age != null ? String(player.age) : null,
-         cmToFeet(player.height),
-         (player.foot && player.foot !== 'unknown' && player.foot !== 'nan') ? formatFoot(player.foot) : null,
+      ${[player.age != null ? `${player.age} y.o.` : null,
+         (heightOverride && heightOverride.trim()) || cmToFeet(player.height),
+         (footOverride && footOverride.trim())
+           || ((player.foot && player.foot !== 'unknown' && player.foot !== 'nan') ? formatFoot(player.foot) : null),
         ].filter(Boolean).map((v, i) => `
         ${i ? `<span style="color:${ink.muted};margin:0 8px;font-size:11px;">&middot;</span>` : ''}
         <span style="font-size:12.5px;font-weight:700;color:${ink.soft};">${esc(v)}</span>`).join('')}
@@ -1166,6 +1191,7 @@ export function buildPlayerPagerElement(player, opts = {}) {
     showForecast = false, useBestRoleCareer = false, showPitch = true,
     positionColors = {}, positionPcts = {}, gbeOv = {}, improveNotes = [],
     heatmapDataUrl = '', heatOpacity = 0.3, shownSlots = null,
+    heightOverride = '', footOverride = '',
   } = opts;
   IMG = images || {};
 
@@ -1221,6 +1247,7 @@ export function buildPlayerPagerElement(player, opts = {}) {
       ${headerHtml(player, ctx, {
         headerColour: HEADER_COLOURS[headerColourName], nameOverride, teamOverride,
         uploadedPhotoDataUrl, positionColors, gbeOv, showPitch, isGK, positionPcts, heatmapDataUrl, heatOpacity, shownSlots,
+        heightOverride, footOverride,
       })}
 
       ${panel({
@@ -1372,7 +1399,7 @@ function Check({ label, value, onChange }) {
 
 const ALL_PITCH_SLOTS = ['GK', 'LB', 'LCB', 'CB', 'RCB', 'RB', 'LWB', 'RWB',
                          'DM', 'CM', 'AM', 'LW', 'RW', 'ST'];
-const VIEW_MAX_LENGTH = 500;
+const VIEW_MAX_LENGTH = 475;
 const SEASON_SORT = ['2018-19', '2019-20', '2020-21', '2021-22', '2022-23', '2023-24', '2024-25', '2025-26'];
 
 export default function PlayerPagerModal({ player, players = [], onClose }) {
@@ -1397,6 +1424,8 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
   const [heatExtract, setHeatExtract] = useState(true);
   const [heatOpacity, setHeatOpacity] = useState(30);
   const [gbeOv, setGbeOv] = useState({});
+  const [heightOverride, setHeightOverride] = useState('');
+  const [footOverride, setFootOverride] = useState('');
   const [showGbeEdit, setShowGbeEdit] = useState(false);
 
   const [clubsMode, setClubsMode] = useState('clubs');   // clubs | players
@@ -1502,7 +1531,26 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
       .filter(r => !chosen.has(key(r)))
       .filter(r => !q || String(clubsMode === 'players' ? r.name : r.team).toLowerCase().includes(q)
                      || String(r.team || '').toLowerCase().includes(q));
-    if (clubsMode === 'players' || q.length < 2) return ranked.slice(0, 8);
+    if (q.length < 2) return ranked.slice(0, 8);
+    if (clubsMode === 'players') {
+      // Same freedom the club picker has: search every player in the pool, not
+      // only the ones the model happened to rank. A hand-picked comparison carries
+      // no match figure and the row prints a dash rather than inventing one.
+      const seen = new Set(ranked.map(key));
+      const extra = [];
+      for (const pl of (players || [])) {
+        if (!pl || !pl.name) continue;
+        const k = `${pl.name}|${pl.team}`;
+        if (seen.has(k) || chosen.has(k)) continue;
+        if (!foldIncludes(pl.name, q) && !foldIncludes(pl.team || '', q)) continue;
+        extra.push({ name: pl.name, team: pl.team, league: pl.league,
+                     age: pl.age ?? null, score: pl.careerScore ?? null,
+                     simPct: null, unranked: true });
+        if (extra.length >= 12) break;
+      }
+      extra.sort((a, b) => (b.score || 0) - (a.score || 0));
+      return [...ranked, ...extra].slice(0, 10);
+    }
     const seen = new Set(ranked.map(r => r.team));
     const extra = teamOptions(players || [], rowQuery, 20)
       .filter(t => !seen.has(t.team) && !chosen.has(t.team))
@@ -1515,6 +1563,7 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
     uploadedPhotoDataUrl, viewText, clubRows,
     clubsMode, hideFitScores, positionPcts,
     heatmapDataUrl, heatOpacity: Number(heatOpacity) / 100, shownSlots: pagerSlots,
+    heightOverride, footOverride,
     clubsCoreOnly: !peakFit,
     showForecast, useBestRoleCareer, showPitch, gbeOv,
   });
@@ -1685,6 +1734,23 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
                 </div>
                 <div style={UI.note}>
                   Blank falls through to the pipeline value. Changing Band moves League Qual with it.
+                </div>
+                <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #16233a' }}>
+                  <Check label="Force ESC eligible"
+                         value={!!gbeOv.escOverride}
+                         onChange={v => setG('escOverride', v ? true : '')} />
+                  {!!gbeOv.escOverride && (
+                    <select value={gbeOv.escReason || ''}
+                            onChange={e => setG('escReason', e.target.value)}
+                            style={{ ...UI.input, cursor: 'pointer' }}>
+                      <option value="">Auto — use the detected reason</option>
+                      {ESC_REASON_OPTIONS.map(r => <option key={r} value={r}>{r}</option>)}
+                    </select>
+                  )}
+                  <div style={UI.note}>
+                    Shows the ESC line when the data can&rsquo;t see the route in — loan
+                    spells recorded oddly, continental minutes missing from the CSV.
+                  </div>
                 </div>
               </>
             )}
