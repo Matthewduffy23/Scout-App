@@ -38,7 +38,7 @@ import { formatMV, formatFoot } from './constants';
 import { useIsMobile, deliverPng, photoUrl } from './utils';
 import {
   scoreWheel, headerInk, preloadImages, fitNameSize, pillHtml,
-  styleHexSvg, gradeColor, radarColor, teamOptions,
+  styleHexSvg, gradeColor, radarColor, teamOptions, personFlagUrl,
   HEADER_COLOURS, HEADER_COLOUR_NAMES,
 } from './TeamReport';
 import { fadeHexToBG, countryToIso2 } from './CoachCard';
@@ -338,6 +338,23 @@ const shortPos = (tok) => POS_SHORT[String(tok || '').trim().toUpperCase()] || S
 // "FB". Strip it and use the player's actual translated position instead.
 const ROLE_SUFFIX = /\s+(GK|CB|LCB|RCB|FB|LB|RB|LWB|RWB|DM|DMF|CM|CMF|AM|AMF|WNG|LW|RW|ATT|ST|CF)$/i;
 const roleBase = (name) => String(name || '').replace(ROLE_SUFFIX, '').trim();
+
+// "Denmark 2." -> "DEN2". The full league name is redundant beside the flag and
+// the league badge, and at 14px it was the widest thing on the row.
+export function leagueAbbrev(league) {
+  const t = String(league || '').trim();
+  const m = t.match(/^(.*?)\s*(\d+)\.?$/);
+  if (!m) return t.toUpperCase().slice(0, 5);
+  const country = m[1].replace(/[^A-Za-z ]/g, '').trim();
+  return `${country.slice(0, 3).toUpperCase()}${m[2]}`;
+}
+
+const cmToFeet = (cm) => {
+  const n = Number(cm);
+  if (!n || isNaN(n)) return null;
+  const inches = Math.round(n / 2.54);
+  return `${Math.floor(inches / 12)}'${inches % 12}"`;
+};
 
 // ─── Heatmap extraction ────────────────────────────────────────────────────
 // Heatmaps arrive as opaque PNGs with a pitch baked in — a flat pale green plus
@@ -871,7 +888,10 @@ function viewPanelBody(w, h, text) {
     return `<div style="position:absolute;inset:0;display:flex;align-items:center;
               justify-content:center;color:#3d4a5e;font-size:13px;">No view written.</div>`;
   }
-  return `<div style="position:absolute;inset:0;font-size:17px;line-height:1.5;
+  // 17px at 1.5 gave 6 lines in a 155px tile and the sixth clipped mid-word.
+  // 15px at 1.45 gives 7 lines with room to spare, and ~68 characters a line
+  // instead of ~50 — a third more copy in the same box.
+  return `<div style="position:absolute;inset:0;font-size:15px;line-height:1.45;
             font-weight:500;color:#e2e8f4;overflow:hidden;">${esc(text)}</div>`;
 }
 
@@ -894,7 +914,7 @@ function headerHtml(player, ctx, opts) {
   const crest = teamCrest(team);
   const logo = leagueLogo(league);
   const flag = leagueFlag(league);
-  const natIso = countryToIso2(player.birthCountry);
+  const natFlag = personFlagUrl(player);
 
   // xG/xA are stored per 90 in bar-chart group A, not as season totals. Same
   // derivation as QuickCard and PlayerScoutingCard, so all three agree.
@@ -938,16 +958,14 @@ function headerHtml(player, ctx, opts) {
          in Effaghe) was clipped by overflow:hidden. 1.18 with a taller box gives
          the tail somewhere to go; the box still clips, but only a name that
          defeats the 22px floor. -->
-    <div style="position:absolute;left:${NAME_X}px;top:16px;width:${NAME_MAX_W}px;height:64px;
+    <div style="position:absolute;left:${NAME_X}px;top:8px;width:${NAME_MAX_W}px;height:62px;
                 display:flex;align-items:flex-end;overflow:hidden;">
       <div style="font-size:${fitNameSize(displayName, NAME_MAX_W)}px;font-weight:800;letter-spacing:-0.8px;
                   line-height:1.18;color:${ink.primary};white-space:nowrap;">${esc(displayName)}</div>
     </div>
 
-    <!-- club crest, club, league badge, league flag, league. The crest leads:
-         it is the fastest identifier on the row and TeamReport puts the badge
-         first for the same reason. -->
-    <div style="position:absolute;left:${NAME_X}px;top:84px;display:flex;align-items:center;
+    <!-- club crest, club, league badge, league flag, abbreviated league -->
+    <div style="position:absolute;left:${NAME_X}px;top:74px;display:flex;align-items:center;
                 white-space:nowrap;">
       ${crest ? `<div style="width:24px;height:24px;flex-shrink:0;background-size:contain;
                   background-repeat:no-repeat;background-position:center;
@@ -956,18 +974,36 @@ function headerHtml(player, ctx, opts) {
       ${logo ? `<div style="width:21px;height:21px;flex-shrink:0;background-size:contain;
                   background-repeat:no-repeat;background-position:center;
                   background-image:url('${src(logo)}');margin-left:14px;"></div>` : ''}
-      ${flag ? `<div style="width:26px;height:16px;flex-shrink:0;background-size:cover;
-                  background-position:center;border-radius:2px;margin-left:8px;
+      ${flag ? `<div style="width:24px;height:15px;flex-shrink:0;background-size:cover;
+                  background-position:center;border-radius:2px;margin-left:9px;
                   box-shadow:inset 0 0 0 1px rgba(255,255,255,0.18);
                   background-image:url('${src(flag)}');"></div>` : ''}
-      <span style="font-size:14px;font-weight:600;color:${ink.muted};margin-left:8px;">${esc(leagueDisplayName(league) || league)}</span>
+      <span style="font-size:13px;font-weight:800;letter-spacing:0.08em;
+                   color:${ink.muted};margin-left:9px;">${esc(leagueAbbrev(league))}</span>
     </div>
 
-    <!-- Apps / Gls / Asts / xG / xA / Mins, on TeamReport's PTS baseline -->
-    <div style="position:absolute;left:${NAME_X}px;top:119px;display:flex;align-items:baseline;
+    <!-- Who he is: nationality, age, height, foot. A separate row from the season
+         counters below, because these describe the player and those describe one
+         season — run together they read as a single twelve-item strip. -->
+    <div style="position:absolute;left:${NAME_X}px;top:101px;display:flex;align-items:center;
+                white-space:nowrap;">
+      ${natFlag ? `<div style="width:22px;height:14px;flex-shrink:0;background-size:cover;
+                  background-position:center;border-radius:2px;margin-right:10px;
+                  box-shadow:inset 0 0 0 1px rgba(255,255,255,0.18);
+                  background-image:url('${src(natFlag)}');"></div>` : ''}
+      ${[player.age != null ? String(player.age) : null,
+         cmToFeet(player.height),
+         (player.foot && player.foot !== 'unknown' && player.foot !== 'nan') ? formatFoot(player.foot) : null,
+        ].filter(Boolean).map((v, i) => `
+        ${i ? `<span style="color:${ink.muted};margin:0 9px;font-size:11px;">&middot;</span>` : ''}
+        <span style="font-size:13px;font-weight:700;color:${ink.soft};">${esc(v)}</span>`).join('')}
+    </div>
+
+    <!-- Apps / Gls / Asts / xG / xA / Mins -->
+    <div style="position:absolute;left:${NAME_X}px;top:124px;display:flex;align-items:baseline;
                 white-space:nowrap;">
       ${cells.map(([lab, val], i) => `
-        <span style="${i ? 'margin-left:19px;' : ''}font-size:15px;font-weight:800;
+        <span style="${i ? 'margin-left:18px;' : ''}font-size:15px;font-weight:800;
                      color:${ink.secondary};">${val}</span>
         <span style="margin-left:5px;font-size:8px;font-weight:700;letter-spacing:0.13em;
                      color:${ink.muted};">${lab}</span>`).join('')}
@@ -1023,17 +1059,24 @@ function headerHtml(player, ctx, opts) {
          that isn't drawn. A maxed component turns its tile green and says MAX.
          Tiles run 44..124 inside the 28..128 band rules; 124 wide on a 14px
          gutter fills the 538px slot exactly. -->
-    <div style="position:absolute;left:${GBE_X}px;top:14px;width:${GBE_W}px;height:20px;">
-      <span style="position:absolute;left:0;top:4px;width:170px;font-size:8px;font-weight:700;
-                   letter-spacing:0.14em;color:${ink.muted};white-space:nowrap;">GBE CALCULATION</span>
-      <span style="position:absolute;right:0;top:0;display:flex;align-items:center;white-space:nowrap;">
+    <!-- The status notes are right-aligned and nowrap, so a long one ("ESC
+         ELIGIBLE - YOUTH LEAGUE (5+ GAMES)") grew leftwards straight out of the
+         block and over the pitch. The row is a flex with a shrinkable middle that
+         clips, and the reason is dropped: the badge says he has a route in, the
+         View panel is where the reason belongs. -->
+    <div style="position:absolute;left:${GBE_X}px;top:14px;width:${GBE_W}px;height:20px;
+                display:flex;align-items:center;white-space:nowrap;overflow:hidden;">
+      <span style="flex-shrink:0;font-size:8px;font-weight:700;letter-spacing:0.14em;
+                   color:${ink.muted};">GBE CALCULATION</span>
+      <span style="flex:1;min-width:0;overflow:hidden;text-align:right;padding:0 12px;">
         ${gbe.homeNation ? `<span style="font-size:8px;font-weight:700;letter-spacing:0.13em;
-                     color:${ink.muted};margin-right:14px;">AUTO PASS &middot; HOME NATION</span>` : ''}
+                     color:${ink.muted};">AUTO PASS &middot; HOME NATION</span>` : ''}
         ${gbe.panelEligible ? `<span style="font-size:8px;font-weight:700;letter-spacing:0.13em;
-                     color:#f0c56a;margin-right:14px;">EXCEPTIONS PANEL</span>` : ''}
+                     color:#f0c56a;">EXCEPTIONS PANEL</span>` : ''}
         ${gbe.escEligible ? `<span style="font-size:8px;font-weight:700;letter-spacing:0.13em;
-                     color:#f97316;margin-right:14px;white-space:nowrap;">&#9889; ESC ELIGIBLE${
-                       gbe.escReasons.length ? ` &middot; ${esc(String(gbe.escReasons[0]).toUpperCase())}` : ''}</span>` : ''}
+                     color:#f97316;">&#9889; ESC ELIGIBLE</span>` : ''}
+      </span>
+      <span style="flex-shrink:0;display:flex;align-items:center;">
         <span style="font-size:17px;font-weight:800;color:${ink.primary};line-height:1;">${gbe.total}</span>
         <span style="font-size:8px;font-weight:700;letter-spacing:0.13em;color:${ink.muted};
                      margin-left:6px;">PTS</span>
@@ -1092,6 +1135,8 @@ export function pagerImageUrls(player, ctx, uploadedPhotoDataUrl, clubRows = [])
   if (iso) urls.push(`https://flagcdn.com/w80/${iso}.png`);
   // Potential Clubs crests. Without these they would be the only remote
   // references left in the render and would blank out in the export.
+  const nf = personFlagUrl(player);
+  if (nf) urls.push(nf);
   for (const r of (clubRows || [])) {
     urls.push(r.name ? photoUrl(r.name, r.team) : teamCrest(r.team));
   }
@@ -1314,7 +1359,7 @@ function Check({ label, value, onChange }) {
 
 const ALL_PITCH_SLOTS = ['GK', 'LB', 'LCB', 'CB', 'RCB', 'RB', 'LWB', 'RWB',
                          'DM', 'CM', 'AM', 'LW', 'RW', 'ST'];
-const VIEW_MAX_LENGTH = 300;
+const VIEW_MAX_LENGTH = 420;
 const SEASON_SORT = ['2018-19', '2019-20', '2020-21', '2021-22', '2022-23', '2023-24', '2024-25', '2025-26'];
 
 export default function PlayerPagerModal({ player, players = [], onClose }) {
