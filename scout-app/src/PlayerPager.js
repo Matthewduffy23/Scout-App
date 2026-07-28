@@ -95,6 +95,12 @@ const HDR_LABEL_Y = 114;
 const GBE_X = 1464;
 const GBE_W = 432;
 
+// FONT WEIGHTS. MONTSERRAT_EMBED_CSS carries 400/500/600/700/900 and no 800, so
+// anything asking for 800 was being synthesised as a faux-bold off the 700 face —
+// invisible at 8px captions, obvious on a 52px name, and the reason the header
+// didn't match the quick card. Every weight used here is one that exists in the
+// embed. QuickCard's own name is 700, which is now what this uses.
+
 // ─── Palette — same values as TeamReport/QuickCard ─────────────────────────
 // Head-and-shoulders fallback, inlined as a data URI so it needs no network and
 // survives the html-to-image pass. Layered UNDER the photo: when the repo has no
@@ -260,7 +266,11 @@ function percentilePanelBody(w, h, sd, isGK) {
   }
   const activeSections = keys.filter(k => groups[k] && groups[k].length > 0).length;
   const SECTION_H = 40;          // heading + its margins, quick card's rhythm
-  const AXIS_H = 48;             // percent scale + "Percentile Rank" caption
+  // Measured, not estimated: the axis row is 22px, its Avg sub-label 14px and the
+  // "Percentile Rank" caption 20px plus margins — ~68px, where this reserved 48.
+  // With 30 metric rows the 20px shortfall pushed the caption past overflow:hidden
+  // and sheared the top off it. 70 leaves a pixel of slack.
+  const AXIS_H = 70;
   const budget = h - AXIS_H - activeSections * SECTION_H;
   // Cap was a flat 34, which suited an outfielder's ~28 rows but left a keeper's
   // ten sitting in the top half of an 815px column with 300px of dead space under
@@ -281,7 +291,7 @@ function percentilePanelBody(w, h, sd, isGK) {
 
   // Quick card sizes these at 24px in a 920px column; 21px is the same weight
   // and colour stepped down for a 716px one.
-  const heading = (t) => `<div style="font-size:23px;font-weight:800;color:#f3f5f7;margin:8px 0 6px;">${t}</div>`;
+  const heading = (t) => `<div style="font-size:23px;font-weight:700;color:#f3f5f7;margin:8px 0 6px;">${t}</div>`;
 
   return `
     <div style="position:absolute;inset:0;overflow:hidden;">
@@ -637,7 +647,7 @@ function positionBlockHtml(player, x, w, ink, manualColors, pcts, heatmap, heatO
       <div style="margin-top:9px;display:flex;align-items:center;white-space:nowrap;">
         <span style="width:9px;height:9px;border-radius:50%;flex-shrink:0;
                      background:${PP_TIERS.Primary};margin-right:9px;"></span>
-        <span style="font-size:${posFs}px;font-weight:800;color:${ink.primary};
+        <span style="font-size:${posFs}px;font-weight:700;color:${ink.primary};
                      line-height:1.05;">${esc(full(primary))}</span>
       </div>
       <div style="margin-top:14px;font-size:8px;font-weight:700;letter-spacing:0.14em;
@@ -645,7 +655,7 @@ function positionBlockHtml(player, x, w, ink, manualColors, pcts, heatmap, heatO
       <div style="margin-top:9px;display:flex;align-items:center;white-space:nowrap;">
         ${secondary ? `<span style="width:9px;height:9px;border-radius:50%;flex-shrink:0;
                      background:${PP_TIERS.Secondary};margin-right:9px;"></span>` : ''}
-        <span style="font-size:${posFs}px;font-weight:800;color:${ink.muted};
+        <span style="font-size:${posFs}px;font-weight:700;color:${ink.muted};
                      line-height:1.05;">${secondary ? esc(full(secondary)) : '&mdash;'}</span>
       </div>
     </div>
@@ -851,8 +861,20 @@ function swEligible(sd, posKey) {
 // Manual entries a percentile can never produce. Athleticism and Physicality are
 // scout judgements — no Wyscout column measures either — so they're offered as
 // one-tap additions rather than left to be typed every time.
-export const SW_MANUAL_TERMS = ['Athleticism', 'Physicality', 'Aerial Presence',
-  'Set Pieces', 'Leadership', 'Consistency', 'Injury Record', 'Decision Making'];
+// Scout judgements no Wyscout column measures. Grouped by what they describe so
+// the dropdown is scannable: physical, then technical, then mental, then durability.
+export const SW_MANUAL_TERMS = [
+  // Physical
+  'Athleticism', 'Physicality', 'Agility', 'Size', 'Dynamism', 'Pace', 'Strength',
+  'Stamina', 'Aerial Presence', 'Balance',
+  // Technical
+  'First Touch', 'Weak Foot', 'Ball Striking', 'Set Pieces', 'Receiving Under Pressure',
+  // Mental
+  'Decision Making', 'Game Intelligence', 'Composure', 'Work Rate', 'Leadership',
+  'Positioning', 'Bravery',
+  // Durability / profile
+  'Consistency', 'Injury Record', 'Versatility',
+];
 export const SW_TONES = {
   Green: '#22c55e', Blue: '#3b7de8', Amber: '#f0a637', Red: '#f87171', Slate: '#8b98ad',
 };
@@ -893,7 +915,7 @@ function strengthsPanelBody(w, h, sd, posKey, opts = {}) {
       <div style="position:absolute;left:0;top:${i * BAR_H}px;width:${w}px;height:${BAR_H - 8}px;">
         <span style="position:absolute;left:0;right:40px;top:0;font-size:11.5px;font-weight:600;
                      color:#c8d2e0;white-space:nowrap;overflow:hidden;">${esc(r.label)}</span>
-        <span style="position:absolute;right:0;top:-1px;font-size:13px;font-weight:800;
+        <span style="position:absolute;right:0;top:-1px;font-size:13px;font-weight:700;
                      color:${radarColor(r.pct)};">${Math.round(r.pct)}</span>
         <div style="position:absolute;left:0;right:0;top:17px;height:5px;border-radius:3px;
                     background:rgba(255,255,255,0.08);overflow:hidden;">
@@ -978,7 +1000,7 @@ function clubsPanelBody(w, h, rows, coreOnly, mode, hideScores, notes) {
         ${hideScores ? '' : `
         <div style="position:absolute;right:10px;top:50%;margin-top:-15px;width:${VAL_W}px;
                     text-align:center;">
-          <div style="font-size:15px;font-weight:800;color:${figure == null ? '#475569' : col};line-height:1.05;">${
+          <div style="font-size:15px;font-weight:700;color:${figure == null ? '#475569' : col};line-height:1.05;">${
             figure == null ? '—' : `${Math.round(figure)}${isPlayers ? '%' : ''}`}</div>
           <div style="font-size:7.5px;font-weight:600;letter-spacing:0.06em;color:#55617a;
                       margin-top:3px;line-height:1;">${isPlayers ? 'match' : 'fit'}</div>
@@ -1089,7 +1111,7 @@ function headerHtml(player, ctx, opts) {
          defeats the 22px floor. -->
     <div style="position:absolute;left:${NAME_X}px;top:6px;width:${NAME_MAX_W}px;height:64px;
                 display:flex;align-items:flex-end;overflow:hidden;">
-      <div style="font-size:${fitNameSize(displayName, NAME_MAX_W)}px;font-weight:800;letter-spacing:-0.8px;
+      <div style="font-size:${fitNameSize(displayName, NAME_MAX_W)}px;font-weight:700;letter-spacing:-0.8px;
                   line-height:1.18;color:${ink.primary};white-space:nowrap;">${esc(displayName)}</div>
     </div>
 
@@ -1111,7 +1133,7 @@ function headerHtml(player, ctx, opts) {
                   background-position:center;border-radius:2px;margin-left:12px;
                   box-shadow:inset 0 0 0 1px rgba(255,255,255,0.18);
                   background-image:url('${src(flag)}');"></div>` : ''}
-      <span style="font-size:12.5px;font-weight:800;letter-spacing:0.08em;
+      <span style="font-size:12.5px;font-weight:700;letter-spacing:0.08em;
                    color:${ink.muted};margin-left:12px;">${esc(leagueAbbrev(league))}</span>
 
       <span style="width:1px;height:16px;background:${ink.rule};margin:0 11px 0 14px;flex-shrink:0;"></span>
@@ -1140,7 +1162,7 @@ function headerHtml(player, ctx, opts) {
     <div style="position:absolute;left:${NAME_X}px;top:113px;display:flex;align-items:baseline;
                 white-space:nowrap;">
       ${cells.map(([lab, val], i) => `
-        <span style="${i ? 'margin-left:18px;' : ''}font-size:15px;font-weight:800;
+        <span style="${i ? 'margin-left:18px;' : ''}font-size:15px;font-weight:700;
                      color:${ink.secondary};">${val}</span>
         <span style="margin-left:5px;font-size:8px;font-weight:700;letter-spacing:0.13em;
                      color:${ink.muted};">${lab}</span>`).join('')}
@@ -1214,10 +1236,10 @@ function headerHtml(player, ctx, opts) {
                      color:#f97316;">&#9889; ESC ELIGIBLE</span>` : ''}
       </span>
       <span style="flex-shrink:0;display:flex;align-items:center;">
-        <span style="font-size:17px;font-weight:800;color:${ink.primary};line-height:1;">${gbe.total}</span>
+        <span style="font-size:17px;font-weight:700;color:${ink.primary};line-height:1;">${gbe.total}</span>
         <span style="font-size:8px;font-weight:700;letter-spacing:0.13em;color:${ink.muted};
                      margin-left:6px;">PTS</span>
-        <span style="margin-left:14px;font-size:11px;font-weight:800;color:${gbe.colour};
+        <span style="margin-left:14px;font-size:11px;font-weight:700;color:${gbe.colour};
                      background:${gbe.colour}22;border:1px solid ${gbe.colour};border-radius:5px;
                      padding:4px 13px;">${gbe.status}</span>
       </span>
@@ -1251,7 +1273,7 @@ function headerHtml(player, ctx, opts) {
             <span style="font-size:7.5px;font-weight:700;letter-spacing:0.13em;
                          color:${ink.muted};">${label}</span>
             <span>
-              <span style="font-size:14px;font-weight:800;
+              <span style="font-size:14px;font-weight:700;
                            color:${got === 0 ? ink.muted : ink.primary};">${got}</span><span
                     style="font-size:9.5px;font-weight:700;color:${ink.muted};">/${max}</span>
             </span>
