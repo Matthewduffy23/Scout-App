@@ -96,6 +96,16 @@ const GBE_X = 1464;
 const GBE_W = 432;
 
 // ─── Palette — same values as TeamReport/QuickCard ─────────────────────────
+// Head-and-shoulders fallback, inlined as a data URI so it needs no network and
+// survives the html-to-image pass. Layered UNDER the photo: when the repo has no
+// file for a player, html-to-image swaps in a transparent placeholder and this
+// shows through, instead of leaving a player-shaped hole in the band.
+const SILHOUETTE = 'data:image/svg+xml;utf8,' + encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">' +
+  '<circle cx="32" cy="23" r="11" fill="rgba(255,255,255,0.20)"/>' +
+  '<path d="M8 64c0-13 11-21 24-21s24 8 24 21z" fill="rgba(255,255,255,0.20)"/>' +
+  '</svg>');
+
 const ACCENT_PINK = '#ff66c4';
 const BG = '#0a0f1c';
 const HEADER_L = 'rgb(23,26,77)';
@@ -252,7 +262,12 @@ function percentilePanelBody(w, h, sd, isGK) {
   const SECTION_H = 40;          // heading + its margins, quick card's rhythm
   const AXIS_H = 48;             // percent scale + "Percentile Rank" caption
   const budget = h - AXIS_H - activeSections * SECTION_H;
-  const rowH = Math.max(8, Math.min(34, Math.floor(budget / totalRows) - 1));
+  // Cap was a flat 34, which suited an outfielder's ~28 rows but left a keeper's
+  // ten sitting in the top half of an 815px column with 300px of dead space under
+  // them. The ceiling now scales with how many rows there are, so a short list
+  // spreads out instead of bunching at the top.
+  const maxRowH = totalRows <= 12 ? 62 : totalRows <= 18 ? 46 : 34;
+  const rowH = Math.max(8, Math.min(maxRowH, Math.floor(budget / totalRows) - 1));
   const slack = Math.max(0, budget - totalRows * (rowH + 1));
   const extraGap = totalRows > 0 ? Math.min(6, Math.floor(slack / totalRows)) : 0;
 
@@ -658,10 +673,21 @@ const SW_HI = 70;
 const SW_LO = 30;
 
 const SW_LABELS = {
+  // The Streamlit GK page's STYLE_MAP only covers distribution, so a keeper could
+  // never be strong or weak at goalkeeping — Sharman-Lowe's 62.5% save rate sits
+  // well below the 30th percentile and the panel still read "None below the 30th".
+  // The shot-stopping metrics are added here with the same naming convention.
   GK: {
     "Long Passes per 90": null,
     "Passes per 90": "Passing Involvement",
     "Accurate passes, %": "Passing Retention",
+    "Accurate long passes, %": "Long Passing",
+    "Save rate, %": "Shot Stopping",
+    "Prevented goals per 90": "Goals Prevented",
+    "Conceded goals per 90": "Goals Conceded",
+    "xG against per 90": "Chances Faced",
+    "Shots against per 90": "Shots Faced",
+    "Exits per 90": "Sweeping",
   },
   CB: {
     "Defensive duels per 90": "Defensive Duel Attempts",
@@ -787,6 +813,12 @@ const G_LABEL_TO_COLUMN = {
   'Passes to F3rd': 'Passes to final third per 90', 'Passes to F3rd %': 'Accurate passes to final third, %',
   'Passes to Box': 'Passes to penalty area per 90', 'Passes to Box %': 'Accurate passes to penalty area, %',
   'Progressive Passes': 'Progressive passes per 90', 'Prog Pass %': 'Accurate progressive passes, %',
+  // Goalkeeping
+  'Save Rate': 'Save rate, %', 'Save rate': 'Save rate, %',
+  'Goals Prevented': 'Prevented goals per 90', 'Prevented goals': 'Prevented goals per 90',
+  'Goals Conceded': 'Conceded goals per 90', 'Conceded goals': 'Conceded goals per 90',
+  'xG Against': 'xG against per 90', 'Shots Against': 'Shots against per 90',
+  'Exits': 'Exits per 90',
 };
 
 // { label, pct } for every metric this position is allowed to be judged on.
@@ -1046,8 +1078,10 @@ function headerHtml(player, ctx, opts) {
          cover-cropped from the top, because a centred crop on a head-and-
          shoulders portrait cuts the chin off. -->
     <div style="position:absolute;left:14px;top:5px;width:140px;height:140px;
-                background-image:url('${src(photo)}');background-size:cover;
-                background-position:center top;background-repeat:no-repeat;"></div>
+                background-image:url('${src(photo)}'), url('${SILHOUETTE}');
+                background-size:cover, 78% 78%;
+                background-position:center top, center 62%;
+                background-repeat:no-repeat, no-repeat;"></div>
 
     <!-- line-height 1.0 sat the baseline on the box floor, so a descender ("g"
          in Effaghe) was clipped by overflow:hidden. 1.18 with a taller box gives
