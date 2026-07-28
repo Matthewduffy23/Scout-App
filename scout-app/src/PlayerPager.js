@@ -541,28 +541,29 @@ const PB_GAP = 20;
 const PB_TEXT_W = 138;
 
 function positionBlockHtml(player, x, w, ink, manualColors, pcts, heatmap, heatOpacity, shownSlots) {
-  const toks = String(player.position || '').split(',').map(t => t.trim().toUpperCase()).filter(Boolean);
-  const primary = toks[0] || '';
-  const short = shortPos(primary);
-  const full = POS_FULL[short] || POSITION_LABELS[primary] || short || '—';
-  const others = toks.slice(1).map(shortPos).filter((v, i, a) => v && v !== short && a.indexOf(v) === i);
+  // Derived from the SLOTS THE PITCH DRAWS, not from the raw position string.
+  // Those two disagree the moment a position is switched on by hand: the pitch
+  // showed ST and RW while the text still read off "CF" alone and printed no
+  // secondary at all. One source for both, so what's written matches what's drawn.
+  const slots = (shownSlots && shownSlots.length) ? shownSlots : occupiedSlots(player, manualColors);
+  const primary = slots[0] || shortPos(String(player.position || '').split(',')[0]);
+  const secondary = slots[1] || null;
+  const full = (sl) => POS_FULL[sl] || POSITION_LABELS[sl] || sl || '—';
 
-  // Text and pitch are one CENTRED group. Sizing the text column as "whatever is
-  // left" pinned the pitch hard against the right-hand rule and left the block
-  // looking like it had slid into the GBE column. A fixed text width and a
-  // centred group gives equal air either side.
   const textW = PB_TEXT_W;
   const groupW = textW + PB_GAP + PB_PITCH_W;
-  const left = x + Math.max(0, Math.round((w - groupW) / 2));
+  // Nudged 14px left of centre: the block sits between RULE_MID and RULE_2, and
+  // the right-hand rule butts straight onto the GBE tiles while the left one has
+  // the wheels' air beside it, so true centre reads right-heavy.
+  const left = x + Math.max(0, Math.round((w - groupW) / 2)) - 14;
   return `
-    <div style="position:absolute;left:${left}px;top:42px;width:${textW}px;">
+    <div style="position:absolute;left:${left}px;top:40px;width:${textW}px;">
       <div style="font-size:8px;font-weight:700;letter-spacing:0.14em;color:${ink.muted};
                   white-space:nowrap;">POSITION</div>
-      <div style="margin-top:8px;font-size:19px;font-weight:800;color:${ink.primary};
-                  line-height:1.05;white-space:nowrap;">${esc(full)}</div>
-      ${others.length ? `<div style="margin-top:4px;font-size:19px;font-weight:800;
-                  color:${ink.muted};line-height:1.05;white-space:nowrap;">${
-        esc(POS_FULL[others[0]] || others[0])}</div>` : ''}
+      <div style="margin-top:9px;font-size:19px;font-weight:800;color:${ink.primary};
+                  line-height:1.05;white-space:nowrap;">${esc(full(primary))}</div>
+      <div style="margin-top:5px;font-size:19px;font-weight:800;color:${ink.muted};
+                  line-height:1.05;white-space:nowrap;">${secondary ? esc(full(secondary)) : '&mdash;'}</div>
     </div>
     <div style="position:absolute;left:${left + textW + PB_GAP}px;top:14px;
                 width:${PB_PITCH_W}px;height:${PB_PITCH_H}px;">
@@ -1005,16 +1006,18 @@ function headerHtml(player, ctx, opts) {
                     color:${ink.secondary};white-space:nowrap;">${esc(truncateText(v, 24))}</div>`).join('')}
     </div>`}
 
-    <!-- GBE in the coach profile's slot, as four tiles.
-         Bare statRows on a gradient had no edges, so four labels and four
-         figures floated in the band with nothing holding them together and read
-         as scruff. Each component now sits in its own bordered tile — same
-         1px rule, same 8px radius and same faint white fill as the panels below,
-         so the block belongs to the card's tile system rather than being loose
-         type on a gradient. Four across at 127px fills the 538px slot exactly.
-         Tiles run 54..116, inside the 28..128 band rules. -->
-    <div style="position:absolute;left:${GBE_X}px;top:26px;width:${GBE_W}px;height:20px;">
-      <span style="position:absolute;left:0;top:5px;width:150px;font-size:8px;font-weight:700;
+    <!-- GBE in the coach profile's slot.
+         Four tiles on one rhythm: caption, figure, pips. The figure and its
+         denominator sit together on one baseline rather than at opposite ends of
+         the tile — split apart, "0" and "/12" read as two unrelated things and
+         the eye had to travel 100px to pair them up. Points are counted, not
+         measured, so the track is pips: twelve of them with ten lit is a number
+         you read, where a bar at 10/12 is a length you estimate against a scale
+         that isn't drawn. A maxed component turns its tile green and says MAX.
+         Tiles run 44..124 inside the 28..128 band rules; 124 wide on a 14px
+         gutter fills the 538px slot exactly. -->
+    <div style="position:absolute;left:${GBE_X}px;top:20px;width:${GBE_W}px;height:18px;">
+      <span style="position:absolute;left:0;top:4px;width:170px;font-size:8px;font-weight:700;
                    letter-spacing:0.14em;color:${ink.muted};white-space:nowrap;">GBE CALCULATION</span>
       <span style="position:absolute;right:0;top:0;display:flex;align-items:center;white-space:nowrap;">
         ${gbe.homeNation ? `<span style="font-size:8px;font-weight:700;letter-spacing:0.13em;
@@ -1024,47 +1027,44 @@ function headerHtml(player, ctx, opts) {
         ${gbe.escEligible ? `<span style="font-size:8px;font-weight:700;letter-spacing:0.13em;
                      color:#f97316;margin-right:14px;white-space:nowrap;">&#9889; ESC ELIGIBLE${
                        gbe.escReasons.length ? ` &middot; ${esc(String(gbe.escReasons[0]).toUpperCase())}` : ''}</span>` : ''}
-        <span style="font-size:16px;font-weight:800;color:${ink.primary};">${gbe.total}</span>
+        <span style="font-size:17px;font-weight:800;color:${ink.primary};line-height:1;">${gbe.total}</span>
         <span style="font-size:8px;font-weight:700;letter-spacing:0.13em;color:${ink.muted};
                      margin-left:6px;">PTS</span>
-        <span style="margin-left:13px;font-size:11px;font-weight:800;color:${gbe.colour};
+        <span style="margin-left:14px;font-size:11px;font-weight:800;color:${gbe.colour};
                      background:${gbe.colour}22;border:1px solid ${gbe.colour};border-radius:5px;
-                     padding:3px 12px;">${gbe.status}</span>
+                     padding:4px 13px;">${gbe.status}</span>
       </span>
     </div>
     ${(() => {
-      const TW = 127, TG = 10;
+      const TW = 124, TG = 14;
       return [['DOMESTIC', gbe.domPts, 12], ['CONTINENTAL', gbe.contPts, 8],
               ['LEAGUE BAND', gbe.lqPts, 12], ['FINISH / PROG', gbe.finishPts + gbe.progPts, 10]]
         .map(([label, val, max], i) => {
           const got = Math.max(0, Math.min(max, val));
           const done = got >= max;
-          // Points are counted, not measured, so they're drawn as pips rather
-          // than as a continuous bar. A bar at 10/12 is a length the reader has
-          // to estimate against a scale; twelve pips with ten lit is a figure
-          // they can read without one, and it matches how the GBE rules are
-          // actually written. Pips flex to the tile so 8 and 12 both fill it.
-          const gap = 2;
-          const pipW = (TW - 22 - (max - 1) * gap) / max;
+          const tone = done ? '#3da65b' : ink.secondary;
+          const gap = 2.5;
+          const inner = TW - 24;
+          const pipW = (inner - (max - 1) * gap) / max;
           const pips = Array.from({ length: max }, (_, k) => `
-            <div style="width:${pipW.toFixed(2)}px;height:5px;border-radius:1.5px;
+            <div style="width:${pipW.toFixed(2)}px;height:6px;border-radius:2px;
                         margin-left:${k ? gap : 0}px;
-                        background:${k < got ? (done ? '#3da65b' : ink.secondary) : ink.track};"></div>`).join('');
+                        background:${k < got ? tone : ink.track};"></div>`).join('');
           return `
-        <div style="position:absolute;left:${GBE_X + i * (TW + TG)}px;top:52px;width:${TW}px;height:64px;
-                    box-sizing:border-box;padding:9px 11px;border-radius:8px;
-                    border:1px solid ${done ? 'rgba(61,166,91,0.45)' : ink.rule};
-                    background:${done ? 'rgba(61,166,91,0.10)' : 'rgba(255,255,255,0.05)'};">
-          <div style="display:flex;align-items:baseline;justify-content:space-between;
-                      white-space:nowrap;">
-            <span style="font-size:7.5px;font-weight:700;letter-spacing:0.13em;
-                         color:${ink.muted};">${label}</span>
-            <span style="font-size:7.5px;font-weight:700;color:${done ? '#3da65b' : ink.muted};">${
-              done ? 'MAX' : `/${max}`}</span>
+        <div style="position:absolute;left:${GBE_X + i * (TW + TG)}px;top:44px;width:${TW}px;height:80px;
+                    box-sizing:border-box;padding:11px 12px;border-radius:9px;
+                    border:1px solid ${done ? 'rgba(61,166,91,0.42)' : ink.rule};
+                    background:${done ? 'rgba(61,166,91,0.09)' : 'rgba(255,255,255,0.05)'};">
+          <div style="font-size:7.5px;font-weight:700;letter-spacing:0.13em;color:${ink.muted};
+                      white-space:nowrap;">${label}</div>
+          <div style="margin-top:11px;display:flex;align-items:baseline;white-space:nowrap;">
+            <span style="font-size:23px;font-weight:800;line-height:1;
+                         color:${got === 0 ? ink.muted : ink.primary};">${got}</span>
+            <span style="margin-left:3px;font-size:12px;font-weight:700;color:${ink.muted};">/${max}</span>
+            ${done ? `<span style="margin-left:auto;font-size:7.5px;font-weight:800;
+                         letter-spacing:0.12em;color:#3da65b;">MAX</span>` : ''}
           </div>
-          <div style="margin-top:6px;font-size:21px;font-weight:800;line-height:1;
-                      color:${got === 0 ? ink.muted : ink.primary};">${got}</div>
-          <div style="display:flex;margin-top:9px;">${pips}</div>
+          <div style="display:flex;margin-top:12px;">${pips}</div>
         </div>`;
         }).join('');
     })()}`;
@@ -1098,7 +1098,7 @@ export function buildPlayerPagerElement(player, opts = {}) {
     clubsMode = 'clubs', hideFitScores = false,
     showForecast = false, useBestRoleCareer = false, showPitch = true,
     positionColors = {}, positionPcts = {}, gbeOv = {}, improveNotes = [],
-    heatmapDataUrl = '', heatOpacity = 0.42, shownSlots = null,
+    heatmapDataUrl = '', heatOpacity = 0.3, shownSlots = null,
   } = opts;
   IMG = images || {};
 
@@ -1328,7 +1328,7 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
   const [heatRaw, setHeatRaw] = useState('');
   const [heatmapDataUrl, setHeatmapDataUrl] = useState('');
   const [heatExtract, setHeatExtract] = useState(true);
-  const [heatOpacity, setHeatOpacity] = useState(42);
+  const [heatOpacity, setHeatOpacity] = useState(30);
   const [gbeOv, setGbeOv] = useState({});
   const [showGbeEdit, setShowGbeEdit] = useState(false);
 
