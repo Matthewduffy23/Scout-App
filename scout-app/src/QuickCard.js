@@ -704,7 +704,7 @@ const PLACEHOLDER_ROLES = [
 // system (Possession/Pressing/Attack/Defence/Passing/Quality) computed in
 // build_players.py's compute_team_context(). Verticality intentionally dropped —
 // it was placeholder-only and has no real backing metric.
-const POSITION_TEAM_CONTEXT_CATS = {
+export const POSITION_TEAM_CONTEXT_CATS = {
   GK:  ['Possession','Defence','Passing','Quality'],
   CB:  ['Possession','Defence','Passing','Quality'],
   FB:  ['Possession','Pressing','Attack','Quality'],
@@ -717,7 +717,7 @@ const POSITION_TEAM_CONTEXT_CATS = {
 // Hardcoded rather than fetched at card-build time since these only change on a
 // full pipeline rebuild — update this constant if build_players.py's printed
 // bands ever change.
-const TEAM_CONTEXT_BANDS = {
+export const TEAM_CONTEXT_BANDS = {
   Possession: [12, 52, 93],
   Pressing:   [12, 52, 93],
   Attack:     [18, 52, 89],

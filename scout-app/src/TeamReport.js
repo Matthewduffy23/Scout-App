@@ -2051,7 +2051,7 @@ export function uncoveredSlots(xi) {
 // narrower than the text — "No Significant Weaknesses" ran off the end of its own
 // colour — so the width is derived from the same character-width estimator used for
 // the club name, with generous side room, and the text is centred inside it.
-function pillHtml(text, tone, fontPx, sidePx) {
+export function pillHtml(text, tone, fontPx, sidePx) {
   const w = Math.ceil(nameEmWidth(text) * fontPx) + sidePx * 2;
   return `<span style="display:inline-block;width:${w}px;height:21px;line-height:21px;
       text-align:center;font-size:${fontPx}px;font-weight:700;border-radius:11px;

@@ -37,8 +37,8 @@ import {
 import { formatMV, formatFoot } from './constants';
 import { useIsMobile, deliverPng, photoUrl } from './utils';
 import {
-  scoreWheel, headerInk, preloadImages, fitNameSize, statRow,
-  styleHexSvg, radarColor, gradeColor,
+  scoreWheel, headerInk, preloadImages, fitNameSize, statRow, pillHtml,
+  styleHexSvg, gradeColor,
   HEADER_COLOURS, HEADER_COLOUR_NAMES,
 } from './TeamReport';
 import { fadeHexToBG, countryToIso2 } from './CoachCard';
@@ -46,6 +46,7 @@ import {
   pitchDiagramSvg, careerTrajectorySvg, teamRangeBarHtml,
   scoreTierColor, barRow,
   TOKEN_TO_POS_KEY, POSITION_LABELS, METRIC_LABEL_MAP,
+  POSITION_TEAM_CONTEXT_CATS, TEAM_CONTEXT_BANDS,
 } from './QuickCard';
 import { computeClubFit, simGroup } from './clubFit';
 
@@ -71,11 +72,15 @@ const ROW_3 = ROW_2 + ROW2_H + GAP;            // 826
 const LEFT_H = ROW_3 + ROW3_H - BODY_TOP;      // 889
 
 const NAME_X = PAD + 128;
-const NAME_MAX_W = 410;
-const RULE_1 = 578;
+// 410 was TeamReport's, sized for club names. Player names run longer
+// ("Alexander-Arnold"), so the identity block takes 66px back off the wheel
+// span — two wheels never needed 372, and moving them right also opens the gap
+// between the rings and the rule.
+const NAME_MAX_W = 476;
+const RULE_1 = 644;
 const RULE_2 = 1338;
-const WHEEL_X = 582;
-const WHEEL_W = 372;
+const WHEEL_X = 650;
+const WHEEL_W = 296;
 const RULE_MID = 946;
 const PITCH_X = 968;                     // TeamReport's trend slot
 const PITCH_W = 360;
@@ -265,70 +270,140 @@ function percentilePanelBody(w, h, sd, isGK) {
     </div>`;
 }
 
-// ─── Areas to Improve ──────────────────────────────────────────────────────
-// TeamReport's weaknesses bars, verbatim: 32px rows, label left, figure right in
-// radarColor, 5px track underneath at full panel width. Not barRow — barRow is
-// the quick card's language and carries a 188px label gutter and a 50% midline
-// tick, neither of which belongs in a 498px tile beside a hex chart.
-//
-// Metrics are deduped by DISPLAY label before ranking: several raw Wyscout
-// columns collapse to one display name, and two identical-looking bars in a
-// four-slot panel reads as a defect. Same reason TeamReport dedupes PPDA.
-const IMPROVE_CEILING = 50;      // only bar a metric that is actually below par
+// ─── Team Context ──────────────────────────────────────────────────────────
+// Quality was missing, and not because the data was absent: teamRangeBarHtml
+// emits ~67px per category, so four categories need ~268px and the tile has 210.
+// The fourth simply fell past overflow:hidden with no visible edge to give it
+// away. Rather than re-cut the function for this tile, it renders at whatever
+// width makes the block fit once scaled uniformly — the same treatment the Style
+// panel needed, and it keeps the bars proportioned exactly as the quick card
+// draws them.
+const TC_ROW_H = 67;
 
-function improvePanelBody(w, h, sd, player, manualNotes) {
-  const groups = sd.g || {};
-  const seen = new Set();
-  const rows = [];
-  for (const k of ['A', 'D', 'P']) {
-    for (const entry of (groups[k] || [])) {
-      if (!Array.isArray(entry) || entry.length < 2) continue;
-      const label = METRIC_LABEL_MAP[entry[0]] || entry[0];
-      if (seen.has(label)) continue;
-      seen.add(label);
-      rows.push([label, Number(entry[1]) || 0]);
-    }
-  }
-  rows.sort((a, b) => a[1] - b[1]);
-  const worst = rows.filter(r => r[1] < IMPROVE_CEILING).slice(0, 4);
-
-  const weaknesses = (manualNotes && manualNotes.length)
-    ? manualNotes
-    : (sd.weaknesses || player.latestWeaknesses || []);
-
-  const ROW_H = 32;
-  const bars = worst.map(([name, p], i) => `
-    <div style="position:absolute;left:0;top:${i * ROW_H}px;width:${w}px;height:${ROW_H - 8}px;">
-      <span style="position:absolute;left:0;right:40px;top:0;font-size:11.5px;font-weight:600;
-                   color:#c8d2e0;white-space:nowrap;overflow:hidden;">${esc(name)}</span>
-      <span style="position:absolute;right:0;top:-1px;font-size:13px;font-weight:800;
-                   color:${radarColor(p)};">${Math.round(p)}</span>
-      <div style="position:absolute;left:0;right:0;top:17px;height:5px;border-radius:3px;
-                  background:rgba(255,255,255,0.08);overflow:hidden;">
-        <div style="width:${Math.max(2, Math.min(100, p))}%;height:100%;
-                    background:${radarColor(p)};border-radius:3px;"></div>
-      </div>
-    </div>`).join('');
-
-  // Qualitative tags sit below the bars on their own labelled row, exactly the
-  // way TeamReport's "ALSO" strip sits below its metric bars.
-  const tagTop = worst.length * ROW_H + 8;
-  const tags = weaknesses.slice(0, 5).map(t => `
-    <span style="display:inline-block;height:21px;line-height:21px;padding:0 11px;
-                 border-radius:11px;margin-right:6px;margin-bottom:4px;white-space:nowrap;
-                 font-size:10.5px;font-weight:700;background:#f871711e;
-                 border:1px solid #f8717159;color:#f87171;">${esc(t)}</span>`).join('');
-
-  if (!bars && !tags) {
+function teamContextBody(w, h, player, posKey) {
+  const cats = POSITION_TEAM_CONTEXT_CATS[posKey] || POSITION_TEAM_CONTEXT_CATS.CM;
+  const tc = player.teamContext || {};
+  const n = cats.filter(c => tc[c] != null && TEAM_CONTEXT_BANDS[c]).length;
+  if (!n) {
     return `<div style="position:absolute;inset:0;display:flex;align-items:center;
-              justify-content:center;font-size:12px;color:#55617a;">No significant weaknesses.</div>`;
+              justify-content:center;font-size:12px;color:#55617a;">No team data available.</div>`;
   }
+  const scale = Math.min(1, h / (n * TC_ROW_H));
+  const renderW = Math.round(w / scale);
+  return `<div style="position:absolute;inset:0;overflow:hidden;">
+      <div style="width:${renderW}px;transform:scale(${scale.toFixed(4)});transform-origin:top left;">
+        ${teamRangeBarHtml(player, posKey, renderW)}
+      </div>
+    </div>`;
+}
+
+// ─── Strengths & Weaknesses ────────────────────────────────────────────────
+// Pills rather than bars. The Performance column on the left already draws every
+// percentile bar this player has; repeating four of them here said nothing new.
+// What a reader wants from this tile is the verdict, which is what the pipeline's
+// strengths/weaknesses lists already are.
+//
+// Pills are TeamReport's pillHtml, so the width is computed from nameEmWidth
+// rather than left to shrink-to-fit — the mechanism TeamReport arrived at in v61
+// after its own pills kept rendering narrower than their text.
+//
+// WORDING. The pipeline emits stats-export names ("Non-penalty goals per 90").
+// This maps them to what a scout would actually say. Several columns collapse to
+// one term on purpose — xG and non-penalty goals are both "Goal Threat" — so
+// the list is deduped AFTER mapping. Anything unmapped falls through a generic
+// tidy (drop "per 90", drop Accurate/Successful, ", %" -> " %") rather than being
+// hidden, so a new metric shows up looking slightly raw instead of vanishing.
+// Extend the table as the wording gets refined.
+const SIMPLE_TERMS = {
+  'Non-penalty goals per 90': 'Goal Threat', 'Goals: Non-Penalty': 'Goal Threat',
+  'xG per 90': 'Goal Threat', 'xG': 'Goal Threat',
+  'Shots per 90': 'Shot Volume', 'Shots': 'Shot Volume',
+  'Shots on target, %': 'Shot Accuracy', 'Shooting Accuracy %': 'Shot Accuracy',
+  'Touches in box per 90': 'Box Presence', 'Touches in Opposition Box': 'Box Presence',
+  'xA per 90': 'Chance Creation', 'Expected Assists': 'Chance Creation',
+  'Key passes per 90': 'Chance Creation', 'Key passes': 'Chance Creation',
+  'Smart passes per 90': 'Incisive Passing', 'Smart Passes': 'Incisive Passing',
+  'Dribbles per 90': 'Dribbling', 'Dribbles': 'Dribbling',
+  'Successful dribbles, %': 'Dribbling', 'Dribbling Success %': 'Dribbling',
+  'Progressive runs per 90': 'Ball Carrying', 'Progressive Runs': 'Ball Carrying',
+  'Accelerations per 90': 'Ball Carrying', 'Accelerations': 'Ball Carrying',
+  'Crosses per 90': 'Crossing', 'Crosses': 'Crossing',
+  'Accurate crosses, %': 'Crossing', 'Crossing Accuracy %': 'Crossing',
+  'Passes per 90': 'Passing Volume', 'Passes': 'Passing Volume',
+  'Accurate passes, %': 'Retention', 'Passing %': 'Retention',
+  'Progressive passes per 90': 'Ball Progression', 'Progressive Passes': 'Ball Progression',
+  'Accurate progressive passes, %': 'Ball Progression', 'Progressive Passing %': 'Ball Progression',
+  'Passes to final third per 90': 'Final Third Passing', 'Passes to Final 3rd': 'Final Third Passing',
+  'Accurate passes to final third, %': 'Final Third Passing', 'Passes to Final 3rd %': 'Final Third Passing',
+  'Passes to penalty area per 90': 'Box Service', 'Passes to Penalty Area': 'Box Service',
+  'Accurate passes to penalty area, %': 'Box Service', 'Pass to Penalty Area %': 'Box Service',
+  'Deep completions per 90': 'Box Service', 'Deep Completions': 'Box Service',
+  'Long passes per 90': 'Long Passing', 'Long Passes': 'Long Passing',
+  'Accurate long passes, %': 'Long Passing', 'Long Passing %': 'Long Passing',
+  'Forward passes per 90': 'Forward Passing', 'Forward Passes': 'Forward Passing',
+  'Accurate forward passes, %': 'Forward Passing', 'Forward Passing %': 'Forward Passing',
+  'Aerial duels per 90': 'Aerial Duels', 'Aerial Duels': 'Aerial Duels',
+  'Aerial duels won, %': 'Aerial Duels', 'Aerial Duel Success %': 'Aerial Duels',
+  'Defensive duels per 90': 'Defensive Activity', 'Defensive Duels': 'Defensive Activity',
+  'Defensive duels won, %': 'Duelling', 'Defensive Duel Success %': 'Duelling',
+  'Offensive duels per 90': 'Duelling', 'Offensive Duels': 'Duelling',
+  'Offensive duels won, %': 'Duelling', 'Offensive Duel Success %': 'Duelling',
+  'PAdj Interceptions': 'Interceptions', 'PAdj. Interceptions': 'Interceptions',
+  'Shots blocked per 90': 'Blocking', 'Shots Blocked': 'Blocking',
+  'Conversion %': 'Finishing',
+};
+
+function simpleTerm(raw) {
+  const t = String(raw || '').trim();
+  if (SIMPLE_TERMS[t]) return SIMPLE_TERMS[t];
+  const viaLabel = METRIC_LABEL_MAP[t];
+  if (viaLabel && SIMPLE_TERMS[viaLabel]) return SIMPLE_TERMS[viaLabel];
+  return t.replace(' per 90', '').replace('Accurate ', '')
+          .replace('Successful ', '').replace(', %', ' %').trim();
+}
+
+// Map, dedupe, cap. Dedupe is on the SIMPLIFIED term, which is the whole point:
+// "xG" and "Non-penalty goals" arriving as two strengths is one strength.
+function simplifyList(list, max) {
+  const seen = new Set();
+  const out = [];
+  for (const raw of (list || [])) {
+    const t = simpleTerm(raw);
+    if (!t || seen.has(t)) continue;
+    seen.add(t);
+    out.push(t);
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
+function strengthsPanelBody(w, h, sd, player, manualNotes) {
+  const strengths = simplifyList(sd.strengths || player.latestStrengths || [], 6);
+  const weaknesses = simplifyList(
+    (manualNotes && manualNotes.length) ? manualNotes
+      : (sd.weaknesses || player.latestWeaknesses || []), 6);
+
+  if (!strengths.length && !weaknesses.length) {
+    return `<div style="position:absolute;inset:0;display:flex;align-items:center;
+              justify-content:center;font-size:12px;color:#55617a;">No profile data for this season.</div>`;
+  }
+
+  const group = (title, items, tone, empty) => `
+      <div style="font-size:8.5px;font-weight:700;letter-spacing:0.14em;color:#6f7c92;">${title}</div>
+      <div style="margin-top:8px;">${
+        items.length
+          ? items.map(t => pillHtml(t, tone, 11, 11)).join('')
+          : `<span style="font-size:11px;color:#8b98ad;">${empty}</span>`
+      }</div>`;
+
+  const half = Math.floor(h / 2);
   return `<div style="position:absolute;inset:0;">
-      ${bars}
-      ${tags ? `<div style="position:absolute;left:0;top:${tagTop}px;width:${w}px;">
-        <div style="font-size:8.5px;font-weight:700;letter-spacing:0.14em;color:#6f7c92;">ALSO</div>
-        <div style="margin-top:7px;">${tags}</div>
-      </div>` : ''}
+      <div style="position:absolute;left:0;top:0;width:${w}px;">
+        ${group('STRENGTHS', strengths, '#22c55e', 'None standing out')}
+      </div>
+      <div style="position:absolute;left:0;top:${half}px;width:${w}px;">
+        ${group('WEAKNESSES', weaknesses, '#f87171', 'No significant weaknesses')}
+      </div>
     </div>`;
 }
 
@@ -343,7 +418,11 @@ function clubsPanelBody(w, h, rows, coreOnly) {
               justify-content:center;font-size:12px;color:#55617a;text-align:center;">
               No UK club fits — the position pool isn't loaded.</div>`;
   }
-  const shown = rows.slice(0, 4);
+  // Three, not five. At 155px of tile the five-row version gave each card 28px
+  // of height for 26px of crest, which is why it read as a stack rather than a
+  // list. Three at ~46px matches the breathing room TeamReport's Similar Teams
+  // gets, and the fourth and fifth clubs were never the interesting ones.
+  const shown = rows.slice(0, 3);
   const rowH = Math.floor((h - (coreOnly ? 14 : 0) - 4) / shown.length);
   const VAL_W = 50;
   const body = shown.map((t, i) => {
@@ -453,7 +532,7 @@ function headerHtml(player, ctx, opts) {
 
     <div style="position:absolute;left:${NAME_X}px;top:14px;width:${NAME_MAX_W}px;height:56px;
                 display:flex;align-items:flex-end;overflow:hidden;">
-      <div style="font-size:${fitNameSize(displayName)}px;font-weight:800;letter-spacing:-0.8px;
+      <div style="font-size:${fitNameSize(displayName, NAME_MAX_W)}px;font-weight:800;letter-spacing:-0.8px;
                   line-height:1.0;color:${ink.primary};white-space:nowrap;">${esc(displayName)}</div>
     </div>
 
@@ -511,15 +590,13 @@ function headerHtml(player, ctx, opts) {
     <div style="position:absolute;left:${RULE_MID}px;top:28px;width:1px;height:100px;
                 background:${ink.rule};"></div>
 
-    <!-- Pitch diagram in the trend line's slot. Fixed 3:2 box so the SVG's own
-         330x220 viewBox scales without distortion, and its caption sits on
-         HDR_LABEL_Y with the wheel labels so the band reads as one row. -->
+    <!-- Pitch diagram in the trend line's slot. No caption: the shape is the
+         label, and the word sat on top of the graphic. Sized to the full band
+         depth (18..134) at the SVG's own 3:2, which is 174x116 — the previous
+         156x104 left 30px of the slot empty on every side. -->
     ${showPitch ? `
-    <div style="position:absolute;left:${PITCH_X + (PITCH_W - 156) / 2}px;top:26px;
-                width:156px;height:104px;">${pitchDiagramSvg(player, positionColors)}</div>
-    <div style="position:absolute;left:${PITCH_X}px;top:${HDR_LABEL_Y}px;width:${PITCH_W}px;
-                text-align:center;font-size:8px;font-weight:700;letter-spacing:0.15em;
-                color:${ink.muted};">POSITIONS</div>`
+    <div style="position:absolute;left:${PITCH_X + (PITCH_W - 174) / 2}px;top:17px;
+                width:174px;height:116px;">${pitchDiagramSvg(player, positionColors)}</div>`
     : `
     <div style="position:absolute;left:${PITCH_X}px;top:34px;width:${PITCH_W}px;">
       ${[['POSITION', POSITION_LABELS[rawTok] || rawTok || '—'],
@@ -534,35 +611,40 @@ function headerHtml(player, ctx, opts) {
     </div>`}
 
     <!-- GBE in the coach profile's slot, built from TeamReport's statRow — the
-         same label / track / figure row the club-facts strip uses, so the right
-         end of the band matches the left. The old version stacked
-         gbeThresholdBar four deep with its own tick circles and ran the
-         home-nation note out of the 150px band and into the panels below. Rows
-         are 18px on an 18px pitch: 46 + 4x18 = 118, inside the 28..128 rules. -->
-    <div style="position:absolute;left:${GBE_X}px;top:26px;width:${GBE_W}px;height:18px;">
-      <span style="position:absolute;left:0;top:4px;font-size:8px;font-weight:700;
-                   letter-spacing:0.14em;color:${ink.muted};">GBE CALCULATION</span>
+         same label / track / figure row the club-facts strip uses.
+         Three things were wrong before. The title had no explicit width, and
+         shrink-to-fit is unreliable in this pipeline (the same defect that made
+         TeamReport compute its pill widths), so "GBE CALCULATION" wrapped onto
+         two lines and collided with the first row. labelW was 92 against labels
+         that measure ~110, so "DOMESTIC APPS" ran under its own bar. And the
+         bars were on the gradeColor ramp, which put a green wash across four
+         rows of neutral reference data and competed with the PASS badge — the
+         only thing in the block that should carry a verdict colour.
+         Rows: 48 + 4x20 = 128, flush with the band rules. -->
+    <div style="position:absolute;left:${GBE_X}px;top:24px;width:${GBE_W}px;height:20px;">
+      <span style="position:absolute;left:0;top:5px;width:150px;font-size:8px;font-weight:700;
+                   letter-spacing:0.14em;color:${ink.muted};white-space:nowrap;">GBE CALCULATION</span>
       <span style="position:absolute;right:0;top:0;display:flex;align-items:center;white-space:nowrap;">
         ${gbe.homeNation ? `<span style="font-size:8px;font-weight:700;letter-spacing:0.13em;
-                     color:${gbe.colour};margin-right:12px;">AUTO — HOME NATION</span>` : ''}
+                     color:${ink.muted};margin-right:14px;">AUTO PASS &middot; HOME NATION</span>` : ''}
         ${gbe.panelEligible ? `<span style="font-size:8px;font-weight:700;letter-spacing:0.13em;
-                     color:${gbe.colour};margin-right:12px;">EXCEPTIONS PANEL</span>` : ''}
-        <span style="font-size:15px;font-weight:800;color:${ink.secondary};">${gbe.total}</span>
+                     color:${ink.muted};margin-right:14px;">EXCEPTIONS PANEL</span>` : ''}
+        <span style="font-size:16px;font-weight:800;color:${ink.primary};">${gbe.total}</span>
         <span style="font-size:8px;font-weight:700;letter-spacing:0.13em;color:${ink.muted};
-                     margin-left:5px;">PTS</span>
-        <span style="margin-left:11px;font-size:11px;font-weight:800;color:${gbe.colour};
+                     margin-left:6px;">PTS</span>
+        <span style="margin-left:13px;font-size:11px;font-weight:800;color:${gbe.colour};
                      background:${gbe.colour}22;border:1px solid ${gbe.colour};border-radius:5px;
-                     padding:3px 11px;">${gbe.status}</span>
+                     padding:3px 12px;">${gbe.status}</span>
       </span>
     </div>
-    ${[['DOMESTIC APPS', gbe.domPts, 12], ['CONTINENTAL', gbe.contPts, 8],
+    ${[['DOMESTIC', gbe.domPts, 12], ['CONTINENTAL', gbe.contPts, 8],
        ['LEAGUE BAND', gbe.lqPts, 12], ['FINISH / PROG', gbe.finishPts + gbe.progPts, 10]]
       .map(([label, val, max], i) => statRow({
-        x: GBE_X, y: 46 + i * 18, w: GBE_W, label,
+        x: GBE_X, y: 48 + i * 20, w: GBE_W, label,
         value: `${val}<span style="color:${ink.muted};font-weight:600;">/${max}</span>`,
         pct: (val / max) * 100,
-        colour: gradeColor((val / max) * 100),
-        ink, labelW: 92, valueW: 46,
+        colour: ink.secondary,
+        ink, labelW: 116, valueW: 48,
       })).join('')}`;
 }
 
@@ -662,13 +744,11 @@ export function buildPlayerPagerElement(player, opts = {}) {
 
       ${panel({
         x: COL_A_X, y: ROW_2, w: COL_W, h: ROW2_H, title: 'Team Context',
-        body: `<div style="position:absolute;inset:0;overflow:hidden;">${
-          teamRangeBarHtml(player, posKey, innerW)
-        }</div>`,
+        body: teamContextBody(innerW, row2InnerH, player, posKey),
       })}
       ${panel({
-        x: COL_B_X, y: ROW_2, w: COL_W, h: ROW2_H, title: 'Areas to Improve',
-        body: improvePanelBody(innerW, row2InnerH, sd, player, improveNotes),
+        x: COL_B_X, y: ROW_2, w: COL_W, h: ROW2_H, title: 'Strengths & Weaknesses',
+        body: strengthsPanelBody(innerW, row2InnerH, sd, player, improveNotes),
       })}
 
       ${panel({
@@ -852,7 +932,7 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
   const clubRows = useMemo(() => {
     try {
       return computeClubFit(player, players || [], {
-        ukOnly: true, topN: 5, peakFitByTeam: peakFit,
+        ukOnly: true, topN: 3, peakFitByTeam: peakFit,
       });
     } catch (e) {
       console.error('[PlayerPager] club fit failed:', e);
