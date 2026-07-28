@@ -1030,7 +1030,7 @@ function headerHtml(player, ctx, opts) {
   const {
     headerColour, nameOverride, teamOverride, positionColors, gbeOv,
     showPitch, isGK, positionPcts, heatmapDataUrl, heatOpacity, shownSlots,
-    heightOverride, footOverride,
+    heightOverride, footOverride, showXValue, xValueOverride,
   } = opts;
 
   const spec = headerColour;
@@ -1296,7 +1296,7 @@ export function buildPlayerPagerElement(player, opts = {}) {
     showForecast = false, useBestRoleCareer = false, showPitch = true,
     positionColors = {}, positionPcts = {}, gbeOv = {}, improveNotes = [],
     heatmapDataUrl = '', heatOpacity = 0.3, shownSlots = null,
-    heightOverride = '', footOverride = '',
+    heightOverride = '', footOverride = '', showXValue = false, xValueOverride = '',
     swDrop = [], swAddStr = [], swAddWeak = [],
   } = opts;
   IMG = images || {};
@@ -1709,7 +1709,7 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
     uploadedPhotoDataUrl, viewText, clubRows,
     clubsMode, hideFitScores, ukOnly, positionPcts,
     heatmapDataUrl, heatOpacity: Number(heatOpacity) / 100, shownSlots: pagerSlots,
-    heightOverride, footOverride,
+    heightOverride, footOverride, showXValue, xValueOverride,
     clubsCoreOnly: !peakFit,
     showForecast, useBestRoleCareer, showPitch, gbeOv,
   });
