@@ -358,6 +358,17 @@ const PP_SLOTS = {
   LW:  [30, 88], RW: [170, 88],
   ST:  [100, 46],
 };
+// Landscape equivalents, attacking right. Only used when a heatmap is loaded —
+// see positionBlockHtml for why the orientation follows the content.
+const PP_SLOTS_H = {
+  GK:  [26, 100],
+  LCB: [64, 58], CB: [64, 100], RCB: [64, 142],
+  LB:  [56, 24], RB: [56, 176],
+  LWB: [108, 24], RWB: [108, 176],
+  DM:  [104, 100], CM: [148, 100], AM: [196, 100],
+  LW:  [224, 30], RW: [224, 170],
+  ST:  [264, 100],
+};
 const PP_TOKEN_TO_SLOT = {
   GK: 'GK', RB: 'RB', RWB: 'RWB', LCB: 'LCB', CB: 'CB', RCB: 'RCB', LB: 'LB', LWB: 'LWB',
   DMF: 'DM', LDMF: 'DM', RDMF: 'DM', LCMF: 'CM', RCMF: 'CM', CMF: 'CM', AMF: 'AM',
@@ -377,83 +388,136 @@ const POS_FULL = {
   LW: 'Left Winger', RW: 'Right Winger', CF: 'Striker', ST: 'Striker',
 };
 
-function positionPitchSvg(player, w, h, manualColors) {
-  const filled = {};
-  const order = [];
+// Which slots this player occupies, in tier order. Shared by the pitch and the
+// editor, so the percentage boxes can only ever appear for slots actually drawn.
+export function occupiedSlots(player, manualColors) {
+  const out = [];
   if (manualColors && Object.keys(manualColors).length) {
     for (const slot of Object.keys(manualColors)) {
-      const tier = manualColors[slot];
-      if (tier && PP_SLOTS[slot]) { filled[slot] = PP_TIERS[tier] || tier; order.push(slot); }
+      if (manualColors[slot] && PP_SLOTS[slot]) out.push(slot);
     }
-  } else {
-    const toks = String(player.position || '').split(',').map(t => t.trim().toUpperCase()).filter(Boolean);
-    let i = 0;
-    for (const tok of toks) {
-      const slot = PP_TOKEN_TO_SLOT[tok];
-      if (!slot || filled[slot] || i >= PP_TIER_ORDER.length) continue;
-      filled[slot] = PP_TIERS[PP_TIER_ORDER[i]];
-      order.push(slot);
-      i += 1;
-    }
+    return out;
   }
+  const toks = String(player.position || '').split(',').map(t => t.trim().toUpperCase()).filter(Boolean);
+  for (const tok of toks) {
+    const slot = PP_TOKEN_TO_SLOT[tok];
+    if (slot && !out.includes(slot) && out.length < PP_TIER_ORDER.length) out.push(slot);
+  }
+  return out;
+}
 
-  // Vertical pitch, attacking upward. A landscape pitch in a 100px-tall band is
-  // 150px wide and every dot lands on top of its neighbour; turned upright the
-  // same height buys a full-length pitch at a sane width, the positions sit where
-  // a team sheet puts them, and there is room left over to state the position in
-  // words beside it. Broadcast graphics use the upright pitch for exactly this.
-  const GHOST = 'rgba(255,255,255,0.14)';
+function positionPitchSvg(player, w, h, manualColors, pcts, heatmap, heatOpacity) {
+  const slots = occupiedSlots(player, manualColors);
+  const colourFor = (slot, i) => {
+    if (manualColors && manualColors[slot]) return PP_TIERS[manualColors[slot]] || manualColors[slot];
+    return PP_TIERS[PP_TIER_ORDER[Math.min(i, PP_TIER_ORDER.length - 1)]];
+  };
+
+  const land = !!heatmap;
+  const SLOTS = land ? PP_SLOTS_H : PP_SLOTS;
+  const VB = land ? [300, 200] : [200, 300];
+  const R = land ? 15 : 16;
+
+  const GHOST = 'rgba(255,255,255,0.13)';
   const MARK = 'rgba(255,255,255,0.24)';
-  const dots = Object.keys(PP_SLOTS).map(slot => {
-    const [x, y] = PP_SLOTS[slot];
-    const col = filled[slot];
-    if (!col) return `<circle cx="${x}" cy="${y}" r="4.5" fill="${GHOST}"/>`;
-    return `<circle cx="${x}" cy="${y}" r="15" fill="${col}"
-              stroke="rgba(0,0,0,0.35)" stroke-width="1"/>
-      <text x="${x}" y="${y + 4}" text-anchor="middle" font-family="Montserrat,sans-serif"
-            font-size="10.5" font-weight="800" fill="#07090f">${slot}</text>`;
+  const dots = Object.keys(SLOTS).map(slot => {
+    const [x, y] = SLOTS[slot];
+    const i = slots.indexOf(slot);
+    // With a heatmap behind it the ghost dots are clutter over the data, so only
+    // the player's own positions draw.
+    if (i < 0) return land ? '' : `<circle cx="${x}" cy="${y}" r="4.5" fill="${GHOST}"/>`;
+    const col = colourFor(slot, i);
+    const pct = pcts && pcts[slot] != null && pcts[slot] !== '' ? Number(pcts[slot]) : null;
+    return `<circle cx="${x}" cy="${y}" r="${R}" fill="${col}" stroke="rgba(0,0,0,0.45)" stroke-width="1.2"/>
+      <text x="${x}" y="${y + 4.5}" text-anchor="middle" font-family="Montserrat,sans-serif"
+            font-size="11" font-weight="800" fill="#07090f">${slot}</text>${
+      pct == null ? '' : `
+      <text x="${x}" y="${y + R + 14}" text-anchor="middle" font-family="Montserrat,sans-serif"
+            font-size="10.5" font-weight="800" fill="${col}">${Math.round(pct)}%</text>`}`;
   }).join('');
 
-  return `<svg width="${w}" height="${h}" viewBox="0 0 200 300" xmlns="http://www.w3.org/2000/svg">
-      <rect x="1" y="1" width="198" height="298" rx="10"
+  // The heatmap goes UNDER the markings and the dots, clipped to the pitch
+  // rectangle so a slightly-off crop can't bleed past the touchline. Drawn over
+  // the same faint white base the tile system uses, so a transparent PNG picks up
+  // the header's own colour through it rather than carrying its own green.
+  const clipId = `pp-pitch-clip-${land ? 'h' : 'v'}`;
+  const heatLayer = heatmap ? `
+      <clipPath id="${clipId}"><rect x="1" y="1" width="${VB[0] - 2}" height="${VB[1] - 2}" rx="10"/></clipPath>
+      <image href="${heatmap}" x="1" y="1" width="${VB[0] - 2}" height="${VB[1] - 2}"
+             preserveAspectRatio="none" opacity="${heatOpacity}" clip-path="url(#${clipId})"/>` : '';
+
+  const marks = land
+    ? `<line x1="150" y1="8" x2="150" y2="192"/>
+       <circle cx="150" cy="100" r="30"/>
+       <rect x="8" y="52" width="42" height="96" rx="2"/>
+       <rect x="250" y="52" width="42" height="96" rx="2"/>
+       <rect x="8" y="76" width="17" height="48" rx="1"/>
+       <rect x="275" y="76" width="17" height="48" rx="1"/>`
+    : `<line x1="8" y1="150" x2="192" y2="150"/>
+       <circle cx="100" cy="150" r="30"/>
+       <rect x="52" y="8" width="96" height="42" rx="2"/>
+       <rect x="52" y="250" width="96" height="42" rx="2"/>
+       <rect x="76" y="8" width="48" height="17" rx="1"/>
+       <rect x="76" y="275" width="48" height="17" rx="1"/>`;
+
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${VB[0]} ${VB[1]}" xmlns="http://www.w3.org/2000/svg">
+      <rect x="1" y="1" width="${VB[0] - 2}" height="${VB[1] - 2}" rx="10"
             fill="rgba(255,255,255,0.045)" stroke="${MARK}" stroke-width="1.5"/>
-      <g fill="none" stroke="${MARK}" stroke-width="1.5">
-        <line x1="8" y1="150" x2="192" y2="150"/>
-        <circle cx="100" cy="150" r="30"/>
-        <rect x="52" y="8" width="96" height="42" rx="2"/>
-        <rect x="52" y="250" width="96" height="42" rx="2"/>
-        <rect x="76" y="8" width="48" height="17" rx="1"/>
-        <rect x="76" y="275" width="48" height="17" rx="1"/>
-      </g>
-      <circle cx="100" cy="150" r="2.5" fill="${MARK}"/>
+      ${heatLayer}
+      <rect x="1" y="1" width="${VB[0] - 2}" height="${VB[1] - 2}" rx="10"
+            fill="none" stroke="${MARK}" stroke-width="1.5"/>
+      <g fill="none" stroke="${MARK}" stroke-width="1.5">${marks}</g>
+      <circle cx="${VB[0] / 2}" cy="${VB[1] / 2}" r="2.5" fill="${MARK}"/>
       ${dots}
     </svg>`;
 }
 
-// Position block: the pitch, plus the position stated in words. A reader should
-// not have to decode a dot to learn that this is a striker.
-function positionBlockHtml(player, x, w, ink, manualColors) {
+// Position block: the pitch, plus the position stated in words.
+//
+// The pair is CENTRED in the slot rather than pinned to its edges. The first
+// version put the text hard left at 968 and the pitch hard right at 1259, which
+// left ~90px of dead air between two things that belong together and made the
+// pitch read as though it had drifted into the GBE column. Text and pitch now sit
+// as one group with a fixed 20px gap, centred in the 360px slot, and the pitch is
+// sized off the band's depth rather than a guessed number.
+const PB_PITCH_H = 112;
+const PB_GAP = 20;
+
+function positionBlockHtml(player, x, w, ink, manualColors, pcts, heatmap, heatOpacity) {
   const toks = String(player.position || '').split(',').map(t => t.trim().toUpperCase()).filter(Boolean);
   const primary = toks[0] || '';
   const short = shortPos(primary);
   const full = POS_FULL[short] || POSITION_LABELS[primary] || short || '—';
   const others = toks.slice(1).map(shortPos).filter((v, i, a) => v && v !== short && a.indexOf(v) === i);
 
-  const PITCH_H = 104, PITCH_W = 69;      // 200x300 viewBox
-  const pitchX = x + w - PITCH_W;
+  // ORIENTATION FOLLOWS THE CONTENT.
+  // Upright is right for a position map: thirteen slots need vertical spread and
+  // the band is short, and it leaves room to state the position in words.
+  // A heatmap is landscape and always will be — every tool that makes one draws
+  // it that way — so rotating it to fit an upright box would both distort it and
+  // squeeze it into 75px. In heatmap mode the pitch turns landscape instead,
+  // which is its natural shape, and gets 168px rather than 75. The text column
+  // gives up 16px to pay for it.
+  const land = !!heatmap;
+  const pitchW = land ? 168 : Math.round(PB_PITCH_H * (200 / 300));   // 168 or 75
+  const textW = land ? 160 : 176;
+
+  const groupW = textW + PB_GAP + pitchW;
+  const left = x + Math.max(0, Math.round((w - groupW) / 2));
   return `
-    <div style="position:absolute;left:${x}px;top:44px;width:${w - PITCH_W - 16}px;">
+    <div style="position:absolute;left:${left}px;top:44px;width:${textW}px;">
       <div style="font-size:8px;font-weight:700;letter-spacing:0.14em;color:${ink.muted};
                   white-space:nowrap;">POSITION</div>
-      <div style="margin-top:7px;font-size:19px;font-weight:800;color:${ink.primary};
+      <div style="margin-top:8px;font-size:${land ? 18 : 20}px;font-weight:800;color:${ink.primary};
                   line-height:1.05;white-space:nowrap;">${esc(full)}</div>
-      <div style="margin-top:6px;font-size:11px;font-weight:700;letter-spacing:0.08em;
+      <div style="margin-top:7px;font-size:11px;font-weight:700;letter-spacing:0.08em;
                   color:${ink.soft};white-space:nowrap;">${esc(short)}${
         others.length ? `<span style="color:${ink.muted};font-weight:600;"> &middot; ${esc(others.join(' '))}</span>` : ''
       }</div>
     </div>
-    <div style="position:absolute;left:${pitchX}px;top:24px;width:${PITCH_W}px;height:${PITCH_H}px;">
-      ${positionPitchSvg(player, PITCH_W, PITCH_H, manualColors)}
+    <div style="position:absolute;left:${left + textW + PB_GAP}px;top:19px;
+                width:${pitchW}px;height:${PB_PITCH_H}px;">
+      ${positionPitchSvg(player, pitchW, PB_PITCH_H, manualColors, pcts, heatmap, heatOpacity)}
     </div>`;
 }
 
@@ -762,7 +826,7 @@ function headerHtml(player, ctx, opts) {
   const { sd, statsRow, league, team } = ctx;
   const {
     headerColour, nameOverride, teamOverride, positionColors, gbeOv,
-    showPitch, isGK,
+    showPitch, isGK, positionPcts, heatmapDataUrl, heatOpacity,
   } = opts;
 
   const spec = headerColour;
@@ -875,7 +939,7 @@ function headerHtml(player, ctx, opts) {
 
     <!-- Position, in the trend line's slot: stated in words, with an upright
          pitch beside it. -->
-    ${showPitch ? positionBlockHtml(player, PITCH_X, PITCH_W, ink, positionColors) : `
+    ${showPitch ? positionBlockHtml(player, PITCH_X, PITCH_W, ink, positionColors, positionPcts, heatmapDataUrl, heatOpacity) : `
     <div style="position:absolute;left:${PITCH_X}px;top:34px;width:${PITCH_W}px;">
       ${[['POSITION', POSITION_LABELS[rawTok] || rawTok || '—'],
          ['FOOT', player.foot && player.foot !== 'unknown' && player.foot !== 'nan' ? formatFoot(player.foot) : '—'],
@@ -965,7 +1029,8 @@ export function buildPlayerPagerElement(player, opts = {}) {
     viewText = '', clubRows = [], clubsCoreOnly = true,
     clubsMode = 'clubs', hideFitScores = false,
     showForecast = false, useBestRoleCareer = false, showPitch = true,
-    positionColors = {}, gbeOv = {}, improveNotes = [],
+    positionColors = {}, positionPcts = {}, gbeOv = {}, improveNotes = [],
+    heatmapDataUrl = '', heatOpacity = 0.9,
   } = opts;
   IMG = images || {};
 
@@ -1020,7 +1085,7 @@ export function buildPlayerPagerElement(player, opts = {}) {
 
       ${headerHtml(player, ctx, {
         headerColour: HEADER_COLOURS[headerColourName], nameOverride, teamOverride,
-        uploadedPhotoDataUrl, positionColors, gbeOv, showPitch, isGK,
+        uploadedPhotoDataUrl, positionColors, gbeOv, showPitch, isGK, positionPcts, heatmapDataUrl, heatOpacity,
       })}
 
       ${panel({
@@ -1189,6 +1254,9 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
   const [showForecast, setShowForecast] = useState(false);
   const [useBestRoleCareer, setUseBestRoleCareer] = useState(false);
   const [showPitch, setShowPitch] = useState(true);
+  const [positionPcts, setPositionPcts] = useState({});
+  const [heatmapDataUrl, setHeatmapDataUrl] = useState('');
+  const [heatOpacity, setHeatOpacity] = useState(90);
   const [gbeOv, setGbeOv] = useState({});
   const [showGbeEdit, setShowGbeEdit] = useState(false);
 
@@ -1203,6 +1271,13 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
   const [peakState, setPeakState] = useState('idle');   // idle | loading | ok | none
 
   const ctx = useMemo(() => resolveSeason(player, seasonOverride), [player, seasonOverride]);
+
+  // Only the slots actually drawn on the pitch get a box, so a percentage can
+  // never be entered against a position the card doesn't show.
+  const pagerSlots = useMemo(() => occupiedSlots(player, {}), [player]);
+  const pctTotal = useMemo(
+    () => pagerSlots.reduce((a, k) => a + (Number(positionPcts[k]) || 0), 0),
+    [pagerSlots, positionPcts]);
 
   const availableSeasons = useMemo(() => {
     const seen = new Set();
@@ -1284,7 +1359,8 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
   const buildOpts = () => ({
     headerColourName, seasonOverride, nameOverride, teamOverride,
     uploadedPhotoDataUrl, viewText, clubRows,
-    clubsMode, hideFitScores,
+    clubsMode, hideFitScores, positionPcts,
+    heatmapDataUrl, heatOpacity: Number(heatOpacity) / 100,
     clubsCoreOnly: !peakFit,
     showForecast, useBestRoleCareer, showPitch, gbeOv,
   });
@@ -1473,7 +1549,82 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
               ))}
             </div>
 
-            <Check label={clubsMode === 'players' ? 'Hide match % beside players' : 'Hide fit score beside clubs'}
+            <div style={UI.block}>
+            <span style={UI.label}>Heatmap (optional)</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <label style={{ flex: 1, cursor: 'pointer', fontSize: 11, fontWeight: 700,
+                              padding: '7px 10px', borderRadius: 5, textAlign: 'center',
+                              border: `1px solid ${heatmapDataUrl ? '#3b7de8' : '#1e2d45'}`,
+                              background: heatmapDataUrl ? '#0e2040' : 'transparent',
+                              color: heatmapDataUrl ? '#60a5fa' : '#8b98ad' }}>
+                {heatmapDataUrl ? 'Heatmap loaded ✓' : 'Upload heatmap'}
+                <input type="file" accept="image/*" style={{ display: 'none' }}
+                  onChange={e => {
+                    const f = e.target.files && e.target.files[0];
+                    if (!f) return;
+                    const r = new FileReader();
+                    r.onload = ev => setHeatmapDataUrl(String(ev.target.result));
+                    r.readAsDataURL(f);
+                    e.target.value = '';
+                  }} />
+              </label>
+              {heatmapDataUrl && (
+                <button onClick={() => setHeatmapDataUrl('')}
+                  style={{ padding: '7px 10px', background: 'none', border: '1px solid #1e2d45',
+                           borderRadius: 5, color: '#f87171', fontSize: 11, cursor: 'pointer' }}>✕</button>
+              )}
+            </div>
+            {heatmapDataUrl && (
+              <div style={{ display: 'flex', alignItems: 'center', marginTop: 7 }}>
+                <span style={{ fontSize: 10.5, color: '#94a3b8', width: 54, flexShrink: 0 }}>Opacity</span>
+                <input type="range" min="30" max="100" value={heatOpacity}
+                  onChange={e => setHeatOpacity(e.target.value)}
+                  style={{ flex: 1, accentColor: '#3b7de8' }} />
+                <span style={{ fontSize: 10.5, color: '#64748b', width: 34, textAlign: 'right' }}>{heatOpacity}%</span>
+              </div>
+            )}
+            <div style={UI.note}>
+              {heatmapDataUrl
+                ? 'Pitch switches to landscape — a heatmap is landscape, and rotating it would distort it.'
+                : 'Export it with a transparent background: the header colour then shows through instead of the heatmap carrying its own green.'}
+            </div>
+          </div>
+
+          <div style={UI.block}>
+            <span style={UI.label}>Position split (optional)</span>
+            {pagerSlots.length ? (
+              <>
+                {pagerSlots.map(slot => (
+                  <div key={slot} style={{ display: 'flex', alignItems: 'center', marginBottom: 5 }}>
+                    <span style={{ width: 44, flexShrink: 0, fontSize: 11, fontWeight: 800,
+                                   color: '#93c5fd' }}>{slot}</span>
+                    <input value={positionPcts[slot] ?? ''} inputMode="numeric" placeholder="—"
+                      onChange={e => {
+                        const v = e.target.value.replace(/[^\d]/g, '').slice(0, 3);
+                        setPositionPcts(o => {
+                          const n = { ...o };
+                          if (v === '') delete n[slot]; else n[slot] = v;
+                          return n;
+                        });
+                      }}
+                      style={{ ...UI.input, width: 70, flex: '0 0 auto' }} />
+                    <span style={{ fontSize: 11, color: '#64748b', marginLeft: 8 }}>
+                      % of minutes
+                    </span>
+                  </div>
+                ))}
+                <div style={UI.note}>
+                  {pctTotal === 0
+                    ? 'Blank leaves the pitch unlabelled.'
+                    : `${pctTotal}% assigned${pctTotal > 100 ? ' — over 100' : ''}`}
+                </div>
+              </>
+            ) : (
+              <div style={UI.note}>No recognised position tokens for this player.</div>
+            )}
+          </div>
+
+          <Check label={clubsMode === 'players' ? 'Hide match % beside players' : 'Hide fit score beside clubs'}
                    value={hideFitScores} onChange={setHideFitScores} />
 
             {poolSize < 50 && (
