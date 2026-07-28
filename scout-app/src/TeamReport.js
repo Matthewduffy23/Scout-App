@@ -1322,7 +1322,10 @@ function radarPanelHtml(w, h, team, allTeams) {
 // NOTE: t.attributes is a list of attribute NAMES (tags like "Possession"), not
 // 0-100 values, so it can't drive this. The numbers come from the season's own
 // percentiles instead — the four headline splits plus two metricGroups entries.
-export function styleHexSvg(rows, maxWidth, maxHeight) {
+// labelW is a parameter rather than a constant so a caller with longer labels
+// can hold the same gap between text and hexes. Defaulted to the original 156,
+// so Team Report's own Style panel is byte-identical.
+export function styleHexSvg(rows, maxWidth, maxHeight, labelW = 156) {
   const R = 11;
   const hex = (cx, cy, opacity, col) => {
     const pts = Array.from({ length: 6 }, (_, i) => {
@@ -1333,7 +1336,7 @@ export function styleHexSvg(rows, maxWidth, maxHeight) {
   };
   // Row height flexes so a 7th row (set pieces) still fits the tile.
   const rowH = maxHeight ? Math.max(30, Math.min(40, Math.floor((maxHeight - 6) / rows.length))) : 40;
-  const labelW = 156, numHex = 10, WD = R * 2, hexGap = 1;
+  const numHex = 10, WD = R * 2, hexGap = 1;
   const w = Math.min(maxWidth, labelW + numHex * WD + (numHex - 1) * hexGap + 6);
   const h = rows.length * rowH + 6;
   const body = rows.map(([disp, score], i) => {

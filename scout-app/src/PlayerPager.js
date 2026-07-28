@@ -38,7 +38,7 @@ import { formatMV, formatFoot } from './constants';
 import { useIsMobile, deliverPng, photoUrl } from './utils';
 import {
   scoreWheel, headerInk, preloadImages, fitNameSize, pillHtml,
-  styleHexSvg, gradeColor, radarColor,
+  styleHexSvg, gradeColor, radarColor, teamOptions,
   HEADER_COLOURS, HEADER_COLOUR_NAMES,
 } from './TeamReport';
 import { fadeHexToBG, countryToIso2 } from './CoachCard';
@@ -350,13 +350,13 @@ const roleBase = (name) => String(name || '').replace(ROLE_SUFFIX, '').trim();
 // colours and the token-to-slot mapping are QuickCard's, so a player reads the
 // same on both cards.
 const PP_SLOTS = {
-  GK:  [28, 100],
-  LCB: [74, 60],  CB: [74, 100], RCB: [74, 140],
-  LB:  [62, 24],  RB: [62, 176],
-  LWB: [122, 24], RWB: [122, 176],
-  DM:  [114, 100], CM: [152, 100], AM: [198, 100],
-  LW:  [234, 30], RW: [234, 170],
-  ST:  [268, 100],
+  GK:  [100, 270],
+  LCB: [56, 226], CB: [100, 232], RCB: [144, 226],
+  LB:  [24, 214], RB: [176, 214],
+  LWB: [24, 170], RWB: [176, 170],
+  DM:  [100, 186], CM: [100, 148], AM: [100, 106],
+  LW:  [30, 88], RW: [170, 88],
+  ST:  [100, 46],
 };
 const PP_TOKEN_TO_SLOT = {
   GK: 'GK', RB: 'RB', RWB: 'RWB', LCB: 'LCB', CB: 'CB', RCB: 'RCB', LB: 'LB', LWB: 'LWB',
@@ -367,12 +367,23 @@ const PP_TIERS = { Primary: '#00bf63', Secondary: '#7ed957', Third: '#c1ff72',
                    Fourth: '#ffde59', Fifth: '#ffbd59', Sixth: '#ff914d', Seventh: '#ff3131' };
 const PP_TIER_ORDER = ['Primary', 'Secondary', 'Third', 'Fourth', 'Fifth', 'Sixth', 'Seventh'];
 
-function positionPitchSvg(player, w, h, ink, manualColors) {
+// Full position names for the stated line. POSITION_LABELS carries these already
+// but in "Right Winger (RW)" form; the code is printed separately here so the two
+// can be typed differently.
+const POS_FULL = {
+  GK: 'Goalkeeper', CB: 'Centre Back', LB: 'Left Back', RB: 'Right Back',
+  LWB: 'Left Wing Back', RWB: 'Right Wing Back', DM: 'Defensive Midfielder',
+  CM: 'Central Midfielder', AM: 'Attacking Midfielder',
+  LW: 'Left Winger', RW: 'Right Winger', CF: 'Striker', ST: 'Striker',
+};
+
+function positionPitchSvg(player, w, h, manualColors) {
   const filled = {};
+  const order = [];
   if (manualColors && Object.keys(manualColors).length) {
     for (const slot of Object.keys(manualColors)) {
       const tier = manualColors[slot];
-      if (tier && PP_SLOTS[slot]) filled[slot] = PP_TIERS[tier] || tier;
+      if (tier && PP_SLOTS[slot]) { filled[slot] = PP_TIERS[tier] || tier; order.push(slot); }
     }
   } else {
     const toks = String(player.position || '').split(',').map(t => t.trim().toUpperCase()).filter(Boolean);
@@ -381,42 +392,69 @@ function positionPitchSvg(player, w, h, ink, manualColors) {
       const slot = PP_TOKEN_TO_SLOT[tok];
       if (!slot || filled[slot] || i >= PP_TIER_ORDER.length) continue;
       filled[slot] = PP_TIERS[PP_TIER_ORDER[i]];
+      order.push(slot);
       i += 1;
     }
   }
 
-  // Every slot is drawn. The unoccupied ones are what make it read as a pitch at
-  // all — the previous version drew only the player's own positions, so a lone
-  // striker was one dot floating in an empty rectangle with no way to tell where
-  // on the pitch it sat. They're faint enough not to compete.
-  const GHOST = 'rgba(255,255,255,0.16)';
-  const MARK = 'rgba(255,255,255,0.26)';
+  // Vertical pitch, attacking upward. A landscape pitch in a 100px-tall band is
+  // 150px wide and every dot lands on top of its neighbour; turned upright the
+  // same height buys a full-length pitch at a sane width, the positions sit where
+  // a team sheet puts them, and there is room left over to state the position in
+  // words beside it. Broadcast graphics use the upright pitch for exactly this.
+  const GHOST = 'rgba(255,255,255,0.14)';
+  const MARK = 'rgba(255,255,255,0.24)';
   const dots = Object.keys(PP_SLOTS).map(slot => {
     const [x, y] = PP_SLOTS[slot];
     const col = filled[slot];
-    if (!col) return `<circle cx="${x}" cy="${y}" r="6" fill="${GHOST}"/>`;
-    return `<circle cx="${x}" cy="${y}" r="17" fill="${col}"/>
+    if (!col) return `<circle cx="${x}" cy="${y}" r="4.5" fill="${GHOST}"/>`;
+    return `<circle cx="${x}" cy="${y}" r="15" fill="${col}"
+              stroke="rgba(0,0,0,0.35)" stroke-width="1"/>
       <text x="${x}" y="${y + 4}" text-anchor="middle" font-family="Montserrat,sans-serif"
-            font-size="11" font-weight="800" fill="#07090f">${slot}</text>`;
+            font-size="10.5" font-weight="800" fill="#07090f">${slot}</text>`;
   }).join('');
 
-  // Markings at 0.26 rather than the band's rule colour: the rule is tuned to be
-  // barely-there as a divider, and at this size it made the pitch invisible —
-  // the previous export showed a striker's dot with no pitch around it.
-  return `<svg width="${w}" height="${h}" viewBox="0 0 300 200" xmlns="http://www.w3.org/2000/svg">
-      <rect x="0.75" y="0.75" width="298.5" height="198.5" rx="9"
-            fill="rgba(255,255,255,0.05)" stroke="${(ink && ink.rule) || MARK}" stroke-width="1.5"/>
+  return `<svg width="${w}" height="${h}" viewBox="0 0 200 300" xmlns="http://www.w3.org/2000/svg">
+      <rect x="1" y="1" width="198" height="298" rx="10"
+            fill="rgba(255,255,255,0.045)" stroke="${MARK}" stroke-width="1.5"/>
       <g fill="none" stroke="${MARK}" stroke-width="1.5">
-        <line x1="150" y1="10" x2="150" y2="190"/>
-        <circle cx="150" cy="100" r="27"/>
-        <rect x="10" y="58" width="38" height="84" rx="2"/>
-        <rect x="252" y="58" width="38" height="84" rx="2"/>
-        <rect x="10" y="82" width="14" height="36" rx="1"/>
-        <rect x="276" y="82" width="14" height="36" rx="1"/>
+        <line x1="8" y1="150" x2="192" y2="150"/>
+        <circle cx="100" cy="150" r="30"/>
+        <rect x="52" y="8" width="96" height="42" rx="2"/>
+        <rect x="52" y="250" width="96" height="42" rx="2"/>
+        <rect x="76" y="8" width="48" height="17" rx="1"/>
+        <rect x="76" y="275" width="48" height="17" rx="1"/>
       </g>
-      <circle cx="150" cy="100" r="2.5" fill="${MARK}"/>
+      <circle cx="100" cy="150" r="2.5" fill="${MARK}"/>
       ${dots}
     </svg>`;
+}
+
+// Position block: the pitch, plus the position stated in words. A reader should
+// not have to decode a dot to learn that this is a striker.
+function positionBlockHtml(player, x, w, ink, manualColors) {
+  const toks = String(player.position || '').split(',').map(t => t.trim().toUpperCase()).filter(Boolean);
+  const primary = toks[0] || '';
+  const short = shortPos(primary);
+  const full = POS_FULL[short] || POSITION_LABELS[primary] || short || '—';
+  const others = toks.slice(1).map(shortPos).filter((v, i, a) => v && v !== short && a.indexOf(v) === i);
+
+  const PITCH_H = 104, PITCH_W = 69;      // 200x300 viewBox
+  const pitchX = x + w - PITCH_W;
+  return `
+    <div style="position:absolute;left:${x}px;top:44px;width:${w - PITCH_W - 16}px;">
+      <div style="font-size:8px;font-weight:700;letter-spacing:0.14em;color:${ink.muted};
+                  white-space:nowrap;">POSITION</div>
+      <div style="margin-top:7px;font-size:19px;font-weight:800;color:${ink.primary};
+                  line-height:1.05;white-space:nowrap;">${esc(full)}</div>
+      <div style="margin-top:6px;font-size:11px;font-weight:700;letter-spacing:0.08em;
+                  color:${ink.soft};white-space:nowrap;">${esc(short)}${
+        others.length ? `<span style="color:${ink.muted};font-weight:600;"> &middot; ${esc(others.join(' '))}</span>` : ''
+      }</div>
+    </div>
+    <div style="position:absolute;left:${pitchX}px;top:24px;width:${PITCH_W}px;height:${PITCH_H}px;">
+      ${positionPitchSvg(player, PITCH_W, PITCH_H, manualColors)}
+    </div>`;
 }
 
 // ─── Strengths & Weaknesses ────────────────────────────────────────────────
@@ -688,7 +726,8 @@ function clubsPanelBody(w, h, rows, coreOnly, mode, hideScores) {
         ${hideScores ? '' : `
         <div style="position:absolute;right:10px;top:50%;margin-top:-15px;width:${VAL_W}px;
                     text-align:center;">
-          <div style="font-size:15px;font-weight:800;color:${col};line-height:1.05;">${Math.round(figure)}${isPlayers ? '%' : ''}</div>
+          <div style="font-size:15px;font-weight:800;color:${figure == null ? '#475569' : col};line-height:1.05;">${
+            figure == null ? '—' : `${Math.round(figure)}${isPlayers ? '%' : ''}`}</div>
           <div style="font-size:7.5px;font-weight:600;letter-spacing:0.06em;color:#55617a;
                       margin-top:3px;line-height:1;">${isPlayers ? 'match' : 'fit'}</div>
         </div>`}
@@ -764,14 +803,15 @@ function headerHtml(player, ctx, opts) {
                 background:${headerGradient(headerColour)};
                 box-shadow:inset 0 1px 0 rgba(255,255,255,0.08);"></div>
 
-    <!-- Player photo takes the crest's box. Circular and cover-cropped from the
-         top, because the repo's photos are head-and-shoulders portraits and a
-         centred crop cuts the chin off. -->
-    <div style="position:absolute;left:${PAD}px;top:21px;width:108px;height:108px;
-                border-radius:50%;overflow:hidden;background:#1a2233;
+    <!-- Player photo takes the crest's box. No circle, no ring, no fill plate:
+         the repo's cut-outs already have transparent backgrounds, so a disc
+         behind one just prints a grey coin around the player's shoulders. The
+         image sits straight on the band and the gradient shows through. Still
+         cover-cropped from the top, because a centred crop on a head-and-
+         shoulders portrait cuts the chin off. -->
+    <div style="position:absolute;left:${PAD}px;top:19px;width:112px;height:112px;
                 background-image:url('${src(photo)}');background-size:cover;
-                background-position:center top;
-                box-shadow:inset 0 0 0 2px rgba(255,255,255,0.14);"></div>
+                background-position:center top;background-repeat:no-repeat;"></div>
 
     <div style="position:absolute;left:${NAME_X}px;top:14px;width:${NAME_MAX_W}px;height:56px;
                 display:flex;align-items:flex-end;overflow:hidden;">
@@ -833,12 +873,9 @@ function headerHtml(player, ctx, opts) {
     <div style="position:absolute;left:${RULE_MID}px;top:28px;width:1px;height:100px;
                 background:${ink.rule};"></div>
 
-    <!-- Positions, in the trend line's slot. Transparent outline in the band's
-         own rule colour, only the slots the player plays, each labelled. -->
-    ${showPitch ? `
-    <div style="position:absolute;left:${PITCH_X + (PITCH_W - 156) / 2}px;top:26px;
-                width:156px;height:104px;">${positionPitchSvg(player, 156, 104, ink, positionColors)}</div>`
-    : `
+    <!-- Position, in the trend line's slot: stated in words, with an upright
+         pitch beside it. -->
+    ${showPitch ? positionBlockHtml(player, PITCH_X, PITCH_W, ink, positionColors) : `
     <div style="position:absolute;left:${PITCH_X}px;top:34px;width:${PITCH_W}px;">
       ${[['POSITION', POSITION_LABELS[rawTok] || rawTok || '—'],
          ['FOOT', player.foot && player.foot !== 'unknown' && player.foot !== 'nan' ? formatFoot(player.foot) : '—'],
@@ -970,7 +1007,10 @@ export function buildPlayerPagerElement(player, opts = {}) {
         .slice(0, 6)
     : [];
   const rolesHtml = roleRows.length
-    ? `<div style="position:absolute;left:0;top:2px;">${styleHexSvg(roleRows, innerW, row1InnerH)}</div>`
+    // 156 was sized for Team Report's one-word style axes. "Chance Creator CF"
+    // is half as long again, so the hexes have to move right by the same amount
+    // or the gap between text and chart closes up on the longest row.
+    ? `<div style="position:absolute;left:0;top:2px;">${styleHexSvg(roleRows, innerW, row1InnerH, 205)}</div>`
     : `<div style="position:absolute;inset:0;display:flex;align-items:center;
                    justify-content:center;font-size:12px;color:#55617a;">No role scores.</div>`;
 
@@ -1219,20 +1259,27 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
 
   const clubRows = manualRows || autoRows.slice(0, 3);
 
-  // The pool the picker searches: the same ranked candidates, just deeper than
-  // the three that fit on the card, plus a name filter. Everything shown has been
-  // through the model, so a manual pick is a re-ordering rather than a free-text
-  // entry that could name a club the fit was never computed for.
+  // Ranked candidates first, then ANY club in the data. Restricting the picker to
+  // the model's own shortlist meant a club you actually wanted to put on the card
+  // was unreachable if the model hadn't ranked it — which defeats the point of a
+  // manual override. Clubs found by search carry no fit figure, and the row prints
+  // a dash rather than inventing one; with scores hidden the distinction vanishes
+  // and any club can be listed freely.
   const rowChoices = useMemo(() => {
     const q = rowQuery.trim().toLowerCase();
     const key = (r) => (clubsMode === 'players' ? `${r.name}|${r.team}` : r.team);
     const chosen = new Set((manualRows || []).map(key));
-    return autoRows
+    const ranked = autoRows
       .filter(r => !chosen.has(key(r)))
       .filter(r => !q || String(clubsMode === 'players' ? r.name : r.team).toLowerCase().includes(q)
-                     || String(r.team || '').toLowerCase().includes(q))
-      .slice(0, 8);
-  }, [autoRows, manualRows, rowQuery, clubsMode]);
+                     || String(r.team || '').toLowerCase().includes(q));
+    if (clubsMode === 'players' || q.length < 2) return ranked.slice(0, 8);
+    const seen = new Set(ranked.map(r => r.team));
+    const extra = teamOptions(players || [], rowQuery, 20)
+      .filter(t => !seen.has(t.team) && !chosen.has(t.team))
+      .map(t => ({ team: t.team, league: t.league, finalFit: null, unranked: true }));
+    return [...ranked, ...extra].slice(0, 10);
+  }, [autoRows, manualRows, rowQuery, clubsMode, players]);
 
   const buildOpts = () => ({
     headerColourName, seasonOverride, nameOverride, teamOverride,
@@ -1461,8 +1508,9 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
                     {label}
                     {clubsMode === 'players' && <span style={{ color: '#64748b' }}> · {r.team}</span>}
                   </span>
-                  <span style={{ fontSize: 11, fontWeight: 800, color: '#60a5fa', marginLeft: 8 }}>
-                    {Math.round(figure)}
+                  <span style={{ fontSize: 11, fontWeight: 800,
+                                 color: figure == null ? '#475569' : '#60a5fa', marginLeft: 8 }}>
+                    {figure == null ? '—' : Math.round(figure)}
                   </span>
                   <button onClick={() => setManualRows(clubRows.filter((_, j) => j !== i))}
                     style={{ marginLeft: 8, background: 'transparent', border: 'none', color: '#64748b',
@@ -1489,13 +1537,16 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
                         {label}
                         {clubsMode === 'players' && <span style={{ color: '#64748b' }}> · {r.team}</span>}
                       </span>
-                      <span style={{ fontSize: 10.5, fontWeight: 700, color: '#8b98ad', marginLeft: 8 }}>
-                        {Math.round(figure)}
+                      <span style={{ fontSize: 10.5, fontWeight: 700,
+                                     color: figure == null ? '#475569' : '#8b98ad', marginLeft: 8 }}>
+                        {figure == null ? 'add' : Math.round(figure)}
                       </span>
                     </div>
                   );
                 })}
-                {!rowChoices.length && <div style={UI.note}>Nothing further ranked.</div>}
+                {!rowChoices.length && <div style={UI.note}>
+                  {rowQuery.trim().length < 2 ? 'Type to search any club.' : 'No match.'}
+                </div>}
               </>
             )}
 
