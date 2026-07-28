@@ -377,20 +377,85 @@ function simplifyList(list, max) {
   return out;
 }
 
+// Where the two lists come from.
+//
+// NOT sd.strengths / player.latestStrengths. Those are what QuickCard reads —
+// and QuickCard assigns them on one line and never renders them, so the field
+// was never actually exercised; on real data it comes back empty and the panel
+// printed "No profile data". The percentile groups are the same evidence those
+// lists would have been built from, and they are guaranteed present because the
+// Performance column on the left is drawn from them.
+//
+// A strength is a metric at or above STRONG_PCT, a weakness at or below WEAK_PCT.
+// If a player clears neither bar the list falls back to his own best/worst so the
+// tile is never empty — a genuinely average player still has a top three.
+const STRONG_PCT = 70;
+const WEAK_PCT = 30;
+
+function metricPercentiles(sd) {
+  const groups = sd.g || {};
+  const out = [];
+  for (const k of ['A', 'D', 'P']) {
+    for (const entry of (groups[k] || [])) {
+      if (!Array.isArray(entry) || entry.length < 2) continue;
+      const pct = Number(entry[1]);
+      if (isNaN(pct)) continue;
+      out.push([entry[0], pct]);
+    }
+  }
+  return out;
+}
+
+// Map to plain terms, dedupe on the SIMPLIFIED name, cap. Dedupe after mapping is
+// the point: xG and non-penalty goals arriving as two strengths is one strength.
+function termsFrom(pairs, max) {
+  const seen = new Set();
+  const out = [];
+  for (const [raw] of pairs) {
+    const t = simpleTerm(raw);
+    if (!t || seen.has(t)) continue;
+    seen.add(t);
+    out.push(t);
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
+function deriveProfile(sd, max = 5) {
+  const rows = metricPercentiles(sd);
+  if (!rows.length) return { strengths: [], weaknesses: [] };
+  const desc = rows.slice().sort((a, b) => b[1] - a[1]);
+  const asc = rows.slice().sort((a, b) => a[1] - b[1]);
+  let strengths = termsFrom(desc.filter(r => r[1] >= STRONG_PCT), max);
+  let weaknesses = termsFrom(asc.filter(r => r[1] <= WEAK_PCT), max);
+  if (!strengths.length) strengths = termsFrom(desc, 3);
+  if (!weaknesses.length) weaknesses = termsFrom(asc, 3);
+  // A metric can't be both. Ordering favours the strength, since the top of the
+  // range is the more useful claim.
+  const claimed = new Set(strengths);
+  weaknesses = weaknesses.filter(t => !claimed.has(t));
+  return { strengths, weaknesses };
+}
+
 function strengthsPanelBody(w, h, sd, player, manualNotes) {
-  const strengths = simplifyList(sd.strengths || player.latestStrengths || [], 6);
-  const weaknesses = simplifyList(
-    (manualNotes && manualNotes.length) ? manualNotes
-      : (sd.weaknesses || player.latestWeaknesses || []), 6);
+  const derived = deriveProfile(sd, 5);
+  const pipelineStr = simplifyList(sd.strengths || player.latestStrengths || [], 5);
+  const pipelineWeak = simplifyList(sd.weaknesses || player.latestWeaknesses || [], 5);
+  // Pipeline lists win where they exist, because they're editorial; derived is the
+  // floor, not the override.
+  const strengths = pipelineStr.length ? pipelineStr : derived.strengths;
+  const weaknesses = (manualNotes && manualNotes.length)
+    ? simplifyList(manualNotes, 5)
+    : (pipelineWeak.length ? pipelineWeak : derived.weaknesses);
 
   if (!strengths.length && !weaknesses.length) {
     return `<div style="position:absolute;inset:0;display:flex;align-items:center;
-              justify-content:center;font-size:12px;color:#55617a;">No profile data for this season.</div>`;
+              justify-content:center;font-size:12px;color:#55617a;">No percentile data for this season.</div>`;
   }
 
   const group = (title, items, tone, empty) => `
       <div style="font-size:8.5px;font-weight:700;letter-spacing:0.14em;color:#6f7c92;">${title}</div>
-      <div style="margin-top:8px;">${
+      <div style="margin-top:9px;">${
         items.length
           ? items.map(t => pillHtml(t, tone, 11, 11)).join('')
           : `<span style="font-size:11px;color:#8b98ad;">${empty}</span>`
@@ -590,13 +655,14 @@ function headerHtml(player, ctx, opts) {
     <div style="position:absolute;left:${RULE_MID}px;top:28px;width:1px;height:100px;
                 background:${ink.rule};"></div>
 
-    <!-- Pitch diagram in the trend line's slot. No caption: the shape is the
-         label, and the word sat on top of the graphic. Sized to the full band
-         depth (18..134) at the SVG's own 3:2, which is 174x116 — the previous
-         156x104 left 30px of the slot empty on every side. -->
+    <!-- Pitch diagram in the trend line's slot. Top and bottom are flush with
+         the 28..128 band rules and it carries the same 1px rule border as they
+         do, so it reads as a module of the band rather than an image dropped on
+         top of it. 150x100 is the SVG's own 3:2, so nothing distorts. -->
     ${showPitch ? `
-    <div style="position:absolute;left:${PITCH_X + (PITCH_W - 174) / 2}px;top:17px;
-                width:174px;height:116px;">${pitchDiagramSvg(player, positionColors)}</div>`
+    <div style="position:absolute;left:${PITCH_X + (PITCH_W - 150) / 2}px;top:28px;
+                width:150px;height:100px;border-radius:8px;overflow:hidden;
+                border:1px solid ${ink.rule};">${pitchDiagramSvg(player, positionColors)}</div>`
     : `
     <div style="position:absolute;left:${PITCH_X}px;top:34px;width:${PITCH_W}px;">
       ${[['POSITION', POSITION_LABELS[rawTok] || rawTok || '—'],
@@ -610,18 +676,15 @@ function headerHtml(player, ctx, opts) {
                     color:${ink.secondary};white-space:nowrap;">${esc(truncateText(v, 24))}</div>`).join('')}
     </div>`}
 
-    <!-- GBE in the coach profile's slot, built from TeamReport's statRow — the
-         same label / track / figure row the club-facts strip uses.
-         Three things were wrong before. The title had no explicit width, and
-         shrink-to-fit is unreliable in this pipeline (the same defect that made
-         TeamReport compute its pill widths), so "GBE CALCULATION" wrapped onto
-         two lines and collided with the first row. labelW was 92 against labels
-         that measure ~110, so "DOMESTIC APPS" ran under its own bar. And the
-         bars were on the gradeColor ramp, which put a green wash across four
-         rows of neutral reference data and competed with the PASS badge — the
-         only thing in the block that should carry a verdict colour.
-         Rows: 48 + 4x20 = 128, flush with the band rules. -->
-    <div style="position:absolute;left:${GBE_X}px;top:24px;width:${GBE_W}px;height:20px;">
+    <!-- GBE in the coach profile's slot.
+         Four full-width rows gave each component a ~380px track to express a
+         value like 10/12, which left the right third of the band reading as
+         empty runway next to a dense identity block on the left. Two columns of
+         two put the tracks at a length the eye actually measures and fills the
+         slot the way the coach block does on a Team Report.
+         Bars stay on ink.secondary: these are reference figures, and the PASS
+         badge is the only thing here that should carry a verdict colour. -->
+    <div style="position:absolute;left:${GBE_X}px;top:26px;width:${GBE_W}px;height:20px;">
       <span style="position:absolute;left:0;top:5px;width:150px;font-size:8px;font-weight:700;
                    letter-spacing:0.14em;color:${ink.muted};white-space:nowrap;">GBE CALCULATION</span>
       <span style="position:absolute;right:0;top:0;display:flex;align-items:center;white-space:nowrap;">
@@ -637,15 +700,21 @@ function headerHtml(player, ctx, opts) {
                      padding:3px 12px;">${gbe.status}</span>
       </span>
     </div>
-    ${[['DOMESTIC', gbe.domPts, 12], ['CONTINENTAL', gbe.contPts, 8],
-       ['LEAGUE BAND', gbe.lqPts, 12], ['FINISH / PROG', gbe.finishPts + gbe.progPts, 10]]
-      .map(([label, val, max], i) => statRow({
-        x: GBE_X, y: 48 + i * 20, w: GBE_W, label,
-        value: `${val}<span style="color:${ink.muted};font-weight:600;">/${max}</span>`,
-        pct: (val / max) * 100,
-        colour: ink.secondary,
-        ink, labelW: 116, valueW: 48,
-      })).join('')}`;
+    ${(() => {
+      const COL_W_GBE = 254;
+      const COL_GAP = 30;
+      return [['DOMESTIC', gbe.domPts, 12], ['CONTINENTAL', gbe.contPts, 8],
+              ['LEAGUE BAND', gbe.lqPts, 12], ['FINISH / PROG', gbe.finishPts + gbe.progPts, 10]]
+        .map(([label, val, max], i) => statRow({
+          x: GBE_X + (i % 2) * (COL_W_GBE + COL_GAP),
+          y: 64 + Math.floor(i / 2) * 34,
+          w: COL_W_GBE, label,
+          value: `${val}<span style="color:${ink.muted};font-weight:600;">/${max}</span>`,
+          pct: (val / max) * 100,
+          colour: ink.secondary,
+          ink, labelW: 104, valueW: 42,
+        })).join('');
+    })()}`;
 }
 
 // ─── Image preload ─────────────────────────────────────────────────────────
