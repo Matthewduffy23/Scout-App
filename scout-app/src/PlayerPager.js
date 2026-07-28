@@ -266,7 +266,7 @@ function percentilePanelBody(w, h, sd, isGK) {
 
   // Quick card sizes these at 24px in a 920px column; 21px is the same weight
   // and colour stepped down for a 716px one.
-  const heading = (t) => `<div style="font-size:21px;font-weight:800;color:#f3f5f7;margin:8px 0 6px;">${t}</div>`;
+  const heading = (t) => `<div style="font-size:23px;font-weight:800;color:#f3f5f7;margin:8px 0 6px;">${t}</div>`;
 
   return `
     <div style="position:absolute;inset:0;overflow:hidden;">
@@ -469,8 +469,23 @@ export function occupiedSlots(player, manualColors) {
   return out;
 }
 
+// Order by minutes share when there is one, otherwise by the order the position
+// string lists them. Whoever has the most minutes IS the primary — a player
+// listed CF first but playing 60% at LW is a left winger, and the tier colours
+// have to follow the same order or the pitch would contradict the text.
+export function orderSlots(slots, pcts) {
+  const withPct = (slots || []).filter(sl => pcts && pcts[sl] != null && pcts[sl] !== '');
+  if (!withPct.length) return slots || [];
+  return (slots || []).slice().sort((a, b) => {
+    const pa = Number(pcts[a]); const pb = Number(pcts[b]);
+    const va = isNaN(pa) ? -1 : pa; const vb = isNaN(pb) ? -1 : pb;
+    return vb - va;
+  });
+}
+
 function positionPitchSvg(player, w, h, manualColors, pcts, heatmap, heatOpacity, shownSlots) {
-  const slots = (shownSlots && shownSlots.length) ? shownSlots : occupiedSlots(player, manualColors);
+  const slots = orderSlots((shownSlots && shownSlots.length)
+    ? shownSlots : occupiedSlots(player, manualColors), pcts);
   const colourFor = (slot, i) => {
     if (manualColors && manualColors[slot]) return PP_TIERS[manualColors[slot]] || manualColors[slot];
     return PP_TIERS[PP_TIER_ORDER[Math.min(i, PP_TIER_ORDER.length - 1)]];
@@ -567,7 +582,8 @@ function positionBlockHtml(player, x, w, ink, manualColors, pcts, heatmap, heatO
   // Those two disagree the moment a position is switched on by hand: the pitch
   // showed ST and RW while the text still read off "CF" alone and printed no
   // secondary at all. One source for both, so what's written matches what's drawn.
-  const slots = (shownSlots && shownSlots.length) ? shownSlots : occupiedSlots(player, manualColors);
+  const slots = orderSlots((shownSlots && shownSlots.length)
+    ? shownSlots : occupiedSlots(player, manualColors), pcts);
   const primary = slots[0] || shortPos(String(player.position || '').split(',')[0]);
   const secondary = slots[1] || null;
   const full = (sl) => POS_FULL[sl] || POSITION_LABELS[sl] || sl || '—';
@@ -791,26 +807,46 @@ function swEligible(sd, posKey) {
   return Object.keys(best).map(label => ({ label, pct: best[label] }));
 }
 
-function strengthsPanelBody(w, h, sd, posKey) {
+// Manual entries a percentile can never produce. Athleticism and Physicality are
+// scout judgements — no Wyscout column measures either — so they're offered as
+// one-tap additions rather than left to be typed every time.
+export const SW_MANUAL_TERMS = ['Athleticism', 'Physicality', 'Aerial Presence',
+  'Set Pieces', 'Leadership', 'Consistency', 'Injury Record', 'Decision Making'];
+export const SW_TONES = {
+  Green: '#22c55e', Blue: '#3b7de8', Amber: '#f0a637', Red: '#f87171', Slate: '#8b98ad',
+};
+
+function strengthsPanelBody(w, h, sd, posKey, opts = {}) {
+  const { swDrop = [], swAddStr = [], swAddWeak = [] } = opts;
   const rows = swEligible(sd, posKey);
   if (!rows.length) {
     return `<div style="position:absolute;inset:0;display:flex;align-items:center;
               justify-content:center;font-size:12px;color:#55617a;">No percentile data for this season.</div>`;
   }
-  const strengths = rows.filter(r => r.pct >= SW_HI).sort((a, b) => b.pct - a.pct).slice(0, 6);
-  const weaknesses = rows.filter(r => r.pct <= SW_LO).sort((a, b) => a.pct - b.pct).slice(0, 3);
+  const dropped = new Set(swDrop);
+  const strengths = [
+    ...rows.filter(r => r.pct >= SW_HI && !dropped.has(r.label))
+           .sort((a, b) => b.pct - a.pct)
+           .map(r => ({ label: r.label, tone: SW_TONES.Green })),
+    ...swAddStr.map(x => ({ label: x.label, tone: SW_TONES[x.tone] || SW_TONES.Green })),
+  ].slice(0, 6);
+  const weaknesses = [
+    ...rows.filter(r => r.pct <= SW_LO && !dropped.has(r.label))
+           .sort((a, b) => a.pct - b.pct),
+    ...swAddWeak.map(x => ({ label: x.label, pct: Number(x.pct) || 0 })),
+  ].slice(0, 4);
 
   // Strengths as pills — a strength is a claim, and a bar invites the reader to
   // compare five things that are all simply good.
   const strengthsHtml = strengths.length
-    ? strengths.map(r => pillHtml(r.label, '#22c55e', 11, 11)).join('')
+    ? strengths.map(r => pillHtml(r.label, r.tone, 11, 11)).join('')
     : `<span style="font-size:11px;color:#8b98ad;">None above the ${SW_HI}th percentile</span>`;
 
   // Weaknesses stay as bars, in TeamReport's exact weakness-bar language: 32px
   // rows, label left, figure right in radarColor, 5px track at full width. A
   // weakness needs its magnitude shown — 29th percentile and 4th are different
   // problems, and a pill flattens them into the same statement.
-  const BAR_H = 32;
+  const BAR_H = weaknesses.length > 3 ? 26 : 32;
   const weakHtml = weaknesses.length
     ? weaknesses.map((r, i) => `
       <div style="position:absolute;left:0;top:${i * BAR_H}px;width:${w}px;height:${BAR_H - 8}px;">
@@ -844,7 +880,7 @@ function strengthsPanelBody(w, h, sd, posKey) {
 // same 9px card, same #n index at 10px, same 26px crest at x=32, same 68px text
 // column, same 50px centred value column with its caption underneath. Only the
 // caption word changes, because these are fit scores rather than match scores.
-function clubsPanelBody(w, h, rows, coreOnly, mode, hideScores) {
+function clubsPanelBody(w, h, rows, coreOnly, mode, hideScores, notes) {
   const isPlayers = mode === 'players';
   if (!rows || !rows.length) {
     return `<div style="position:absolute;inset:0;display:flex;align-items:center;
@@ -869,6 +905,8 @@ function clubsPanelBody(w, h, rows, coreOnly, mode, hideScores) {
     const sub = isPlayers
       ? [t.team, leagueDisplayName(t.league) || t.league].filter(Boolean).join(' · ')
       : (leagueDisplayName(t.league) || t.league);
+    const lflag = leagueFlag(t.league);
+    const note = (notes && notes[isPlayers ? `${t.name}|${t.team}` : t.team]) || '';
     return `
       <div style="position:absolute;left:0;top:${i * rowH + 2}px;width:${w}px;height:${rowH - 6}px;
                   background:rgba(255,255,255,0.035);border:1px solid rgba(255,255,255,0.07);
@@ -884,8 +922,17 @@ function clubsPanelBody(w, h, rows, coreOnly, mode, hideScores) {
         <div style="position:absolute;left:68px;right:${VAL_W + 18}px;top:50%;margin-top:-15px;">
           <div style="font-size:13px;font-weight:700;color:#eaf0f8;line-height:1.15;white-space:nowrap;
                       ">${esc(title)}</div>
-          <div style="font-size:10px;color:#8b98ad;margin-top:4px;line-height:1.15;white-space:nowrap;
-                      overflow:hidden;">${esc(sub)}</div>
+          <div style="display:flex;align-items:center;margin-top:4px;white-space:nowrap;
+                      overflow:hidden;line-height:1.15;">
+            ${lflag ? `<div style="width:15px;height:10px;flex-shrink:0;background-size:cover;
+                        background-position:center;border-radius:1.5px;margin-right:6px;
+                        box-shadow:inset 0 0 0 0.5px rgba(255,255,255,0.25);
+                        background-image:url('${src(lflag)}');"></div>` : ''}
+            <span style="font-size:10px;color:#8b98ad;">${esc(sub)}</span>
+            ${note ? `<span style="font-size:10px;color:#5c6b82;margin:0 6px;">&middot;</span>
+              <span style="font-size:10px;font-weight:600;color:${ACCENT_PINK};
+                           overflow:hidden;">${esc(note)}</span>` : ''}
+          </div>
         </div>
         ${hideScores ? '' : `
         <div style="position:absolute;right:10px;top:50%;margin-top:-15px;width:${VAL_W}px;
@@ -920,8 +967,15 @@ function viewPanelBody(w, h, text) {
   // of tile — 15px: ~490 chars, 14px: ~525, 13px: ~650 — all above the 475 cap
   // at their own band, with the step chosen so the text never fills the last line
   // to its edge.
+  // Sizing only to FIT left short copy sitting in the top two thirds of the tile
+  // with a band of dead space under it. This picks the LARGEST size that still
+  // fits, so 200 characters fill the box as completely as 470 do.
   const n = String(text).length;
-  const fs = n > 380 ? 13 : n > 280 ? 14 : 15;
+  let fs = 13;
+  for (const cand of [18, 17, 16, 15, 14, 13]) {
+    const perLine = Math.max(1, Math.floor(w / (cand * 0.47)));
+    if (Math.ceil(n / perLine) * (cand * 1.45) <= h - 2) { fs = cand; break; }
+  }
   return `<div style="position:absolute;inset:0;font-size:${fs}px;line-height:1.45;
             font-weight:500;color:#e2e8f4;overflow:hidden;">${esc(text)}</div>`;
 }
@@ -1177,6 +1231,7 @@ export function pagerImageUrls(player, ctx, uploadedPhotoDataUrl, clubRows = [])
   if (nf) urls.push(nf);
   for (const r of (clubRows || [])) {
     urls.push(r.name ? photoUrl(r.name, r.team) : teamCrest(r.team));
+    if (r.league) urls.push(leagueFlag(r.league));
   }
   return [...new Set(urls.filter(u => u && !u.startsWith('data:')))];
 }
@@ -1187,11 +1242,12 @@ export function buildPlayerPagerElement(player, opts = {}) {
     images = {}, headerColourName = 'Default', seasonOverride = '',
     nameOverride = '', teamOverride = '', uploadedPhotoDataUrl = '',
     viewText = '', clubRows = [], clubsCoreOnly = true,
-    clubsMode = 'clubs', hideFitScores = false, ukOnly = true,
+    clubsMode = 'clubs', hideFitScores = false, ukOnly = true, clubNotes = {},
     showForecast = false, useBestRoleCareer = false, showPitch = true,
     positionColors = {}, positionPcts = {}, gbeOv = {}, improveNotes = [],
     heatmapDataUrl = '', heatOpacity = 0.3, shownSlots = null,
     heightOverride = '', footOverride = '',
+    swDrop = [], swAddStr = [], swAddWeak = [],
   } = opts;
   IMG = images || {};
 
@@ -1279,7 +1335,7 @@ export function buildPlayerPagerElement(player, opts = {}) {
       })}
       ${panel({
         x: COL_B_X, y: ROW_2, w: COL_W, h: ROW2_H, title: 'Strengths & Weaknesses',
-        body: strengthsPanelBody(innerW, row2InnerH, sd, posKey),
+        body: strengthsPanelBody(innerW, row2InnerH, sd, posKey, { swDrop, swAddStr, swAddWeak }),
       })}
 
       ${panel({
@@ -1288,7 +1344,7 @@ export function buildPlayerPagerElement(player, opts = {}) {
         // Scope goes in the panel's right-hand slot rather than the title, so the
         // heading stays the same length whichever way it's set.
         right: ukOnly ? 'UK' : 'WORLDWIDE',
-        body: clubsPanelBody(innerW, row3InnerH, clubRows, clubsCoreOnly, clubsMode, hideFitScores),
+        body: clubsPanelBody(innerW, row3InnerH, clubRows, clubsCoreOnly, clubsMode, hideFitScores, clubNotes),
       })}
       ${panel({
         x: COL_B_X, y: ROW_3, w: COL_W, h: ROW3_H, title: 'View',
@@ -1402,6 +1458,9 @@ function Check({ label, value, onChange }) {
 
 const ALL_PITCH_SLOTS = ['GK', 'LB', 'LCB', 'CB', 'RCB', 'RB', 'LWB', 'RWB',
                          'DM', 'CM', 'AM', 'LW', 'RW', 'ST'];
+// The note shares a 498px line with a flag and a league name, so it has to be
+// short enough that the row never wraps.
+const CLUB_NOTE_MAX = 26;
 const VIEW_MAX_LENGTH = 475;
 const SEASON_SORT = ['2018-19', '2019-20', '2020-21', '2021-22', '2022-23', '2023-24', '2024-25', '2025-26'];
 
@@ -1427,6 +1486,11 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
   const [heatExtract, setHeatExtract] = useState(true);
   const [heatOpacity, setHeatOpacity] = useState(30);
   const [gbeOv, setGbeOv] = useState({});
+  const [swDrop, setSwDrop] = useState([]);
+  const [swAddStr, setSwAddStr] = useState([]);
+  const [swAddWeak, setSwAddWeak] = useState([]);
+  const [swNew, setSwNew] = useState({ label: '', tone: 'Green', pct: '' });
+  const [clubNotes, setClubNotes] = useState({});
   const [heightOverride, setHeightOverride] = useState('');
   const [footOverride, setFootOverride] = useState('');
   const [showGbeEdit, setShowGbeEdit] = useState(false);
@@ -1453,11 +1517,26 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
   // Slots the pitch draws = the player's own tokens PLUS anything switched on by
   // hand. A player listed only as CF can still be shown at AM and LW with a share
   // against each, which is the point of tracking minutes by position at all.
+  const posKeyForEditor = useMemo(() => {
+    const tok = String(player.position || '').split(',')[0].trim();
+    return TOKEN_TO_POS_KEY[tok] || player.roleKey || 'CF';
+  }, [player]);
   const autoSlots = useMemo(() => occupiedSlots(player, {}), [player]);
   const [extraSlots, setExtraSlots] = useState([]);
   const pagerSlots = useMemo(
     () => [...autoSlots, ...extraSlots.filter(sl => !autoSlots.includes(sl))],
     [autoSlots, extraSlots]);
+  const swRows = useMemo(() => {
+    try { return swEligible(resolveSeason(player, seasonOverride).sd, posKeyForEditor); }
+    catch (e) { return []; }
+  }, [player, seasonOverride, posKeyForEditor]);
+  const swStrengthLabels = useMemo(
+    () => swRows.filter(r => r.pct >= SW_HI).sort((a, b) => b.pct - a.pct).map(r => r.label),
+    [swRows]);
+  const swWeakLabels = useMemo(
+    () => swRows.filter(r => r.pct <= SW_LO).sort((a, b) => a.pct - b.pct).map(r => r.label),
+    [swRows]);
+
   const pctTotal = useMemo(
     () => pagerSlots.reduce((a, k) => a + (Number(positionPcts[k]) || 0), 0),
     [pagerSlots, positionPcts]);
@@ -1701,6 +1780,80 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
           <Check label="Career chart uses best role per season"
                  value={useBestRoleCareer} onChange={setUseBestRoleCareer} />
 
+          <div style={UI.block}>
+            <span style={UI.label}>Strengths &amp; weaknesses</span>
+            <div style={{ display: 'flex', flexWrap: 'wrap', marginBottom: 6 }}>
+              {[...swStrengthLabels, ...swWeakLabels].map(lbl => {
+                const off = swDrop.includes(lbl);
+                const isStr = swStrengthLabels.includes(lbl);
+                return (
+                  <button key={lbl}
+                    onClick={() => setSwDrop(d => off ? d.filter(x => x !== lbl) : [...d, lbl])}
+                    style={{ padding: '3px 8px', marginRight: 5, marginBottom: 5, borderRadius: 10,
+                             border: `1px solid ${off ? '#1e2d45' : (isStr ? '#22c55e55' : '#f8717155')}`,
+                             background: off ? 'transparent' : (isStr ? '#22c55e1e' : '#f871711e'),
+                             color: off ? '#55617a' : (isStr ? '#22c55e' : '#f87171'),
+                             textDecoration: off ? 'line-through' : 'none',
+                             fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>{lbl}</button>
+                );
+              })}
+              {!swStrengthLabels.length && !swWeakLabels.length &&
+                <span style={UI.note}>Nothing derived for this season.</span>}
+            </div>
+            <div style={UI.note}>Tap to drop one. Add your own below.</div>
+
+            <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+              <select value={swNew.label} onChange={e => setSwNew(o => ({ ...o, label: e.target.value }))}
+                      style={{ ...UI.input, flex: 1, cursor: 'pointer' }}>
+                <option value="">Add a trait…</option>
+                {SW_MANUAL_TERMS.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+              <select value={swNew.tone} onChange={e => setSwNew(o => ({ ...o, tone: e.target.value }))}
+                      style={{ ...UI.input, width: 86, flex: '0 0 auto', cursor: 'pointer' }}>
+                {Object.keys(SW_TONES).map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+            <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+              <button disabled={!swNew.label}
+                onClick={() => { setSwAddStr(a => [...a, { label: swNew.label, tone: swNew.tone }]);
+                                 setSwNew({ label: '', tone: 'Green', pct: '' }); }}
+                style={{ flex: 1, padding: '7px 0', borderRadius: 5, border: '1px solid #22c55e55',
+                         background: swNew.label ? '#22c55e1e' : 'transparent',
+                         color: swNew.label ? '#22c55e' : '#55617a', fontSize: 11, fontWeight: 700,
+                         cursor: swNew.label ? 'pointer' : 'default' }}>+ Strength</button>
+              <input value={swNew.pct} inputMode="numeric" placeholder="0-100"
+                     onChange={e => setSwNew(o => ({ ...o, pct: e.target.value.replace(/[^\d]/g, '').slice(0, 3) }))}
+                     style={{ ...UI.input, width: 72, flex: '0 0 auto' }} />
+              <button disabled={!swNew.label || swNew.pct === ''}
+                onClick={() => { setSwAddWeak(a => [...a, { label: swNew.label, pct: swNew.pct }]);
+                                 setSwNew({ label: '', tone: 'Green', pct: '' }); }}
+                style={{ flex: 1, padding: '7px 0', borderRadius: 5, border: '1px solid #f8717155',
+                         background: (swNew.label && swNew.pct !== '') ? '#f871711e' : 'transparent',
+                         color: (swNew.label && swNew.pct !== '') ? '#f87171' : '#55617a',
+                         fontSize: 11, fontWeight: 700,
+                         cursor: (swNew.label && swNew.pct !== '') ? 'pointer' : 'default' }}>+ Weakness</button>
+            </div>
+            <div style={UI.note}>A weakness needs a 0-100 score — it draws as a bar.</div>
+
+            {[...swAddStr.map((x, i) => ({ ...x, i, kind: 'str' })),
+              ...swAddWeak.map((x, i) => ({ ...x, i, kind: 'weak' }))].map(x => (
+              <div key={x.kind + x.i + x.label}
+                   style={{ display: 'flex', alignItems: 'center', marginTop: 5,
+                            background: '#0d1220', border: '1px solid #1e2d45',
+                            borderRadius: 6, padding: '5px 8px' }}>
+                <span style={{ flex: 1, fontSize: 11.5,
+                               color: x.kind === 'str' ? SW_TONES[x.tone] || '#22c55e' : '#f87171' }}>
+                  {x.label}{x.kind === 'weak' ? ` · ${x.pct}` : ''}
+                </span>
+                <button onClick={() => x.kind === 'str'
+                          ? setSwAddStr(a => a.filter((_, j) => j !== x.i))
+                          : setSwAddWeak(a => a.filter((_, j) => j !== x.i))}
+                  style={{ background: 'transparent', border: 'none', color: '#64748b',
+                           cursor: 'pointer', fontSize: 13, lineHeight: 1, padding: 0 }}>×</button>
+              </div>
+            ))}
+          </div>
+
           <div style={{ ...UI.block, marginTop: 10 }}>
             <span style={UI.label}>Height &amp; foot</span>
             <div style={{ display: 'flex', gap: 6 }}>
@@ -1937,6 +2090,22 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
                 </div>
               );
             })}
+            {clubRows.map((r, i) => {
+              const k = clubsMode === 'players' ? `${r.name}|${r.team}` : r.team;
+              return (
+                <div key={'note' + k + i} style={{ display: 'flex', alignItems: 'center', marginBottom: 5 }}>
+                  <span style={{ width: 74, flexShrink: 0, fontSize: 10, color: '#64748b',
+                                 overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                    {clubsMode === 'players' ? r.name : r.team}
+                  </span>
+                  <input value={clubNotes[k] || ''} maxLength={CLUB_NOTE_MAX}
+                    onChange={e => setClubNotes(o => ({ ...o, [k]: e.target.value.slice(0, CLUB_NOTE_MAX) }))}
+                    placeholder="note, e.g. Mukendi replacement"
+                    style={{ ...UI.input, flex: 1 }} />
+                </div>
+              );
+            })}
+            <div style={UI.note}>Notes print beside the league, {CLUB_NOTE_MAX} characters max.</div>
 
             {clubRows.length < 3 && (
               <>
