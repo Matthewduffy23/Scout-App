@@ -428,6 +428,116 @@ export function computeClubFit(player, pool, opts = {}) {
     }));
 }
 
+/**
+ * Rank individual players by similarity, rather than aggregating them to clubs.
+ *
+ * Everything up to the per-candidate adjSim in computeClubFit is exactly what
+ * "similar players" needs — same feature set, same weights, same 70/30 split of
+ * within-league percentile and z-scored raw, same league-strength damping. The
+ * only difference is that this stops before the by-club aggregation instead of
+ * averaging squads. Deliberately a separate exported function rather than a flag
+ * on computeClubFit, because the two return different shapes.
+ *
+ * @param {Object} player  the target, from players_final.json
+ * @param {Array}  pool    candidates — the position chunk already in memory
+ * @param {Object} opts    { ukOnly, topN }
+ * @returns {Array} [{ name, team, league, age, position, score, simPct }]
+ */
+export function computeSimilarPlayers(player, pool, opts = {}) {
+  const { ukOnly = false, topN = 5 } = opts;
+  if (!player || !Array.isArray(pool) || !pool.length) return [];
+
+  const group = simGroup(player.position || player.roleKey || '');
+  const [featList, featWeights] = featuresFor(group);
+
+  let fbSide = null;
+  if (group === 'FB') {
+    const t0 = String(player.position || '').trim().toUpperCase().split(/[,/;]\s*|\s+/)[0];
+    if (t0 === 'RB' || t0 === 'RWB') fbSide = 'R';
+    else if (t0 === 'LB' || t0 === 'LWB') fbSide = 'L';
+  }
+
+  const tgtLs = Math.max(Number(LEAGUE_STRENGTHS[player.league || '']) || 1.0, 1e-6);
+  const tgtPeak = peakSeason(player);
+  const tgtMetrics = metricsFromSeason(tgtPeak || latestSeason(player));
+
+  const avail = featList.filter(f => tgtMetrics[careerLabel(f)] != null);
+  if (avail.length < 5) return [];
+  const labels = avail.map(careerLabel);
+  const weights = avail.map(f => Number(featWeights[f] || 1));
+  const tgtPct = labels.map(l => (Number(tgtMetrics[l][0]) || 50) / 100);
+  const tgtRaw = labels.map(l => Number(tgtMetrics[l][1]) || 0);
+
+  const ownTeam = normTeam(player.team);
+  const cands = [];
+  for (const c of pool) {
+    if (!c || c.id === player.id) continue;
+    if (String(c.name).toLowerCase() === String(player.name).toLowerCase()) continue;
+    if (normTeam(c.team) === ownTeam && String(c.name).toLowerCase() === String(player.name).toLowerCase()) continue;
+    if (simGroup(c.position || c.roleKey || '') !== group) continue;
+    if (fbSide) {
+      const t0 = String(c.position || '').trim().toUpperCase().split(/[,/;]\s*|\s+/)[0];
+      const side = (t0 === 'RB' || t0 === 'RWB') ? 'R' : (t0 === 'LB' || t0 === 'LWB') ? 'L' : null;
+      if (side !== fbSide) continue;
+    }
+    if (ukOnly && !UK_LEAGUES_CF.has(String(c.league).trim())) continue;
+
+    const sd = latestSeason(c);
+    if (!sd) continue;
+    const m = metricsFromSeason(sd);
+    const pct = [], raw = [];
+    let ok = true;
+    for (const l of labels) {
+      if (m[l] == null) { ok = false; break; }
+      pct.push((Number(m[l][0]) || 50) / 100);
+      raw.push(Number(m[l][1]) || 0);
+    }
+    if (!ok) continue;
+    cands.push({ p: c, pct, raw, ls: Math.max(Number(LEAGUE_STRENGTHS[c.league]) || 1.0, 1e-6) });
+  }
+  if (!cands.length) return [];
+
+  const n = labels.length;
+  const means = new Array(n).fill(0), stds = new Array(n).fill(0);
+  for (let i = 0; i < n; i++) {
+    let s = 0;
+    for (const c of cands) s += c.raw[i];
+    means[i] = s / cands.length;
+    let v = 0;
+    for (const c of cands) v += (c.raw[i] - means[i]) ** 2;
+    stds[i] = Math.sqrt(v / cands.length) || 1.0;
+  }
+  const tgtStd = tgtRaw.map((v, i) => (v - means[i]) / stds[i]);
+
+  const combined = cands.map(c => {
+    let dp = 0, dv = 0;
+    for (let i = 0; i < n; i++) {
+      dp += (c.pct[i] - tgtPct[i]) ** 2 * weights[i];
+      dv += (((c.raw[i] - means[i]) / stds[i]) - tgtStd[i]) ** 2 * weights[i];
+    }
+    return Math.sqrt(dp) * 0.7 + Math.sqrt(dv) * 0.3;
+  });
+  const cMin = Math.min(...combined), cMax = Math.max(...combined);
+  const rng = (cMax - cMin) || 1.0;
+
+  cands.forEach((c, i) => {
+    const rawSim = (1 - (combined[i] - cMin) / rng) * 100;
+    const ratio = Math.min(c.ls / tgtLs, tgtLs / c.ls);
+    c.adjSim = rawSim * (0.8 + 0.2 * ratio);
+  });
+
+  return cands
+    .sort((a, b) => b.adjSim - a.adjSim)
+    .slice(0, topN)
+    .map(c => ({
+      name: c.p.name, team: c.p.team, league: c.p.league,
+      age: c.p.age != null ? c.p.age : null,
+      position: String(c.p.position || '').split(',')[0].trim(),
+      score: c.p.careerScore != null ? c.p.careerScore : null,
+      simPct: Math.round(c.adjSim * 10) / 10,
+    }));
+}
+
 // ─── CALIBRATION NOTE ──────────────────────────────────────────────────────
 // Two things are expected to differ slightly from the Flask version, and both are
 // worth knowing before treating a mismatch as a bug:

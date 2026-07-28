@@ -305,7 +305,7 @@ function truncateText(str, maxChars) {
 // Mirrors the ESC-reason logic in PlayerCard.js exactly (same constants, same
 // criteria) so QuickCard can say *why* a player is ESC eligible, not just that
 // they are. Falls back gracefully to an empty list if allSeasonsSummary isn't present.
-function computeEscReasons(player) {
+export function computeEscReasons(player) {
   const ESC_SEASONS = new Set(['2025-26','2026','2025','2024-25','2024']);
   const HOME_NATIONS = new Set(['england','scotland','wales','ireland','northern ireland','republic of ireland']);
   const YOUTH_LEAGUES_GBE = new Set(['Sweden 4.','Switzerland 3.','Ukraine 3.','Brazil 4.','Czech 3.','Denmark 4.','Germany 5.','Germany 6.','Italy 5.','Portugal 4.','Serbia 3.','England 7.','England 8.','England 9.','England 10.']);
@@ -508,7 +508,7 @@ function ensureMontserratEmbedded() {
 
 // Same strings computeEscReasons() produces, so a manually picked reason reads
 // identically to a detected one.
-const ESC_REASON_OPTIONS = [
+export const ESC_REASON_OPTIONS = [
   'Home nation',
   'Continental history',
   'International history',

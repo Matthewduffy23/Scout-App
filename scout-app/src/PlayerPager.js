@@ -46,9 +46,9 @@ import {
   careerTrajectorySvg, teamRangeBarHtml,
   scoreTierColor, barRow,
   TOKEN_TO_POS_KEY, POSITION_LABELS, METRIC_LABEL_MAP,
-  POSITION_TEAM_CONTEXT_CATS, TEAM_CONTEXT_BANDS,
+  POSITION_TEAM_CONTEXT_CATS, TEAM_CONTEXT_BANDS, computeEscReasons,
 } from './QuickCard';
-import { computeClubFit, simGroup } from './clubFit';
+import { computeClubFit, computeSimilarPlayers, simGroup } from './clubFit';
 
 // ─── Canvas geometry — identical to TeamReport.js ──────────────────────────
 const W = 1920;
@@ -202,10 +202,25 @@ function deriveGbe(player, ov = {}) {
   const homeNation = [...HOME_NATIONS].some(n => birth.includes(n) || passport.includes(n));
 
   const pass = homeNation || total >= 15;
+  // Two separate routes in for a player who fails outright, exactly as QuickCard
+  // and PlayerCard define them, and they are mutually exclusive by points:
+  //   10-14 pts  -> GBE Exceptions Panel review
+  //   under 10   -> ESC, but only if the player is flagged escEligible
+  // The pager was showing neither, so an ESC-eligible player who reads ESC on his
+  // quick card read as a plain FAIL here. escOverride forces the line on for the
+  // cases the data can't see, same as the quick card's toggle.
   const panelEligible = !pass && total >= 10;
+  const escOn = !!ov.escOverride;
+  const escEligible = escOn || (!pass && total < 10 && !!player.escEligible);
+  let escReasons = [];
+  try {
+    escReasons = escOn
+      ? (ov.escReason ? [ov.escReason] : computeEscReasons(player))
+      : (escEligible ? computeEscReasons(player) : []);
+  } catch (e) { escReasons = []; }
   return {
     band, domPts, contPts, lqPts, finishPts, progPts, total, homeNation, pass,
-    panelEligible,
+    panelEligible, escEligible, escReasons,
     status: pass ? 'PASS' : 'FAIL',
     colour: pass ? '#3da65b' : panelEligible ? '#f0a637' : '#c7363c',
   };
@@ -278,7 +293,10 @@ function percentilePanelBody(w, h, sd, isGK) {
 // width makes the block fit once scaled uniformly — the same treatment the Style
 // panel needed, and it keeps the bars proportioned exactly as the quick card
 // draws them.
-const TC_ROW_H = 67;
+// 67 was measured off the markup and left the bottom category's Low/Avg/High
+// caption clipping against the tile edge. 74 is the same measurement plus the
+// row's own bottom margin, which the first estimate didn't account for.
+const TC_ROW_H = 74;
 
 function teamContextBody(w, h, player, posKey) {
   const cats = POSITION_TEAM_CONTEXT_CATS[posKey] || POSITION_TEAM_CONTEXT_CATS.CM;
@@ -296,6 +314,29 @@ function teamContextBody(w, h, player, posKey) {
       </div>
     </div>`;
 }
+
+// Wyscout token -> the short code a scout would write. Same collapsing the pitch
+// uses (RAMF and RWF are both RW), except CF stays CF rather than becoming ST —
+// on a card the position label reads as a position, not as a pitch slot.
+const POS_SHORT = {
+  GK: 'GK',
+  CB: 'CB', LCB: 'CB', RCB: 'CB',
+  LB: 'LB', RB: 'RB', LWB: 'LWB', RWB: 'RWB',
+  DMF: 'DM', LDMF: 'DM', RDMF: 'DM',
+  CMF: 'CM', LCMF: 'CM', RCMF: 'CM',
+  AMF: 'AM',
+  RAMF: 'RW', RWF: 'RW', RW: 'RW',
+  LAMF: 'LW', LWF: 'LW', LW: 'LW',
+  CF: 'CF',
+};
+const shortPos = (tok) => POS_SHORT[String(tok || '').trim().toUpperCase()] || String(tok || '').trim().toUpperCase();
+
+// Role names carry a trailing position token ("Ball Playing CB", "Target Man CF")
+// which is redundant once the player's own position sits beside it — and worse,
+// it can disagree with him: a Wide Creator FB role on a player listed RB printed
+// "FB". Strip it and use the player's actual translated position instead.
+const ROLE_SUFFIX = /\s+(GK|CB|LCB|RCB|FB|LB|RB|LWB|RWB|DM|DMF|CM|CMF|AM|AMF|WNG|LW|RW|ATT|ST|CF)$/i;
+const roleBase = (name) => String(name || '').replace(ROLE_SUFFIX, '').trim();
 
 // ─── Position pitch ────────────────────────────────────────────────────────
 // A different system to QuickCard's pitchDiagramSvg, which is built for a 390px
@@ -327,7 +368,6 @@ const PP_TIERS = { Primary: '#00bf63', Secondary: '#7ed957', Third: '#c1ff72',
 const PP_TIER_ORDER = ['Primary', 'Secondary', 'Third', 'Fourth', 'Fifth', 'Sixth', 'Seventh'];
 
 function positionPitchSvg(player, w, h, ink, manualColors) {
-  const line = (ink && ink.rule) || 'rgba(255,255,255,0.13)';
   const filled = {};
   if (manualColors && Object.keys(manualColors).length) {
     for (const slot of Object.keys(manualColors)) {
@@ -344,21 +384,37 @@ function positionPitchSvg(player, w, h, ink, manualColors) {
       i += 1;
     }
   }
-  const dots = Object.keys(filled).map(slot => {
+
+  // Every slot is drawn. The unoccupied ones are what make it read as a pitch at
+  // all — the previous version drew only the player's own positions, so a lone
+  // striker was one dot floating in an empty rectangle with no way to tell where
+  // on the pitch it sat. They're faint enough not to compete.
+  const GHOST = 'rgba(255,255,255,0.16)';
+  const MARK = 'rgba(255,255,255,0.26)';
+  const dots = Object.keys(PP_SLOTS).map(slot => {
     const [x, y] = PP_SLOTS[slot];
-    return `<circle cx="${x}" cy="${y}" r="15" fill="${filled[slot]}"/>
-      <text x="${x}" y="${y + 3.5}" text-anchor="middle" font-family="Montserrat,sans-serif"
-            font-size="9.5" font-weight="800" fill="#07090f">${slot}</text>`;
+    const col = filled[slot];
+    if (!col) return `<circle cx="${x}" cy="${y}" r="6" fill="${GHOST}"/>`;
+    return `<circle cx="${x}" cy="${y}" r="17" fill="${col}"/>
+      <text x="${x}" y="${y + 4}" text-anchor="middle" font-family="Montserrat,sans-serif"
+            font-size="11" font-weight="800" fill="#07090f">${slot}</text>`;
   }).join('');
 
+  // Markings at 0.26 rather than the band's rule colour: the rule is tuned to be
+  // barely-there as a divider, and at this size it made the pitch invisible —
+  // the previous export showed a striker's dot with no pitch around it.
   return `<svg width="${w}" height="${h}" viewBox="0 0 300 200" xmlns="http://www.w3.org/2000/svg">
-      <g fill="none" stroke="${line}" stroke-width="1.4">
-        <rect x="6" y="6" width="288" height="188" rx="4"/>
-        <line x1="150" y1="6" x2="150" y2="194"/>
-        <circle cx="150" cy="100" r="26"/>
-        <rect x="6" y="62" width="34" height="76"/>
-        <rect x="260" y="62" width="34" height="76"/>
+      <rect x="0.75" y="0.75" width="298.5" height="198.5" rx="9"
+            fill="rgba(255,255,255,0.05)" stroke="${(ink && ink.rule) || MARK}" stroke-width="1.5"/>
+      <g fill="none" stroke="${MARK}" stroke-width="1.5">
+        <line x1="150" y1="10" x2="150" y2="190"/>
+        <circle cx="150" cy="100" r="27"/>
+        <rect x="10" y="58" width="38" height="84" rx="2"/>
+        <rect x="252" y="58" width="38" height="84" rx="2"/>
+        <rect x="10" y="82" width="14" height="36" rx="1"/>
+        <rect x="276" y="82" width="14" height="36" rx="1"/>
       </g>
+      <circle cx="150" cy="100" r="2.5" fill="${MARK}"/>
       ${dots}
     </svg>`;
 }
@@ -592,22 +648,28 @@ function strengthsPanelBody(w, h, sd, posKey) {
 // same 9px card, same #n index at 10px, same 26px crest at x=32, same 68px text
 // column, same 50px centred value column with its caption underneath. Only the
 // caption word changes, because these are fit scores rather than match scores.
-function clubsPanelBody(w, h, rows, coreOnly) {
+function clubsPanelBody(w, h, rows, coreOnly, mode, hideScores) {
+  const isPlayers = mode === 'players';
   if (!rows || !rows.length) {
     return `<div style="position:absolute;inset:0;display:flex;align-items:center;
               justify-content:center;font-size:12px;color:#55617a;text-align:center;">
-              No UK club fits — the position pool isn't loaded.</div>`;
+              ${isPlayers ? 'No comparable UK players' : 'No UK club fits'} —
+              the position pool isn't loaded.</div>`;
   }
-  // Three, not five. At 155px of tile the five-row version gave each card 28px
-  // of height for 26px of crest, which is why it read as a stack rather than a
-  // list. Three at ~46px matches the breathing room TeamReport's Similar Teams
-  // gets, and the fourth and fifth clubs were never the interesting ones.
   const shown = rows.slice(0, 3);
-  const rowH = Math.floor((h - (coreOnly ? 14 : 0) - 4) / shown.length);
-  const VAL_W = 50;
+  const note = (!isPlayers && coreOnly && !hideScores);
+  const rowH = Math.floor((h - (note ? 14 : 0) - 4) / shown.length);
+  const VAL_W = hideScores ? 0 : 50;
   const body = shown.map((t, i) => {
-    const col = gradeColor(t.finalFit);
+    const figure = isPlayers ? t.simPct : t.finalFit;
+    const col = gradeColor(figure);
     const crest = teamCrest(t.team);
+    const title = isPlayers ? t.name : t.team;
+    // A player row's second line is his club and league; a club row's is just the
+    // league. Both stay one nowrap line so nothing wraps into the crest.
+    const sub = isPlayers
+      ? [t.team, leagueDisplayName(t.league) || t.league].filter(Boolean).join(' · ')
+      : (leagueDisplayName(t.league) || t.league);
     return `
       <div style="position:absolute;left:0;top:${i * rowH + 2}px;width:${w}px;height:${rowH - 6}px;
                   background:rgba(255,255,255,0.035);border:1px solid rgba(255,255,255,0.07);
@@ -619,27 +681,28 @@ function clubsPanelBody(w, h, rows, coreOnly) {
                      background-repeat:no-repeat;background-position:center;"></div>` : ''}
         <div style="position:absolute;left:68px;right:${VAL_W + 18}px;top:50%;margin-top:-15px;">
           <div style="font-size:13px;font-weight:700;color:#eaf0f8;line-height:1.15;white-space:nowrap;
-                      ">${esc(t.team)}</div>
+                      ">${esc(title)}</div>
           <div style="font-size:10px;color:#8b98ad;margin-top:4px;line-height:1.15;white-space:nowrap;
-                      overflow:hidden;">${esc(leagueDisplayName(t.league) || t.league)}</div>
+                      overflow:hidden;">${esc(sub)}</div>
         </div>
+        ${hideScores ? '' : `
         <div style="position:absolute;right:10px;top:50%;margin-top:-15px;width:${VAL_W}px;
                     text-align:center;">
-          <div style="font-size:15px;font-weight:800;color:${col};line-height:1.05;">${Math.round(t.finalFit)}</div>
+          <div style="font-size:15px;font-weight:800;color:${col};line-height:1.05;">${Math.round(figure)}${isPlayers ? '%' : ''}</div>
           <div style="font-size:7.5px;font-weight:600;letter-spacing:0.06em;color:#55617a;
-                      margin-top:3px;line-height:1;">fit</div>
-        </div>
+                      margin-top:3px;line-height:1;">${isPlayers ? 'match' : 'fit'}</div>
+        </div>`}
       </div>`;
   }).join('');
 
   // Stated on the card, not just in the editor. Without the peak-fit blend the
   // number is the core alone and reads a few points high — anyone comparing this
   // against ScoutBoard deserves to know which of the two they are looking at.
-  const note = coreOnly
-    ? `<div style="position:absolute;left:0;bottom:0;font-size:8px;font-weight:700;
-                   letter-spacing:0.14em;color:#475569;">CORE FIT ONLY — CLUB SIMILARITY NOT LOADED</div>`
-    : '';
-  return `<div style="position:absolute;inset:0;overflow:hidden;">${body}${note}</div>`;
+  // Pointless when the figures are hidden, so it only draws alongside them.
+  return `<div style="position:absolute;inset:0;overflow:hidden;">${body}${
+    note ? `<div style="position:absolute;left:0;bottom:0;font-size:8px;font-weight:700;
+                   letter-spacing:0.14em;color:#475569;">CORE FIT ONLY — CLUB SIMILARITY NOT LOADED</div>` : ''
+  }</div>`;
 }
 
 // ─── View ──────────────────────────────────────────────────────────────────
@@ -773,8 +836,8 @@ function headerHtml(player, ctx, opts) {
     <!-- Positions, in the trend line's slot. Transparent outline in the band's
          own rule colour, only the slots the player plays, each labelled. -->
     ${showPitch ? `
-    <div style="position:absolute;left:${PITCH_X + (PITCH_W - 165) / 2}px;top:29px;
-                width:165px;height:110px;">${positionPitchSvg(player, 165, 110, ink, positionColors)}</div>`
+    <div style="position:absolute;left:${PITCH_X + (PITCH_W - 156) / 2}px;top:26px;
+                width:156px;height:104px;">${positionPitchSvg(player, 156, 104, ink, positionColors)}</div>`
     : `
     <div style="position:absolute;left:${PITCH_X}px;top:34px;width:${PITCH_W}px;">
       ${[['POSITION', POSITION_LABELS[rawTok] || rawTok || '—'],
@@ -803,7 +866,10 @@ function headerHtml(player, ctx, opts) {
         ${gbe.homeNation ? `<span style="font-size:8px;font-weight:700;letter-spacing:0.13em;
                      color:${ink.muted};margin-right:14px;">AUTO PASS &middot; HOME NATION</span>` : ''}
         ${gbe.panelEligible ? `<span style="font-size:8px;font-weight:700;letter-spacing:0.13em;
-                     color:${ink.muted};margin-right:14px;">EXCEPTIONS PANEL</span>` : ''}
+                     color:#f0c56a;margin-right:14px;">EXCEPTIONS PANEL</span>` : ''}
+        ${gbe.escEligible ? `<span style="font-size:8px;font-weight:700;letter-spacing:0.13em;
+                     color:#f97316;margin-right:14px;white-space:nowrap;">&#9889; ESC ELIGIBLE${
+                       gbe.escReasons.length ? ` &middot; ${esc(String(gbe.escReasons[0]).toUpperCase())}` : ''}</span>` : ''}
         <span style="font-size:16px;font-weight:800;color:${ink.primary};">${gbe.total}</span>
         <span style="font-size:8px;font-weight:700;letter-spacing:0.13em;color:${ink.muted};
                      margin-left:6px;">PTS</span>
@@ -860,6 +926,7 @@ export function buildPlayerPagerElement(player, opts = {}) {
     images = {}, headerColourName = 'Default', seasonOverride = '',
     nameOverride = '', teamOverride = '', uploadedPhotoDataUrl = '',
     viewText = '', clubRows = [], clubsCoreOnly = true,
+    clubsMode = 'clubs', hideFitScores = false,
     showForecast = false, useBestRoleCareer = false, showPitch = true,
     positionColors = {}, gbeOv = {}, improveNotes = [],
   } = opts;
@@ -891,9 +958,14 @@ export function buildPlayerPagerElement(player, opts = {}) {
   // quick card's visual language while every other tile spoke TeamReport's.
   // styleHexSvg flexes its own row height to the box, so no scaling is needed.
   const qcRoles = player.qcRoleCareerScores || player.qcLatestRoles || player.roleCareerScores;
+  // "Ball Playing CB" -> "Ball Playing · CB", where the CB is the PLAYER's
+  // translated position rather than the role string's own suffix, so a RAMF
+  // reads RW and a role whose suffix disagrees with the player can't print a
+  // position he doesn't play.
+  const posShort = shortPos(rawTok);
   const roleRows = qcRoles && Object.keys(qcRoles).length
     ? Object.entries(qcRoles)
-        .map(([k, v]) => [k, Number(v) || 0])
+        .map(([k, v]) => [`${roleBase(k)}${posShort ? `  ${posShort}` : ''}`, Number(v) || 0])
         .sort((a, b) => b[1] - a[1])
         .slice(0, 6)
     : [];
@@ -914,7 +986,12 @@ export function buildPlayerPagerElement(player, opts = {}) {
       ${panel({
         x: PAD, y: BODY_TOP, w: LEFT_W, h: LEFT_H,
         title: 'Performance',
-        right: `${ctx.seasonKey || ''}${ctx.team ? ` · ${truncateText(ctx.team, 22)}` : ''}`,
+        // Season, club, league and the pool the percentiles are against. Without
+        // the last two a reader can't tell whether 80th percentile means 80th of
+        // Cyprus 1. strikers or of Premier League ones, which is the whole
+        // meaning of the column.
+        right: [ctx.seasonKey, ctx.team, ctx.league].filter(Boolean).join(' · ')
+               + (posKey ? ` vs ${posKey}'s` : ''),
         body: percentilePanelBody(leftInnerW, leftInnerH, sd, isGK),
       })}
 
@@ -939,8 +1016,9 @@ export function buildPlayerPagerElement(player, opts = {}) {
       })}
 
       ${panel({
-        x: COL_A_X, y: ROW_3, w: COL_W, h: ROW3_H, title: 'Potential Clubs UK',
-        body: clubsPanelBody(innerW, row3InnerH, clubRows, clubsCoreOnly),
+        x: COL_A_X, y: ROW_3, w: COL_W, h: ROW3_H,
+        title: clubsMode === 'players' ? 'Similar Players UK' : 'Potential Clubs UK',
+        body: clubsPanelBody(innerW, row3InnerH, clubRows, clubsCoreOnly, clubsMode, hideFitScores),
       })}
       ${panel({
         x: COL_B_X, y: ROW_3, w: COL_W, h: ROW3_H, title: 'View',
@@ -1074,6 +1152,13 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
   const [gbeOv, setGbeOv] = useState({});
   const [showGbeEdit, setShowGbeEdit] = useState(false);
 
+  const [clubsMode, setClubsMode] = useState('clubs');   // clubs | players
+  const [hideFitScores, setHideFitScores] = useState(false);
+  // null = auto (whatever the model ranks). An array = the user has taken over,
+  // and is authoritative including its order.
+  const [manualRows, setManualRows] = useState(null);
+  const [rowQuery, setRowQuery] = useState('');
+
   const [peakFit, setPeakFit] = useState(null);
   const [peakState, setPeakState] = useState('idle');   // idle | loading | ok | none
 
@@ -1116,20 +1201,43 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
     if (!isMobile) loadPeakFit();
   }, [isMobile, loadPeakFit]);
 
-  const clubRows = useMemo(() => {
+  const autoRows = useMemo(() => {
     try {
-      return computeClubFit(player, players || [], {
-        ukOnly: true, topN: 3, peakFitByTeam: peakFit,
-      });
+      return clubsMode === 'players'
+        ? computeSimilarPlayers(player, players || [], { ukOnly: true, topN: 8 })
+        : computeClubFit(player, players || [], { ukOnly: true, topN: 8, peakFitByTeam: peakFit });
     } catch (e) {
-      console.error('[PlayerPager] club fit failed:', e);
+      console.error('[PlayerPager] ranking failed:', e);
       return [];
     }
-  }, [player, players, peakFit]);
+  }, [player, players, peakFit, clubsMode]);
+
+  // Switching mode drops a manual list built for the other one — a club list is
+  // not a player list, and silently carrying it across would print clubs under a
+  // "Similar Players" heading.
+  useEffect(() => { setManualRows(null); setRowQuery(''); }, [clubsMode]);
+
+  const clubRows = manualRows || autoRows.slice(0, 3);
+
+  // The pool the picker searches: the same ranked candidates, just deeper than
+  // the three that fit on the card, plus a name filter. Everything shown has been
+  // through the model, so a manual pick is a re-ordering rather than a free-text
+  // entry that could name a club the fit was never computed for.
+  const rowChoices = useMemo(() => {
+    const q = rowQuery.trim().toLowerCase();
+    const key = (r) => (clubsMode === 'players' ? `${r.name}|${r.team}` : r.team);
+    const chosen = new Set((manualRows || []).map(key));
+    return autoRows
+      .filter(r => !chosen.has(key(r)))
+      .filter(r => !q || String(clubsMode === 'players' ? r.name : r.team).toLowerCase().includes(q)
+                     || String(r.team || '').toLowerCase().includes(q))
+      .slice(0, 8);
+  }, [autoRows, manualRows, rowQuery, clubsMode]);
 
   const buildOpts = () => ({
     headerColourName, seasonOverride, nameOverride, teamOverride,
     uploadedPhotoDataUrl, viewText, clubRows,
+    clubsMode, hideFitScores,
     clubsCoreOnly: !peakFit,
     showForecast, useBestRoleCareer, showPitch, gbeOv,
   });
@@ -1306,25 +1414,95 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
           </div>
 
           <div style={UI.block}>
-            <span style={UI.label}>Potential Clubs UK</span>
+            <span style={UI.label}>Bottom-left panel</span>
+            <div style={{ display: 'flex', marginBottom: 8 }}>
+              {[['clubs', 'Potential Clubs'], ['players', 'Similar Players']].map(([v, lbl], i) => (
+                <button key={v} onClick={() => setClubsMode(v)}
+                  style={{ flex: 1, padding: '6px 0', marginLeft: i ? 6 : 0, borderRadius: 5,
+                           border: `1px solid ${clubsMode === v ? '#3b7de8' : '#1e2d45'}`,
+                           background: clubsMode === v ? '#0e2040' : 'transparent',
+                           color: clubsMode === v ? '#60a5fa' : '#94a3b8',
+                           fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>{lbl}</button>
+              ))}
+            </div>
+
+            <Check label={clubsMode === 'players' ? 'Hide match % beside players' : 'Hide fit score beside clubs'}
+                   value={hideFitScores} onChange={setHideFitScores} />
+
             {poolSize < 50 && (
               <div style={{ ...note, color: '#fbc701', background: 'rgba(251,199,1,0.08)',
                             border: '1px solid rgba(251,199,1,0.25)' }}>
-                Only {poolSize} {group || 'matching'} players loaded — club fit needs the
-                position group in memory to rank against.
+                Only {poolSize} {group || 'matching'} players loaded — this ranks against
+                the position group in memory.
               </div>
             )}
-            <div style={UI.note}>
-              {clubRows.length
-                ? `${clubRows.length} clubs ranked against ${poolSize} ${group} players.`
-                : 'No clubs ranked.'}
-            </div>
-            {peakState === 'ok' && (
-              <div style={{ ...UI.note, color: '#4ade80' }}>
-                Club similarity loaded — full blended fit.
-              </div>
+
+            <span style={{ ...UI.label, marginTop: 4 }}>
+              Shown {manualRows ? '(manual)' : '(auto — top 3)'}
+              {manualRows && (
+                <button onClick={() => { setManualRows(null); setRowQuery(''); }}
+                  style={{ marginLeft: 8, background: 'transparent', border: '1px solid #1e2d45',
+                           borderRadius: 4, color: '#60a5fa', fontSize: 9, padding: '1px 5px',
+                           cursor: 'pointer' }}>back to auto</button>
+              )}
+            </span>
+
+            {clubRows.map((r, i) => {
+              const label = clubsMode === 'players' ? r.name : r.team;
+              const figure = clubsMode === 'players' ? r.simPct : r.finalFit;
+              return (
+                <div key={label + i}
+                     style={{ display: 'flex', alignItems: 'center', marginBottom: 5,
+                              background: '#0d1220', border: '1px solid #1e2d45',
+                              borderRadius: 6, padding: '5px 8px' }}>
+                  <span style={{ width: 16, flexShrink: 0, fontSize: 10, color: '#475569' }}>#{i + 1}</span>
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 11.5, color: '#e2e8f4',
+                                 overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                    {label}
+                    {clubsMode === 'players' && <span style={{ color: '#64748b' }}> · {r.team}</span>}
+                  </span>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: '#60a5fa', marginLeft: 8 }}>
+                    {Math.round(figure)}
+                  </span>
+                  <button onClick={() => setManualRows(clubRows.filter((_, j) => j !== i))}
+                    style={{ marginLeft: 8, background: 'transparent', border: 'none', color: '#64748b',
+                             cursor: 'pointer', fontSize: 13, lineHeight: 1, padding: 0 }}>×</button>
+                </div>
+              );
+            })}
+
+            {clubRows.length < 3 && (
+              <>
+                <input value={rowQuery} onChange={e => setRowQuery(e.target.value)}
+                       placeholder={clubsMode === 'players' ? 'Add a player…' : 'Add a club…'}
+                       style={{ ...UI.input, marginTop: 4 }} />
+                {rowChoices.map((r, i) => {
+                  const label = clubsMode === 'players' ? r.name : r.team;
+                  const figure = clubsMode === 'players' ? r.simPct : r.finalFit;
+                  return (
+                    <div key={label + i}
+                         onClick={() => { setManualRows([...clubRows, r]); setRowQuery(''); }}
+                         style={{ display: 'flex', alignItems: 'center', cursor: 'pointer',
+                                  padding: '5px 8px', borderBottom: '1px solid #101a2c' }}>
+                      <span style={{ flex: 1, minWidth: 0, fontSize: 11, color: '#c8d2e0',
+                                     overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                        {label}
+                        {clubsMode === 'players' && <span style={{ color: '#64748b' }}> · {r.team}</span>}
+                      </span>
+                      <span style={{ fontSize: 10.5, fontWeight: 700, color: '#8b98ad', marginLeft: 8 }}>
+                        {Math.round(figure)}
+                      </span>
+                    </div>
+                  );
+                })}
+                {!rowChoices.length && <div style={UI.note}>Nothing further ranked.</div>}
+              </>
             )}
-            {peakState !== 'ok' && (
+
+            {clubsMode === 'clubs' && peakState === 'ok' && (
+              <div style={{ ...UI.note, color: '#4ade80' }}>Club similarity loaded — full blended fit.</div>
+            )}
+            {clubsMode === 'clubs' && peakState !== 'ok' && (
               <>
                 <div style={{ ...UI.note, color: '#f6a75c' }}>
                   {peakState === 'loading'
