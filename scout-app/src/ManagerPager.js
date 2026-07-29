@@ -127,13 +127,6 @@ const truncateText = (s, n) => {
   return t.length > n ? t.slice(0, n - 1) + '…' : t;
 };
 const num = (v) => { const x = Number(v); return Number.isFinite(x) ? x : null; };
-const ordinal = (n) => {
-  const v = Number(n);
-  if (!Number.isFinite(v)) return '';
-  const t = v % 100;
-  if (t >= 11 && t <= 13) return `${v}TH`;
-  return `${v}${['TH', 'ST', 'ND', 'RD'][v % 10] || 'TH'}`;
-};
 const clamp = (v, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, v));
 
 // Panel chrome. Copied by value from PlayerPager, which copied it from
@@ -621,8 +614,21 @@ function mpSwEligible(mg, spAttPct = null, spDefPct = null) {
   }
   // These arrive as percentiles already — rankToPct did the conversion — so they
   // meet the same 70/30 thresholds as everything else with no special casing.
-  if (spAttPct != null && !isNaN(Number(spAttPct))) best['Attacking Set Pieces'] = Number(spAttPct);
-  if (spDefPct != null && !isNaN(Number(spDefPct))) best['Defending Set Pieces'] = Number(spDefPct);
+  //
+  // When both sides land on the SAME side of the line they collapse into one
+  // entry. Two bars reading "Defending Set Pieces 5" and "Attacking Set Pieces 10"
+  // spend two of three weakness slots making one point, and squeeze out a real
+  // second problem. Split them only when they disagree, which is the case where
+  // the distinction is the finding.
+  const spA = (spAttPct != null && !isNaN(Number(spAttPct))) ? Number(spAttPct) : null;
+  const spD = (spDefPct != null && !isNaN(Number(spDefPct))) ? Number(spDefPct) : null;
+  if (spA != null && spD != null
+      && ((spA >= SW_HI && spD >= SW_HI) || (spA <= SW_LO && spD <= SW_LO))) {
+    best['Set Pieces'] = (spA + spD) / 2;
+  } else {
+    if (spA != null) best['Attacking Set Pieces'] = spA;
+    if (spD != null) best['Defending Set Pieces'] = spD;
+  }
   return Object.keys(best).map(label => ({ label, pct: best[label] }));
 }
 
@@ -903,64 +909,49 @@ function headerHtml(coach, ctx, opts) {
       </span>
     </div>
     ${(() => {
-      // The third tile earns its place ONLY when it carries something the two
-      // route tiles cannot: WHY a manager passes with no route ticked (autopass),
-      // or what the Exceptions Panel is being asked to weigh. On a ticked route it
-      // was stating the same fact a third time after the tick and the PASS badge,
-      // and on a plain fail two empty tiles already say it.
-      //
-      // When it goes the routes take the whole 44..128 band rather than leaving a
-      // 46px hole below them — taller tile, bigger tick, larger type — so the
-      // absence reads as the intended layout rather than as something missing.
-      const showNote = gbe.autopass || gbe.showPanel;
-      const TW = 210, TGX = 12;
-      const TH = showNote ? 38 : 84;
-      const tickSize = showNote ? 15 : 24;
-      const capFs = showNote ? 7.5 : 10;
-      const subFs = showNote ? 7 : 8.5;
-
+      const TW = 210, TGX = 12, TH = 38;
       const tick = (on) => `
-        <span style="width:${tickSize}px;height:${tickSize}px;border-radius:50%;flex-shrink:0;
-                     margin-right:${showNote ? 9 : 13}px;
+        <span style="width:15px;height:15px;border-radius:50%;flex-shrink:0;margin-right:9px;
                      background:${on ? '#3da65b' : 'transparent'};
-                     border:${showNote ? 1.5 : 2}px solid ${on ? '#3da65b' : ink.rule};
+                     border:1.5px solid ${on ? '#3da65b' : ink.rule};
                      display:flex;align-items:center;justify-content:center;">
-          ${on ? `<span style="color:#07090f;font-size:${Math.round(tickSize * 0.58)}px;
-                       font-weight:900;line-height:1;">&#10003;</span>` : ''}
+          ${on ? `<span style="color:#07090f;font-size:9px;font-weight:900;line-height:1;">&#10003;</span>` : ''}
         </span>`;
-
       const routes = [['36 MONTHS CUMULATIVE', gbe.c36], ['24 MONTHS CONSECUTIVE', gbe.c24]];
       const tiles = routes.map(([label, on], i) => `
         <div style="position:absolute;left:${GBE_X + i * (TW + TGX)}px;top:44px;
-                    width:${TW}px;height:${TH}px;box-sizing:border-box;
-                    padding:${showNote ? '7px 11px' : '0 15px'};border-radius:7px;
+                    width:${TW}px;height:${TH}px;box-sizing:border-box;padding:7px 11px;
+                    border-radius:7px;
                     border:1px solid ${on ? 'rgba(61,166,91,0.42)' : ink.rule};
                     background:${on ? 'rgba(61,166,91,0.09)' : 'rgba(255,255,255,0.05)'};
                     display:flex;align-items:center;">
           ${tick(on)}
-          <span style="display:flex;flex-direction:column;line-height:1.3;min-width:0;">
-            <span style="font-size:${capFs}px;font-weight:700;letter-spacing:0.13em;
+          <span style="display:flex;flex-direction:column;line-height:1.25;min-width:0;">
+            <span style="font-size:7.5px;font-weight:700;letter-spacing:0.13em;
                          color:${on ? ink.primary : ink.muted};white-space:nowrap;">${label}</span>
-            <span style="font-size:${subFs}px;font-weight:700;letter-spacing:0.1em;
+            <span style="font-size:7px;font-weight:700;letter-spacing:0.1em;
                          color:${ink.muted};white-space:nowrap;">BAND 1-5 LEAGUE</span>
           </span>
         </div>`).join('');
 
-      if (!showNote) return tiles;
-
-      const noteTone = gbe.autopass ? '#3da65b' : '#f0a637';
+      const noteTone = gbe.autopass ? '#3da65b' : gbe.showPanel ? '#f0a637' : ink.muted;
       const noteText = gbe.autopass
         ? `&#10003; AUTO PASS &mdash; ${gbe.englandLeague ? 'ENGLISH LEAGUE' : 'HOME NATION'}`
-        : `&#9889; EXCEPTIONS PANEL &mdash; ${esc(gbe.exceptionsText).toUpperCase()}`;
-      return tiles + `
+        : gbe.showPanel
+          ? `&#9889; EXCEPTIONS PANEL &mdash; ${esc(gbe.exceptionsText).toUpperCase()}`
+          : gbe.pass ? 'QUALIFYING ROUTE HELD' : 'NO QUALIFYING ROUTE';
+      const note = `
         <div style="position:absolute;left:${GBE_X}px;top:90px;width:${GBE_W}px;height:38px;
                     box-sizing:border-box;padding:0 11px;border-radius:7px;
-                    border:1px solid ${gbe.autopass ? 'rgba(61,166,91,0.32)' : 'rgba(240,166,55,0.32)'};
-                    background:${gbe.autopass ? 'rgba(61,166,91,0.08)' : 'rgba(240,166,55,0.08)'};
+                    border:1px solid ${gbe.autopass ? 'rgba(61,166,91,0.32)'
+                                        : gbe.showPanel ? 'rgba(240,166,55,0.32)' : ink.rule};
+                    background:${gbe.autopass ? 'rgba(61,166,91,0.08)'
+                                 : gbe.showPanel ? 'rgba(240,166,55,0.08)' : 'rgba(255,255,255,0.04)'};
                     display:flex;align-items:center;overflow:hidden;">
           <span style="font-size:8.5px;font-weight:700;letter-spacing:0.11em;color:${noteTone};
                        white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${noteText}</span>
         </div>`;
+      return tiles + note;
     })()}`;
 }
 
@@ -1173,7 +1164,6 @@ export function buildManagerPagerElement(coach, tenureRows, traits, opts = {}) {
       })}
       ${panel({
         x: COL_B_X, y: ROW_1, w: COL_W, h: ROW1_H, title: 'Career',
-        right: careerMode === 'finish' ? 'LEAGUE FINISH' : '',
         body: `<div style="position:absolute;left:0;top:0;">${
           careerChartSvg(careerPts, innerW, row1InnerH, careerMode)
         }</div>`,
@@ -1181,9 +1171,6 @@ export function buildManagerPagerElement(coach, tenureRows, traits, opts = {}) {
 
       ${panel({
         x: COL_A_X, y: ROW_2, w: COL_W, h: ROW2_H, title: 'Team Context',
-        // One card-level fact, stated once, rather than a legend row eating a
-        // fifth of the tile. The caret on each resource bar means this.
-        right: (finishPct != null && finRank != null) ? `FINISHED ${ordinal(finRank)}` : '',
         body: teamContextBody(innerW, row2InnerH, teamContext, ageVal, agePct, finishPct),
       })}
       ${panel({
