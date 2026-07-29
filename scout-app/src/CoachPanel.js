@@ -9,6 +9,7 @@ import { loadCoaches, deleteCoach, exportCoaches, importCoachesFile } from './co
 import { computeCoachTraits } from './coachMetrics';
 import { downloadCoachCardPNG } from './CoachCard';
 import { downloadCoachQuickCardPNG } from './CoachQuickCard';
+import ManagerPagerModal from './ManagerPager';
 import { useIsMobile } from './utils';
 
 const FIELD_LABELS = [
@@ -372,7 +373,7 @@ function CoachQuickOverrides({ coach, coachId, overrides, teams, onFieldChange, 
   );
 }
 
-function CoachRow({ coach, teams, generatingId, generatingQuickId, expandedOverride, cardOverrides, expandedQuick, quickOverrides, onGenerate, onGenerateQuick, onToggleOverride, onToggleQuick, onEdit, onDelete, onFieldChange, onClear, onQuickFieldChange, onQuickClear }) {
+function CoachRow({ coach, teams, generatingId, generatingQuickId, expandedOverride, cardOverrides, expandedQuick, quickOverrides, onGenerate, onGenerateQuick, onPager, onToggleOverride, onToggleQuick, onEdit, onDelete, onFieldChange, onClear, onQuickFieldChange, onQuickClear }) {
   var isMobile = useIsMobile();
   var tenureCount = (coach.tenures || []).length;
   var sorted = (coach.tenures || []).slice().sort(function(a, b) { return a.season < b.season ? 1 : -1; });
@@ -413,6 +414,13 @@ function CoachRow({ coach, teams, generatingId, generatingQuickId, expandedOverr
           style={{ padding: '5px 10px', borderRadius: 5, border: '1px solid #a855f7', background: isGenQuick ? '#1e2d45' : 'transparent', color: '#c084fc', fontSize: 11, fontWeight: 600, cursor: isGenQuick ? 'default' : 'pointer', whiteSpace: 'nowrap' }}
         >
           {isGenQuick ? 'Generating…' : '⚡ Quick'}
+        </button>
+        <button
+          onClick={function() { onPager(coach); }}
+          style={{ padding: '5px 10px', borderRadius: 5, border: '1px solid #ff66c4', background: 'transparent', color: '#ff8fd4', fontSize: 11, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
+          title="Manager Pager — 1920x1080 all-in-one report"
+        >
+          📄 Pager
         </button>
         <button
           onClick={function() { onToggleQuick(coach.id); }}
@@ -529,6 +537,10 @@ export default function CoachPanel({ allTeams, allPlayers, onClose }) {
   var [expandedOverride, setExpandedOverride] = useState(null);
   var [quickOverrides, setQuickOverrides] = useState({});
   var [expandedQuick, setExpandedQuick] = useState(null);
+  // Manager Pager runs as a modal rather than a straight download: it carries its
+  // own inputs (formation, panel choice, view, similar teams), the way the player
+  // pager does, so the row only has to resolve the data and hand it over.
+  var [pagerCtx, setPagerCtx] = useState(null);
 
   function refresh() { setCoaches(loadCoaches()); }
 
@@ -718,6 +730,31 @@ export default function CoachPanel({ allTeams, allPlayers, onClose }) {
     }
   }
 
+  function handleOpenPager(coach) {
+    var tenureRows = resolveTenureRows(coach);
+    if (!tenureRows.length) {
+      alert("This coach's saved tenure doesn't match any teams currently in the data — the underlying team-season data may have changed. Try editing the coach and re-picking their seasons.");
+      return;
+    }
+    var missingCount = (coach.tenures || []).length - tenureRows.length;
+    if (missingCount > 0) {
+      var resolvedKeys = new Set(tenureRows.map(function(t) { return t.team + '|' + t.league + '|' + t.season; }));
+      var missing = (coach.tenures || []).filter(function(t) { return !resolvedKeys.has(t.team + '|' + t.league + '|' + t.season); });
+      var proceed = window.confirm(
+        missingCount + ' of ' + coach.tenures.length + ' saved season(s) couldn\'t be matched against the current team data and will be left out of this pager:\n\n' +
+        missing.map(function(t) { return t.team + ' — ' + t.league + ' · ' + t.season; }).join('\n') +
+        '\n\nOpen the pager anyway with just the ' + tenureRows.length + ' that matched?'
+      );
+      if (!proceed) return;
+    }
+    setPagerCtx({
+      coach: coach,
+      tenureRows: tenureRows,
+      traits: computeCoachTraits(tenureRows, teams),
+      seasonPerf: buildSeasonPerfMap(tenureRows),
+    });
+  }
+
   function handleImportFile(file) {
     importCoachesFile(file, function() { refresh(); });
   }
@@ -762,6 +799,7 @@ export default function CoachPanel({ allTeams, allPlayers, onClose }) {
                 quickOverrides={quickOverrides}
                 onGenerate={handleGenerateCard}
                 onGenerateQuick={handleGenerateQuickCard}
+                onPager={handleOpenPager}
                 onToggleOverride={handleToggleOverride}
                 onToggleQuick={handleToggleQuick}
                 onEdit={handleEdit}
@@ -776,6 +814,17 @@ export default function CoachPanel({ allTeams, allPlayers, onClose }) {
         </div>
 
       </div>
+
+      {pagerCtx && (
+        <ManagerPagerModal
+          coach={pagerCtx.coach}
+          tenureRows={pagerCtx.tenureRows}
+          traits={pagerCtx.traits}
+          allTeams={teams}
+          seasonPerf={pagerCtx.seasonPerf}
+          onClose={function() { setPagerCtx(null); }}
+        />
+      )}
 
       {showBuilder && (
         <CoachBuilder

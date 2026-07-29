@@ -162,7 +162,7 @@ function finishChartSvg(points, w, h) {
   </svg>`;
 }
 
-function careerChartSvg(points, w = 404, h = 284, mode = 'score') {
+export function careerChartSvg(points, w = 404, h = 284, mode = 'score') {
   if (!points.length) return `<div style="font-size:13px;color:#5e6678;padding:6px 0;">Not enough season history.</div>`;
   // League-finish mode plots position instead of score. It needs its own axis
   // (inverted — 1st at the top), and the score band lines are meaningless here,
@@ -221,7 +221,7 @@ function _ctxBarHtml(label, pct, sub, lowLbl = 'Low', highLbl = 'High') {
       </div>
     </div>`;
 }
-function teamContextHtml(tc, ageVal, agePct) {
+export function teamContextHtml(tc, ageVal, agePct) {
   const cats = [['squadValue','Squad Cost'],['wageBill','Wage Bill*'],['odds','Betting Forecast']];
   const parts = [];
   cats.forEach(([k,label]) => {
@@ -282,7 +282,7 @@ function _decile(pool, spec) {
   return ticks;
 }
 
-function impactRadarSvg(rowA, rowB, pool, labelA, labelB, subA, subB) {
+export function impactRadarSvg(rowA, rowB, pool, labelA, labelB, subA, subB) {
   if (!rowA || !rowB) return `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#6b7a9f;font-size:14px;">Pick two seasons to compare</div>`;
   const leagues = new Set([String(rowA.league||''), String(rowB.league||'')]);
   const base = (Array.isArray(pool) && pool.length) ? pool : [rowA, rowB];

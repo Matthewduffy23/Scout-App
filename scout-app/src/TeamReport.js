@@ -1517,7 +1517,7 @@ function tableRowHtml(t, team, w, top, rowH, dim) {
     </div>`;
 }
 
-function leagueTablePanelHtml(w, h, team, allTeams) {
+export function leagueTablePanelHtml(w, h, team, allTeams) {
   const { rows, pinnedTop } = leagueWindow(team, allTeams, pinnedRows(h));
   if (!rows.length) {
     return `<div style="position:absolute;inset:0;display:flex;align-items:center;
@@ -1685,7 +1685,7 @@ function coachShortlistPanelHtml(w, h, rows, hideScores = false) {
 
 // Rows can be supplied, so the editor can present the top 7 candidates and let three
 // be chosen from them; with none supplied it falls back to the computed top 3.
-function similarTeamsPanelHtml(w, h, team, allTeams, rows = null) {
+export function similarTeamsPanelHtml(w, h, team, allTeams, rows = null) {
   rows = (rows && rows.length) ? rows.slice(0, 3) : resolveSimilarTeams(team, allTeams, 3);
   if (!rows.length) {
     return `<div style="position:absolute;inset:0;display:flex;align-items:center;
@@ -2620,6 +2620,12 @@ function headerHtml(team, coach, coachScore, allTeams, headerColour, rawOverall,
 // Anything that fails falls back to its original URL — no worse than before.
 let IMG = {};
 const src = (url) => (url && IMG[url]) || url || '';
+// Cards outside this file (ManagerPager) reuse similarTeamsPanelHtml and
+// leagueTablePanelHtml, which resolve crests through the map above. Without a
+// way to point it at their preloaded set those two panels would be the only
+// things in their render still holding remote references. buildTeamReportElement
+// assigns IMG itself on every build, so nothing here can be left stale.
+export function setSharedImageMap(images) { IMG = images || {}; }
 
 export function cardImageUrls(team, squad, coach, allTeams = [], extraPlayers = [], coachRows = []) {
   const urls = [teamCrest(team.team), leagueLogo(team.league), leagueFlag(team.league)];

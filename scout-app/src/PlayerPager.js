@@ -734,8 +734,8 @@ function positionBlockHtml(player, x, w, ink, manualColors, pcts, heatmap, heatO
 //     never claimed a striker was weak at long passing.
 //
 // HI/LO thresholds are the Streamlit ones verbatim: 70 and 30.
-const SW_HI = 70;
-const SW_LO = 30;
+export const SW_HI = 70;
+export const SW_LO = 30;
 
 const SW_LABELS = {
   GK: {
@@ -943,8 +943,15 @@ export const SW_TONES = {
 };
 
 function strengthsPanelBody(w, h, sd, posKey, opts = {}) {
+  return swBlockHtml(w, h, swEligible(sd, posKey), opts);
+}
+
+// The tile itself, taking [{label, pct}] rather than a season object. Split out
+// so the manager pager can hand it coach percentiles instead of player ones —
+// same pills, same bars, same fit-or-trim logic, one implementation.
+export function swBlockHtml(w, h, rows, opts = {}) {
   const { swDrop = [], swAddStr = [], swAddWeak = [] } = opts;
-  const rows = swEligible(sd, posKey);
+  rows = rows || [];
   const dropped = new Set(swDrop);
 
   // Manual entries go FIRST. Appended after the derived ones they were cut by the
