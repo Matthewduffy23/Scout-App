@@ -39,7 +39,6 @@ import { useIsMobile, deliverPng, photoUrl } from './utils';
 import {
   scoreWheel, headerInk, preloadImages, fitNameSize, pillHtml,
   styleHexSvg, gradeColor, radarColor, teamOptions, personFlagUrl, nameEmWidth,
-  SILHOUETTE,
   foldIncludes,
   HEADER_COLOURS, HEADER_COLOUR_NAMES,
 } from './TeamReport';
@@ -103,6 +102,11 @@ const GBE_W = 432;
 // embed. QuickCard's own name is 700, which is now what this uses.
 
 // ─── Palette — same values as TeamReport/QuickCard ─────────────────────────
+// The app-wide photo fallback. utils.js's <Photo> swaps to it on error, and the
+// scouting card sets it on 404 — same file, so a player with no picture looks the
+// same everywhere.
+const PHOTO_FALLBACK = '/fallback.png';
+
 const ACCENT_PINK = '#ff66c4';
 const BG = '#0a0f1c';
 const HEADER_L = 'rgb(23,26,77)';
@@ -753,9 +757,9 @@ const SW_LABELS = {
     "Accurate forward passes, %": "Forward Passing %",
     "Dribbles per 90": "Stepping with the ball",
     "Successful dribbles, %": "Dribbling Efficiency",
-    "Progressive runs per 90": "Progressive Runs",
+    "Progressive runs per 90": "Progressive Carries",
     "Accurate passes, %": "Passing Retention",
-    "Progressive passes per 90": "Ball progression via passes",
+    "Progressive passes per 90": "Progressive Passes",
     "Accurate long passes, %": "Long passing",
     "Shots blocked per 90": "Blocking Shots",
     "Passes per 90": null,
@@ -769,9 +773,9 @@ const SW_LABELS = {
     "Accurate forward passes, %": "Forward Passing %",
     "Dribbles per 90": "Ball Carrying",
     "Successful dribbles, %": "Dribbling Efficiency",
-    "Progressive runs per 90": "Getting team up the pitch via carries",
+    "Progressive runs per 90": "Progressive Carries",
     "Accurate passes, %": "Passing Retention",
-    "Progressive passes per 90": "Ball progression via passes",
+    "Progressive passes per 90": "Progressive Passes",
     "Accurate long passes, %": "Long passing",
     "Shots blocked per 90": "Blocking Shots",
     "xG per 90": "Goal Threat",
@@ -794,9 +798,9 @@ const SW_LABELS = {
     "Accurate forward passes, %": "Forward Passing %",
     "Dribbles per 90": "Dribble volume",
     "Successful dribbles, %": "Dribbling Efficiency",
-    "Progressive runs per 90": "Getting team up the pitch via carries",
+    "Progressive runs per 90": "Progressive Carries",
     "Accurate passes, %": "Passing Retention",
-    "Progressive passes per 90": "Ball progression via passes",
+    "Progressive passes per 90": "Progressive Passes",
     "Accurate long passes, %": "Long passing",
     "Shots blocked per 90": "Blocking Shots",
     "xG per 90": "Goal Threat",
@@ -824,13 +828,13 @@ const SW_LABELS = {
     "Dribbles per 90": "Dribble Volume",
     "Successful dribbles, %": "Dribbling Efficiency",
     "Touches in box per 90": "Penalty-box Coverage",
-    "Progressive runs per 90": "Getting team up the pitch via carries",
+    "Progressive runs per 90": "Progressive Carries",
     "Passes per 90": "Involvement",
     "Accurate passes, %": "Retention",
     "xA per 90": "Creating Chances",
     "Passes to penalty area per 90": "Passes to Penalty Area",
     "Smart passes per 90": "Through Balls",
-    "Progressive passes per 90": "Deep playmaking",
+    "Progressive passes per 90": "Progressive Passes",
     "Aerial duels per 90": null,
     "Deep completions per 90": null,
   },
@@ -843,7 +847,7 @@ const SW_LABELS = {
     "Dribbles per 90": "Dribble Volume",
     "Successful dribbles, %": "Dribbling Efficiency",
     "Touches in box per 90": "Penalty-box Coverage",
-    "Progressive runs per 90": "Ball Carrying",
+    "Progressive runs per 90": "Progressive Carries",
     "Passes per 90": "Involvement",
     "Accurate passes, %": "Passing Retention",
     "xA per 90": "Creating Chances",
@@ -932,8 +936,11 @@ export const SW_MANUAL_TERMS = [
   // Durability / profile
   'Consistency', 'Injury Record', 'Versatility',
 ];
+// The same five steps the position tiers and score wheels use, so a pill on this
+// tile means what the same colour means anywhere else on the card.
 export const SW_TONES = {
-  Green: '#22c55e', Blue: '#3b7de8', Amber: '#f0a637', Red: '#f87171', Slate: '#8b98ad',
+  Green: '#00bf63', 'Light Green': '#7ed957', Yellow: '#ffde59',
+  Orange: '#ff914d', Red: '#ff3131',
 };
 
 function strengthsPanelBody(w, h, sd, posKey, opts = {}) {
@@ -987,12 +994,12 @@ function strengthsPanelBody(w, h, sd, posKey, opts = {}) {
     : (weakPills.length ? '' : `<span style="font-size:11px;color:#8b98ad;">None below the ${SW_LO}th percentile</span>`);
 
   const pillsHtml = weakPills.length
-    ? weakPills.map(x => pillHtml(x.label, '#f87171', 11, 11)).join('')
+    ? weakPills.map(x => pillHtml(x.label, SW_TONES[x.tone] || SW_TONES.Red, 11, 11)).join('')
     : '';
 
   // WHERE THE WEAKNESSES START IS MEASURED, NOT ASSUMED.
   // A fixed 92px top assumed the strengths always packed into two rows. Labels like
-  // "Getting team up the pitch via carries" are 240px on their own, so six of them
+  // "Progressive Carries" and the like run long, so six of them can
   // wrap to three rows and the WEAKNESSES heading was drawn straight through the
   // last of them. Pill widths use the same formula pillHtml does — nameEmWidth at
   // the pill's font size, plus its side padding and margin — packed into lines of
@@ -1242,9 +1249,14 @@ function headerHtml(player, ctx, opts) {
          cover-cropped from the top, because a centred crop on a head-and-
          shoulders portrait cuts the chin off. -->
     <!-- 146 square in a 150 band, so it reads as a portrait rather than a thumbnail
-         while still clearing both edges by 2px. -->
+         while still clearing both edges by 2px.
+         The fallback layer is /fallback.png — the same file utils.js, QuickCard and
+         the scouting card all fall back to. TeamReport's SILHOUETTE constant paints
+         an opaque #1a2233 plate, which is right behind its own cut-outs but wrong
+         here: the repo's player PNGs are transparent, so the plate showed THROUGH
+         every photo as a grey box round the shoulders. -->
     <div style="position:absolute;left:12px;top:2px;width:146px;height:146px;
-                background-image:url('${src(photo)}'), url('${SILHOUETTE}');
+                background-image:url('${src(photo)}'), url('${src(PHOTO_FALLBACK)}');
                 background-size:cover, cover;
                 background-position:center top, center top;
                 background-repeat:no-repeat, no-repeat;"></div>
@@ -1464,6 +1476,7 @@ export function pagerImageUrls(player, ctx, uploadedPhotoDataUrl, clubRows = [])
   // references left in the render and would blank out in the export.
   const nf = personFlagUrl(player);
   if (nf) urls.push(nf);
+  urls.push(PHOTO_FALLBACK);
   for (const v of [player.careerScore, player.potentialScore]) {
     const b = tierLeagueLogo(v);
     if (b) urls.push(b);
@@ -2095,7 +2108,7 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
                          color: swNew.label ? '#22c55e' : '#55617a', fontSize: 11, fontWeight: 700,
                          cursor: swNew.label ? 'pointer' : 'default' }}>+ Strength</button>
               <button disabled={!swNew.label}
-                onClick={() => { setSwAddWeak(a => [...a, { label: swNew.label }]);
+                onClick={() => { setSwAddWeak(a => [...a, { label: swNew.label, tone: swNew.tone }]);
                                  setSwNew({ label: '', tone: 'Green', pct: '' }); }}
                 style={{ flex: 1, padding: '7px 0', borderRadius: 5, border: '1px solid #f8717155',
                          background: swNew.label ? '#f871711e' : 'transparent',
@@ -2115,7 +2128,7 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
                             background: '#0d1220', border: '1px solid #1e2d45',
                             borderRadius: 6, padding: '5px 8px' }}>
                 <span style={{ flex: 1, fontSize: 11.5,
-                               color: x.kind === 'str' ? SW_TONES[x.tone] || '#22c55e' : '#f87171' }}>
+                               color: SW_TONES[x.tone] || (x.kind === 'str' ? SW_TONES.Green : SW_TONES.Red) }}>
                   {x.label}
                 </span>
                 <button onClick={() => x.kind === 'str'
