@@ -948,41 +948,37 @@ export const SW_TONES = {
 function strengthsPanelBody(w, h, sd, posKey, opts = {}) {
   const { swDrop = [], swAddStr = [], swAddWeak = [] } = opts;
   const rows = swEligible(sd, posKey);
-  if (!rows.length) {
-    return `<div style="position:absolute;inset:0;display:flex;align-items:center;
-              justify-content:center;font-size:12px;color:#55617a;">No percentile data for this season.</div>`;
-  }
   const dropped = new Set(swDrop);
-  // Manual entries go FIRST. Appended after the derived ones they were being cut
-  // by the slice: Titraoui already had six derived strengths, so anything typed in
-  // fell outside the six-slot cap and silently never appeared. A hand-entered
-  // trait is a deliberate act and outranks a computed one.
+
+  // Manual entries go FIRST. Appended after the derived ones they were cut by the
+  // slice — six derived strengths meant anything typed in fell outside the cap and
+  // silently never appeared. A hand-entered trait is a deliberate act and outranks
+  // a computed one.
   const strengths = [
     ...swAddStr.map(x => ({ label: x.label, tone: SW_TONES[x.tone] || SW_TONES.Green })),
     ...rows.filter(r => r.pct >= SW_HI && !dropped.has(r.label))
            .sort((a, b) => b.pct - a.pct)
            .map(r => ({ label: r.label, tone: SW_TONES.Green })),
   ].slice(0, 6);
-  // Derived weaknesses are bars — a percentile has a magnitude and 4th is a
+
+  // Derived weaknesses are bars — a percentile has magnitude, and 4th is a
   // different problem from 29th. Manual ones are pills: a scout writing
-  // "Physicality" is making a call, not reporting a measurement, and drawing it
-  // as a bar lends it a precision it doesn't have. The tile then reads pills,
-  // rules, pills — which is also the better shape.
+  // "Physicality" is making a call, not reporting a measurement, and a bar lends it
+  // a precision it doesn't have. The tile reads pills, rules, pills.
   const weaknesses = rows.filter(r => r.pct <= SW_LO && !dropped.has(r.label))
     .sort((a, b) => a.pct - b.pct)
     .slice(0, 3);
   const weakPills = swAddWeak.slice(0, 4);
 
-  // Strengths as pills — a strength is a claim, and a bar invites the reader to
-  // compare five things that are all simply good.
+  if (!strengths.length && !weaknesses.length && !weakPills.length) {
+    return `<div style="position:absolute;inset:0;display:flex;align-items:center;
+              justify-content:center;font-size:12px;color:#55617a;">No profile data for this season.</div>`;
+  }
+
   const strengthsHtml = strengths.length
     ? strengths.map(r => pillHtml(r.label, r.tone, 11, 11)).join('')
     : `<span style="font-size:11px;color:#8b98ad;">None above the ${SW_HI}th percentile</span>`;
 
-  // Weaknesses stay as bars, in TeamReport's exact weakness-bar language: 32px
-  // rows, label left, figure right in radarColor, 5px track at full width. A
-  // weakness needs its magnitude shown — 29th percentile and 4th are different
-  // problems, and a pill flattens them into the same statement.
   const BAR_H = 32;
   const weakHtml = weaknesses.length
     ? weaknesses.map((r, i) => `
@@ -999,15 +995,42 @@ function strengthsPanelBody(w, h, sd, posKey, opts = {}) {
       </div>`).join('')
     : (weakPills.length ? '' : `<span style="font-size:11px;color:#8b98ad;">None below the ${SW_LO}th percentile</span>`);
 
-  const WEAK_TOP = 92;
-  return `<div style="position:absolute;inset:0;">
+  const pillsHtml = weakPills.length
+    ? weakPills.map(x => pillHtml(x.label, '#f87171', 11, 11)).join('')
+    : '';
+
+  // WHERE THE WEAKNESSES START IS MEASURED, NOT ASSUMED.
+  // A fixed 92px top assumed the strengths always packed into two rows. Labels like
+  // "Getting team up the pitch via carries" are 240px on their own, so six of them
+  // wrap to three rows and the WEAKNESSES heading was drawn straight through the
+  // last of them. Pill widths use the same formula pillHtml does — nameEmWidth at
+  // the pill's font size, plus its side padding and margin — packed into lines of
+  // the panel width. Many strengths therefore push the weaknesses down; few pull
+  // them up, which is the behaviour you'd expect from the tile.
+  const PILL_W = (t) => Math.ceil(nameEmWidth(t) * 11) + 22 + 6;
+  const packRows = (labels) => {
+    if (!labels.length) return 1;
+    let rows = 1, x = 0;
+    for (const t of labels) {
+      const pw = PILL_W(t);
+      if (x + pw > w && x > 0) { rows += 1; x = pw; } else { x += pw; }
+    }
+    return rows;
+  };
+  const LABEL_H = 12, LABEL_GAP = 9, PILL_ROW_H = 25, BLOCK_GAP = 15;
+  const strengthsH = LABEL_H + LABEL_GAP + packRows(strengths.map(r => r.label)) * PILL_ROW_H;
+  const WEAK_TOP = Math.min(strengthsH + BLOCK_GAP, h - 46);
+  const barsH = weaknesses.length * BAR_H;
+
+  return `<div style="position:absolute;inset:0;overflow:hidden;">
       <div style="position:absolute;left:0;top:0;width:${w}px;">
         <div style="font-size:8.5px;font-weight:700;letter-spacing:0.14em;color:#6f7c92;">STRENGTHS</div>
-        <div style="margin-top:9px;">${strengthsHtml}</div>
+        <div style="margin-top:${LABEL_GAP}px;">${strengthsHtml}</div>
       </div>
       <div style="position:absolute;left:0;top:${WEAK_TOP}px;width:${w}px;">
         <div style="font-size:8.5px;font-weight:700;letter-spacing:0.14em;color:#6f7c92;">WEAKNESSES</div>
-        <div style="position:relative;margin-top:11px;height:${h - WEAK_TOP - 24}px;">${weakHtml}</div>
+        <div style="position:relative;margin-top:11px;height:${barsH}px;">${weakHtml}</div>
+        ${pillsHtml ? `<div style="margin-top:${weaknesses.length ? 10 : 0}px;">${pillsHtml}</div>` : ''}
       </div>
     </div>`;
 }
@@ -1086,7 +1109,10 @@ function clubsPanelBody(w, h, rows, coreOnly, mode, hideScores, notes) {
               }
               parts.push(`<span style="position:absolute;left:${x}px;top:0;font-size:${SUB_FS}px;
                            color:#8b98ad;white-space:nowrap;line-height:14px;">${esc(sub)}</span>`);
-              x += subW + 8;
+              // nameEmWidth is a deliberately generous estimator — it runs about
+              // 10% wide so nothing ever collides. Left uncorrected that surplus
+              // became visible air between the league name and its flag.
+              x += Math.round(subW * 0.90) + 5;
               if (isPlayers && lflag) {
                 parts.push(`<span style="position:absolute;left:${x}px;top:2px;width:15px;height:10px;
                              background-size:cover;background-position:center;border-radius:1.5px;
