@@ -221,11 +221,11 @@ function _ctxBarHtml(label, pct, sub, lowLbl = 'Low', highLbl = 'High', markPct 
           // bisect it.
           const mx = _clamp(markPct, 1.5, 98.5);
           return `
-        <div style="position:absolute;top:-8px;left:${mx}%;transform:translateX(-50%);width:0;height:0;
-                    border-left:4px solid transparent;border-right:4px solid transparent;
-                    border-top:5px solid rgba(255,255,255,0.92);"></div>
-        <div style="position:absolute;top:0;left:${mx}%;transform:translateX(-50%);width:1.5px;height:10px;
-                    background:rgba(255,255,255,0.5);"></div>`;
+        <div style="position:absolute;top:-10px;left:${mx}%;transform:translateX(-50%);width:0;height:0;
+                    border-left:5px solid transparent;border-right:5px solid transparent;
+                    border-top:7px solid #ffffff;"></div>
+        <div style="position:absolute;top:0;left:${mx}%;transform:translateX(-50%);width:2.5px;height:10px;
+                    background:#ffffff;box-shadow:0 0 0 1px rgba(7,9,15,0.75);"></div>`;
         })()}
         <div style="position:absolute;top:50%;left:${pVal}%;transform:translate(-50%,-50%);">
           <div style="width:16px;height:16px;border-radius:50%;background:${col};border:2.5px solid #07090f;"></div>

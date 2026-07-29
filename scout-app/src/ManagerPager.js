@@ -535,8 +535,8 @@ function formationBlockHtml(x, w, ink, primary, secondary, mapUrl, mapOpacity, s
       <div style="font-size:8px;font-weight:700;letter-spacing:0.14em;color:${ink.muted};
                   white-space:nowrap;">PRIMARY FORMATION</div>
       <div style="margin-top:9px;display:flex;align-items:center;white-space:nowrap;">
-        ${showDots ? `<span style="width:9px;height:9px;border-radius:50%;flex-shrink:0;
-                     background:${dotCol};margin-right:9px;"></span>` : ''}
+        ${(showDots && showSecondary && secondary) ? `<span style="width:9px;height:9px;
+                     border-radius:50%;flex-shrink:0;background:${dotCol};margin-right:9px;"></span>` : ''}
         <span style="font-size:${fs}px;font-weight:700;color:${ink.primary};
                      line-height:1.05;">${esc(primary || '—')}</span>
       </div>
@@ -601,7 +601,11 @@ const MP_SW_LABELS = {
 };
 
 
-function mpSwEligible(mg) {
+// Attacking and defending are kept SEPARATE here even though Style shows the
+// average of the two. A side ranked 2nd for attacking corners and 19th for
+// defending them averages to unremarkable, which is the one reading that tells
+// you nothing: the point is that one of those is a weapon and the other a leak.
+function mpSwEligible(mg, spAttPct = null, spDefPct = null) {
   const lower = {};
   for (const k of Object.keys(MP_SW_LABELS)) lower[k.toLowerCase()] = MP_SW_LABELS[k];
   const best = {};
@@ -615,6 +619,10 @@ function mpSwEligible(mg) {
       if (best[label] == null || pct > best[label]) best[label] = pct;
     }
   }
+  // These arrive as percentiles already — rankToPct did the conversion — so they
+  // meet the same 70/30 thresholds as everything else with no special casing.
+  if (spAttPct != null && !isNaN(Number(spAttPct))) best['Attacking Set Pieces'] = Number(spAttPct);
+  if (spDefPct != null && !isNaN(Number(spDefPct))) best['Defending Set Pieces'] = Number(spDefPct);
   return Object.keys(best).map(label => ({ label, pct: best[label] }));
 }
 
@@ -895,49 +903,64 @@ function headerHtml(coach, ctx, opts) {
       </span>
     </div>
     ${(() => {
-      const TW = 210, TGX = 12, TH = 38;
+      // The third tile earns its place ONLY when it carries something the two
+      // route tiles cannot: WHY a manager passes with no route ticked (autopass),
+      // or what the Exceptions Panel is being asked to weigh. On a ticked route it
+      // was stating the same fact a third time after the tick and the PASS badge,
+      // and on a plain fail two empty tiles already say it.
+      //
+      // When it goes the routes take the whole 44..128 band rather than leaving a
+      // 46px hole below them — taller tile, bigger tick, larger type — so the
+      // absence reads as the intended layout rather than as something missing.
+      const showNote = gbe.autopass || gbe.showPanel;
+      const TW = 210, TGX = 12;
+      const TH = showNote ? 38 : 84;
+      const tickSize = showNote ? 15 : 24;
+      const capFs = showNote ? 7.5 : 10;
+      const subFs = showNote ? 7 : 8.5;
+
       const tick = (on) => `
-        <span style="width:15px;height:15px;border-radius:50%;flex-shrink:0;margin-right:9px;
+        <span style="width:${tickSize}px;height:${tickSize}px;border-radius:50%;flex-shrink:0;
+                     margin-right:${showNote ? 9 : 13}px;
                      background:${on ? '#3da65b' : 'transparent'};
-                     border:1.5px solid ${on ? '#3da65b' : ink.rule};
+                     border:${showNote ? 1.5 : 2}px solid ${on ? '#3da65b' : ink.rule};
                      display:flex;align-items:center;justify-content:center;">
-          ${on ? `<span style="color:#07090f;font-size:9px;font-weight:900;line-height:1;">&#10003;</span>` : ''}
+          ${on ? `<span style="color:#07090f;font-size:${Math.round(tickSize * 0.58)}px;
+                       font-weight:900;line-height:1;">&#10003;</span>` : ''}
         </span>`;
+
       const routes = [['36 MONTHS CUMULATIVE', gbe.c36], ['24 MONTHS CONSECUTIVE', gbe.c24]];
       const tiles = routes.map(([label, on], i) => `
         <div style="position:absolute;left:${GBE_X + i * (TW + TGX)}px;top:44px;
-                    width:${TW}px;height:${TH}px;box-sizing:border-box;padding:7px 11px;
-                    border-radius:7px;
+                    width:${TW}px;height:${TH}px;box-sizing:border-box;
+                    padding:${showNote ? '7px 11px' : '0 15px'};border-radius:7px;
                     border:1px solid ${on ? 'rgba(61,166,91,0.42)' : ink.rule};
                     background:${on ? 'rgba(61,166,91,0.09)' : 'rgba(255,255,255,0.05)'};
                     display:flex;align-items:center;">
           ${tick(on)}
-          <span style="display:flex;flex-direction:column;line-height:1.25;min-width:0;">
-            <span style="font-size:7.5px;font-weight:700;letter-spacing:0.13em;
+          <span style="display:flex;flex-direction:column;line-height:1.3;min-width:0;">
+            <span style="font-size:${capFs}px;font-weight:700;letter-spacing:0.13em;
                          color:${on ? ink.primary : ink.muted};white-space:nowrap;">${label}</span>
-            <span style="font-size:7px;font-weight:700;letter-spacing:0.1em;
+            <span style="font-size:${subFs}px;font-weight:700;letter-spacing:0.1em;
                          color:${ink.muted};white-space:nowrap;">BAND 1-5 LEAGUE</span>
           </span>
         </div>`).join('');
 
-      const noteTone = gbe.autopass ? '#3da65b' : gbe.showPanel ? '#f0a637' : ink.muted;
+      if (!showNote) return tiles;
+
+      const noteTone = gbe.autopass ? '#3da65b' : '#f0a637';
       const noteText = gbe.autopass
         ? `&#10003; AUTO PASS &mdash; ${gbe.englandLeague ? 'ENGLISH LEAGUE' : 'HOME NATION'}`
-        : gbe.showPanel
-          ? `&#9889; EXCEPTIONS PANEL &mdash; ${esc(gbe.exceptionsText).toUpperCase()}`
-          : gbe.pass ? 'QUALIFYING ROUTE HELD' : 'NO QUALIFYING ROUTE';
-      const note = `
+        : `&#9889; EXCEPTIONS PANEL &mdash; ${esc(gbe.exceptionsText).toUpperCase()}`;
+      return tiles + `
         <div style="position:absolute;left:${GBE_X}px;top:90px;width:${GBE_W}px;height:38px;
                     box-sizing:border-box;padding:0 11px;border-radius:7px;
-                    border:1px solid ${gbe.autopass ? 'rgba(61,166,91,0.32)'
-                                        : gbe.showPanel ? 'rgba(240,166,55,0.32)' : ink.rule};
-                    background:${gbe.autopass ? 'rgba(61,166,91,0.08)'
-                                 : gbe.showPanel ? 'rgba(240,166,55,0.08)' : 'rgba(255,255,255,0.04)'};
+                    border:1px solid ${gbe.autopass ? 'rgba(61,166,91,0.32)' : 'rgba(240,166,55,0.32)'};
+                    background:${gbe.autopass ? 'rgba(61,166,91,0.08)' : 'rgba(240,166,55,0.08)'};
                     display:flex;align-items:center;overflow:hidden;">
           <span style="font-size:8.5px;font-weight:700;letter-spacing:0.11em;color:${noteTone};
                        white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${noteText}</span>
         </div>`;
-      return tiles + note;
     })()}`;
 }
 
@@ -992,6 +1015,7 @@ export function buildManagerPagerElement(coach, tenureRows, traits, opts = {}) {
     impactRowA = null, impactRowB = null,
     clubRows = null, clubNotes = {}, hideFitScores = false,
     styleKeys = null, traitOv = {}, setPiecesPct = null,
+    spAttPct = null, spDefPct = null,
     overallOverride = '', potentialOverride = '',
     overallUnclear = false, potentialUnclear = false,
     gbeOv = {},
@@ -1117,7 +1141,7 @@ export function buildManagerPagerElement(coach, tenureRows, traits, opts = {}) {
     : `<div style="position:absolute;inset:0;display:flex;align-items:center;
                    justify-content:center;font-size:12px;color:#55617a;">No trait scores.</div>`;
 
-  const swRows = mpSwEligible(mg);
+  const swRows = mpSwEligible(mg, spAttPct, spDefPct);
   const rowA = impactRowA || sortedDesc[sortedDesc.length - 1] || null;
   const rowB = impactRowB || sortedDesc[0] || null;
   const clubs = (clubRows && clubRows.length) ? clubRows : potentialClubRows(statsRow, allTeams, 3);
@@ -1392,6 +1416,8 @@ export default function ManagerPagerModal({
   const spLeagueSize = leagueSizeOv !== '' ? Number(leagueSizeOv)
     : (ctx.statsRow && ctx.statsRow.leagueSize != null ? Number(ctx.statsRow.leagueSize) : 20);
   const setPiecesPct = setPieceScore(spAtt, spDef, spLeagueSize);
+  const spAttPct = rankToPct(spAtt, spLeagueSize);
+  const spDefPct = rankToPct(spDef, spLeagueSize);
 
   const rowByKey = (key) => (tenureRows || []).find(r => `${r.team}|${r.season}` === key) || null;
 
@@ -1402,7 +1428,7 @@ export default function ManagerPagerModal({
 
   const mg = useMemo(() => computeCoachMetricGroups([ctx.statsRow])
     || { Attack: [], Defence: [], Possession: [] }, [ctx.statsRow]);
-  const swRows = useMemo(() => mpSwEligible(mg), [mg]);
+  const swRows = useMemo(() => mpSwEligible(mg, spAttPct, spDefPct), [mg, spAttPct, spDefPct]);
   const swStrengthLabels = useMemo(
     () => swRows.filter(r => r.pct >= SW_HI).sort((a, b) => b.pct - a.pct).map(r => r.label), [swRows]);
   const swWeakLabels = useMemo(
@@ -1474,7 +1500,7 @@ export default function ManagerPagerModal({
     careerMode, teamContext, rightMid, rightLow,
     impactRowA: impactA, impactRowB: impactB,
     clubRows, clubNotes, hideFitScores, clubsTitle,
-    styleKeys, traitOv, setPiecesPct,
+    styleKeys, traitOv, setPiecesPct, spAttPct, spDefPct,
     overallOverride, potentialOverride, overallUnclear, potentialUnclear,
     gbeOv, swDrop, swAddStr, swAddWeak,
   });
@@ -1806,7 +1832,7 @@ export default function ManagerPagerModal({
               </div>
               <div style={UI.note}>
                 {setPiecesPct == null
-                  ? `Blank falls back to the coach's saved rating. Ranks out of ${spLeagueSize}, converted to a percentile.`
+                  ? `Blank falls back to the coach's saved rating. Ranks out of ${spLeagueSize}, converted to a percentile — each side also feeds Strengths & Weaknesses on its own.`
                   : `${rankToPct(spAtt, spLeagueSize) != null
                         ? `Att ${Math.round(rankToPct(spAtt, spLeagueSize))} ` : ''}${
                       rankToPct(spDef, spLeagueSize) != null
