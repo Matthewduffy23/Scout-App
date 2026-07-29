@@ -199,7 +199,7 @@ export function careerChartSvg(points, w = 404, h = 284, mode = 'score') {
 }
 
 // TEAM CONTEXT — rank -> percentile, drawn in the player Team Context band style.
-function _ctxBarHtml(label, pct, sub, lowLbl = 'Low', highLbl = 'High') {
+function _ctxBarHtml(label, pct, sub, lowLbl = 'Low', highLbl = 'High', markPct = null) {
   const val = Math.round(pct);
   const col = scoreTierColor(val);
   const pVal = Math.max(2, Math.min(96, pct));
@@ -212,6 +212,7 @@ function _ctxBarHtml(label, pct, sub, lowLbl = 'Low', highLbl = 'High') {
       <div style="position:relative;height:10px;background:#1b2636;border-radius:5px;margin-bottom:4px;">
         <div style="position:absolute;left:0;top:0;height:100%;width:100%;background:linear-gradient(to right,#c7363c,#f0c56a,#3da65b);border-radius:5px;opacity:0.3;"></div>
         <div style="position:absolute;top:-3px;left:50%;width:2px;height:16px;background:#5e6678;transform:translateX(-50%);"></div>
+        ${markPct == null ? '' : `<div style="position:absolute;top:-5px;left:${_clamp(markPct, 1, 99)}%;width:2px;height:20px;background:rgba(255,255,255,0.72);transform:translateX(-50%);border-radius:1px;box-shadow:0 0 0 1px rgba(7,9,15,0.55);"></div>`}
         <div style="position:absolute;top:50%;left:${pVal}%;transform:translate(-50%,-50%);">
           <div style="width:16px;height:16px;border-radius:50%;background:${col};border:2.5px solid #07090f;"></div>
         </div>
@@ -221,7 +222,7 @@ function _ctxBarHtml(label, pct, sub, lowLbl = 'Low', highLbl = 'High') {
       </div>
     </div>`;
 }
-export function teamContextHtml(tc, ageVal, agePct) {
+export function teamContextHtml(tc, ageVal, agePct, markPct = null) {
   const cats = [['squadValue','Squad Cost'],['wageBill','Wage Bill*'],['odds','Betting Forecast']];
   const parts = [];
   cats.forEach(([k,label]) => {
@@ -230,7 +231,7 @@ export function teamContextHtml(tc, ageVal, agePct) {
     const size = _n(m.size), rank = _n(m.rank);
     if (rank == null || size == null || size <= 1) return;
     const pct = _clamp(((size - rank) / (size - 1)) * 100);
-    parts.push(_ctxBarHtml(label, pct, `Rank ${rank} of ${size}`));
+    parts.push(_ctxBarHtml(label, pct, `Rank ${rank} of ${size}`, 'Low', 'High', markPct));
   });
   if (agePct != null) {
     parts.push(_ctxBarHtml('Average Age', agePct, `Avg age ${ageVal}`, 'Young', 'Old'));

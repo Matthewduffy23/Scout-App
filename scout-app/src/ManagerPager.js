@@ -363,7 +363,7 @@ function percentilePanelBody(w, h, mg) {
 // those looks broken. The player pager reserves 80 for the same reason.
 const TC_ROW_H = 76;
 
-function teamContextBody(w, h, tc, ageVal, agePct) {
+function teamContextBody(w, h, tc, ageVal, agePct, markPct) {
   const cats = ['squadValue', 'wageBill', 'odds'];
   let n = cats.filter(k => {
     const m = tc && tc[k];
@@ -383,7 +383,7 @@ function teamContextBody(w, h, tc, ageVal, agePct) {
                   width:${Math.round(w / scale)}px;height:${Math.round(blockH / scale)}px;
                   display:flex;flex-direction:column;
                   transform:scale(${scale.toFixed(4)});transform-origin:top left;">
-        ${teamContextHtml(tc || {}, ageVal, agePct)}
+        ${teamContextHtml(tc || {}, ageVal, agePct, markPct)}
       </div>
     </div>`;
 }
@@ -509,7 +509,7 @@ function formationPitchSvg(primary, secondary, w, h, mapUrl, mapOpacity, showDot
 // the text: 8..142 inside a 150px header clears the photo's own 2..148.
 const FB_PITCH_H = 134;
 const FB_PITCH_W = Math.round(FB_PITCH_H * (320 / 208));   // 206
-const FB_GAP = 18;
+const FB_GAP = 36;
 const FB_TEXT_W = 128;
 
 function formationBlockHtml(x, w, ink, primary, secondary, mapUrl, mapOpacity, showDots, showSecondary) {
@@ -517,10 +517,11 @@ function formationBlockHtml(x, w, ink, primary, secondary, mapUrl, mapOpacity, s
   const longest = Math.max(nameEmWidth(primary || '—'), nameEmWidth(secondary || '—'));
   const fs = Math.max(15, Math.min(24, Math.floor(textW / (longest || 1))));
   const groupW = textW + FB_GAP + FB_PITCH_W;
-  // 24 left of centre. True centre reads right-heavy here: the right-hand rule
+  // 14 left of centre. True centre reads right-heavy here: the right-hand rule
   // butts straight onto the GBE tiles while the left has the wheels' air beside
-  // it, and the narrower text column moved the whole group right again.
-  const left = x + Math.max(0, Math.round((w - groupW) / 2)) - 24;
+  // it. The gutter above does the rest — at 18px the pitch sat on the shoulder of
+  // "SECONDARY FORMATION" and the two blocks read as one.
+  const left = x + Math.max(0, Math.round((w - groupW) / 2)) - 14;
   const dotCol = mapUrl ? FM_ON_IMAGE : FM_PRIMARY;
   return `
     <div style="position:absolute;left:${left}px;top:26px;width:${textW}px;">
@@ -565,32 +566,33 @@ function formationBlockHtml(x, w, ink, primary, secondary, mapUrl, mapOpacity, s
 // HI/LO thresholds are the player pager's, imported rather than repeated.
 const MP_SW_LABELS = {
   // Attacking
-  'Goals Scored': 'Goalscoring',
-  'xG': 'Chance Creation',
-  'Shooting %': 'Shot Quality',
-  'Touches in Box': 'Box Occupation',
+  'Goals Scored': 'Scoring Goals',
+  'xG': 'Creating Chances',
+  'Shots': 'Shot Volume',
+  'Touches in Box': 'Penalty Box Entries',
+  'Shooting %': null,
   'Crosses': null,
-  'Shots': null,
   // Defensive
-  'Goals Against': 'Defensive Solidity',
+  'Goals Against': 'Conceding Goals',
   'xG Against': 'Chance Prevention',
-  'Shots Against': 'Shots Conceded',
+  'Shots Against': 'Conceding Shots',
   'PPDA': 'Pressing Intensity',
-  'Aerial Duel Success %': 'Aerial Dominance',
-  'Defensive Duel Win %': 'Duel Success',
+  'Aerial Duel Success %': 'Winning Aerials',
+  'Defensive Duel Win %': 'Winning Duels',
   'Aerial Duels': null,
   'Defensive Duels': null,
   // Possession
-  'Possession': 'Possession Control',
+  'Possession': 'Control',
   'Passing Accuracy %': 'Passing Retention',
-  'Long Passing %': 'Long Passing Accuracy',
   'Passes to Final 3rd': 'Territorial Progression',
   'Progressive Passes': 'Progression',
+  'Long Passing %': null,
   'Passes': null,
   'Long Passes': null,
   'Dribbles': null,
   'Progressive Runs': null,
 };
+
 
 function mpSwEligible(mg) {
   const lower = {};
@@ -977,11 +979,12 @@ export function buildManagerPagerElement(coach, tenureRows, traits, opts = {}) {
     positionMapUrl = '', mapOpacity = 0.5,
     careerMode = 'score', finishOverrides = {}, extraFinish = [],
     teamContext = {},
-    rightMid = 'impact',          // impact | sw
+    rightMid = 'impact',          // impact | comparison | sw
     rightLow = 'view',            // view | table
+    clubsTitle = 'Potential Clubs',
     impactRowA = null, impactRowB = null,
     clubRows = null, clubNotes = {}, hideFitScores = false,
-    styleKeys = null,
+    styleKeys = null, traitOv = {},
     overallOverride = '', potentialOverride = '',
     overallUnclear = false, potentialUnclear = false,
     gbeOv = {},
@@ -1005,9 +1008,17 @@ export function buildManagerPagerElement(coach, tenureRows, traits, opts = {}) {
 
   // Style hexes. Traits are 0-100 already; a saved override is 1-10, so it is
   // scaled the same way both coach cards scale it.
-  const getTrait = (key) => (coach.traitOverrides && coach.traitOverrides[key] != null
-    ? coach.traitOverrides[key] * 10
-    : (traits ? traits[key] : null));
+  // Order of authority: what you typed on this card, then the coach's saved
+  // 1-10 override, then the computed trait. Set Pieces has no metric behind it
+  // at all, so without the first of those it can only ever be changed by editing
+  // the coach — which is a round trip for a number you're deciding as you build
+  // the card.
+  const getTrait = (key) => {
+    const t = traitOv && traitOv[key];
+    if (t !== '' && t != null && !isNaN(Number(t))) return Number(t) * 10;
+    if (coach.traitOverrides && coach.traitOverrides[key] != null) return coach.traitOverrides[key] * 10;
+    return traits ? traits[key] : null;
+  };
   const TRAIT_LABELS = {
     possession: 'Possession', pressing: 'Pressing', passing: 'Passing',
     adaptability: 'Adaptability', youthDevelopment: 'Youth Development',
@@ -1063,6 +1074,14 @@ export function buildManagerPagerElement(coach, tenureRows, traits, opts = {}) {
   } else if (teamContext && teamContext.age != null && teamContext.age !== '') {
     ageVal = String(teamContext.age);
   }
+
+  // Where they actually finished, on the same 0-100 scale the context bars use,
+  // so the tick sits comparably against squad cost and the betting forecast.
+  const finRank = num(statsRow.pointsRank);
+  const finSize = num(statsRow.leagueSize)
+    || (rankIn(pool, statsRow, 'points') || {}).size || null;
+  const finishPct = (finRank != null && finSize != null && finSize > 1)
+    ? clamp(((finSize - finRank) / (finSize - 1)) * 100) : null;
 
   const container = document.createElement('div');
   container.style.position = 'fixed';
@@ -1126,11 +1145,12 @@ export function buildManagerPagerElement(coach, tenureRows, traits, opts = {}) {
 
       ${panel({
         x: COL_A_X, y: ROW_2, w: COL_W, h: ROW2_H, title: 'Team Context',
-        body: teamContextBody(innerW, row2InnerH, teamContext, ageVal, agePct),
+        body: teamContextBody(innerW, row2InnerH, teamContext, ageVal, agePct, finishPct),
       })}
       ${panel({
         x: COL_B_X, y: ROW_2, w: COL_W, h: ROW2_H,
-        title: rightMid === 'sw' ? 'Strengths &amp; Weaknesses' : 'Impact',
+        title: rightMid === 'sw' ? 'Strengths &amp; Weaknesses'
+             : rightMid === 'comparison' ? 'Comparison' : 'Impact',
         body: rightMid === 'sw'
           ? swBlockHtml(innerW, row2InnerH, swRows, { swDrop, swAddStr, swAddWeak })
           : impactBody(row2InnerH, rowA, rowB, pool,
@@ -1139,7 +1159,7 @@ export function buildManagerPagerElement(coach, tenureRows, traits, opts = {}) {
       })}
 
       ${panel({
-        x: COL_A_X, y: ROW_3, w: COL_W, h: ROW3_H, title: 'Potential Clubs',
+        x: COL_A_X, y: ROW_3, w: COL_W, h: ROW3_H, title: esc(clubsTitle),
         // A hand-typed note is a scout's own words, so it takes the body ink
         // rather than the pink the player card uses. Pink there is the only
         // editorial mark on the tile; here it read as a second accent arguing
@@ -1203,6 +1223,59 @@ function Seg({ options, value, onChange }) {
                    background: value === v ? '#0e2040' : 'transparent',
                    color: value === v ? '#60a5fa' : '#94a3b8',
                    fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>{lbl}</button>
+      ))}
+    </div>
+  );
+}
+
+function TeamSeasonPicker({ label, value, teams, onPick, onClear }) {
+  const [q, setQ] = useState('');
+  const hits = useMemo(() => {
+    const t = q.trim();
+    if (t.length < 2) return [];
+    const out = [];
+    for (const r of (teams || [])) {
+      if (!r || !r.team) continue;
+      if (!foldIncludes(r.team, t)) continue;
+      out.push(r);
+      if (out.length >= 24) break;
+    }
+    return out.sort((a, b) => (a.season < b.season ? 1 : -1)).slice(0, 10);
+  }, [q, teams]);
+
+  if (value) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 5,
+                    background: '#0d1220', border: '1px solid #1e2d45',
+                    borderRadius: 6, padding: '5px 8px' }}>
+        <span style={{ width: 16, flexShrink: 0, fontSize: 10, fontWeight: 800, color: '#475569' }}>{label}</span>
+        <span style={{ flex: 1, minWidth: 0, fontSize: 11.5, color: '#e2e8f4',
+                       overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+          {value.team}<span style={{ color: '#64748b' }}> · {shortSeason(value.season)}</span>
+        </span>
+        <button onClick={onClear}
+          style={{ marginLeft: 8, background: 'transparent', border: 'none', color: '#64748b',
+                   cursor: 'pointer', fontSize: 13, lineHeight: 1, padding: 0 }}>×</button>
+      </div>
+    );
+  }
+  return (
+    <div style={{ marginBottom: 5 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ width: 16, flexShrink: 0, fontSize: 10, fontWeight: 800, color: '#475569' }}>{label}</span>
+        <input value={q} onChange={e => setQ(e.target.value)}
+               placeholder="Search any club…" style={{ ...UI.input, flex: 1 }} />
+      </div>
+      {hits.map((r, i) => (
+        <div key={r.team + r.season + i}
+             onClick={() => { onPick(r); setQ(''); }}
+             style={{ display: 'flex', alignItems: 'center', cursor: 'pointer',
+                      padding: '5px 8px', borderBottom: '1px solid #101a2c' }}>
+          <span style={{ flex: 1, minWidth: 0, fontSize: 11, color: '#c8d2e0',
+                         overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+            {r.team}<span style={{ color: '#64748b' }}> · {r.league} · {shortSeason(r.season)}</span>
+          </span>
+        </div>
       ))}
     </div>
   );
@@ -1275,8 +1348,10 @@ export default function ManagerPagerModal({
   const [tcRanks, setTcRanks] = useState({ squadValue: '', wageBill: '', odds: '' });
   const [leagueSizeOv, setLeagueSizeOv] = useState('');
 
-  const [impactAKey, setImpactAKey] = useState('');
-  const [impactBKey, setImpactBKey] = useState('');
+  const [impactA, setImpactA] = useState(null);
+  const [impactB, setImpactB] = useState(null);
+  const [clubsTitle, setClubsTitle] = useState('Potential Clubs');
+  const [traitOv, setTraitOv] = useState({});
 
   const [manualClubs, setManualClubs] = useState(null);
   const [clubNotes, setClubNotes] = useState({});
@@ -1296,6 +1371,8 @@ export default function ManagerPagerModal({
   const scores = useMemo(
     () => computeCoachScore(tenureRows, age, { seasonPerf }),
     [tenureRows, age, seasonPerf]);
+
+  const rowByKey = (key) => (tenureRows || []).find(r => `${r.team}|${r.season}` === key) || null;
 
   const seasonOptions = useMemo(() => [...(tenureRows || [])]
     .sort((a, b) => (a.season < b.season ? 1 : -1))
@@ -1357,7 +1434,7 @@ export default function ManagerPagerModal({
     };
   }, [tcRanks, leagueSizeOv, ctx.statsRow, autoSquadRank]);
 
-  const rowFor = (key) => (tenureRows || []).find(r => `${r.team}|${r.season}` === key) || null;
+
 
   const processMap = async (raw, mode) => {
     if (!raw) return '';
@@ -1374,9 +1451,9 @@ export default function ManagerPagerModal({
     primaryFormation, secondaryFormation, showFormation, showFormationDots, showSecondaryShape,
     positionMapUrl, mapOpacity: Number(mapOpacity) / 100,
     careerMode, teamContext, rightMid, rightLow,
-    impactRowA: rowFor(impactAKey), impactRowB: rowFor(impactBKey),
-    clubRows, clubNotes, hideFitScores,
-    styleKeys,
+    impactRowA: impactA, impactRowB: impactB,
+    clubRows, clubNotes, hideFitScores, clubsTitle,
+    styleKeys, traitOv,
     overallOverride, potentialOverride, overallUnclear, potentialUnclear,
     gbeOv, swDrop, swAddStr, swAddWeak,
   });
@@ -1499,12 +1576,15 @@ export default function ManagerPagerModal({
 
           <div style={UI.block}>
             <span style={UI.label}>Bottom-right panels</span>
-            <Seg options={[['impact', 'Impact'], ['sw', 'Strengths & Weaknesses']]}
+            <Seg options={[['impact', 'Impact'], ['comparison', 'Comparison'], ['sw', 'S&W']]}
                  value={rightMid} onChange={setRightMid} />
             <Seg options={[['view', 'View'], ['table', 'League Table']]}
                  value={rightLow} onChange={setRightLow} />
+            <Seg options={[['Potential Clubs', 'Potential Clubs'], ['Similar Teams', 'Similar Teams']]}
+                 value={clubsTitle} onChange={setClubsTitle} />
             <div style={UI.note}>
-              Left column is fixed: Style, Team Context, Potential Clubs.
+              Impact and Comparison draw the same radar — the title is the claim you
+              are making about it. Potential Clubs and Similar Teams likewise.
             </div>
           </div>
 
@@ -1670,6 +1750,30 @@ export default function ManagerPagerModal({
               })}
             </div>
             <div style={UI.note}>{styleKeys.length} selected · sorted by score on the card.</div>
+            {styleKeys.map(k => (
+              <div key={k} style={{ display: 'flex', alignItems: 'center', marginTop: 5 }}>
+                <span style={{ width: 96, flexShrink: 0, fontSize: 11, color: '#94a3b8' }}>
+                  {TRAIT_CHIP_LABELS[k]}
+                </span>
+                <input value={traitOv[k] ?? ''} inputMode="decimal"
+                  placeholder={(() => {
+                    const auto = (coach.traitOverrides && coach.traitOverrides[k] != null)
+                      ? coach.traitOverrides[k] : (traits && traits[k] != null ? traits[k] / 10 : null);
+                    return auto == null ? '—' : String(Math.round(auto * 10) / 10);
+                  })()}
+                  onChange={e => {
+                    const v = e.target.value.replace(/[^\d.]/g, '').slice(0, 4);
+                    setTraitOv(o => { const n = { ...o }; if (v === '') delete n[k]; else n[k] = v; return n; });
+                  }}
+                  style={{ ...UI.input, width: 72, flex: '0 0 auto' }} />
+                <span style={{ fontSize: 11, color: '#64748b', marginLeft: 8 }}>/ 10</span>
+              </div>
+            ))}
+            <div style={UI.note}>
+              Blank uses the coach&rsquo;s saved value, then the computed one. Set Pieces
+              has no metric behind it, so this is the only place it can be set without
+              editing the coach.
+            </div>
           </div>
 
           <div style={UI.block}>
@@ -1700,22 +1804,32 @@ export default function ManagerPagerModal({
             </div>
           </div>
 
-          {rightMid === 'impact' && (
+          {rightMid !== 'sw' && (
             <div style={UI.block}>
-              <span style={UI.label}>Impact — seasons compared</span>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <select style={{ ...UI.input, flex: 1, cursor: 'pointer' }} value={impactAKey}
-                        onChange={e => setImpactAKey(e.target.value)}>
-                  <option value="">A: earliest tenure</option>
-                  {seasonOptions.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
-                </select>
-                <select style={{ ...UI.input, flex: 1, cursor: 'pointer' }} value={impactBKey}
-                        onChange={e => setImpactBKey(e.target.value)}>
-                  <option value="">B: latest tenure</option>
-                  {seasonOptions.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
-                </select>
+              <span style={UI.label}>
+                {rightMid === 'comparison' ? 'Comparison' : 'Impact'} — sides compared
+              </span>
+              <TeamSeasonPicker label="A" value={impactA} teams={pool}
+                onPick={setImpactA} onClear={() => setImpactA(null)} />
+              <TeamSeasonPicker label="B" value={impactB} teams={pool}
+                onPick={setImpactB} onClear={() => setImpactB(null)} />
+              {(!impactA || !impactB) && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', marginTop: 2 }}>
+                  {seasonOptions.map(o => (
+                    <button key={o.key}
+                      onClick={() => (impactA ? setImpactB(rowByKey(o.key)) : setImpactA(rowByKey(o.key)))}
+                      style={{ padding: '3px 8px', marginRight: 5, marginBottom: 5, borderRadius: 10,
+                               border: '1px solid #1e2d45', background: 'transparent',
+                               color: '#8b98ad', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>
+                      {o.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div style={UI.note}>
+                A draws red, B draws blue. Blank falls back to his earliest and latest
+                tenure; the chips are shortcuts, the search reaches any club in the data.
               </div>
-              <div style={UI.note}>A draws red, B draws blue.</div>
             </div>
           )}
 
