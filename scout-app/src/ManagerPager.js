@@ -354,8 +354,14 @@ function percentilePanelBody(w, h, mg) {
 // middle, four fill the tile, and the internal spacing is the same either way.
 // Only when the natural height exceeds the tile does anything scale, which keeps
 // the bars proportioned exactly as the quick card draws them.
-// Measured off the markup: label 20 + bar 14 + caption 12 + the flex gap 12.
-const TC_ROW_H = 62;
+// Measured off the markup, twice adjusted. 62 assumed the Low / "Rank 18 of 20" /
+// High caption was one line; on a 498px tile it wrapped, which added ~12px to
+// every row and pushed the fourth category off the bottom edge. The caption is
+// nowrap now, and the reserve is deliberately generous on top of that: label 20 +
+// bar 14 + caption 12 + flex gap 12 measures 58, and over-reserving costs a
+// slightly smaller chart where under-reserving costs a clipped row. Only one of
+// those looks broken. The player pager reserves 80 for the same reason.
+const TC_ROW_H = 76;
 
 function teamContextBody(w, h, tc, ageVal, agePct) {
   const cats = ['squadValue', 'wageBill', 'odds'];
@@ -403,7 +409,7 @@ const fmX = (x) => 4 + (Number(x) / 330) * 312;
 const fmY = (y) => 4 + (Number(y) / 220) * 200;
 
 function formationPitchSvg(primary, secondary, w, h, mapUrl, mapOpacity, showDots, showSecondary) {
-  const LINE = 'rgba(255,255,255,0.42)';
+  const LINE = 'rgba(255,255,255,0.46)';
   const LINE_SOFT = 'rgba(255,255,255,0.30)';
   const dotCol = mapUrl ? FM_ON_IMAGE : FM_PRIMARY;
 
@@ -411,15 +417,39 @@ function formationPitchSvg(primary, secondary, w, h, mapUrl, mapOpacity, showDot
   const primaryPts = showDots ? coordsFor(primary) : null;
   const secondaryPts = (showDots && showSecondary) ? coordsFor(secondary) : null;
 
+  // Mowing bands. Six stripes at a whisker of white — barely visible on their
+  // own, but they give the surface a direction, and direction is the one thing a
+  // formation diagram needs the reader to have (this side attacks right). They
+  // come off under a zones wash, where they'd fight the data for the same pixels.
+  const stripes = mapUrl ? '' : Array.from({ length: 6 }, (_, i) => {
+    if (i % 2) return '';
+    return `<rect x="${(4 + i * 52).toFixed(1)}" y="4" width="52" height="200"
+                  fill="rgba(255,255,255,0.022)"/>`;
+  }).join('');
+
+  // Goals, drawn OUTSIDE the touchline. The pitch previously ended at its own
+  // boundary, which reads as a rectangle; a net at each end reads as a pitch.
+  const goals = `
+      <g fill="none" stroke="${LINE_SOFT}" stroke-width="1.3">
+        <rect x="0" y="90" width="4" height="28"/>
+        <rect x="316" y="90" width="4" height="28"/>
+      </g>`;
+
   // Secondary FIRST so a shared position doesn't punch a ring through the solid
   // dot on the same spot — the primary shape always reads on top.
   const secondaryDots = (secondaryPts || []).map(([x, y]) => `
       <circle cx="${fmX(x).toFixed(1)}" cy="${fmY(y).toFixed(1)}" r="7.5"
               fill="none" stroke="${mapUrl ? 'rgba(255,255,255,0.65)' : FM_SECONDARY}"
               stroke-width="2.2"/>`).join('');
-  const primaryDots = (primaryPts || []).map(([x, y]) => `
-      <circle cx="${fmX(x).toFixed(1)}" cy="${fmY(y).toFixed(1)}" r="8.5"
-              fill="${dotCol}" filter="url(#mpShadow)"/>`).join('');
+  // Two circles per player, not one. The wider disc underneath is the same
+  // colour at a tenth opacity, which separates the shape from whatever is behind
+  // it — turf, stripe or zone — without drawing a hard ring around every man.
+  const primaryDots = (primaryPts || []).map(([x, y]) => {
+    const cx = fmX(x).toFixed(1), cy = fmY(y).toFixed(1);
+    return `
+      <circle cx="${cx}" cy="${cy}" r="13" fill="${dotCol}" opacity="0.14"/>
+      <circle cx="${cx}" cy="${cy}" r="7.6" fill="${dotCol}" filter="url(#mpShadow)"/>`;
+  }).join('');
 
   // The wash sits under the markings, clipped to the pitch. Over the top is what
   // a screenshot does; underneath is what a design does.
@@ -434,13 +464,15 @@ function formationPitchSvg(primary, secondary, w, h, mapUrl, mapOpacity, showDot
           <feDropShadow dx="0" dy="1.5" stdDeviation="1.6" flood-color="#000" flood-opacity="0.55"/>
         </filter>
         <linearGradient id="mpTurf" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="rgba(255,255,255,0.075)"/>
-          <stop offset="100%" stop-color="rgba(255,255,255,0.025)"/>
+          <stop offset="0%" stop-color="rgba(255,255,255,0.085)"/>
+          <stop offset="100%" stop-color="rgba(255,255,255,0.022)"/>
         </linearGradient>
       </defs>
 
       <rect x="4" y="4" width="312" height="200" rx="8" fill="url(#mpTurf)"/>
+      <g clip-path="url(#mpClip)">${stripes}</g>
       ${mapLayer}
+      ${goals}
 
       <g fill="none" stroke="${LINE}" stroke-width="1.6">
         <rect x="4" y="4" width="312" height="200" rx="8"/>
@@ -471,20 +503,27 @@ function formationPitchSvg(primary, secondary, w, h, mapUrl, mapOpacity, showDot
 // Same block geometry as the player pager's position block: a 236px text column,
 // a 20px gutter and a 188px pitch, nudged 14px left of centre for the same
 // reason (the right-hand rule butts onto GBE while the left has the wheels' air).
-const FB_PITCH_H = 122;
-const FB_PITCH_W = Math.round(FB_PITCH_H * (320 / 208));   // 188
-const FB_GAP = 20;
-const FB_TEXT_W = 236;
+// The player pager reserves 236px of text because "Defensive Midfielder" needs
+// it. "4-2-3-1" needs 128, and handing the other 108 to the pitch buys ~35% more
+// drawing area at the same aspect. Height is bounded by the band rather than by
+// the text: 8..142 inside a 150px header clears the photo's own 2..148.
+const FB_PITCH_H = 134;
+const FB_PITCH_W = Math.round(FB_PITCH_H * (320 / 208));   // 206
+const FB_GAP = 18;
+const FB_TEXT_W = 128;
 
 function formationBlockHtml(x, w, ink, primary, secondary, mapUrl, mapOpacity, showDots, showSecondary) {
   const textW = FB_TEXT_W;
   const longest = Math.max(nameEmWidth(primary || '—'), nameEmWidth(secondary || '—'));
   const fs = Math.max(15, Math.min(24, Math.floor(textW / (longest || 1))));
   const groupW = textW + FB_GAP + FB_PITCH_W;
-  const left = x + Math.max(0, Math.round((w - groupW) / 2)) - 14;
+  // 24 left of centre. True centre reads right-heavy here: the right-hand rule
+  // butts straight onto the GBE tiles while the left has the wheels' air beside
+  // it, and the narrower text column moved the whole group right again.
+  const left = x + Math.max(0, Math.round((w - groupW) / 2)) - 24;
   const dotCol = mapUrl ? FM_ON_IMAGE : FM_PRIMARY;
   return `
-    <div style="position:absolute;left:${left}px;top:28px;width:${textW}px;">
+    <div style="position:absolute;left:${left}px;top:26px;width:${textW}px;">
       <div style="font-size:8px;font-weight:700;letter-spacing:0.14em;color:${ink.muted};
                   white-space:nowrap;">PRIMARY FORMATION</div>
       <div style="margin-top:9px;display:flex;align-items:center;white-space:nowrap;">
@@ -503,7 +542,7 @@ function formationBlockHtml(x, w, ink, primary, secondary, mapUrl, mapOpacity, s
                      line-height:1.05;">${secondary ? esc(secondary) : '&mdash;'}</span>
       </div>
     </div>
-    <div style="position:absolute;left:${left + textW + FB_GAP}px;top:14px;
+    <div style="position:absolute;left:${left + textW + FB_GAP}px;top:8px;
                 width:${FB_PITCH_W}px;height:${FB_PITCH_H}px;">
       ${formationPitchSvg(primary, secondary, FB_PITCH_W, FB_PITCH_H, mapUrl, mapOpacity, showDots, showSecondary)}
     </div>`;
@@ -1101,11 +1140,12 @@ export function buildManagerPagerElement(coach, tenureRows, traits, opts = {}) {
 
       ${panel({
         x: COL_A_X, y: ROW_3, w: COL_W, h: ROW3_H, title: 'Potential Clubs',
-        // The basis, stated. These are ranked on how close each club is to the
-        // one he is at, and a reader is entitled to know that rather than be
-        // handed a percentage with no stated meaning.
-        right: ctx.team ? `LIKE ${esc(truncateText(ctx.team, 14)).toUpperCase()}` : '',
-        body: clubsPanelBody(innerW, row3InnerH, clubs, false, 'clubs', hideFitScores, clubNotes),
+        // A hand-typed note is a scout's own words, so it takes the body ink
+        // rather than the pink the player card uses. Pink there is the only
+        // editorial mark on the tile; here it read as a second accent arguing
+        // with the panel title two lines above it.
+        body: clubsPanelBody(innerW, row3InnerH, clubs, false, 'clubs', hideFitScores,
+                             clubNotes, '#c8d2e0'),
       })}
       ${panel({
         x: COL_B_X, y: ROW_3, w: COL_W, h: ROW3_H,
@@ -1800,7 +1840,7 @@ export default function ManagerPagerModal({
                   style={{ ...UI.input, flex: 1 }} />
               </div>
             ))}
-            <div style={UI.note}>Notes print in pink beside the league, {CLUB_NOTE_MAX} characters max.</div>
+            <div style={UI.note}>Notes print beside the league, {CLUB_NOTE_MAX} characters max.</div>
 
             {clubRows.length < 3 && (
               <>

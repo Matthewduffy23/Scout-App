@@ -216,7 +216,7 @@ function _ctxBarHtml(label, pct, sub, lowLbl = 'Low', highLbl = 'High') {
           <div style="width:16px;height:16px;border-radius:50%;background:${col};border:2.5px solid #07090f;"></div>
         </div>
       </div>
-      <div style="display:flex;justify-content:space-between;font-size:10px;color:#3a4458;">
+      <div style="display:flex;justify-content:space-between;font-size:10px;color:#3a4458;white-space:nowrap;">
         <span>${lowLbl}</span><span>${sub}</span><span>${highLbl}</span>
       </div>
     </div>`;

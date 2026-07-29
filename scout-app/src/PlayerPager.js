@@ -984,7 +984,7 @@ export function swBlockHtml(w, h, rows, opts = {}) {
     : `<span style="font-size:11px;color:#8b98ad;">None above the ${SW_HI}th percentile</span>`;
 
   const BAR_H = 32;
-  const weakHtml = weaknesses.length
+  const buildWeakHtml = () => weaknesses.length
     ? weaknesses.map((r, i) => `
       <div style="position:absolute;left:0;top:${i * BAR_H}px;width:${w}px;height:${BAR_H - 8}px;">
         <span style="position:absolute;left:0;right:44px;top:0;font-size:11.5px;font-weight:600;
@@ -1028,8 +1028,16 @@ export function swBlockHtml(w, h, rows, opts = {}) {
   // tile. Previously a third strength row plus a bar plus two pills came to 222px
   // in a 210px box and the pills were silently clipped off the bottom, which looks
   // identical to them never having been added.
-  const weakBlockH = LABEL_H + 11 + weaknesses.length * BAR_H
+  const measureWeak = (n) => LABEL_H + 11 + n * BAR_H
     + (weakPills.length ? 10 + packRows(weakPills.map(x => x.label)) * PILL_ROW_H : 0);
+  const MIN_STRENGTH_H = LABEL_H + LABEL_GAP + PILL_ROW_H;   // one row of pills
+  while (weaknesses.length > 1 && MIN_STRENGTH_H + BLOCK_GAP + measureWeak(weaknesses.length) > h) {
+    weaknesses.pop();
+  }
+
+  const weakBlockH = measureWeak(weaknesses.length);
+  const weakHtml = buildWeakHtml();
+
   let shown = strengths.slice();
   let strengthsH = LABEL_H + LABEL_GAP + packRows(shown.map(r => r.label)) * PILL_ROW_H;
   while (shown.length > 1 && strengthsH + BLOCK_GAP + weakBlockH > h) {
@@ -1060,7 +1068,8 @@ export function swBlockHtml(w, h, rows, opts = {}) {
 // same 9px card, same #n index at 10px, same 26px crest at x=32, same 68px text
 // column, same 50px centred value column with its caption underneath. Only the
 // caption word changes, because these are fit scores rather than match scores.
-export function clubsPanelBody(w, h, rows, coreOnly, mode, hideScores, notes) {
+export function clubsPanelBody(w, h, rows, coreOnly, mode, hideScores, notes, noteColour) {
+  const NOTE_COL = noteColour || ACCENT_PINK;
   const isPlayers = mode === 'players';
   if (!rows || !rows.length) {
     return `<div style="position:absolute;inset:0;display:flex;align-items:center;
@@ -1144,7 +1153,7 @@ export function clubsPanelBody(w, h, rows, coreOnly, mode, hideScores, notes) {
                 parts.push(`<span style="position:absolute;left:${x}px;top:0;font-size:${SUB_FS}px;
                              color:#5c6b82;line-height:14px;">&middot;</span>`);
                 parts.push(`<span style="position:absolute;left:${x + 10}px;top:0;font-size:${SUB_FS}px;
-                             font-weight:600;color:${ACCENT_PINK};white-space:nowrap;
+                             font-weight:600;color:${NOTE_COL};white-space:nowrap;
                              line-height:14px;">${esc(note)}</span>`);
               }
               return parts.join('');
