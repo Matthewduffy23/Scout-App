@@ -1051,42 +1051,58 @@ function clubsPanelBody(w, h, rows, coreOnly, mode, hideScores, notes) {
                   border-radius:9px;">
         <span style="position:absolute;left:10px;top:50%;margin-top:-6px;font-size:10px;
                      font-weight:700;color:#475569;">#${i + 1}</span>
-        ${badge ? `<div style="position:absolute;left:32px;top:50%;margin-top:-14px;
-                     width:28px;height:28px;background-image:url('${src(badge)}');
+        ${badge ? `<div style="position:absolute;left:31px;top:50%;margin-top:-17px;
+                     width:34px;height:34px;background-image:url('${src(badge)}');
                      background-size:${isPlayers ? 'cover' : 'contain'};
                      background-repeat:no-repeat;
                      background-position:center ${isPlayers ? 'top' : 'center'};
                      ${isPlayers ? 'border-radius:50%;background-color:#1a2233;' : ''}"></div>` : ''}
-        <div style="position:absolute;left:68px;right:${VAL_W + 18}px;top:50%;margin-top:-15px;">
-          <div style="font-size:13px;font-weight:700;color:#eaf0f8;line-height:1.15;white-space:nowrap;
-                      ">${esc(title)}</div>
-          <!-- Inline-block, not flex. As a flex row the league name was being
-               shrunk to an ellipsis with 200px of the row still empty — flex
-               shrink resolves unpredictably under this renderer, and there is no
-               reason to negotiate widths on a line that always fits. Inline boxes
-               simply sit next to each other and the parent clips if anything ever
-               doesn't. -->
-          <div style="margin-top:4px;white-space:nowrap;overflow:hidden;line-height:1.15;">
-            ${isPlayers && crest ? `<span style="display:inline-block;vertical-align:middle;
-                        width:13px;height:13px;margin-right:6px;background-size:contain;
-                        background-repeat:no-repeat;background-position:center;
-                        background-image:url('${src(crest)}');"></span>` : ''}
-            ${!isPlayers && lflag ? `<span style="display:inline-block;vertical-align:middle;
-                        width:15px;height:10px;margin-right:6px;background-size:cover;
-                        background-position:center;border-radius:1.5px;
-                        box-shadow:inset 0 0 0 0.5px rgba(255,255,255,0.25);
-                        background-image:url('${src(lflag)}');"></span>` : ''}
-            <span style="display:inline-block;vertical-align:middle;font-size:10px;
-                         color:#8b98ad;">${esc(sub)}</span>
-            ${isPlayers && lflag ? `<span style="display:inline-block;vertical-align:middle;
-                        width:15px;height:10px;margin-left:7px;background-size:cover;
-                        background-position:center;border-radius:1.5px;
-                        box-shadow:inset 0 0 0 0.5px rgba(255,255,255,0.25);
-                        background-image:url('${src(lflag)}');"></span>` : ''}
-            ${note ? `<span style="display:inline-block;vertical-align:middle;font-size:10px;
-                        color:#5c6b82;margin:0 6px;">&middot;</span>
-              <span style="display:inline-block;vertical-align:middle;font-size:10px;
-                        font-weight:600;color:${ACCENT_PINK};">${esc(note)}</span>` : ''}
+        <!-- The sub-line is ABSOLUTELY placed, not laid out. Flex shrank the
+             league name to an ellipsis with 200px spare; inline-block let the
+             flag print over it. Both are the renderer resolving widths its own
+             way. nameEmWidth measures the text, so the flag is positioned at a
+             coordinate and can neither overlap nor push anything. -->
+        <div style="position:absolute;left:74px;right:${VAL_W + 16}px;top:50%;margin-top:-17px;">
+          <div style="font-size:14px;font-weight:700;color:#eaf0f8;line-height:1.15;
+                      white-space:nowrap;">${esc(title)}</div>
+          <div style="position:relative;height:14px;margin-top:5px;">
+            ${(() => {
+              const SUB_FS = 10.5;
+              const subW = Math.ceil(nameEmWidth(sub) * SUB_FS);
+              let x = 0;
+              const parts = [];
+              if (isPlayers && crest) {
+                parts.push(`<span style="position:absolute;left:${x}px;top:0;width:14px;height:14px;
+                             background-size:contain;background-repeat:no-repeat;
+                             background-position:center;
+                             background-image:url('${src(crest)}');"></span>`);
+                x += 20;
+              } else if (!isPlayers && lflag) {
+                parts.push(`<span style="position:absolute;left:${x}px;top:2px;width:15px;height:10px;
+                             background-size:cover;background-position:center;border-radius:1.5px;
+                             box-shadow:inset 0 0 0 0.5px rgba(255,255,255,0.25);
+                             background-image:url('${src(lflag)}');"></span>`);
+                x += 21;
+              }
+              parts.push(`<span style="position:absolute;left:${x}px;top:0;font-size:${SUB_FS}px;
+                           color:#8b98ad;white-space:nowrap;line-height:14px;">${esc(sub)}</span>`);
+              x += subW + 8;
+              if (isPlayers && lflag) {
+                parts.push(`<span style="position:absolute;left:${x}px;top:2px;width:15px;height:10px;
+                             background-size:cover;background-position:center;border-radius:1.5px;
+                             box-shadow:inset 0 0 0 0.5px rgba(255,255,255,0.25);
+                             background-image:url('${src(lflag)}');"></span>`);
+                x += 23;
+              }
+              if (note) {
+                parts.push(`<span style="position:absolute;left:${x}px;top:0;font-size:${SUB_FS}px;
+                             color:#5c6b82;line-height:14px;">&middot;</span>`);
+                parts.push(`<span style="position:absolute;left:${x + 10}px;top:0;font-size:${SUB_FS}px;
+                             font-weight:600;color:${ACCENT_PINK};white-space:nowrap;
+                             line-height:14px;">${esc(note)}</span>`);
+              }
+              return parts.join('');
+            })()}
           </div>
         </div>
         ${hideScores ? '' : `
@@ -1192,9 +1208,11 @@ function headerHtml(player, ctx, opts) {
          image sits straight on the band and the gradient shows through. Still
          cover-cropped from the top, because a centred crop on a head-and-
          shoulders portrait cuts the chin off. -->
-    <div style="position:absolute;left:14px;top:5px;width:140px;height:140px;
+    <!-- 146 square in a 150 band, so it reads as a portrait rather than a thumbnail
+         while still clearing both edges by 2px. -->
+    <div style="position:absolute;left:12px;top:2px;width:146px;height:146px;
                 background-image:url('${src(photo)}'), url('${SILHOUETTE}');
-                background-size:cover, 78% 78%;
+                background-size:cover, 76% 76%;
                 background-position:center top, center 62%;
                 background-repeat:no-repeat, no-repeat;"></div>
 
@@ -2043,19 +2061,19 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
                          background: swNew.label ? '#22c55e1e' : 'transparent',
                          color: swNew.label ? '#22c55e' : '#55617a', fontSize: 11, fontWeight: 700,
                          cursor: swNew.label ? 'pointer' : 'default' }}>+ Strength</button>
-              <input value={swNew.pct} inputMode="numeric" placeholder="0-100"
-                     onChange={e => setSwNew(o => ({ ...o, pct: e.target.value.replace(/[^\d]/g, '').slice(0, 3) }))}
-                     style={{ ...UI.input, width: 72, flex: '0 0 auto' }} />
-              <button disabled={!swNew.label || swNew.pct === ''}
-                onClick={() => { setSwAddWeak(a => [...a, { label: swNew.label, pct: swNew.pct }]);
+              <button disabled={!swNew.label}
+                onClick={() => { setSwAddWeak(a => [...a, { label: swNew.label }]);
                                  setSwNew({ label: '', tone: 'Green', pct: '' }); }}
                 style={{ flex: 1, padding: '7px 0', borderRadius: 5, border: '1px solid #f8717155',
-                         background: (swNew.label && swNew.pct !== '') ? '#f871711e' : 'transparent',
-                         color: (swNew.label && swNew.pct !== '') ? '#f87171' : '#55617a',
+                         background: swNew.label ? '#f871711e' : 'transparent',
+                         color: swNew.label ? '#f87171' : '#55617a',
                          fontSize: 11, fontWeight: 700,
-                         cursor: (swNew.label && swNew.pct !== '') ? 'pointer' : 'default' }}>+ Weakness</button>
+                         cursor: swNew.label ? 'pointer' : 'default' }}>+ Weakness</button>
             </div>
-            <div style={UI.note}>A weakness needs a 0-100 score — it draws as a bar.</div>
+            <div style={UI.note}>
+              Manual weaknesses draw as red pills under the measured bars — no score
+              needed, since it&rsquo;s a judgement rather than a percentile.
+            </div>
 
             {[...swAddStr.map((x, i) => ({ ...x, i, kind: 'str' })),
               ...swAddWeak.map((x, i) => ({ ...x, i, kind: 'weak' }))].map(x => (
@@ -2065,7 +2083,7 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
                             borderRadius: 6, padding: '5px 8px' }}>
                 <span style={{ flex: 1, fontSize: 11.5,
                                color: x.kind === 'str' ? SW_TONES[x.tone] || '#22c55e' : '#f87171' }}>
-                  {x.label}{x.kind === 'weak' ? ` · ${x.pct}` : ''}
+                  {x.label}
                 </span>
                 <button onClick={() => x.kind === 'str'
                           ? setSwAddStr(a => a.filter((_, j) => j !== x.i))
