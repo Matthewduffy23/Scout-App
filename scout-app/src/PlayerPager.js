@@ -376,6 +376,19 @@ const shortPos = (tok) => POS_SHORT[String(tok || '').trim().toUpperCase()] || S
 const ROLE_SUFFIX = /\s+(GK|CB|LCB|RCB|FB|LB|RB|LWB|RWB|DM|DMF|CM|CMF|AM|AMF|WNG|LW|RW|ATT|ST|CF)$/i;
 const roleBase = (name) => String(name || '').replace(ROLE_SUFFIX, '').trim();
 
+// Roles that shouldn't carry the position tag, because the name already says a
+// position and the tag then contradicts or repeats it: "Attacking Midfielder CM"
+// reads as two different answers to the same question, "DLP CM" is an
+// abbreviation stapled to an abbreviation.
+//
+// Two rules rather than one list, so new roles behave sensibly without an edit:
+// any role whose name contains a positional noun is caught automatically, and a
+// short explicit set covers the established abbreviations that don't contain one.
+const ROLE_POSITIONAL_WORD = /\b(Midfielder|Forward|Winger|Back|Keeper|Striker|Defender)\b/i;
+const ROLE_NO_TAG = new Set(['DLP', 'Controller', 'Regista', 'Libero', 'Enganche']);
+const roleWantsTag = (base) =>
+  !ROLE_NO_TAG.has(base) && !ROLE_POSITIONAL_WORD.test(base);
+
 // "Denmark 2." -> "DEN2". The full league name is redundant beside the flag and
 // the league badge, and at 14px it was the widest thing on the row.
 export function leagueAbbrev(league) {
@@ -459,6 +472,27 @@ function tierLeagueKey(score) {
 function tierLeagueLogo(score) {
   const key = tierLeagueKey(score);
   return key ? leagueLogo(key) : null;
+}
+
+// An "unclear" wheel. Same geometry as scoreWheel — same size formula, same text
+// baseline offset, same label block — so it drops into the row without shifting
+// anything. The ring is left as bare track and the figure becomes a question mark
+// in the muted ink: a score you don't trust shouldn't be printed as a number, and
+// a blank space would read as a rendering fault rather than a judgement.
+function unclearWheel({ cx, cy, r, stroke, label, ink, big, labelY }) {
+  const size = r * 2 + stroke + 2;
+  return `
+    <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}"
+         style="position:absolute;left:${cx - size / 2}px;top:${cy - size / 2}px;">
+      <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none"
+              stroke="${ink.track}" stroke-width="${stroke}"/>
+      <text x="${size / 2}" y="${size / 2 + (big ? 9 : 7)}" text-anchor="middle"
+            font-family="Montserrat,sans-serif" font-size="${big ? 26 : 20}"
+            font-weight="700" fill="${ink.muted}">?</text>
+    </svg>
+    <div style="position:absolute;left:${cx - 60}px;top:${labelY != null ? labelY : cy + size / 2 + 6}px;
+                width:120px;text-align:center;font-size:8px;font-weight:700;letter-spacing:0.15em;
+                color:${ink.muted};">${label}</div>`;
 }
 
 // ─── Position pitch ────────────────────────────────────────────────────────
@@ -991,6 +1025,7 @@ function clubsPanelBody(w, h, rows, coreOnly, mode, hideScores, notes) {
     // his club's badge instead put three different clubs down the left of a panel
     // whose subject is three people, and it read as a club list.
     const badge = isPlayers ? photoUrl(t.name, t.team) : teamCrest(t.team);
+    const crest = teamCrest(t.team);
     const title = isPlayers ? t.name : t.team;
     // A player row's second line is his club and league; a club row's is just the
     // league. Both stay one nowrap line so nothing wraps into the crest.
@@ -1016,11 +1051,22 @@ function clubsPanelBody(w, h, rows, coreOnly, mode, hideScores, notes) {
                       ">${esc(title)}</div>
           <div style="display:flex;align-items:center;margin-top:4px;white-space:nowrap;
                       overflow:hidden;line-height:1.15;">
-            ${lflag ? `<div style="width:15px;height:10px;flex-shrink:0;background-size:cover;
+            <!-- Players lead with the CLUB CREST and put the league flag after the
+                 league name; clubs keep the flag in front, since their own crest
+                 is already the main badge on the row. -->
+            ${isPlayers && crest ? `<div style="width:13px;height:13px;flex-shrink:0;
+                        background-size:contain;background-repeat:no-repeat;
+                        background-position:center;margin-right:6px;
+                        background-image:url('${src(crest)}');"></div>` : ''}
+            ${!isPlayers && lflag ? `<div style="width:15px;height:10px;flex-shrink:0;background-size:cover;
                         background-position:center;border-radius:1.5px;margin-right:6px;
                         box-shadow:inset 0 0 0 0.5px rgba(255,255,255,0.25);
                         background-image:url('${src(lflag)}');"></div>` : ''}
             <span style="font-size:10px;color:#8b98ad;">${esc(sub)}</span>
+            ${isPlayers && lflag ? `<div style="width:15px;height:10px;flex-shrink:0;background-size:cover;
+                        background-position:center;border-radius:1.5px;margin-left:7px;
+                        box-shadow:inset 0 0 0 0.5px rgba(255,255,255,0.25);
+                        background-image:url('${src(lflag)}');"></div>` : ''}
             ${note ? `<span style="font-size:10px;color:#5c6b82;margin:0 6px;">&middot;</span>
               <span style="font-size:10px;font-weight:600;color:${ACCENT_PINK};
                            overflow:hidden;">${esc(note)}</span>` : ''}
@@ -1082,6 +1128,7 @@ function headerHtml(player, ctx, opts) {
     headerColour, nameOverride, teamOverride, positionColors, gbeOv,
     showPitch, isGK, positionPcts, heatmapDataUrl, heatOpacity, shownSlots,
     heightOverride, footOverride, showXValue, xValueOverride, showTierBadge,
+    overallOverride, potentialOverride, overallUnclear, potentialUnclear,
   } = opts;
 
   const spec = headerColour;
@@ -1205,27 +1252,34 @@ function headerHtml(player, ctx, opts) {
          arrangement: a player's ceiling is not a subordinate stat to his current
          level, and at two wheels there's room for both to carry full weight. -->
     ${(() => {
+      const num = (v, fb) => (v === '' || v == null || isNaN(Number(v)) ? fb : Number(v));
       const all = [
-        ['OVERALL', player.careerScore, 37],
-        ['POTENTIAL', player.potentialScore, 33],
+        ['OVERALL', num(overallOverride, player.careerScore), 37, !!overallUnclear],
+        ['POTENTIAL', num(potentialOverride, player.potentialScore), 33, !!potentialUnclear],
       ];
       const step = WHEEL_W / all.length;
       // Optional tier key under each wheel. The thresholds are the career chart's
       // own (scoreLeagueTier), so the badge and the dashed lines in the Career
       // panel can never disagree about what 72 means. Subtle by design — it is a
       // key to a number already on screen, not a second headline.
-      return all.map(([label, v, r], i) => {
+      return all.map(([label, v, r, unclear], i) => {
         const cx = WHEEL_X + step * i + step / 2;
-        const wheel = scoreWheel({
-          cx, cy: 64, r, stroke: 8,
-          value: v, label, colour: scoreTierColor(v), ink, big: true, labelY: HDR_LABEL_Y,
-        });
-        if (!showTierBadge) return wheel;
+        const wheel = unclear
+          ? unclearWheel({ cx, cy: 64, r, stroke: 8, label, ink, big: true, labelY: HDR_LABEL_Y })
+          : scoreWheel({
+              cx, cy: 64, r, stroke: 8,
+              value: v, label, colour: scoreTierColor(v), ink, big: true, labelY: HDR_LABEL_Y,
+            });
+        // No tier badge on an unclear score — the whole point is that we aren't
+        // claiming a level for it.
+        if (!showTierBadge || unclear) return wheel;
         const badge = tierLeagueLogo(v);
         if (!badge) return wheel;
+        // Small, centred on the same axis as the label, and tucked close under it:
+        // it is a footnote to the number, not a third element competing with it.
         return wheel + `
-      <div style="position:absolute;left:${cx - step / 2}px;top:${HDR_LABEL_Y + 10}px;
-                  width:${step}px;height:22px;background-size:contain;
+      <div style="position:absolute;left:${cx - 60}px;top:${HDR_LABEL_Y + 11}px;
+                  width:120px;height:15px;background-size:contain;
                   background-repeat:no-repeat;background-position:center;
                   background-image:url('${src(badge)}');"></div>`;
       }).join('');
@@ -1348,6 +1402,7 @@ export function pagerImageUrls(player, ctx, uploadedPhotoDataUrl, clubRows = [])
   }
   for (const r of (clubRows || [])) {
     urls.push(r.name ? photoUrl(r.name, r.team) : teamCrest(r.team));
+    if (r.name) urls.push(teamCrest(r.team));
     if (r.league) urls.push(leagueFlag(r.league));
   }
   return [...new Set(urls.filter(u => u && !u.startsWith('data:')))];
@@ -1365,6 +1420,8 @@ export function buildPlayerPagerElement(player, opts = {}) {
     heatmapDataUrl = '', heatOpacity = 0.3, shownSlots = null,
     heightOverride = '', footOverride = '', showXValue = false, xValueOverride = '',
     showTierBadge = false,
+    overallOverride = '', potentialOverride = '',
+    overallUnclear = false, potentialUnclear = false,
     swDrop = [], swAddStr = [], swAddWeak = [],
   } = opts;
   IMG = images || {};
@@ -1417,7 +1474,11 @@ export function buildPlayerPagerElement(player, opts = {}) {
   const posShort = primarySlot || shortPos(rawTok);
   const roleRows = qcRoles && Object.keys(qcRoles).length
     ? Object.entries(qcRoles)
-        .map(([k, v]) => [`${roleBase(k)}${posShort ? `  ${posShort}` : ''}`, Number(v) || 0])
+        .map(([k, v]) => {
+          const base = roleBase(k);
+          const tag = (posShort && roleWantsTag(base)) ? `  ${posShort}` : '';
+          return [`${base}${tag}`, Number(v) || 0];
+        })
         .sort((a, b) => b[1] - a[1])
         .slice(0, 6)
     : [];
@@ -1437,6 +1498,7 @@ export function buildPlayerPagerElement(player, opts = {}) {
         headerColour: HEADER_COLOURS[headerColourName], nameOverride, teamOverride,
         uploadedPhotoDataUrl, positionColors, gbeOv, showPitch, isGK, positionPcts, heatmapDataUrl, heatOpacity, shownSlots,
         heightOverride, footOverride, showXValue, xValueOverride, showTierBadge,
+        overallOverride, potentialOverride, overallUnclear, potentialUnclear,
       })}
 
       ${panel({
@@ -1628,6 +1690,10 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
   const [footOverride, setFootOverride] = useState('');
   const [showXValue, setShowXValue] = useState(false);
   const [showTierBadge, setShowTierBadge] = useState(false);
+  const [overallOverride, setOverallOverride] = useState('');
+  const [potentialOverride, setPotentialOverride] = useState('');
+  const [overallUnclear, setOverallUnclear] = useState(false);
+  const [potentialUnclear, setPotentialUnclear] = useState(false);
   const [xValueOverride, setXValueOverride] = useState('');
 
   const [clubsMode, setClubsMode] = useState('clubs');   // clubs | players
@@ -1786,6 +1852,7 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
     clubsMode, hideFitScores, ukOnly, positionPcts,
     heatmapDataUrl, heatOpacity: Number(heatOpacity) / 100, shownSlots: pagerSlots,
     heightOverride, footOverride, showXValue, xValueOverride, showTierBadge,
+    overallOverride, potentialOverride, overallUnclear, potentialUnclear,
     clubsCoreOnly: !peakFit,
     showForecast, useBestRoleCareer, showPitch, gbeOv,
   });
@@ -1989,6 +2056,30 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
                            cursor: 'pointer', fontSize: 13, lineHeight: 1, padding: 0 }}>×</button>
               </div>
             ))}
+          </div>
+
+          <div style={UI.block}>
+            <span style={UI.label}>Overall &amp; potential</span>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input value={overallOverride} inputMode="numeric"
+                     onChange={e => setOverallOverride(e.target.value.replace(/[^\d]/g, '').slice(0, 3))}
+                     placeholder={player.careerScore != null ? String(Math.round(player.careerScore)) : 'Overall'}
+                     disabled={overallUnclear}
+                     style={{ ...UI.input, flex: 1, opacity: overallUnclear ? 0.45 : 1 }} />
+              <input value={potentialOverride} inputMode="numeric"
+                     onChange={e => setPotentialOverride(e.target.value.replace(/[^\d]/g, '').slice(0, 3))}
+                     placeholder={player.potentialScore != null ? String(Math.round(player.potentialScore)) : 'Potential'}
+                     disabled={potentialUnclear}
+                     style={{ ...UI.input, flex: 1, opacity: potentialUnclear ? 0.45 : 1 }} />
+            </div>
+            <div style={{ marginTop: 8 }}>
+              <Check label="Overall unclear (?)" value={overallUnclear} onChange={setOverallUnclear} />
+              <Check label="Potential unclear (?)" value={potentialUnclear} onChange={setPotentialUnclear} />
+            </div>
+            <div style={UI.note}>
+              Unclear draws an empty ring with a question mark and drops the tier badge —
+              a score you don&rsquo;t trust shouldn&rsquo;t print as a number.
+            </div>
           </div>
 
           <div style={{ ...UI.block, marginTop: 10 }}>
