@@ -1060,7 +1060,7 @@ export function swBlockHtml(w, h, rows, opts = {}) {
 // same 9px card, same #n index at 10px, same 26px crest at x=32, same 68px text
 // column, same 50px centred value column with its caption underneath. Only the
 // caption word changes, because these are fit scores rather than match scores.
-function clubsPanelBody(w, h, rows, coreOnly, mode, hideScores, notes) {
+export function clubsPanelBody(w, h, rows, coreOnly, mode, hideScores, notes) {
   const isPlayers = mode === 'players';
   if (!rows || !rows.length) {
     return `<div style="position:absolute;inset:0;display:flex;align-items:center;
@@ -1200,6 +1200,10 @@ function viewPanelBody(w, h, text) {
 // ─── Header ────────────────────────────────────────────────────────────────
 let IMG = {};
 const src = (url) => (url && IMG[url]) || url || '';
+// ManagerPager reuses clubsPanelBody, which resolves crests and flags through
+// the map above. buildPlayerPagerElement assigns IMG on every build, so this
+// can't leave anything stale behind it.
+export function setPagerImageMap(images) { IMG = images || {}; }
 
 function headerHtml(player, ctx, opts) {
   const { sd, statsRow, league, team } = ctx;

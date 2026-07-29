@@ -1,4 +1,4 @@
-// ManagerPager.js v1 — Manager All-in-One report. 1920x1080 PNG export.
+// ManagerPager.js v2 — Manager All-in-One report. 1920x1080 PNG export.
 //
 // The coach equivalent of PlayerPager.js, which is itself the player equivalent
 // of TeamReport.js. Geometry is PlayerPager's, verbatim: same 24px pad, same
@@ -8,31 +8,34 @@
 //
 // WHAT REPLACES WHAT (PlayerPager slot -> ManagerPager slot)
 //   player photo         -> coach photo (FotMob id, upload, or fallback)
-//   club + league row    -> club + league row, minus height and foot
+//   club + league row    -> club + league row, minus height, foot and contract
 //   Apps/Gls/Asts/xG/xA  -> Games / GF / GA / Pts / xPts / PPG
 //   Overall + Potential  -> Overall + Potential (computeCoachScore)
-//   position pitch       -> FORMATION pitch — primary + secondary shape, with an
-//                           average position map in the heatmap's place
+//   position pitch       -> FORMATION pitch — the primary shape, over an Opta
+//                           zones-of-control wash in the heatmap's place
 //   GBE points + pips    -> GBE routes (36m cumulative / 24m consecutive), which
 //                           for a manager are pass/fail rather than scored
 //   percentile column    -> the same column, off computeCoachMetricGroups
 //   6 bottom panels      -> Style / Career,
 //                           Team Context / Impact OR Strengths & Weaknesses,
-//                           Similar Teams / View OR League Table
+//                           Potential Clubs / View OR League Table
 //
 // NOTHING IS REDRAWN HERE. Every renderer is imported from the card that already
 // owns it — CoachQuickCard for the career chart, team context bands and impact
-// radar, TeamReport for the wheel, the hex chart, Similar Teams and the League
-// Table, PlayerPager for the strengths/weaknesses block and the heat extractor.
-// Those declarations gained an `export` keyword and nothing else, so their
-// existing callers are untouched and this file cannot drift from the other
-// cards: if a bar colour changes in QuickCard it changes here in the same
-// commit, because it is literally the same function.
+// radar, TeamReport for the wheel, the hex chart and the League Table,
+// PlayerPager for the Potential Clubs rows, the strengths/weaknesses block and
+// the heat extractor. Those declarations gained an `export` keyword and nothing
+// else, so their existing callers are untouched and this file cannot drift from
+// the other cards: if a bar colour changes in QuickCard it changes here in the
+// same commit, because it is literally the same function.
 //
-// The only things built locally are panel chrome (the rounded box + pink title,
-// copied constants so it matches by value), the formation pitch, and the
-// percentile column, which is assembled out of imported barRow calls rather than
-// drawn from scratch.
+// v2 changes: contract is gone from the identity row (tenure only, and an
+// Unattached state that reads as a state rather than a missing club); the pitch
+// draws ONE shape by default; zones of control recolour into the card's palette
+// and sit under the markings; Team Context centres and no longer wraps its
+// labels; strengths and weaknesses speak manager language rather than printing
+// raw team metric names; Similar Teams became Potential Clubs, with the player
+// pager's own row renderer, its per-row notes and its free search.
 
 import React, { useState, useMemo, useEffect } from 'react';
 import {
@@ -41,8 +44,8 @@ import {
 import { useIsMobile, deliverPng } from './utils';
 import {
   scoreWheel, headerInk, preloadImages, fitNameSize, styleHexSvg, nameEmWidth,
-  similarTeamsPanelHtml, leagueTablePanelHtml, resolveSimilarTeams, leagueWindow,
-  setSharedImageMap,
+  leagueTablePanelHtml, resolveSimilarTeams, leagueWindow, teamOptions,
+  setSharedImageMap, foldIncludes,
   HEADER_COLOURS, HEADER_COLOUR_NAMES,
 } from './TeamReport';
 import {
@@ -55,7 +58,8 @@ import {
 import { computeCoachMetricGroups } from './coachMetrics';
 import { barRow, scoreTierColor } from './QuickCard';
 import {
-  extractHeat, swBlockHtml, leagueAbbrev, SW_TONES, SW_MANUAL_TERMS, SW_HI, SW_LO,
+  extractHeat, swBlockHtml, clubsPanelBody, setPagerImageMap,
+  leagueAbbrev, SW_TONES, SW_HI, SW_LO,
 } from './PlayerPager';
 
 // ─── Canvas geometry — identical to PlayerPager.js / TeamReport.js ─────────
@@ -108,10 +112,13 @@ const TITLE_H = 34;
 
 // Formation dot tiers — the SAME two greens the position pitch uses for a
 // player's primary and secondary slot, so a dot on this card means the same
-// thing it means on his. Primary is solid, secondary is a ring: two filled sets
-// of eleven dots on a 188px pitch is a smear, an outline reads as "and also".
+// thing it means on his.
 const FM_PRIMARY = '#00bf63';
 const FM_SECONDARY = '#7ed957';
+// Over a zones wash the greens disappear into the zones themselves, so the
+// shape switches to white. It is still the only solid mark on the pitch, which
+// is what makes it read as the shape rather than as more data.
+const FM_ON_IMAGE = '#ffffff';
 
 const esc = (s) => String(s == null ? '' : s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -168,11 +175,11 @@ const rankStr = (r) => (r ? `${r.rank}<span style="color:#6b7385;font-weight:600
 // SEASON RESOLUTION
 //
 // A pager describes ONE tenure season. Everything anchored to it — the stat row,
-// the percentile column, Team Context, the league table and the similar-teams
-// list — has to come off the SAME row, or the card would describe two clubs at
-// once for a coach who moved. Default is the most recent tenure, which is what
-// both coach cards already do; the override key is "team|season" because that is
-// the key resolveStatsRow already understands.
+// the percentile column, Team Context, the league table and the club list — has
+// to come off the SAME row, or the card would describe two clubs at once for a
+// coach who moved. Default is the most recent tenure, which is what both coach
+// cards already do; the override key is "team|season" because that is the key
+// resolveStatsRow already understands.
 // ───────────────────────────────────────────────────────────────────────────
 function resolveTenure(tenureRows, statsSeasonKey) {
   const sortedDesc = [...(tenureRows || [])].sort((a, b) => (a.season < b.season ? 1 : -1));
@@ -208,6 +215,83 @@ function deriveGbe(coach, league, ov = {}) {
     status: pass ? 'PASS' : 'FAIL',
     colour: pass ? '#3da65b' : showPanel ? '#f0a637' : '#c7363c',
   };
+}
+
+// ─── Zones of control ──────────────────────────────────────────────────────
+// Opta's zones chart arrives as an opaque PNG on a white page: purple where the
+// team wins the zone, pink where the opposition does, grey where it's contested,
+// with black pitch markings drawn on top. Dropped straight onto the header it
+// would be a white rectangle with someone else's palette sitting on a navy band.
+//
+// So it's remapped at upload time, on a canvas, before it reaches the card:
+//   purple -> the card's green,  pink -> the card's red,  everything else -> gone.
+// The test is saturation, then which of red and blue leads. Purple has blue
+// above red, pink has red above blue, and grey, white and the black markings all
+// have the three channels within a few points of each other — so one threshold
+// separates the three states without needing to know Opta's exact hexes.
+//
+// Contested zones going transparent is the point rather than a shortcut: the
+// card then shows its own pitch through them, which is what makes the wash read
+// as part of the design instead of as a screenshot pasted on top.
+//
+// The crop is taken from the BLACK MARKINGS, not from the coloured pixels. The
+// chart has a white margin and its outer touchline is the only reliable edge; a
+// bounding box of coloured pixels would cut off any grey zone that happens to
+// sit on the flank, and every zone after it would be drawn in the wrong place.
+export function extractZones(dataUrl) {
+  return new Promise((resolve) => {
+    try {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const maxW = 1200;
+          const scale = Math.min(1, maxW / img.width);
+          const c = document.createElement('canvas');
+          c.width = Math.max(1, Math.round(img.width * scale));
+          c.height = Math.max(1, Math.round(img.height * scale));
+          const g = c.getContext('2d');
+          g.drawImage(img, 0, 0, c.width, c.height);
+          const data = g.getImageData(0, 0, c.width, c.height);
+          const px = data.data;
+
+          // Pass 1 — the pitch outline, so the wash lands where the pitch is.
+          let minX = c.width, minY = c.height, maxX = -1, maxY = -1;
+          for (let i = 0; i < px.length; i += 4) {
+            if (px[i] < 110 && px[i + 1] < 110 && px[i + 2] < 110 && px[i + 3] > 40) {
+              const p = i / 4, x = p % c.width, y = (p / c.width) | 0;
+              if (x < minX) minX = x;
+              if (x > maxX) maxX = x;
+              if (y < minY) minY = y;
+              if (y > maxY) maxY = y;
+            }
+          }
+
+          // Pass 2 — recolour.
+          const GREEN = [0, 191, 99], RED = [255, 49, 49];
+          let any = false;
+          for (let i = 0; i < px.length; i += 4) {
+            const r = px[i], gg = px[i + 1], b = px[i + 2];
+            const sat = Math.max(r, gg, b) - Math.min(r, gg, b);
+            if (sat < 34) { px[i + 3] = 0; continue; }   // grey / white / markings
+            const tint = b > r ? GREEN : RED;            // purple -> green, pink -> red
+            px[i] = tint[0]; px[i + 1] = tint[1]; px[i + 2] = tint[2]; px[i + 3] = 255;
+            any = true;
+          }
+          if (!any) return resolve(dataUrl);             // not a zones chart — use it raw
+          g.putImageData(data, 0, 0);
+
+          if (maxX <= minX || maxY <= minY) return resolve(c.toDataURL('image/png'));
+          const cw = maxX - minX + 1, ch = maxY - minY + 1;
+          const c2 = document.createElement('canvas');
+          c2.width = cw; c2.height = ch;
+          c2.getContext('2d').drawImage(c, minX, minY, cw, ch, 0, 0, cw, ch);
+          resolve(c2.toDataURL('image/png'));
+        } catch (e) { resolve(dataUrl); }                // tainted canvas etc
+      };
+      img.onerror = () => resolve(dataUrl);
+      img.src = dataUrl;
+    } catch (e) { resolve(dataUrl); }
+  });
 }
 
 // ─── Percentile column (PlayerPager's Performance slot) ────────────────────
@@ -259,14 +343,18 @@ function percentilePanelBody(w, h, mg) {
 }
 
 // ─── Team Context ──────────────────────────────────────────────────────────
-// teamContextHtml emits ~62px per category and this tile has 210, so four
-// categories don't fit. Same treatment the player pager gives its own Team
-// Context: render at whatever width makes the block fit once scaled uniformly,
-// which keeps the bars proportioned exactly as the quick card draws them rather
-// than re-cutting the function for one tile.
-// Measured off the markup: label row 20 + bar 14 + caption 12 + the flex gap 12.
-// Deliberately generous — over-reserving costs a slightly smaller chart,
-// under-reserving costs a clipped Low/High caption, and only one looks broken.
+// teamContextHtml lays its rows out with space-between inside whatever box it's
+// given, which is right for the quick card's tall tile and wrong here: one or
+// two rows in a 210px box left the first pinned to the top and the last to the
+// bottom with a canyon between them, and the tile read as broken rather than as
+// sparse.
+//
+// So the BLOCK is sized to its own content — n rows at their natural height —
+// and that block is centred in the tile. Two rows then sit as a pair in the
+// middle, four fill the tile, and the internal spacing is the same either way.
+// Only when the natural height exceeds the tile does anything scale, which keeps
+// the bars proportioned exactly as the quick card draws them.
+// Measured off the markup: label 20 + bar 14 + caption 12 + the flex gap 12.
 const TC_ROW_H = 62;
 
 function teamContextBody(w, h, tc, ageVal, agePct) {
@@ -280,11 +368,14 @@ function teamContextBody(w, h, tc, ageVal, agePct) {
     return `<div style="position:absolute;inset:0;display:flex;align-items:center;
               justify-content:center;font-size:12px;color:#55617a;">No team context entered.</div>`;
   }
-  const scale = Math.min(1, h / (n * TC_ROW_H));
-  const renderW = Math.round(w / scale);
-  const renderH = Math.round(h / scale);
+  const natural = n * TC_ROW_H;
+  const scale = Math.min(1, h / natural);
+  const blockH = Math.min(h, natural);
+  const top = Math.max(0, Math.round((h - blockH) / 2));
   return `<div style="position:absolute;inset:0;overflow:hidden;">
-      <div style="width:${renderW}px;height:${renderH}px;display:flex;flex-direction:column;
+      <div style="position:absolute;left:0;top:${top}px;
+                  width:${Math.round(w / scale)}px;height:${Math.round(blockH / scale)}px;
+                  display:flex;flex-direction:column;
                   transform:scale(${scale.toFixed(4)});transform-origin:top left;">
         ${teamContextHtml(tc || {}, ageVal, agePct)}
       </div>
@@ -295,37 +386,43 @@ function teamContextBody(w, h, tc, ageVal, agePct) {
 // The player pager's pitch chrome, verbatim — same 320x208 viewBox, same two
 // line weights, same clip and shadow, so the two cards draw the same pitch. Only
 // what sits ON it changes: eleven formation dots instead of labelled position
-// discs, and an average position map instead of a heatmap.
+// discs, and a zones-of-control wash instead of a heatmap.
 //
 // CoachCard's FORMATIONS coordinates live in a 330x220 space with the keeper at
 // the left edge. That maps onto this pitch's playing area (x 4..316, y 4..204)
 // with no distortion, and the two systems already agree — its keeper at [25,110]
 // lands on 27.6, 104 against the position pitch's GK slot at [26,104].
+//
+// ONE SHAPE BY DEFAULT. Drawing the secondary formation as well put 22 marks on
+// a 188px pitch, and at that density neither shape is legible — you read a
+// scatter of dots rather than a back four. The secondary is NAMED in the text
+// column, which is where it belongs, and can be drawn as rings on request for
+// the cases where the contrast between the two is the actual point.
 const FM_VB = [320, 208];
 const fmX = (x) => 4 + (Number(x) / 330) * 312;
 const fmY = (y) => 4 + (Number(y) / 220) * 200;
 
-function formationPitchSvg(primary, secondary, w, h, mapUrl, mapOpacity, showDots) {
+function formationPitchSvg(primary, secondary, w, h, mapUrl, mapOpacity, showDots, showSecondary) {
   const LINE = 'rgba(255,255,255,0.42)';
   const LINE_SOFT = 'rgba(255,255,255,0.30)';
+  const dotCol = mapUrl ? FM_ON_IMAGE : FM_PRIMARY;
 
   const coordsFor = (fm) => (fm && COACH_FORMATIONS[fm]) || null;
   const primaryPts = showDots ? coordsFor(primary) : null;
-  const secondaryPts = showDots ? coordsFor(secondary) : null;
+  const secondaryPts = (showDots && showSecondary) ? coordsFor(secondary) : null;
 
   // Secondary FIRST so a shared position doesn't punch a ring through the solid
-  // dot that sits on the same spot — the primary shape always reads on top.
+  // dot on the same spot — the primary shape always reads on top.
   const secondaryDots = (secondaryPts || []).map(([x, y]) => `
       <circle cx="${fmX(x).toFixed(1)}" cy="${fmY(y).toFixed(1)}" r="7.5"
-              fill="none" stroke="${FM_SECONDARY}" stroke-width="2.2" opacity="0.85"/>`).join('');
+              fill="none" stroke="${mapUrl ? 'rgba(255,255,255,0.65)' : FM_SECONDARY}"
+              stroke-width="2.2"/>`).join('');
   const primaryDots = (primaryPts || []).map(([x, y]) => `
       <circle cx="${fmX(x).toFixed(1)}" cy="${fmY(y).toFixed(1)}" r="8.5"
-              fill="${FM_PRIMARY}" filter="url(#mpShadow)"/>`).join('');
+              fill="${dotCol}" filter="url(#mpShadow)"/>`).join('');
 
-  // The map sits under the markings, clipped to the pitch. An average position
-  // map is a chart in its own right rather than a wash, so it defaults far more
-  // opaque than a heatmap would — but it still goes underneath, because the
-  // pitch is the thing that tells you which way they were playing.
+  // The wash sits under the markings, clipped to the pitch. Over the top is what
+  // a screenshot does; underneath is what a design does.
   const mapLayer = mapUrl ? `
       <image href="${mapUrl}" x="4" y="4" width="312" height="200"
              preserveAspectRatio="none" opacity="${mapOpacity}" clip-path="url(#mpClip)"/>` : '';
@@ -334,7 +431,7 @@ function formationPitchSvg(primary, secondary, w, h, mapUrl, mapOpacity, showDot
       <defs>
         <clipPath id="mpClip"><rect x="4" y="4" width="312" height="200" rx="8"/></clipPath>
         <filter id="mpShadow" x="-50%" y="-50%" width="200%" height="200%">
-          <feDropShadow dx="0" dy="1.5" stdDeviation="1.6" flood-color="#000" flood-opacity="0.45"/>
+          <feDropShadow dx="0" dy="1.5" stdDeviation="1.6" flood-color="#000" flood-opacity="0.55"/>
         </filter>
         <linearGradient id="mpTurf" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stop-color="rgba(255,255,255,0.075)"/>
@@ -379,36 +476,119 @@ const FB_PITCH_W = Math.round(FB_PITCH_H * (320 / 208));   // 188
 const FB_GAP = 20;
 const FB_TEXT_W = 236;
 
-function formationBlockHtml(x, w, ink, primary, secondary, mapUrl, mapOpacity, showDots) {
+function formationBlockHtml(x, w, ink, primary, secondary, mapUrl, mapOpacity, showDots, showSecondary) {
   const textW = FB_TEXT_W;
   const longest = Math.max(nameEmWidth(primary || '—'), nameEmWidth(secondary || '—'));
   const fs = Math.max(15, Math.min(24, Math.floor(textW / (longest || 1))));
   const groupW = textW + FB_GAP + FB_PITCH_W;
   const left = x + Math.max(0, Math.round((w - groupW) / 2)) - 14;
+  const dotCol = mapUrl ? FM_ON_IMAGE : FM_PRIMARY;
   return `
     <div style="position:absolute;left:${left}px;top:28px;width:${textW}px;">
       <div style="font-size:8px;font-weight:700;letter-spacing:0.14em;color:${ink.muted};
                   white-space:nowrap;">PRIMARY FORMATION</div>
       <div style="margin-top:9px;display:flex;align-items:center;white-space:nowrap;">
-        <span style="width:9px;height:9px;border-radius:50%;flex-shrink:0;
-                     background:${FM_PRIMARY};margin-right:9px;"></span>
+        ${showDots ? `<span style="width:9px;height:9px;border-radius:50%;flex-shrink:0;
+                     background:${dotCol};margin-right:9px;"></span>` : ''}
         <span style="font-size:${fs}px;font-weight:700;color:${ink.primary};
                      line-height:1.05;">${esc(primary || '—')}</span>
       </div>
       <div style="margin-top:14px;font-size:8px;font-weight:700;letter-spacing:0.14em;
                   color:${ink.muted};white-space:nowrap;">SECONDARY FORMATION</div>
       <div style="margin-top:9px;display:flex;align-items:center;white-space:nowrap;">
-        ${secondary ? `<span style="width:9px;height:9px;border-radius:50%;flex-shrink:0;
-                     border:2px solid ${FM_SECONDARY};box-sizing:border-box;margin-right:9px;"></span>` : ''}
+        ${(secondary && showDots && showSecondary) ? `<span style="width:9px;height:9px;border-radius:50%;
+                     flex-shrink:0;border:2px solid ${mapUrl ? 'rgba(255,255,255,0.65)' : FM_SECONDARY};
+                     box-sizing:border-box;margin-right:9px;"></span>` : ''}
         <span style="font-size:${fs}px;font-weight:700;color:${ink.muted};
                      line-height:1.05;">${secondary ? esc(secondary) : '&mdash;'}</span>
       </div>
     </div>
     <div style="position:absolute;left:${left + textW + FB_GAP}px;top:14px;
                 width:${FB_PITCH_W}px;height:${FB_PITCH_H}px;">
-      ${formationPitchSvg(primary, secondary, FB_PITCH_W, FB_PITCH_H, mapUrl, mapOpacity, showDots)}
+      ${formationPitchSvg(primary, secondary, FB_PITCH_W, FB_PITCH_H, mapUrl, mapOpacity, showDots, showSecondary)}
     </div>`;
 }
+
+// ─── Strengths & weaknesses, in manager language ───────────────────────────
+// The percentile column prints the METRIC names, which is right for a column of
+// bars — "Passes to Final 3rd" beside a bar is a measurement and reads as one.
+// As a strength pill it isn't: a pill saying "Dribbles" claims the manager is
+// good at dribbling, and "Passes" claims nothing at all.
+//
+// So the same translation the player pager does per position, done here per
+// metric: a label a scout would write, and null for the metrics that shouldn't
+// be eligible at all. The exclusions are all VOLUME measures — how much a side
+// crosses, dribbles, duels or plays long is a description of how they play, not
+// of how well. Elche's 19th-percentile Dribbles was printing as a weakness when
+// what it actually says is that they don't dribble, which is a style choice and
+// on this card is already stated three tiles away.
+//
+// HI/LO thresholds are the player pager's, imported rather than repeated.
+const MP_SW_LABELS = {
+  // Attacking
+  'Goals Scored': 'Goalscoring',
+  'xG': 'Chance Creation',
+  'Shooting %': 'Shot Quality',
+  'Touches in Box': 'Box Occupation',
+  'Crosses': null,
+  'Shots': null,
+  // Defensive
+  'Goals Against': 'Defensive Solidity',
+  'xG Against': 'Chance Prevention',
+  'Shots Against': 'Shots Conceded',
+  'PPDA': 'Pressing Intensity',
+  'Aerial Duel Success %': 'Aerial Dominance',
+  'Defensive Duel Win %': 'Duel Success',
+  'Aerial Duels': null,
+  'Defensive Duels': null,
+  // Possession
+  'Possession': 'Possession Control',
+  'Passing Accuracy %': 'Passing Retention',
+  'Long Passing %': 'Long Passing Accuracy',
+  'Passes to Final 3rd': 'Territorial Progression',
+  'Progressive Passes': 'Progression',
+  'Passes': null,
+  'Long Passes': null,
+  'Dribbles': null,
+  'Progressive Runs': null,
+};
+
+function mpSwEligible(mg) {
+  const lower = {};
+  for (const k of Object.keys(MP_SW_LABELS)) lower[k.toLowerCase()] = MP_SW_LABELS[k];
+  const best = {};
+  for (const k of MG_KEYS) {
+    for (const r of (mg[k] || [])) {
+      if (!r || r.label == null) continue;
+      const pct = Number(r.pct);
+      if (isNaN(pct)) continue;
+      const label = lower[String(r.label).toLowerCase().trim()];
+      if (!label) continue;                 // null or absent = not eligible
+      if (best[label] == null || pct > best[label]) best[label] = pct;
+    }
+  }
+  return Object.keys(best).map(label => ({ label, pct: best[label] }));
+}
+
+// Judgements no metric measures. These are the manager equivalent of the player
+// pager's SW_MANUAL_TERMS — that list is Pace and Weak Foot, which say nothing
+// about a head coach. Alphabetical rather than grouped, for the same reason:
+// in a long dropdown you're scanning for a word you've already chosen.
+export const MP_MANUAL_TERMS = [
+  'Adaptability', 'Attacking Set Pieces', 'Board Relations', 'Build-Up Structure',
+  'Counter-Attacking', 'Counter-Pressing', 'Defending Set Pieces',
+  'Defensive Organisation', 'Defensive Transitions', 'Developing Young Players',
+  'Discipline', 'Elite Player Management', 'Facing a Low Block', 'Game Management',
+  'High Defensive Line', 'In-Game Adaptation', 'Injury Record', 'Loan Market Use',
+  'Low Block Defending', 'Man Management', 'Media Handling', 'Midfield Control',
+  'Off-Ball Structure', 'Overload Creation', 'Playing Out From The Back',
+  'Pressing Structure', 'Pressing Triggers', 'Promoting From The Academy',
+  'Recruitment Judgement', 'Resilience', 'Rotation Management', 'Second Balls',
+  'Set-Piece Coaching', 'Squad Building', 'Squad Cohesion', 'Staff Retention',
+  'Style Consistency', 'Tactical Flexibility', 'Territorial Dominance',
+  'Transitional Play', 'Wide Overloads', 'Winning Mentality',
+  'Working To A Budget', 'Working With A Young Squad',
+];
 
 // ─── View ──────────────────────────────────────────────────────────────────
 // Copied by value from the player pager: the type is sized to the copy so no
@@ -430,14 +610,29 @@ function viewPanelBody(w, h, text) {
 }
 
 // ─── Impact ────────────────────────────────────────────────────────────────
-// The quick card's Team Comparison radar, centred in the tile. It draws at
-// height:100% and takes whatever width follows, so it simply scales into a 210px
-// slot rather than needing its own cut.
 function impactBody(h, rowA, rowB, pool, labelA, labelB, subA, subB) {
   return `<div style="position:absolute;inset:0;display:flex;align-items:center;
             justify-content:center;height:${h}px;">
       ${impactRadarSvg(rowA, rowB, pool, labelA, labelB, subA, subB)}
     </div>`;
+}
+
+// ─── Potential Clubs ───────────────────────────────────────────────────────
+// The player pager's own Potential Clubs renderer, called with clubs rather than
+// players — same 9px card, same #n index, same 26px crest, same league flag and
+// the same pink note beside it. Nothing is redrawn, so the two cards' club lists
+// are the same object.
+//
+// Where the ranking comes from is the honest difference. A player has a fit
+// model; a manager doesn't, so the ordering is the SIMILARITY of each club to
+// the one he is at — which is a defensible proxy (a side that plays and is
+// resourced like his current one is a side he'd walk into) and is labelled as
+// such in the panel's right-hand slot rather than passed off as a fit score.
+function potentialClubRows(statsRow, allTeams, n = 8) {
+  try {
+    return resolveSimilarTeams(statsRow || {}, allTeams, n)
+      .map(t => ({ team: t.team, league: t.league, finalFit: t.__sim }));
+  } catch (e) { return []; }
 }
 
 // ─── Header ────────────────────────────────────────────────────────────────
@@ -456,9 +651,9 @@ function headerHtml(coach, ctx, opts) {
   const { statsRow, league, team } = ctx;
   const {
     headerColour, nameOverride, teamOverride, uploadedPhotoDataUrl,
-    gbeOv, unattached, contractOverride, tenureOverride,
+    gbeOv, unattached, tenureOverride,
     showFormation, primaryFormation, secondaryFormation,
-    positionMapUrl, mapOpacity, showFormationDots,
+    positionMapUrl, mapOpacity, showFormationDots, showSecondaryShape,
     score, potential, overallOverride, potentialOverride,
     overallUnclear, potentialUnclear,
     allTeams,
@@ -467,7 +662,6 @@ function headerHtml(coach, ctx, opts) {
   const ink = headerInk(headerColour);
   const displayName = (nameOverride && nameOverride.trim()) || coach.name || '';
   const displayTeam = (teamOverride && teamOverride.trim()) || team;
-  const uploadedPhoto = uploadedPhotoDataUrl || (coach.photoDataUrl || '');
   const photo = uploadedPhotoDataUrl || coachPhotoUrl(coach) || PHOTO_FALLBACK;
   const crest = teamCrest(team);
   const logo = leagueLogo(league);
@@ -495,43 +689,22 @@ function headerHtml(coach, ctx, opts) {
   ];
 
   const gbe = deriveGbe(coach, league, gbeOv);
-  const contract = (contractOverride && contractOverride.trim()) || coach.contract || '';
   const tenure = (tenureOverride && tenureOverride.trim()) || coach.tenure || '';
 
-  return `
-    <div style="position:absolute;top:0;left:0;width:${W}px;height:${HEADER_H}px;
-                background:${headerGradient(headerColour)};
-                box-shadow:inset 0 1px 0 rgba(255,255,255,0.08);"></div>
-
-    <!-- Coach photo in the crest's box, cover-cropped from the top so a
-         head-and-shoulders portrait keeps its chin. ONE layer, chosen up front:
-         stacking the fallback under a transparent cut-out prints a grey figure
-         through the subject's own shoulders. preloadImages only records URLs it
-         actually fetched, so absence from that map IS the 404. -->
-    ${(() => {
-      const uploaded = !!uploadedPhotoDataUrl || (!!uploadedPhoto && uploadedPhoto.startsWith('data:'));
-      const shown = (uploaded || IMG[photo]) ? src(photo) : src(PHOTO_FALLBACK);
-      return `<div style="position:absolute;left:12px;top:2px;width:146px;height:146px;
-                background-image:url('${shown}');background-size:cover;
-                background-position:center top;background-repeat:no-repeat;"></div>`;
-    })()}
-
-    <div style="position:absolute;left:${NAME_X}px;top:6px;width:${NAME_MAX_W}px;height:64px;
-                display:flex;align-items:flex-end;overflow:hidden;">
-      <div style="font-size:${fitNameSize(displayName, NAME_MAX_W)}px;font-weight:700;letter-spacing:-0.8px;
-                  line-height:1.18;color:${ink.primary};white-space:nowrap;">${esc(displayName)}</div>
-    </div>
-
-    <!-- Club, league and the coach's own details on ONE row. No height and no
-         foot — neither means anything for a manager — so contract and tenure
-         take the space they used to occupy. -->
-    <div style="position:absolute;left:${NAME_X}px;top:78px;display:flex;align-items:center;
-                white-space:nowrap;">
-      ${unattached ? `
-      <span style="font-size:20px;font-weight:700;color:${ink.secondary};">Unattached</span>
-      ${displayTeam ? `<span style="font-size:12.5px;font-weight:700;color:${ink.muted};
-                   margin-left:10px;">LAST: ${esc(truncateText(displayTeam, 16))}</span>` : ''}`
-      : `
+  // UNATTACHED reads as a STATE, not as a missing club. The crest still draws,
+  // dimmed, with the club named in the muted ink and a small tag after it — a
+  // manager between jobs is defined by where he last was, so removing the club
+  // entirely lost the one thing a reader wants. The league badge and flag go,
+  // because he isn't in that league any more.
+  const clubBlock = unattached ? `
+      ${crest ? `<div style="width:23px;height:23px;flex-shrink:0;background-size:contain;
+                  background-repeat:no-repeat;background-position:center;opacity:0.55;
+                  background-image:url('${src(crest)}');"></div>` : ''}
+      <span style="font-size:20px;font-weight:700;color:${ink.muted};${crest ? 'margin-left:9px;' : ''}">${esc(truncateText(displayTeam, 16))}</span>
+      <span style="font-size:9px;font-weight:700;letter-spacing:0.14em;color:${ink.muted};
+                   border:1px solid ${ink.rule};border-radius:4px;padding:3px 8px;
+                   margin-left:11px;">UNATTACHED</span>`
+    : `
       ${crest ? `<div style="width:23px;height:23px;flex-shrink:0;background-size:contain;
                   background-repeat:no-repeat;background-position:center;
                   background-image:url('${src(crest)}');"></div>` : ''}
@@ -544,7 +717,39 @@ function headerHtml(coach, ctx, opts) {
                   box-shadow:inset 0 0 0 1px rgba(255,255,255,0.18);
                   background-image:url('${src(flag)}');"></div>` : ''}
       <span style="font-size:12.5px;font-weight:700;letter-spacing:0.08em;
-                   color:${ink.muted};margin-left:12px;">${esc(leagueAbbrev(league))}</span>`}
+                   color:${ink.muted};margin-left:12px;">${esc(leagueAbbrev(league))}</span>`;
+
+  return `
+    <div style="position:absolute;top:0;left:0;width:${W}px;height:${HEADER_H}px;
+                background:${headerGradient(headerColour)};
+                box-shadow:inset 0 1px 0 rgba(255,255,255,0.08);"></div>
+
+    <!-- Coach photo in the crest's box, cover-cropped from the top so a
+         head-and-shoulders portrait keeps its chin. ONE layer, chosen up front:
+         stacking the fallback under a transparent cut-out prints a grey figure
+         through the subject's own shoulders. preloadImages only records URLs it
+         actually fetched, so absence from that map IS the 404. -->
+    ${(() => {
+      const uploaded = !!uploadedPhotoDataUrl || (!!photo && photo.startsWith('data:'));
+      const shown = (uploaded || IMG[photo]) ? src(photo) : src(PHOTO_FALLBACK);
+      return `<div style="position:absolute;left:12px;top:2px;width:146px;height:146px;
+                background-image:url('${shown}');background-size:cover;
+                background-position:center top;background-repeat:no-repeat;"></div>`;
+    })()}
+
+    <div style="position:absolute;left:${NAME_X}px;top:6px;width:${NAME_MAX_W}px;height:64px;
+                display:flex;align-items:flex-end;overflow:hidden;">
+      <div style="font-size:${fitNameSize(displayName, NAME_MAX_W)}px;font-weight:700;letter-spacing:-0.8px;
+                  line-height:1.18;color:${ink.primary};white-space:nowrap;">${esc(displayName)}</div>
+    </div>
+
+    <!-- Club, league and the coach's own details on ONE row. No height, no foot
+         and no contract: the first two mean nothing for a manager and the third
+         is a number that dates the card the moment it's wrong. Tenure says how
+         long he's been there, which is the thing a reader actually uses. -->
+    <div style="position:absolute;left:${NAME_X}px;top:78px;display:flex;align-items:center;
+                white-space:nowrap;">
+      ${clubBlock}
 
       <span style="width:1px;height:16px;background:${ink.rule};margin:0 6px 0 7px;flex-shrink:0;"></span>
 
@@ -552,10 +757,8 @@ function headerHtml(coach, ctx, opts) {
                   background-position:center;border-radius:2px;margin-right:8px;
                   box-shadow:inset 0 0 0 1px rgba(255,255,255,0.18);
                   background-image:url('${src(natFlag)}');"></div>` : ''}
-      ${[age != null ? `${age} y.o.` : null,
-         contract ? `Contract ${contract}` : null,
-         tenure || null,
-        ].filter(Boolean).map((v, i) => `
+      ${[age != null ? `${age} y.o.` : null, tenure || null]
+        .filter(Boolean).map((v, i) => `
         ${i ? `<span style="color:${ink.muted};margin:0 8px;font-size:11px;">&middot;</span>` : ''}
         <span style="font-size:12.5px;font-weight:700;color:${ink.soft};">${esc(v)}</span>`).join('')}
     </div>
@@ -611,18 +814,17 @@ function headerHtml(coach, ctx, opts) {
                 background:${ink.rule};"></div>
 
     <!-- Formation, in the position pitch's slot: shape named in words, drawn
-         beside it. -->
+         beside it, over the zones wash if one is loaded. -->
     ${showFormation ? formationBlockHtml(PITCH_X, PITCH_W, ink, primaryFormation,
-        secondaryFormation, positionMapUrl, mapOpacity, showFormationDots) : `
-    <div style="position:absolute;left:${PITCH_X}px;top:34px;width:${PITCH_W}px;">
+        secondaryFormation, positionMapUrl, mapOpacity, showFormationDots, showSecondaryShape) : `
+    <div style="position:absolute;left:${PITCH_X}px;top:38px;width:${PITCH_W}px;">
       ${[['FORMATION', primaryFormation || '—'],
          ['ALTERNATIVE', secondaryFormation || '—'],
-         ['CONTRACT', contract || '—'],
          ['TENURE', tenure || '—'],
         ].map(([k, v], i) => `
-        <div style="position:absolute;left:0;top:${i * 22}px;font-size:8px;font-weight:700;
+        <div style="position:absolute;left:0;top:${i * 26}px;font-size:8px;font-weight:700;
                     letter-spacing:0.13em;color:${ink.muted};">${k}</div>
-        <div style="position:absolute;left:110px;top:${i * 22 - 3}px;font-size:13px;font-weight:700;
+        <div style="position:absolute;left:110px;top:${i * 26 - 3}px;font-size:13px;font-weight:700;
                     color:${ink.secondary};white-space:nowrap;">${esc(truncateText(v, 24))}</div>`).join('')}
     </div>`}
 
@@ -637,8 +839,6 @@ function headerHtml(coach, ctx, opts) {
       <span style="flex:1;min-width:0;overflow:hidden;text-align:right;padding:0 10px;">
         ${gbe.autopass ? `<span style="font-size:8px;font-weight:700;letter-spacing:0.13em;
                      color:${ink.muted};">AUTO PASS</span>` : ''}
-        ${gbe.showPanel ? `<span style="font-size:8px;font-weight:700;letter-spacing:0.13em;
-                     color:#f0c56a;">EXCEPTIONS PANEL</span>` : ''}
       </span>
       <span style="flex-shrink:0;display:flex;align-items:center;">
         <span style="font-size:11px;font-weight:700;color:${gbe.colour};
@@ -697,7 +897,7 @@ function headerHtml(coach, ctx, opts) {
 // Same treatment TeamReport and PlayerPager give theirs, for the same reason:
 // html-to-image refetches every remote image on each of the two render passes,
 // and a cold FotMob or GitHub fetch is slower than the render itself.
-export function managerPagerImageUrls(coach, ctx, uploadedPhotoDataUrl, allTeams = [], similarRows = []) {
+export function managerPagerImageUrls(coach, ctx, uploadedPhotoDataUrl, allTeams = [], clubRows = []) {
   const urls = [
     uploadedPhotoDataUrl ? '' : coachPhotoUrl(coach),
     leagueLogo(ctx.league),
@@ -708,12 +908,13 @@ export function managerPagerImageUrls(coach, ctx, uploadedPhotoDataUrl, allTeams
   const iso = countryToIso2(coach.nationality || '');
   if (iso) urls.push(`https://flagcdn.com/w80/${iso}.png`);
 
-  // Similar Teams crests and every crest in the league-table window. Without
-  // these they'd be the only remote references left in the render and would
-  // blank out in the export.
-  for (const t of (similarRows && similarRows.length
-    ? similarRows : resolveSimilarTeams(ctx.statsRow || {}, allTeams, 3))) {
-    if (t && t.team) urls.push(teamCrest(t.team));
+  // Potential Clubs crests AND their league flags — the row prints both, so
+  // missing either leaves a hole in the export.
+  for (const t of (clubRows && clubRows.length
+    ? clubRows : potentialClubRows(ctx.statsRow || {}, allTeams, 3))) {
+    if (!t || !t.team) continue;
+    urls.push(teamCrest(t.team));
+    if (t.league) urls.push(leagueFlag(t.league));
   }
   try {
     const lw = leagueWindow(ctx.statsRow || {}, allTeams, 5);
@@ -731,16 +932,16 @@ export function buildManagerPagerElement(coach, tenureRows, traits, opts = {}) {
     headerColour = HEADER_COLOURS.Default,
     statsSeasonKey = '', nameOverride = '', teamOverride = '',
     uploadedPhotoDataUrl = '', viewText = '',
-    contractOverride = '', tenureOverride = '', unattached = false,
+    tenureOverride = '', unattached = false,
     primaryFormation = '', secondaryFormation = '',
-    showFormation = true, showFormationDots = true,
-    positionMapUrl = '', mapOpacity = 0.75,
+    showFormation = true, showFormationDots = true, showSecondaryShape = false,
+    positionMapUrl = '', mapOpacity = 0.5,
     careerMode = 'score', finishOverrides = {}, extraFinish = [],
     teamContext = {},
     rightMid = 'impact',          // impact | sw
     rightLow = 'view',            // view | table
     impactRowA = null, impactRowB = null,
-    similarRows = null,
+    clubRows = null, clubNotes = {}, hideFitScores = false,
     styleKeys = null,
     overallOverride = '', potentialOverride = '',
     overallUnclear = false, potentialUnclear = false,
@@ -749,14 +950,15 @@ export function buildManagerPagerElement(coach, tenureRows, traits, opts = {}) {
   } = opts;
 
   IMG = images || {};
-  // Similar Teams and the League Table are TeamReport's own renderers, and they
-  // resolve crests through TeamReport's image map rather than this file's. Point
-  // it at the same preloaded set or those two panels would be the only things on
-  // the card still holding remote references.
+  // Potential Clubs is PlayerPager's renderer and the League Table is
+  // TeamReport's; both resolve crests through their OWN module image map rather
+  // than this file's. Point all three at the same preloaded set or those panels
+  // would be the only things on the card still holding remote references.
   try { setSharedImageMap(images || {}); } catch (e) { /* older TeamReport build */ }
+  try { setPagerImageMap(images || {}); } catch (e) { /* older PlayerPager build */ }
 
   const ctx = resolveTenure(tenureRows, statsSeasonKey);
-  const { statsRow, latest, sortedDesc } = ctx;
+  const { statsRow, sortedDesc } = ctx;
   const age = computeAge(coach.dob);
   const pool = (allTeams && allTeams.length) ? allTeams : tenureRows;
 
@@ -797,8 +999,6 @@ export function buildManagerPagerElement(coach, tenureRows, traits, opts = {}) {
     const manual = ov && ov.rank && ov.size ? { rank: Number(ov.rank), size: Number(ov.size) } : null;
     return { season: s.season, sc: s.sc, finish: manual || auto };
   });
-  // Seasons the data doesn't cover carry no score, so they only join the series
-  // in finish mode — appending them in score mode would plot a null.
   if (careerMode === 'finish' && Array.isArray(extraFinish)) {
     for (const e of extraFinish) {
       if (!e || !e.season || !e.rank || !e.size) continue;
@@ -847,15 +1047,10 @@ export function buildManagerPagerElement(coach, tenureRows, traits, opts = {}) {
     : `<div style="position:absolute;inset:0;display:flex;align-items:center;
                    justify-content:center;font-size:12px;color:#55617a;">No trait scores.</div>`;
 
-  // Strengths & weaknesses off the SAME percentile rows the Performance column
-  // draws, so a trait called a strength here is visibly a long bar there.
-  const swRows = MG_KEYS
-    .flatMap(k => (mg[k] || []))
-    .map(r => ({ label: r.label, pct: Number(r.pct) }))
-    .filter(r => !isNaN(r.pct));
-
+  const swRows = mpSwEligible(mg);
   const rowA = impactRowA || sortedDesc[sortedDesc.length - 1] || null;
   const rowB = impactRowB || sortedDesc[0] || null;
+  const clubs = (clubRows && clubRows.length) ? clubRows : potentialClubRows(statsRow, allTeams, 3);
 
   container.innerHTML = `
     <div id="mp-card-root" style="width:${W}px;height:${H}px;overflow:hidden;background:${BG};
@@ -863,9 +1058,9 @@ export function buildManagerPagerElement(coach, tenureRows, traits, opts = {}) {
 
       ${headerHtml(coach, ctx, {
         headerColour, nameOverride, teamOverride, uploadedPhotoDataUrl,
-        gbeOv, unattached, contractOverride, tenureOverride,
+        gbeOv, unattached, tenureOverride,
         showFormation, primaryFormation, secondaryFormation,
-        positionMapUrl, mapOpacity, showFormationDots,
+        positionMapUrl, mapOpacity, showFormationDots, showSecondaryShape,
         score, potential, overallOverride, potentialOverride,
         overallUnclear, potentialUnclear, allTeams: pool,
       })}
@@ -873,10 +1068,6 @@ export function buildManagerPagerElement(coach, tenureRows, traits, opts = {}) {
       ${panel({
         x: PAD, y: BODY_TOP, w: LEFT_W, h: LEFT_H,
         title: 'Performance',
-        // Season, club, league and the pool the percentiles run against. Without
-        // the last two a reader can't tell whether 80th percentile means 80th of
-        // League Two or of the Championship, which is the whole meaning of the
-        // column.
         right: [shortSeason(ctx.season), ctx.team, leagueDisplayName(ctx.league) || ctx.league]
                  .filter(Boolean).join(' · '),
         body: percentilePanelBody(leftInnerW, leftInnerH, mg),
@@ -909,9 +1100,12 @@ export function buildManagerPagerElement(coach, tenureRows, traits, opts = {}) {
       })}
 
       ${panel({
-        x: COL_A_X, y: ROW_3, w: COL_W, h: ROW3_H, title: 'Similar Teams',
-        right: ctx.team ? esc(truncateText(ctx.team, 18)).toUpperCase() : '',
-        body: similarTeamsPanelHtml(innerW, row3InnerH, statsRow, allTeams, similarRows),
+        x: COL_A_X, y: ROW_3, w: COL_W, h: ROW3_H, title: 'Potential Clubs',
+        // The basis, stated. These are ranked on how close each club is to the
+        // one he is at, and a reader is entitled to know that rather than be
+        // handed a percentage with no stated meaning.
+        right: ctx.team ? `LIKE ${esc(truncateText(ctx.team, 14)).toUpperCase()}` : '',
+        body: clubsPanelBody(innerW, row3InnerH, clubs, false, 'clubs', hideFitScores, clubNotes),
       })}
       ${panel({
         x: COL_B_X, y: ROW_3, w: COL_W, h: ROW3_H,
@@ -984,9 +1178,13 @@ const TRAIT_CHIP_LABELS = {
   directness: 'Long Ball',
 };
 const VIEW_MAX_LENGTH = 440;
+// The note shares a 498px line with a flag and a league name, so it has to be
+// short enough that the row never wraps. Same cap as the player pager's.
+const CLUB_NOTE_MAX = 26;
 
 export default function ManagerPagerModal({
-  coach, tenureRows = [], traits = {}, allTeams = [], seasonPerf = {}, onClose,
+  coach, tenureRows = [], traits = {}, allTeams = [], seasonPerf = {},
+  squadValueRanks = {}, onClose,
 }) {
   const isMobile = useIsMobile();
 
@@ -994,8 +1192,6 @@ export default function ManagerPagerModal({
   const [progress, setProgress] = useState('');
   const [error, setError] = useState('');
 
-  // A saved club colour is the honest default for a coach card — it is the club
-  // he is actually at. The named palette stays available beside it.
   const COLOURS = useMemo(() => (coach.clubColor
     ? { Club: { hex: coach.clubColor, fade: [0.62, 0.93] }, ...HEADER_COLOURS }
     : HEADER_COLOURS), [coach.clubColor]);
@@ -1007,7 +1203,6 @@ export default function ManagerPagerModal({
   const [statsSeasonKey, setStatsSeasonKey] = useState('');
   const [nameOverride, setNameOverride] = useState('');
   const [teamOverride, setTeamOverride] = useState('');
-  const [contractOverride, setContractOverride] = useState('');
   const [tenureOverride, setTenureOverride] = useState('');
   const [unattached, setUnattached] = useState(false);
   const [uploadedPhotoDataUrl, setUploadedPhotoDataUrl] = useState('');
@@ -1019,10 +1214,11 @@ export default function ManagerPagerModal({
   const [secondaryFormation, setSecondaryFormation] = useState(savedFormations[1] || '');
   const [showFormation, setShowFormation] = useState(true);
   const [showFormationDots, setShowFormationDots] = useState(true);
+  const [showSecondaryShape, setShowSecondaryShape] = useState(false);
   const [mapRaw, setMapRaw] = useState('');
   const [positionMapUrl, setPositionMapUrl] = useState('');
-  const [mapExtract, setMapExtract] = useState(false);
-  const [mapOpacity, setMapOpacity] = useState(75);
+  const [mapMode, setMapMode] = useState('zones');   // zones | raw | heat
+  const [mapOpacity, setMapOpacity] = useState(50);
 
   const [careerMode, setCareerMode] = useState('score');
   const [rightMid, setRightMid] = useState('impact');
@@ -1042,7 +1238,10 @@ export default function ManagerPagerModal({
   const [impactAKey, setImpactAKey] = useState('');
   const [impactBKey, setImpactBKey] = useState('');
 
-  const [similarPicked, setSimilarPicked] = useState([]);
+  const [manualClubs, setManualClubs] = useState(null);
+  const [clubNotes, setClubNotes] = useState({});
+  const [hideFitScores, setHideFitScores] = useState(false);
+  const [clubQuery, setClubQuery] = useState('');
 
   const [gbeOv, setGbeOv] = useState({ c36: false, c24: false, exceptions: false, exceptionsText: '' });
 
@@ -1065,46 +1264,78 @@ export default function ManagerPagerModal({
 
   const mg = useMemo(() => computeCoachMetricGroups([ctx.statsRow])
     || { Attack: [], Defence: [], Possession: [] }, [ctx.statsRow]);
-  const swRows = useMemo(() => MG_KEYS
-    .flatMap(k => (mg[k] || []))
-    .map(r => ({ label: r.label, pct: Number(r.pct) }))
-    .filter(r => !isNaN(r.pct)), [mg]);
+  const swRows = useMemo(() => mpSwEligible(mg), [mg]);
   const swStrengthLabels = useMemo(
     () => swRows.filter(r => r.pct >= SW_HI).sort((a, b) => b.pct - a.pct).map(r => r.label), [swRows]);
   const swWeakLabels = useMemo(
     () => swRows.filter(r => r.pct <= SW_LO).sort((a, b) => a.pct - b.pct).map(r => r.label), [swRows]);
 
-  const similarChoices = useMemo(() => {
-    try { return resolveSimilarTeams(ctx.statsRow || {}, allTeams, 7); }
-    catch (e) { return []; }
-  }, [ctx.statsRow, allTeams]);
-  // A different season is a different club's similarity list, so the manual pick
-  // can't survive the switch.
-  useEffect(() => { setSimilarPicked([]); }, [statsSeasonKey]);
+  // Squad cost comes from the market values CoachPanel already sums per club, so
+  // the row draws itself for any season with player data behind it. Typing over
+  // it stays possible — the number is a proxy for a wage bill nobody publishes.
+  const autoSquadRank = squadValueRanks[`${ctx.season}||${ctx.league}||${ctx.team}`] || null;
+
+  const autoClubs = useMemo(
+    () => potentialClubRows(ctx.statsRow || {}, allTeams, 8), [ctx.statsRow, allTeams]);
+  // A different season is a different club's list, so a manual pick can't
+  // survive the switch.
+  useEffect(() => { setManualClubs(null); setClubQuery(''); }, [statsSeasonKey]);
+
+  const clubRows = useMemo(
+    () => (manualClubs || autoClubs.slice(0, 3)), [manualClubs, autoClubs]);
+
+  // Ranked candidates first, then ANY club in the data. Restricting the picker to
+  // the similarity list would make a club you actually want unreachable, which
+  // defeats the point of a manual override. Clubs found by search carry no
+  // figure and the row prints a dash rather than inventing one.
+  const clubChoices = useMemo(() => {
+    const q = clubQuery.trim().toLowerCase();
+    const chosen = new Set(clubRows.map(r => r.team));
+    const ranked = autoClubs
+      .filter(r => !chosen.has(r.team))
+      .filter(r => !q || foldIncludes(r.team, q));
+    if (q.length < 2) return ranked.slice(0, 8);
+    const seen = new Set(ranked.map(r => r.team));
+    const extra = teamOptions(allTeams || [], clubQuery, 20)
+      .filter(t => !seen.has(t.team) && !chosen.has(t.team))
+      .map(t => ({ team: t.team, league: t.league, finalFit: null }));
+    return [...ranked, ...extra].slice(0, 10);
+  }, [autoClubs, clubRows, clubQuery, allTeams]);
 
   const teamContext = useMemo(() => {
     const size = leagueSizeOv !== '' ? Number(leagueSizeOv)
       : (ctx.statsRow && ctx.statsRow.leagueSize != null ? Number(ctx.statsRow.leagueSize) : 20);
-    const m = (k) => {
-      const r = tcRanks[k];
+    const m = (k, auto) => {
+      const r = tcRanks[k] !== '' && tcRanks[k] != null ? tcRanks[k] : auto;
       if (r === '' || r == null) return undefined;
       return { rank: Number(r), size };
     };
-    return { squadValue: m('squadValue'), wageBill: m('wageBill'), odds: m('odds') };
-  }, [tcRanks, leagueSizeOv, ctx.statsRow]);
+    return {
+      squadValue: m('squadValue', autoSquadRank),
+      wageBill: m('wageBill', null),
+      odds: m('odds', null),
+    };
+  }, [tcRanks, leagueSizeOv, ctx.statsRow, autoSquadRank]);
 
   const rowFor = (key) => (tenureRows || []).find(r => `${r.team}|${r.season}` === key) || null;
+
+  const processMap = async (raw, mode) => {
+    if (!raw) return '';
+    if (mode === 'zones') return await extractZones(raw);
+    if (mode === 'heat') return await extractHeat(raw);
+    return raw;
+  };
 
   const buildOpts = () => ({
     allTeams, seasonPerf,
     headerColour: COLOURS[headerColourName] || HEADER_COLOURS.Default,
     statsSeasonKey, nameOverride, teamOverride, uploadedPhotoDataUrl, viewText,
-    contractOverride, tenureOverride, unattached,
-    primaryFormation, secondaryFormation, showFormation, showFormationDots,
+    tenureOverride, unattached,
+    primaryFormation, secondaryFormation, showFormation, showFormationDots, showSecondaryShape,
     positionMapUrl, mapOpacity: Number(mapOpacity) / 100,
     careerMode, teamContext, rightMid, rightLow,
     impactRowA: rowFor(impactAKey), impactRowB: rowFor(impactBKey),
-    similarRows: similarPicked.length ? similarPicked : null,
+    clubRows, clubNotes, hideFitScores,
     styleKeys,
     overallOverride, potentialOverride, overallUnclear, potentialUnclear,
     gbeOv, swDrop, swAddStr, swAddWeak,
@@ -1115,8 +1346,7 @@ export default function ManagerPagerModal({
     let el = null;
     try {
       const { toPng } = await import('html-to-image');
-      const urls = managerPagerImageUrls(coach, ctx, uploadedPhotoDataUrl, allTeams,
-        similarPicked.length ? similarPicked : null);
+      const urls = managerPagerImageUrls(coach, ctx, uploadedPhotoDataUrl, allTeams, clubRows);
       const images = await preloadImages(urls, (d, t) => setProgress(`Images ${d}/${t}`));
       setProgress('Rendering…');
       el = buildManagerPagerElement(coach, tenureRows, traits, { ...buildOpts(), images });
@@ -1126,8 +1356,6 @@ export default function ManagerPagerModal({
         cacheBust: false, fontEmbedCSS: MONTSERRAT_EMBED_CSS,
         imagePlaceholder: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
       };
-      // Double render: the first pass warms the font and image caches, the
-      // second is the one that comes out right. Same pattern as every card here.
       await toPng(node, opts);
       const dataUrl = await toPng(node, opts);
       await deliverPng(dataUrl, `${String(coach.name || 'manager').replace(/\s+/g, '_')}_manager_pager.png`);
@@ -1195,29 +1423,22 @@ export default function ManagerPagerModal({
                 {seasonOptions.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
               </select>
               <div style={UI.note}>
-                Drives the stat row, percentiles, Team Context, Similar Teams and the table.
+                Drives the stat row, percentiles, Team Context, Potential Clubs and the table.
               </div>
             </div>
           )}
 
           <div style={UI.block}>
-            <span style={UI.label}>Club name on card</span>
-            <input style={UI.input} value={teamOverride}
-                   onChange={e => setTeamOverride(e.target.value)} placeholder={ctx.team} />
-          </div>
-
-          <div style={UI.block}>
-            <span style={UI.label}>Contract &amp; tenure</span>
+            <span style={UI.label}>Club &amp; tenure on card</span>
             <div style={{ display: 'flex', gap: 6 }}>
-              <input style={{ ...UI.input, flex: 1 }} value={contractOverride}
-                     onChange={e => setContractOverride(e.target.value)}
-                     placeholder={coach.contract || 'Contract'} />
+              <input style={{ ...UI.input, flex: 1 }} value={teamOverride}
+                     onChange={e => setTeamOverride(e.target.value)} placeholder={ctx.team} />
               <input style={{ ...UI.input, flex: 1 }} value={tenureOverride}
                      onChange={e => setTenureOverride(e.target.value)}
                      placeholder={coach.tenure || '2024–Present'} />
             </div>
             <div style={{ marginTop: 8 }}>
-              <Check label="Unattached (drops the club identity line)"
+              <Check label="Unattached — club greys out and takes an Unattached tag"
                      value={unattached} onChange={setUnattached} />
             </div>
           </div>
@@ -1243,7 +1464,7 @@ export default function ManagerPagerModal({
             <Seg options={[['view', 'View'], ['table', 'League Table']]}
                  value={rightLow} onChange={setRightLow} />
             <div style={UI.note}>
-              Left column is fixed: Style, Team Context, Similar Teams.
+              Left column is fixed: Style, Team Context, Potential Clubs.
             </div>
           </div>
 
@@ -1277,24 +1498,36 @@ export default function ManagerPagerModal({
                 {FORMATION_NAMES.map(f => <option key={f} value={f}>{f}</option>)}
               </select>
             </div>
-            <div style={UI.note}>Primary draws solid, secondary as rings.</div>
             <div style={{ marginTop: 8 }}>
-              <Check label="Formation pitch in the header (off = formation / contract / tenure list)"
+              <Check label="Formation pitch in the header (off = formation / alternative / tenure)"
                      value={showFormation} onChange={setShowFormation} />
-              <Check label="Draw the formation dots"
+              <Check label="Draw the shape on the pitch"
                      value={showFormationDots} onChange={setShowFormationDots} />
+              <Check label="Also draw the secondary shape as rings"
+                     value={showSecondaryShape} onChange={setShowSecondaryShape} />
+            </div>
+            <div style={UI.note}>
+              One shape by default — twenty-two marks on a 188px pitch reads as a
+              scatter rather than as a back four.
             </div>
           </div>
 
           <div style={UI.block}>
-            <span style={UI.label}>Average position map (optional)</span>
+            <span style={UI.label}>Pitch background (optional)</span>
+            <Seg options={[['zones', 'Zones of control'], ['raw', 'As uploaded'], ['heat', 'Strip pitch']]}
+                 value={mapMode}
+                 onChange={async (v) => {
+                   setMapMode(v);
+                   if (mapRaw) setPositionMapUrl(await processMap(mapRaw, v));
+                   if (v !== 'zones' && mapRaw) setShowFormationDots(false);
+                 }} />
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <label style={{ flex: 1, cursor: 'pointer', fontSize: 11, fontWeight: 700,
                               padding: '7px 10px', borderRadius: 5, textAlign: 'center',
                               border: `1px solid ${mapRaw ? '#3b7de8' : '#1e2d45'}`,
                               background: mapRaw ? '#0e2040' : 'transparent',
                               color: mapRaw ? '#60a5fa' : '#8b98ad' }}>
-                {mapRaw ? 'Position map loaded ✓' : 'Upload position map'}
+                {mapRaw ? 'Image loaded ✓' : 'Upload image'}
                 <input type="file" accept="image/*" style={{ display: 'none' }}
                   onChange={e => {
                     const f = e.target.files && e.target.files[0];
@@ -1303,8 +1536,10 @@ export default function ManagerPagerModal({
                     r.onload = async (ev) => {
                       const raw = String(ev.target.result);
                       setMapRaw(raw);
-                      setPositionMapUrl(mapExtract ? await extractHeat(raw) : raw);
-                      setShowFormationDots(false);
+                      setPositionMapUrl(await processMap(raw, mapMode));
+                      // A zones wash is a backdrop the shape sits on; an average
+                      // position map already IS the shape, so the dots come off.
+                      if (mapMode !== 'zones') setShowFormationDots(false);
                     };
                     r.readAsDataURL(f);
                     e.target.value = '';
@@ -1318,15 +1553,7 @@ export default function ManagerPagerModal({
             </div>
             {mapRaw && (
               <>
-                <div style={{ marginTop: 8 }}>
-                  <Check label="Strip the pitch background (heat-style maps only)"
-                         value={mapExtract}
-                         onChange={async (v) => {
-                           setMapExtract(v);
-                           setPositionMapUrl(v ? await extractHeat(mapRaw) : mapRaw);
-                         }} />
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', marginTop: 8 }}>
                   <span style={{ fontSize: 10.5, color: '#94a3b8', width: 54, flexShrink: 0 }}>Strength</span>
                   <input type="range" min="15" max="100" value={mapOpacity}
                     onChange={e => setMapOpacity(e.target.value)}
@@ -1334,8 +1561,9 @@ export default function ManagerPagerModal({
                   <span style={{ fontSize: 10.5, color: '#64748b', width: 34, textAlign: 'right' }}>{mapOpacity}%</span>
                 </div>
                 <div style={UI.note}>
-                  Sits under the pitch markings, which is what keeps it inside the
-                  design rather than pasted on top of it.
+                  Zones recolours Opta&rsquo;s chart into the card&rsquo;s palette — purple
+                  becomes green, pink becomes red, contested drops out so the pitch
+                  shows through. The shape turns white over it.
                 </div>
               </>
             )}
@@ -1379,10 +1607,6 @@ export default function ManagerPagerModal({
               <Check label="Overall unclear (?)" value={overallUnclear} onChange={setOverallUnclear} />
               <Check label="Potential unclear (?)" value={potentialUnclear} onChange={setPotentialUnclear} />
             </div>
-            <div style={UI.note}>
-              75% team quality + 25% £ performance, recency weighted — same figure the
-              quick card prints.
-            </div>
           </div>
 
           <div style={UI.block}>
@@ -1412,16 +1636,13 @@ export default function ManagerPagerModal({
             <span style={UI.label}>Career chart</span>
             <Seg options={[['score', 'Score'], ['finish', 'League finish']]}
                  value={careerMode} onChange={setCareerMode} />
-            <div style={UI.note}>
-              Finish mode scales each season against its own division, so 3rd of 24
-              and 3rd of 20 don&rsquo;t plot at the same height.
-            </div>
           </div>
 
           <div style={UI.block}>
             <span style={UI.label}>Team context — league rank</span>
             <div style={{ display: 'flex', gap: 6 }}>
-              {[['squadValue', 'Squad cost'], ['wageBill', 'Wage bill'], ['odds', 'Odds']].map(([k, lbl]) => (
+              {[['squadValue', autoSquadRank ? `Squad cost (${autoSquadRank})` : 'Squad cost'],
+                ['wageBill', 'Wage bill'], ['odds', 'Odds']].map(([k, lbl]) => (
                 <input key={k} value={tcRanks[k]} inputMode="numeric" placeholder={lbl}
                        onChange={e => setTcRanks(o => ({ ...o, [k]: e.target.value.replace(/[^\d]/g, '').slice(0, 2) }))}
                        style={{ ...UI.input, flex: 1 }} />
@@ -1432,8 +1653,10 @@ export default function ManagerPagerModal({
                    placeholder={`League size (${ctx.statsRow && ctx.statsRow.leagueSize ? ctx.statsRow.leagueSize : 20})`}
                    style={{ ...UI.input, marginTop: 6 }} />
             <div style={UI.note}>
-              Ranks within the league — 1 = richest / heaviest favourite. Average age
-              comes from the data.
+              1 = richest / heaviest favourite. Squad cost fills itself from market
+              values where they exist; average age comes from the data. The block
+              centres in the tile, so two rows sit as a pair rather than at opposite
+              ends of it.
             </div>
           </div>
 
@@ -1477,13 +1700,17 @@ export default function ManagerPagerModal({
                 {!swStrengthLabels.length && !swWeakLabels.length &&
                   <span style={UI.note}>Nothing derived for this season.</span>}
               </div>
-              <div style={UI.note}>Tap to drop one. Add your own below.</div>
+              <div style={UI.note}>
+                Metric names are translated into coaching terms, and the volume
+                measures (crosses, dribbles, duels, passes) are excluded — how much
+                a side does something is style, not quality.
+              </div>
 
               <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
                 <select value={swNew.label} onChange={e => setSwNew(o => ({ ...o, label: e.target.value }))}
                         style={{ ...UI.input, flex: 1, cursor: 'pointer' }}>
                   <option value="">Add a trait…</option>
-                  {SW_MANUAL_TERMS.map(t => <option key={t} value={t}>{t}</option>)}
+                  {MP_MANUAL_TERMS.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
                 <select value={swNew.tone} onChange={e => setSwNew(o => ({ ...o, tone: e.target.value }))}
                         style={{ ...UI.input, width: 86, flex: '0 0 auto', cursor: 'pointer' }}>
@@ -1530,33 +1757,76 @@ export default function ManagerPagerModal({
 
           <div style={UI.block}>
             <span style={UI.label}>
-              Similar teams {similarPicked.length ? `(${similarPicked.length} chosen)` : '(auto — top 3)'}
-              {similarPicked.length > 0 && (
-                <button onClick={() => setSimilarPicked([])}
+              Potential clubs {manualClubs ? '(manual)' : '(auto — top 3)'}
+              {manualClubs && (
+                <button onClick={() => { setManualClubs(null); setClubQuery(''); }}
                   style={{ marginLeft: 8, background: 'transparent', border: '1px solid #1e2d45',
                            borderRadius: 4, color: '#60a5fa', fontSize: 9, padding: '1px 5px',
                            cursor: 'pointer' }}>back to auto</button>
               )}
             </span>
-            {!similarChoices.length && <div style={UI.note}>No similarity data on this season&rsquo;s row.</div>}
-            <div style={{ display: 'flex', flexWrap: 'wrap' }}>
-              {similarChoices.map(t => {
-                const on = similarPicked.some(x => x.team === t.team);
-                return (
-                  <button key={t.team}
-                    onClick={() => setSimilarPicked(list => on
-                      ? list.filter(x => x.team !== t.team)
-                      : (list.length >= 3 ? list : [...list, t]))}
-                    style={{ padding: '3px 8px', marginRight: 5, marginBottom: 5, borderRadius: 10,
-                             border: `1px solid ${on ? '#3b7de8' : '#1e2d45'}`,
-                             background: on ? '#0e2040' : 'transparent',
-                             color: on ? '#60a5fa' : '#8b98ad',
-                             fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>
-                    {t.team}{t.__sim != null ? ` ${Math.round(t.__sim)}%` : ''}
-                  </button>
-                );
-              })}
-            </div>
+            <Check label="Hide the match figure beside each club"
+                   value={hideFitScores} onChange={setHideFitScores} />
+
+            {clubRows.map((r, i) => (
+              <div key={r.team + i}
+                   style={{ display: 'flex', alignItems: 'center', marginBottom: 5,
+                            background: '#0d1220', border: '1px solid #1e2d45',
+                            borderRadius: 6, padding: '5px 8px' }}>
+                <span style={{ width: 16, flexShrink: 0, fontSize: 10, color: '#475569' }}>#{i + 1}</span>
+                <span style={{ flex: 1, minWidth: 0, fontSize: 11.5, color: '#e2e8f4',
+                               overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                  {r.team}
+                </span>
+                <span style={{ fontSize: 11, fontWeight: 800,
+                               color: r.finalFit == null ? '#475569' : '#60a5fa', marginLeft: 8 }}>
+                  {r.finalFit == null ? '—' : Math.round(r.finalFit)}
+                </span>
+                <button onClick={() => setManualClubs(clubRows.filter((_, j) => j !== i))}
+                  style={{ marginLeft: 8, background: 'transparent', border: 'none', color: '#64748b',
+                           cursor: 'pointer', fontSize: 13, lineHeight: 1, padding: 0 }}>×</button>
+              </div>
+            ))}
+
+            {clubRows.map((r, i) => (
+              <div key={'note' + r.team + i} style={{ display: 'flex', alignItems: 'center', marginBottom: 5 }}>
+                <span style={{ width: 74, flexShrink: 0, fontSize: 10, color: '#64748b',
+                               overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                  {r.team}
+                </span>
+                <input value={clubNotes[r.team] || ''} maxLength={CLUB_NOTE_MAX}
+                  onChange={e => setClubNotes(o => ({ ...o, [r.team]: e.target.value.slice(0, CLUB_NOTE_MAX) }))}
+                  placeholder="note, e.g. rebuild, sells well"
+                  style={{ ...UI.input, flex: 1 }} />
+              </div>
+            ))}
+            <div style={UI.note}>Notes print in pink beside the league, {CLUB_NOTE_MAX} characters max.</div>
+
+            {clubRows.length < 3 && (
+              <>
+                <input value={clubQuery} onChange={e => setClubQuery(e.target.value)}
+                       placeholder="Add a club…" style={{ ...UI.input, marginTop: 4 }} />
+                {clubChoices.map((r, i) => (
+                  <div key={r.team + i}
+                       onClick={() => { setManualClubs([...clubRows, r]); setClubQuery(''); }}
+                       style={{ display: 'flex', alignItems: 'center', cursor: 'pointer',
+                                padding: '5px 8px', borderBottom: '1px solid #101a2c' }}>
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 11, color: '#c8d2e0',
+                                   overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                      {r.team}
+                      <span style={{ color: '#64748b' }}> · {r.league}</span>
+                    </span>
+                    <span style={{ fontSize: 10.5, fontWeight: 700,
+                                   color: r.finalFit == null ? '#475569' : '#8b98ad', marginLeft: 8 }}>
+                      {r.finalFit == null ? 'add' : Math.round(r.finalFit)}
+                    </span>
+                  </div>
+                ))}
+                {!clubChoices.length && <div style={UI.note}>
+                  {clubQuery.trim().length < 2 ? 'Type to search any club.' : 'No match.'}
+                </div>}
+              </>
+            )}
           </div>
 
           <div style={UI.block}>
@@ -1576,7 +1846,7 @@ export default function ManagerPagerModal({
             {gbeOv.exceptions && (
               <input value={gbeOv.exceptionsText}
                      onChange={e => setGbeOv(o => ({ ...o, exceptionsText: e.target.value.slice(0, 44) }))}
-                     placeholder="Reason, e.g. Continental experience"
+                     placeholder="Reason, e.g. UEFA A Licence & a season in Serie A"
                      style={UI.input} />
             )}
             <div style={UI.note}>

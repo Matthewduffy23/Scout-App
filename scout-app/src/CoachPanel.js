@@ -730,6 +730,23 @@ export default function CoachPanel({ allTeams, allPlayers, onClose }) {
     }
   }
 
+  function buildSquadValueRanks(rows) {
+    var map = {};
+    (rows || []).forEach(function (row) {
+      if (!row) return;
+      var peers = teams.filter(function (t) { return String(t.league) === String(row.league) && String(t.season) === String(row.season); });
+      var withMV = peers
+        .map(function (t) { return { team: t.team, mv: getTotalMV(t.team, t.league) }; })
+        .filter(function (x) { return x.mv != null; });
+      if (withMV.length < 2) return;
+      withMV.sort(function (a, b) { return b.mv - a.mv; });
+      var idx = withMV.findIndex(function (x) { return String(x.team).toLowerCase() === String(row.team).toLowerCase(); });
+      if (idx < 0) return;
+      map[row.season + '||' + row.league + '||' + row.team] = idx + 1;
+    });
+    return map;
+  }
+
   function handleOpenPager(coach) {
     var tenureRows = resolveTenureRows(coach);
     if (!tenureRows.length) {
@@ -752,6 +769,7 @@ export default function CoachPanel({ allTeams, allPlayers, onClose }) {
       tenureRows: tenureRows,
       traits: computeCoachTraits(tenureRows, teams),
       seasonPerf: buildSeasonPerfMap(tenureRows),
+      squadValueRanks: buildSquadValueRanks(tenureRows),
     });
   }
 
@@ -822,6 +840,7 @@ export default function CoachPanel({ allTeams, allPlayers, onClose }) {
           traits={pagerCtx.traits}
           allTeams={teams}
           seasonPerf={pagerCtx.seasonPerf}
+          squadValueRanks={pagerCtx.squadValueRanks}
           onClose={function() { setPagerCtx(null); }}
         />
       )}
