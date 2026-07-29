@@ -322,10 +322,11 @@ function percentilePanelBody(w, h, sd, isGK) {
 // width makes the block fit once scaled uniformly — the same treatment the Style
 // panel needed, and it keeps the bars proportioned exactly as the quick card
 // draws them.
-// 67 was measured off the markup and left the bottom category's Low/Avg/High
-// caption clipping against the tile edge. 74 is the same measurement plus the
-// row's own bottom margin, which the first estimate didn't account for.
-const TC_ROW_H = 74;
+// Measured off the markup, twice adjusted: 67 ignored the row's bottom margin, 74
+// still sheared the last category's Low/Avg/High caption by a couple of pixels.
+// 80 is deliberately generous — over-reserving costs a slightly smaller chart,
+// under-reserving costs a clipped caption, and only one of those looks broken.
+const TC_ROW_H = 80;
 
 function teamContextBody(w, h, player, posKey, sd) {
   const cats = POSITION_TEAM_CONTEXT_CATS[posKey] || POSITION_TEAM_CONTEXT_CATS.CM;
@@ -928,9 +929,10 @@ function swEligible(sd, posKey) {
 export const SW_MANUAL_TERMS = [
   'Aerial Presence', 'Aggression', 'Agility', 'Athleticism', 'Availability',
   'Balance', 'Ball Striking', 'Bravery', 'Composure', 'Consistency',
-  'Decision Making', 'Dynamism', 'First Touch', 'Injury Record', 'IQ',
+  'Decision Making', 'Dynamism', 'First Touch', 'Injury Record', 'Intensity', 'IQ',
   'Leadership', 'Mentality', 'Movement', 'Pace', 'Physicality',
-  'Positioning', 'Receiving Under Pressure', 'Resilience', 'Set Pieces',
+  'Positioning', 'Receiving Under Pressure', 'Resilience', 'Running Power',
+  'Set Pieces',
   'Size', 'Stamina', 'Strength', 'Unique', 'Versatility', 'Weak Foot',
 ];
 // The same five steps the position tiers and score wheels use, so a pill on this
@@ -1247,21 +1249,20 @@ function headerHtml(player, ctx, opts) {
          shoulders portrait cuts the chin off. -->
     <!-- 146 square in a 150 band, so it reads as a portrait rather than a thumbnail
          while still clearing both edges by 2px.
-         The fallback layer is /fallback.png — the same file utils.js, QuickCard and
-         the scouting card all fall back to. TeamReport's SILHOUETTE constant paints
-         an opaque #1a2233 plate, which is right behind its own cut-outs but wrong
-         here: the repo's player PNGs are transparent, so the plate showed THROUGH
-         every photo as a grey box round the shoulders. -->
-    <div style="position:absolute;left:12px;top:2px;width:146px;height:146px;
-                background-image:url('${src(photo)}'), url('${src(PHOTO_FALLBACK)}');
-                background-size:cover, cover;
-                background-position:center top, center top;
-                background-repeat:no-repeat, no-repeat;"></div>
+         ONE layer, chosen up front. Stacking the fallback under the photo meant an
+         opaque plate behind every transparent cut-out — a grey figure showing
+         through the player's own shoulders. preloadImages only records URLs it
+         actually fetched, so its absence from that map IS the 404, and the fallback
+         is drawn instead of behind. An uploaded photo is a data URL and never goes
+         through the preloader, so it counts as present. -->
+    ${(() => {
+      const uploaded = !!opts.uploadedPhotoDataUrl;
+      const shown = (uploaded || IMG[photo]) ? src(photo) : src(PHOTO_FALLBACK);
+      return `<div style="position:absolute;left:12px;top:2px;width:146px;height:146px;
+                background-image:url('${shown}');background-size:cover;
+                background-position:center top;background-repeat:no-repeat;"></div>`;
+    })()}
 
-    <!-- line-height 1.0 sat the baseline on the box floor, so a descender ("g"
-         in Effaghe) was clipped by overflow:hidden. 1.18 with a taller box gives
-         the tail somewhere to go; the box still clips, but only a name that
-         defeats the 22px floor. -->
     <div style="position:absolute;left:${NAME_X}px;top:6px;width:${NAME_MAX_W}px;height:64px;
                 display:flex;align-items:flex-end;overflow:hidden;">
       <div style="font-size:${fitNameSize(displayName, NAME_MAX_W)}px;font-weight:700;letter-spacing:-0.8px;
