@@ -45,7 +45,7 @@ import { useIsMobile, deliverPng } from './utils';
 import {
   scoreWheel, headerInk, preloadImages, fitNameSize, styleHexSvg, nameEmWidth,
   leagueTablePanelHtml, resolveSimilarTeams, leagueWindow, teamOptions,
-  setSharedImageMap, foldIncludes,
+  setSharedImageMap, foldIncludes, rankToPct, setPieceScore,
   HEADER_COLOURS, HEADER_COLOUR_NAMES,
 } from './TeamReport';
 import {
@@ -127,6 +127,13 @@ const truncateText = (s, n) => {
   return t.length > n ? t.slice(0, n - 1) + '…' : t;
 };
 const num = (v) => { const x = Number(v); return Number.isFinite(x) ? x : null; };
+const ordinal = (n) => {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return '';
+  const t = v % 100;
+  if (t >= 11 && t <= 13) return `${v}TH`;
+  return `${v}${['TH', 'ST', 'ND', 'RD'][v % 10] || 'TH'}`;
+};
 const clamp = (v, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, v));
 
 // Panel chrome. Copied by value from PlayerPager, which copied it from
@@ -976,7 +983,7 @@ export function buildManagerPagerElement(coach, tenureRows, traits, opts = {}) {
     tenureOverride = '', unattached = false,
     primaryFormation = '', secondaryFormation = '',
     showFormation = true, showFormationDots = true, showSecondaryShape = false,
-    positionMapUrl = '', mapOpacity = 0.5,
+    positionMapUrl = '', mapOpacity = 0.15,
     careerMode = 'score', finishOverrides = {}, extraFinish = [],
     teamContext = {},
     rightMid = 'impact',          // impact | comparison | sw
@@ -984,7 +991,7 @@ export function buildManagerPagerElement(coach, tenureRows, traits, opts = {}) {
     clubsTitle = 'Potential Clubs',
     impactRowA = null, impactRowB = null,
     clubRows = null, clubNotes = {}, hideFitScores = false,
-    styleKeys = null, traitOv = {},
+    styleKeys = null, traitOv = {}, setPiecesPct = null,
     overallOverride = '', potentialOverride = '',
     overallUnclear = false, potentialUnclear = false,
     gbeOv = {},
@@ -1014,6 +1021,11 @@ export function buildManagerPagerElement(coach, tenureRows, traits, opts = {}) {
   // the coach — which is a round trip for a number you're deciding as you build
   // the card.
   const getTrait = (key) => {
+    // Set pieces aren't in the data at any level, so there is nothing to compute.
+    // Two league ranks averaged into a percentile is the route the team report
+    // already uses, and reusing it means a side rated 4th for attacking corners
+    // scores the same here as it does there.
+    if (key === 'setPieces' && setPiecesPct != null) return Number(setPiecesPct);
     const t = traitOv && traitOv[key];
     if (t !== '' && t != null && !isNaN(Number(t))) return Number(t) * 10;
     if (coach.traitOverrides && coach.traitOverrides[key] != null) return coach.traitOverrides[key] * 10;
@@ -1145,6 +1157,9 @@ export function buildManagerPagerElement(coach, tenureRows, traits, opts = {}) {
 
       ${panel({
         x: COL_A_X, y: ROW_2, w: COL_W, h: ROW2_H, title: 'Team Context',
+        // One card-level fact, stated once, rather than a legend row eating a
+        // fifth of the tile. The caret on each resource bar means this.
+        right: (finishPct != null && finRank != null) ? `FINISHED ${ordinal(finRank)}` : '',
         body: teamContextBody(innerW, row2InnerH, teamContext, ageVal, agePct, finishPct),
       })}
       ${panel({
@@ -1331,7 +1346,7 @@ export default function ManagerPagerModal({
   const [mapRaw, setMapRaw] = useState('');
   const [positionMapUrl, setPositionMapUrl] = useState('');
   const [mapMode, setMapMode] = useState('zones');   // zones | raw | heat
-  const [mapOpacity, setMapOpacity] = useState(50);
+  const [mapOpacity, setMapOpacity] = useState(15);
 
   const [careerMode, setCareerMode] = useState('score');
   const [rightMid, setRightMid] = useState('impact');
@@ -1352,6 +1367,8 @@ export default function ManagerPagerModal({
   const [impactB, setImpactB] = useState(null);
   const [clubsTitle, setClubsTitle] = useState('Potential Clubs');
   const [traitOv, setTraitOv] = useState({});
+  const [spAtt, setSpAtt] = useState('');
+  const [spDef, setSpDef] = useState('');
 
   const [manualClubs, setManualClubs] = useState(null);
   const [clubNotes, setClubNotes] = useState({});
@@ -1371,6 +1388,10 @@ export default function ManagerPagerModal({
   const scores = useMemo(
     () => computeCoachScore(tenureRows, age, { seasonPerf }),
     [tenureRows, age, seasonPerf]);
+
+  const spLeagueSize = leagueSizeOv !== '' ? Number(leagueSizeOv)
+    : (ctx.statsRow && ctx.statsRow.leagueSize != null ? Number(ctx.statsRow.leagueSize) : 20);
+  const setPiecesPct = setPieceScore(spAtt, spDef, spLeagueSize);
 
   const rowByKey = (key) => (tenureRows || []).find(r => `${r.team}|${r.season}` === key) || null;
 
@@ -1453,7 +1474,7 @@ export default function ManagerPagerModal({
     careerMode, teamContext, rightMid, rightLow,
     impactRowA: impactA, impactRowB: impactB,
     clubRows, clubNotes, hideFitScores, clubsTitle,
-    styleKeys, traitOv,
+    styleKeys, traitOv, setPiecesPct,
     overallOverride, potentialOverride, overallUnclear, potentialUnclear,
     gbeOv, swDrop, swAddStr, swAddWeak,
   });
@@ -1750,7 +1771,7 @@ export default function ManagerPagerModal({
               })}
             </div>
             <div style={UI.note}>{styleKeys.length} selected · sorted by score on the card.</div>
-            {styleKeys.map(k => (
+            {styleKeys.filter(k => k !== 'setPieces').map(k => (
               <div key={k} style={{ display: 'flex', alignItems: 'center', marginTop: 5 }}>
                 <span style={{ width: 96, flexShrink: 0, fontSize: 11, color: '#94a3b8' }}>
                   {TRAIT_CHIP_LABELS[k]}
@@ -1770,11 +1791,30 @@ export default function ManagerPagerModal({
               </div>
             ))}
             <div style={UI.note}>
-              Blank uses the coach&rsquo;s saved value, then the computed one. Set Pieces
-              has no metric behind it, so this is the only place it can be set without
-              editing the coach.
+              Blank uses the coach&rsquo;s saved value, then the computed one.
             </div>
           </div>
+
+          {styleKeys.includes('setPieces') && (
+            <div style={UI.block}>
+              <span style={UI.label}>Set pieces — league rank (1 = best of {spLeagueSize})</span>
+              <div style={{ display: 'flex' }}>
+                <input value={spAtt} onChange={e => setSpAtt(e.target.value.replace(/[^\d]/g, '').slice(0, 2))}
+                       placeholder="Attacking rank" style={{ ...UI.input, flex: 1 }} />
+                <input value={spDef} onChange={e => setSpDef(e.target.value.replace(/[^\d]/g, '').slice(0, 2))}
+                       placeholder="Defending rank" style={{ ...UI.input, flex: 1, marginLeft: 6 }} />
+              </div>
+              <div style={UI.note}>
+                {setPiecesPct == null
+                  ? `Blank falls back to the coach's saved rating. Ranks out of ${spLeagueSize}, converted to a percentile.`
+                  : `${rankToPct(spAtt, spLeagueSize) != null
+                        ? `Att ${Math.round(rankToPct(spAtt, spLeagueSize))} ` : ''}${
+                      rankToPct(spDef, spLeagueSize) != null
+                        ? `Def ${Math.round(rankToPct(spDef, spLeagueSize))} ` : ''}\u2192 ${
+                      Math.round(setPiecesPct)} percentile`}
+              </div>
+            </div>
+          )}
 
           <div style={UI.block}>
             <span style={UI.label}>Career chart</span>

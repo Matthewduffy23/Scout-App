@@ -212,7 +212,21 @@ function _ctxBarHtml(label, pct, sub, lowLbl = 'Low', highLbl = 'High', markPct 
       <div style="position:relative;height:10px;background:#1b2636;border-radius:5px;margin-bottom:4px;">
         <div style="position:absolute;left:0;top:0;height:100%;width:100%;background:linear-gradient(to right,#c7363c,#f0c56a,#3da65b);border-radius:5px;opacity:0.3;"></div>
         <div style="position:absolute;top:-3px;left:50%;width:2px;height:16px;background:#5e6678;transform:translateX(-50%);"></div>
-        ${markPct == null ? '' : `<div style="position:absolute;top:-5px;left:${_clamp(markPct, 1, 99)}%;width:2px;height:20px;background:rgba(255,255,255,0.72);transform:translateX(-50%);border-radius:1px;box-shadow:0 0 0 1px rgba(7,9,15,0.55);"></div>`}
+        ${markPct == null ? '' : (() => {
+          // Where they FINISHED, against how they were resourced. A bare white bar
+          // read as a second midline and got lost against the 50% tick two pixels
+          // from it; a caret above the track points AT the position and can't be
+          // mistaken for part of the scale. The stem sits inside the bar and stops
+          // short of the dot, so a finish that lands on the resource dot doesn't
+          // bisect it.
+          const mx = _clamp(markPct, 1.5, 98.5);
+          return `
+        <div style="position:absolute;top:-8px;left:${mx}%;transform:translateX(-50%);width:0;height:0;
+                    border-left:4px solid transparent;border-right:4px solid transparent;
+                    border-top:5px solid rgba(255,255,255,0.92);"></div>
+        <div style="position:absolute;top:0;left:${mx}%;transform:translateX(-50%);width:1.5px;height:10px;
+                    background:rgba(255,255,255,0.5);"></div>`;
+        })()}
         <div style="position:absolute;top:50%;left:${pVal}%;transform:translate(-50%,-50%);">
           <div style="width:16px;height:16px;border-radius:50%;background:${col};border:2.5px solid #07090f;"></div>
         </div>
