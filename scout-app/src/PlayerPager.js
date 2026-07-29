@@ -39,6 +39,7 @@ import { useIsMobile, deliverPng, photoUrl } from './utils';
 import {
   scoreWheel, headerInk, preloadImages, fitNameSize, pillHtml,
   styleHexSvg, gradeColor, radarColor, teamOptions, personFlagUrl, nameEmWidth,
+  SILHOUETTE,
   foldIncludes,
   HEADER_COLOURS, HEADER_COLOUR_NAMES,
 } from './TeamReport';
@@ -102,16 +103,6 @@ const GBE_W = 432;
 // embed. QuickCard's own name is 700, which is now what this uses.
 
 // ─── Palette — same values as TeamReport/QuickCard ─────────────────────────
-// Head-and-shoulders fallback, inlined as a data URI so it needs no network and
-// survives the html-to-image pass. Layered UNDER the photo: when the repo has no
-// file for a player, html-to-image swaps in a transparent placeholder and this
-// shows through, instead of leaving a player-shaped hole in the band.
-const SILHOUETTE = 'data:image/svg+xml;utf8,' + encodeURIComponent(
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">' +
-  '<circle cx="32" cy="23" r="11" fill="rgba(255,255,255,0.20)"/>' +
-  '<path d="M8 64c0-13 11-21 24-21s24 8 24 21z" fill="rgba(255,255,255,0.20)"/>' +
-  '</svg>');
-
 const ACCENT_PINK = '#ff66c4';
 const BG = '#0a0f1c';
 const HEADER_L = 'rgb(23,26,77)';
@@ -983,11 +974,11 @@ function strengthsPanelBody(w, h, sd, posKey, opts = {}) {
   const weakHtml = weaknesses.length
     ? weaknesses.map((r, i) => `
       <div style="position:absolute;left:0;top:${i * BAR_H}px;width:${w}px;height:${BAR_H - 8}px;">
-        <span style="position:absolute;left:0;right:40px;top:0;font-size:11.5px;font-weight:600;
+        <span style="position:absolute;left:0;right:44px;top:0;font-size:11.5px;font-weight:600;
                      color:#c8d2e0;white-space:nowrap;overflow:hidden;">${esc(r.label)}</span>
-        <span style="position:absolute;right:0;top:-1px;font-size:13px;font-weight:700;
+        <span style="position:absolute;right:2px;top:-1px;font-size:13px;font-weight:700;
                      color:${radarColor(r.pct)};">${Math.round(r.pct)}</span>
-        <div style="position:absolute;left:0;right:0;top:17px;height:5px;border-radius:3px;
+        <div style="position:absolute;left:0;right:2px;top:17px;height:5px;border-radius:3px;
                     background:rgba(255,255,255,0.08);overflow:hidden;">
           <div style="width:${Math.max(2, Math.min(100, r.pct))}%;height:100%;
                       background:${radarColor(r.pct)};border-radius:3px;"></div>
@@ -1018,14 +1009,30 @@ function strengthsPanelBody(w, h, sd, posKey, opts = {}) {
     return rows;
   };
   const LABEL_H = 12, LABEL_GAP = 9, PILL_ROW_H = 25, BLOCK_GAP = 15;
-  const strengthsH = LABEL_H + LABEL_GAP + packRows(strengths.map(r => r.label)) * PILL_ROW_H;
-  const WEAK_TOP = Math.min(strengthsH + BLOCK_GAP, h - 46);
+  // The weaknesses block has to FIT, not merely start in the right place. Its own
+  // height is known — heading, bars, and however many rows the manual pills pack
+  // into — so the strengths are trimmed one pill at a time until the pair fits the
+  // tile. Previously a third strength row plus a bar plus two pills came to 222px
+  // in a 210px box and the pills were silently clipped off the bottom, which looks
+  // identical to them never having been added.
+  const weakBlockH = LABEL_H + 11 + weaknesses.length * BAR_H
+    + (weakPills.length ? 10 + packRows(weakPills.map(x => x.label)) * PILL_ROW_H : 0);
+  let shown = strengths.slice();
+  let strengthsH = LABEL_H + LABEL_GAP + packRows(shown.map(r => r.label)) * PILL_ROW_H;
+  while (shown.length > 1 && strengthsH + BLOCK_GAP + weakBlockH > h) {
+    shown = shown.slice(0, -1);
+    strengthsH = LABEL_H + LABEL_GAP + packRows(shown.map(r => r.label)) * PILL_ROW_H;
+  }
+  const strengthsHtml2 = shown.length
+    ? shown.map(r => pillHtml(r.label, r.tone, 11, 11)).join('')
+    : strengthsHtml;
+  const WEAK_TOP = Math.max(0, Math.min(strengthsH + BLOCK_GAP, h - weakBlockH));
   const barsH = weaknesses.length * BAR_H;
 
   return `<div style="position:absolute;inset:0;overflow:hidden;">
       <div style="position:absolute;left:0;top:0;width:${w}px;">
         <div style="font-size:8.5px;font-weight:700;letter-spacing:0.14em;color:#6f7c92;">STRENGTHS</div>
-        <div style="margin-top:${LABEL_GAP}px;">${strengthsHtml}</div>
+        <div style="margin-top:${LABEL_GAP}px;">${strengthsHtml2}</div>
       </div>
       <div style="position:absolute;left:0;top:${WEAK_TOP}px;width:${w}px;">
         <div style="font-size:8.5px;font-weight:700;letter-spacing:0.14em;color:#6f7c92;">WEAKNESSES</div>
@@ -1238,8 +1245,8 @@ function headerHtml(player, ctx, opts) {
          while still clearing both edges by 2px. -->
     <div style="position:absolute;left:12px;top:2px;width:146px;height:146px;
                 background-image:url('${src(photo)}'), url('${SILHOUETTE}');
-                background-size:cover, 76% 76%;
-                background-position:center top, center 62%;
+                background-size:cover, cover;
+                background-position:center top, center top;
                 background-repeat:no-repeat, no-repeat;"></div>
 
     <!-- line-height 1.0 sat the baseline on the box floor, so a descender ("g"

@@ -268,7 +268,7 @@ const COACH_W = 538;
 // Generic head-and-shoulders, inlined as a data URI so it needs no network and
 // survives the html-to-image pass. Layered UNDER the photo: if the photo 404s
 // html-to-image swaps in a transparent placeholder and this shows through.
-const SILHOUETTE = "data:image/svg+xml;utf8," + encodeURIComponent(
+export const SILHOUETTE = "data:image/svg+xml;utf8," + encodeURIComponent(
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">' +
   '<rect width="64" height="64" fill="#1a2233"/>' +
   '<circle cx="32" cy="24" r="11" fill="#39445c"/>' +
