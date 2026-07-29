@@ -1062,7 +1062,11 @@ function clubsPanelBody(w, h, rows, coreOnly, mode, hideScores, notes) {
                         background-position:center;border-radius:1.5px;margin-right:6px;
                         box-shadow:inset 0 0 0 0.5px rgba(255,255,255,0.25);
                         background-image:url('${src(lflag)}');"></div>` : ''}
-            <span style="font-size:10px;color:#8b98ad;">${esc(sub)}</span>
+            <!-- min-width:0 is the whole fix: without it a flex child refuses to
+                 shrink below its content, so the club-and-league text ran on under
+                 the flag instead of ellipsing before it. -->
+            <span style="font-size:10px;color:#8b98ad;min-width:0;overflow:hidden;
+                         text-overflow:ellipsis;white-space:nowrap;">${esc(sub)}</span>
             ${isPlayers && lflag ? `<div style="width:15px;height:10px;flex-shrink:0;background-size:cover;
                         background-position:center;border-radius:1.5px;margin-left:7px;
                         box-shadow:inset 0 0 0 0.5px rgba(255,255,255,0.25);
@@ -1278,7 +1282,7 @@ function headerHtml(player, ctx, opts) {
         // Small, centred on the same axis as the label, and tucked close under it:
         // it is a footnote to the number, not a third element competing with it.
         return wheel + `
-      <div style="position:absolute;left:${cx - 60}px;top:${HDR_LABEL_Y + 11}px;
+      <div style="position:absolute;left:${cx - 60}px;top:${HDR_LABEL_Y + 14}px;
                   width:120px;height:15px;background-size:contain;
                   background-repeat:no-repeat;background-position:center;
                   background-image:url('${src(badge)}');"></div>`;
@@ -1416,7 +1420,7 @@ export function buildPlayerPagerElement(player, opts = {}) {
     viewText = '', clubRows = [], clubsCoreOnly = true,
     clubsMode = 'clubs', hideFitScores = false, ukOnly = true, clubNotes = {},
     showForecast = false, useBestRoleCareer = false, showPitch = true,
-    positionColors = {}, positionPcts = {}, gbeOv = {}, improveNotes = [],
+    positionColors = {}, positionPcts = {}, gbeOv = {},
     heatmapDataUrl = '', heatOpacity = 0.3, shownSlots = null,
     heightOverride = '', footOverride = '', showXValue = false, xValueOverride = '',
     showTierBadge = false,
@@ -1853,6 +1857,7 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
     heatmapDataUrl, heatOpacity: Number(heatOpacity) / 100, shownSlots: pagerSlots,
     heightOverride, footOverride, showXValue, xValueOverride, showTierBadge,
     overallOverride, potentialOverride, overallUnclear, potentialUnclear,
+    swDrop, swAddStr, swAddWeak, clubNotes,
     clubsCoreOnly: !peakFit,
     showForecast, useBestRoleCareer, showPitch, gbeOv,
   });
