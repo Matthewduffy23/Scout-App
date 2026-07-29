@@ -1209,6 +1209,14 @@ function headerHtml(player, ctx, opts) {
   const displayTeam = (teamOverride && teamOverride.trim()) || team;
   const photo = opts.uploadedPhotoDataUrl || photoUrl(player.name, player.team);
   const crest = teamCrest(team);
+  // A long club name needs a touch more air before the league badge. "Viktoria
+  // Plzeň" was close enough to the badge that its caron read as touching it — and
+  // a diacritic sits outside the glyph box the width estimate accounts for, so the
+  // estimate is fractionally short exactly on the names that need the room.
+  // Threshold is that name one character shorter, measured rather than counted so
+  // it fires on width, not on how many letters happen to be in it.
+  const LONG_CLUB_W = nameEmWidth('Viktoria Plze');
+  const LONG_CLUB = nameEmWidth(truncateText(displayTeam, 16)) >= LONG_CLUB_W;
   const logo = leagueLogo(league);
   const flag = leagueFlag(league);
   const natFlag = personFlagUrl(player);
@@ -1282,7 +1290,7 @@ function headerHtml(player, ctx, opts) {
       <span style="font-size:20px;font-weight:700;color:${ink.secondary};${crest ? 'margin-left:9px;' : ''}">${esc(truncateText(displayTeam, 16))}</span>
       ${logo ? `<div style="width:19px;height:19px;flex-shrink:0;background-size:contain;
                   background-repeat:no-repeat;background-position:center;
-                  background-image:url('${src(logo)}');margin-left:14px;"></div>` : ''}
+                  background-image:url('${src(logo)}');margin-left:${LONG_CLUB ? 18 : 14}px;"></div>` : ''}
       ${flag ? `<div style="width:22px;height:14px;flex-shrink:0;background-size:cover;
                   background-position:center;border-radius:2px;margin-left:12px;
                   box-shadow:inset 0 0 0 1px rgba(255,255,255,0.18);
@@ -1290,7 +1298,7 @@ function headerHtml(player, ctx, opts) {
       <span style="font-size:12.5px;font-weight:700;letter-spacing:0.08em;
                    color:${ink.muted};margin-left:12px;">${esc(leagueAbbrev(league))}</span>
 
-      <span style="width:1px;height:16px;background:${ink.rule};margin:0 11px 0 14px;flex-shrink:0;"></span>
+      <span style="width:1px;height:16px;background:${ink.rule};margin:0 6px 0 7px;flex-shrink:0;"></span>
 
       ${natFlag ? `<div style="width:21px;height:13px;flex-shrink:0;background-size:cover;
                   background-position:center;border-radius:2px;margin-right:8px;
