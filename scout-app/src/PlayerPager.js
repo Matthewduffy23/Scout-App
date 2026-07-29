@@ -922,19 +922,16 @@ function swEligible(sd, posKey) {
 // Manual entries a percentile can never produce. Athleticism and Physicality are
 // scout judgements — no Wyscout column measures either — so they're offered as
 // one-tap additions rather than left to be typed every time.
-// Scout judgements no Wyscout column measures. Grouped by what they describe so
-// the dropdown is scannable: physical, then technical, then mental, then durability.
+// Scout judgements no Wyscout column measures. ALPHABETICAL, not grouped: a
+// grouped list only helps someone who already knows which group a trait is in,
+// and in a 30-item dropdown you're scanning for a word you've already decided on.
 export const SW_MANUAL_TERMS = [
-  // Physical
-  'Athleticism', 'Physicality', 'Agility', 'Size', 'Dynamism', 'Pace', 'Strength',
-  'Stamina', 'Aerial Presence', 'Balance',
-  // Technical
-  'First Touch', 'Weak Foot', 'Ball Striking', 'Set Pieces', 'Receiving Under Pressure',
-  // Mental
-  'Decision Making', 'Game Intelligence', 'Composure', 'Work Rate', 'Leadership',
-  'Positioning', 'Bravery',
-  // Durability / profile
-  'Consistency', 'Injury Record', 'Versatility',
+  'Aerial Presence', 'Aggression', 'Agility', 'Athleticism', 'Availability',
+  'Balance', 'Ball Striking', 'Bravery', 'Composure', 'Consistency',
+  'Decision Making', 'Dynamism', 'First Touch', 'Injury Record', 'IQ',
+  'Leadership', 'Mentality', 'Movement', 'Pace', 'Physicality',
+  'Positioning', 'Receiving Under Pressure', 'Resilience', 'Set Pieces',
+  'Size', 'Stamina', 'Strength', 'Unique', 'Versatility', 'Weak Foot',
 ];
 // The same five steps the position tiers and score wheels use, so a pill on this
 // tile means what the same colour means anywhere else on the card.
@@ -1561,13 +1558,21 @@ export function buildPlayerPagerElement(player, opts = {}) {
           return [`${base}${tag}`, Number(v) || 0];
         })
         .sort((a, b) => b[1] - a[1])
-        .slice(0, 6)
+        // Seven, not six. The hex chart flexes its row height between 30 and 40px,
+        // so a seventh row costs nothing and fills a tile that was ending 40px
+        // short. Positions with only six roles are unaffected.
+        .slice(0, 7)
     : [];
   const rolesHtml = roleRows.length
     // 156 was sized for Team Report's one-word style axes. "Chance Creator CF"
     // is half as long again, so the hexes have to move right by the same amount
     // or the gap between text and chart closes up on the longest row.
-    ? `<div style="position:absolute;left:0;top:2px;">${styleHexSvg(roleRows, innerW, row1InnerH, 205)}</div>`
+    // Vertically centred rather than pinned to the top, so whatever the row
+    // height solves to, the leftover splits evenly instead of pooling underneath.
+    ? `<div style="position:absolute;left:0;top:${
+         Math.max(0, Math.round((row1InnerH - (roleRows.length * Math.max(30, Math.min(40,
+           Math.floor((row1InnerH - 6) / roleRows.length))) + 6)) / 2))
+       }px;">${styleHexSvg(roleRows, innerW, row1InnerH, 205)}</div>`
     : `<div style="position:absolute;inset:0;display:flex;align-items:center;
                    justify-content:center;font-size:12px;color:#55617a;">No role scores.</div>`;
 
