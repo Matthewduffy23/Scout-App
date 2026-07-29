@@ -742,120 +742,127 @@ const SW_HI = 70;
 const SW_LO = 30;
 
 const SW_LABELS = {
-  // The Streamlit GK page's STYLE_MAP only covers distribution, so a keeper could
-  // never be strong or weak at goalkeeping — Sharman-Lowe's 62.5% save rate sits
-  // well below the 30th percentile and the panel still read "None below the 30th".
-  // The shot-stopping metrics are added here with the same naming convention.
   GK: {
-    "Long Passes per 90": null,
-    "Passes per 90": "Passing Involvement",
-    "Accurate passes, %": "Passing Retention",
-    "Accurate long passes, %": "Long Passing",
     "Save rate, %": "Shot Stopping",
-    "Prevented goals per 90": "Goals Prevented",
-    "Conceded goals per 90": "Goals Conceded",
-    "xG against per 90": "Chances Faced",
-    "Shots against per 90": "Shots Faced",
+    "Prevented goals per 90": "Preventing Goals",
+    "Conceded goals per 90": "Conceding Goals",
     "Exits per 90": "Sweeping",
+    "Accurate passes, %": "Short Passing",
+    "Accurate long passes, %": "Long Passing",
+    "Passes per 90": null,
+    "Long Passes per 90": null,
+    "xG against per 90": null,
+    "Shots against per 90": null,
   },
   CB: {
     "Defensive duels per 90": "Defensive Duel Attempts",
     "Aerial duels won, %": "Aerial Duels",
-    "Defensive duels won, %": "Tackling %",
-    "Long Passes per 90": null,
-    "PAdj Interceptions": "Interceptions",
-    "Accurate forward passes, %": "Forward Passing Accuracy",
-    "Dribbles per 90": "Dribble Volume",
+    "Defensive duels won, %": "Tackling",
+    "PAdj Interceptions": "Positioning",
+    "Accurate forward passes, %": "Forward Passing %",
+    "Dribbles per 90": "Stepping with the ball",
     "Successful dribbles, %": "Dribbling Efficiency",
     "Progressive runs per 90": "Progressive Runs",
-    "Passes per 90": "Passing Involvement",
     "Accurate passes, %": "Passing Retention",
     "Progressive passes per 90": "Ball progression via passes",
-    "Shots blocked per 90": null,
+    "Accurate long passes, %": "Long passing",
+    "Shots blocked per 90": "Blocking Shots",
+    "Passes per 90": null,
+    "Long Passes per 90": null,
   },
   FB: {
     "Defensive duels per 90": "Defensive Duel Attempts",
     "Aerial duels won, %": "Aerial Duels",
-    "Defensive duels won, %": "Tackling %",
-    "Long passes per 90": null,
-    "xG per 90": "Goal Threat",
-    "Shots per 90": null,
-    "PAdj Interceptions": "Defensive positioning",
-    "Accurate forward passes, %": "Forward Passing Accuracy",
-    "Dribbles per 90": "Dribble Volume",
+    "Defensive duels won, %": "Tackling",
+    "PAdj Interceptions": "Defensive Positioning",
+    "Accurate forward passes, %": "Forward Passing %",
+    "Dribbles per 90": "Ball Carrying",
     "Successful dribbles, %": "Dribbling Efficiency",
-    "Touches in box per 90": "Penalty-box Coverage",
-    "Progressive runs per 90": "Progressive Runs",
-    "Passes per 90": "Passing Involvement",
+    "Progressive runs per 90": "Getting team up the pitch via carries",
     "Accurate passes, %": "Passing Retention",
-    "xA per 90": "Creativity",
-    "Passes to penalty area per 90": "Passes to Penalty Area",
-    "Deep completions per 90": null,
     "Progressive passes per 90": "Ball progression via passes",
+    "Accurate long passes, %": "Long passing",
+    "Shots blocked per 90": "Blocking Shots",
+    "xG per 90": "Goal Threat",
+    "Touches in box per 90": "Penalty-box Coverage",
+    "xA per 90": "Creating Chances",
+    "Passes to penalty area per 90": "Passes to Penalty Area",
+    "Crosses per 90": "Crossing",
+    "Accurate crosses, %": "Crossing",
+    "Passes per 90": null,
+    "Long passes per 90": null,
+    "Shots per 90": null,
+    "Deep completions per 90": null,
     "Smart passes per 90": null,
   },
   CM: {
     "Defensive duels per 90": "Defensive Duel Attempts",
     "Aerial duels won, %": "Aerial Duels",
-    "Defensive duels won, %": "Tackling %",
-    "Long Passes per 90": null,
-    "Non-penalty goals per 90": "Scoring Goals",
-    "xG per 90": "Goal Threat",
-    "Shots per 90": null,
-    "PAdj Interceptions": "Defensive positioning",
-    "Accurate forward passes, %": "Forward Passing Accuracy",
-    "Dribbles per 90": "Dribble Volume",
+    "Defensive duels won, %": "Tackling",
+    "PAdj Interceptions": "Interceptions",
+    "Accurate forward passes, %": "Forward Passing %",
+    "Dribbles per 90": "Dribble volume",
     "Successful dribbles, %": "Dribbling Efficiency",
-    "Touches in box per 90": "Penalty-box Coverage",
-    "Progressive runs per 90": "Progressive Runs",
-    "Passes per 90": "Passing Involvement",
+    "Progressive runs per 90": "Getting team up the pitch via carries",
     "Accurate passes, %": "Passing Retention",
-    "xA per 90": "Creativity",
-    "Passes to penalty area per 90": "Passes to Penalty Area",
-    "Deep completions per 90": null,
     "Progressive passes per 90": "Ball progression via passes",
-    "Smart passes per 90": null,
+    "Accurate long passes, %": "Long passing",
+    "Shots blocked per 90": "Blocking Shots",
+    "xG per 90": "Goal Threat",
+    "Touches in box per 90": "Getting into penalty box",
+    "xA per 90": "Creating Chances",
+    "Passes to penalty area per 90": "Passes to Penalty Area",
+    "Crosses per 90": "Crossing",
+    "Accurate crosses, %": "Crossing",
+    "Smart passes per 90": "Through Balls",
+    "Passes per 90": null,
+    "Long Passes per 90": null,
+    "Shots per 90": null,
+    "Deep completions per 90": null,
+    "Non-penalty goals per 90": null,
   },
   ATT: {
     "Defensive duels per 90": "Defensive Duels",
     "Aerial duels won, %": "Aerial Duels",
-    "Aerial duels per 90": null,
     "Non-penalty goals per 90": "Scoring Goals",
     "xG per 90": "Attacking Positioning",
     "Shots per 90": "Shot Volume",
     "Goal conversion, %": "Finishing",
     "Crosses per 90": "Crossing",
+    "Accurate crosses, %": "Crossing",
     "Dribbles per 90": "Dribble Volume",
     "Successful dribbles, %": "Dribbling Efficiency",
     "Touches in box per 90": "Penalty-box Coverage",
-    "Progressive runs per 90": "Progressive Runs",
+    "Progressive runs per 90": "Getting team up the pitch via carries",
     "Passes per 90": "Involvement",
     "Accurate passes, %": "Retention",
-    "xA per 90": "Creativity",
+    "xA per 90": "Creating Chances",
     "Passes to penalty area per 90": "Passes to Penalty Area",
+    "Smart passes per 90": "Through Balls",
+    "Progressive passes per 90": "Deep playmaking",
+    "Aerial duels per 90": null,
     "Deep completions per 90": null,
-    "Progressive passes per 90": null,
-    "Smart passes per 90": null,
   },
   CF: {
     "Defensive duels per 90": "Defensive Duel Attempts",
     "Aerial duels won, %": "Aerial Duels",
     "xG per 90": "Goal Threat",
     "Shots per 90": "Shot Volume",
-    "Crosses per 90": null,
+    "Goal conversion, %": "Finishing",
     "Dribbles per 90": "Dribble Volume",
     "Successful dribbles, %": "Dribbling Efficiency",
     "Touches in box per 90": "Penalty-box Coverage",
-    "Progressive runs per 90": "Progressive Runs",
+    "Progressive runs per 90": "Ball Carrying",
     "Passes per 90": "Involvement",
     "Accurate passes, %": "Passing Retention",
-    "xA per 90": "Creativity",
+    "xA per 90": "Creating Chances",
     "Passes to penalty area per 90": "Passes to Penalty Area",
+    "Smart passes per 90": "Through Balls",
+    "Non-penalty goals per 90": "Scoring Goals",
+    "Crosses per 90": null,
     "Deep completions per 90": null,
-    "Goal conversion, %": "Finishing",
-    "Smart passes per 90": null,
-  },};
-
+  },
+};
 // The pipeline's `g` groups store abbreviated labels ("Pass %"), not the Wyscout
 // column names STYLE_MAP is keyed on ("Accurate passes, %"). This maps one to the
 // other. Lookups are lowercased because the Streamlit maps are inconsistent about
@@ -956,11 +963,15 @@ function strengthsPanelBody(w, h, sd, posKey, opts = {}) {
            .sort((a, b) => b.pct - a.pct)
            .map(r => ({ label: r.label, tone: SW_TONES.Green })),
   ].slice(0, 6);
-  const weaknesses = [
-    ...swAddWeak.map(x => ({ label: x.label, pct: Number(x.pct) || 0 })),
-    ...rows.filter(r => r.pct <= SW_LO && !dropped.has(r.label))
-           .sort((a, b) => a.pct - b.pct),
-  ].slice(0, 4);
+  // Derived weaknesses are bars — a percentile has a magnitude and 4th is a
+  // different problem from 29th. Manual ones are pills: a scout writing
+  // "Physicality" is making a call, not reporting a measurement, and drawing it
+  // as a bar lends it a precision it doesn't have. The tile then reads pills,
+  // rules, pills — which is also the better shape.
+  const weaknesses = rows.filter(r => r.pct <= SW_LO && !dropped.has(r.label))
+    .sort((a, b) => a.pct - b.pct)
+    .slice(0, 3);
+  const weakPills = swAddWeak.slice(0, 4);
 
   // Strengths as pills — a strength is a claim, and a bar invites the reader to
   // compare five things that are all simply good.
@@ -972,7 +983,7 @@ function strengthsPanelBody(w, h, sd, posKey, opts = {}) {
   // rows, label left, figure right in radarColor, 5px track at full width. A
   // weakness needs its magnitude shown — 29th percentile and 4th are different
   // problems, and a pill flattens them into the same statement.
-  const BAR_H = weaknesses.length > 3 ? 26 : 32;
+  const BAR_H = 32;
   const weakHtml = weaknesses.length
     ? weaknesses.map((r, i) => `
       <div style="position:absolute;left:0;top:${i * BAR_H}px;width:${w}px;height:${BAR_H - 8}px;">
@@ -986,7 +997,7 @@ function strengthsPanelBody(w, h, sd, posKey, opts = {}) {
                       background:${radarColor(r.pct)};border-radius:3px;"></div>
         </div>
       </div>`).join('')
-    : `<span style="font-size:11px;color:#8b98ad;">None below the ${SW_LO}th percentile</span>`;
+    : (weakPills.length ? '' : `<span style="font-size:11px;color:#8b98ad;">None below the ${SW_LO}th percentile</span>`);
 
   const WEAK_TOP = 92;
   return `<div style="position:absolute;inset:0;">
@@ -1049,31 +1060,33 @@ function clubsPanelBody(w, h, rows, coreOnly, mode, hideScores, notes) {
         <div style="position:absolute;left:68px;right:${VAL_W + 18}px;top:50%;margin-top:-15px;">
           <div style="font-size:13px;font-weight:700;color:#eaf0f8;line-height:1.15;white-space:nowrap;
                       ">${esc(title)}</div>
-          <div style="display:flex;align-items:center;margin-top:4px;white-space:nowrap;
-                      overflow:hidden;line-height:1.15;">
-            <!-- Players lead with the CLUB CREST and put the league flag after the
-                 league name; clubs keep the flag in front, since their own crest
-                 is already the main badge on the row. -->
-            ${isPlayers && crest ? `<div style="width:13px;height:13px;flex-shrink:0;
-                        background-size:contain;background-repeat:no-repeat;
-                        background-position:center;margin-right:6px;
-                        background-image:url('${src(crest)}');"></div>` : ''}
-            ${!isPlayers && lflag ? `<div style="width:15px;height:10px;flex-shrink:0;background-size:cover;
-                        background-position:center;border-radius:1.5px;margin-right:6px;
+          <!-- Inline-block, not flex. As a flex row the league name was being
+               shrunk to an ellipsis with 200px of the row still empty — flex
+               shrink resolves unpredictably under this renderer, and there is no
+               reason to negotiate widths on a line that always fits. Inline boxes
+               simply sit next to each other and the parent clips if anything ever
+               doesn't. -->
+          <div style="margin-top:4px;white-space:nowrap;overflow:hidden;line-height:1.15;">
+            ${isPlayers && crest ? `<span style="display:inline-block;vertical-align:middle;
+                        width:13px;height:13px;margin-right:6px;background-size:contain;
+                        background-repeat:no-repeat;background-position:center;
+                        background-image:url('${src(crest)}');"></span>` : ''}
+            ${!isPlayers && lflag ? `<span style="display:inline-block;vertical-align:middle;
+                        width:15px;height:10px;margin-right:6px;background-size:cover;
+                        background-position:center;border-radius:1.5px;
                         box-shadow:inset 0 0 0 0.5px rgba(255,255,255,0.25);
-                        background-image:url('${src(lflag)}');"></div>` : ''}
-            <!-- min-width:0 is the whole fix: without it a flex child refuses to
-                 shrink below its content, so the club-and-league text ran on under
-                 the flag instead of ellipsing before it. -->
-            <span style="font-size:10px;color:#8b98ad;min-width:0;overflow:hidden;
-                         text-overflow:ellipsis;white-space:nowrap;">${esc(sub)}</span>
-            ${isPlayers && lflag ? `<div style="width:15px;height:10px;flex-shrink:0;background-size:cover;
-                        background-position:center;border-radius:1.5px;margin-left:7px;
+                        background-image:url('${src(lflag)}');"></span>` : ''}
+            <span style="display:inline-block;vertical-align:middle;font-size:10px;
+                         color:#8b98ad;">${esc(sub)}</span>
+            ${isPlayers && lflag ? `<span style="display:inline-block;vertical-align:middle;
+                        width:15px;height:10px;margin-left:7px;background-size:cover;
+                        background-position:center;border-radius:1.5px;
                         box-shadow:inset 0 0 0 0.5px rgba(255,255,255,0.25);
-                        background-image:url('${src(lflag)}');"></div>` : ''}
-            ${note ? `<span style="font-size:10px;color:#5c6b82;margin:0 6px;">&middot;</span>
-              <span style="font-size:10px;font-weight:600;color:${ACCENT_PINK};
-                           overflow:hidden;">${esc(note)}</span>` : ''}
+                        background-image:url('${src(lflag)}');"></span>` : ''}
+            ${note ? `<span style="display:inline-block;vertical-align:middle;font-size:10px;
+                        color:#5c6b82;margin:0 6px;">&middot;</span>
+              <span style="display:inline-block;vertical-align:middle;font-size:10px;
+                        font-weight:600;color:${ACCENT_PINK};">${esc(note)}</span>` : ''}
           </div>
         </div>
         ${hideScores ? '' : `
