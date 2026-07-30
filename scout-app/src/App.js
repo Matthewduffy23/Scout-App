@@ -3,8 +3,12 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import PlayerCard from './PlayerCard';
 import ClubTool from './ClubTool';
 import TeamIndex from './TeamIndex';
-import { Photo as PhotoUtil, Crest as CrestUtil, photoUrl as photoUrlUtil, useIsMobile, deliverJson } from './utils';
+import { Photo, Crest, photoUrl, useIsMobile, deliverJson } from './utils';
 import { scoreBandColor, formatMV, formatFoot, ROLE_KEY_LABELS, ROLES_BY_KEY, POSITION_ATTRIBUTES, playerHasAttribute, ALL_LEAGUES, DEFAULT_LEAGUES, HIDDEN_LEAGUES, YOUTH_LEAGUES, PRESET_LEAGUES, COUNTRY_TO_REGION, GBE_LEAGUE_BANDS, leagueToRegion, leagueToBand, scoreLabel, scoreToStars, promotionBadge, ALL_SEASONS, LEAGUE_STRENGTHS } from './constants';
+
+// Re-exported so anything that already imports these from App.js keeps working —
+// but there is now ONE implementation, in utils.js, rather than a second copy here.
+export { Photo, Crest, photoUrl };
 
 // Height filter: data is stored in cm, but displayed as feet'inches (matches player card
 // convention). Options generated in whole inches (58"-83" ≈ 4'10"-6'11"), each mapped to
@@ -90,33 +94,7 @@ function countryToIso2(name) {
 }
 
 
-const PHOTO_BASE = 'https://raw.githubusercontent.com/Matthewduffy23/scouting-photos/main/photos/';
-const CREST_BASE = 'https://images.fotmob.com/image_resources/logo/teamlogo/';
 const PAGE = 50;
-
-function slugN(s) {
-  s = String(s||'').toLowerCase();
-  'ø,o|œ,oe|æ,ae|å,a|ä,a|ö,o|ü,u|ß,ss|ł,l|đ,d|ð,d|þ,th|ç,c|ş,s|ğ,g|ı,i'.split('|').forEach(p=>{const[k,v]=p.split(',');s=s.split(k).join(v);});
-  return s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'');
-}
-export function photoUrl(name,team){
-  const parts=name.trim().split('.');let ini,sur;
-  if(parts.length>=2){ini=parts[0].trim();sur=parts.slice(1).join('.').trim();}
-  else{const b=name.trim().split(' ');ini=b[0]||'';sur=b.slice(1).join(' ')||b[0]||'';}
-  const t=String(team||'').trim().split(/\s+/).map(w=>slugN(w)).join('_').replace(/^_|_$/g,'');
-  return `${PHOTO_BASE}${slugN(ini)}_${slugN(sur)}__${t}.png`;
-}
-export function Photo({name,team,size=34}){
-  const [src,set]=useState(()=>photoUrl(name,team));
-  const [tried,setT]=useState(false);
-  React.useEffect(()=>{set(photoUrl(name,team));setT(false);},[name,team]);
-  return <img src={src} alt="" onError={()=>{if(!tried){set('/fallback.png');setT(true);}}} style={{width:size,height:size,borderRadius:'50%',objectFit:'cover',background:'#111827',flexShrink:0,border:'2px solid #1a2740'}}/>;
-}
-export function Crest({id,name,size=20}){
-  const [ok,set]=useState(!!id);
-  if(!id||!ok) return <div style={{width:size,height:size,borderRadius:3,background:'#1a2740',display:'flex',alignItems:'center',justifyContent:'center',fontSize:size*.5,color:'#94a3b8',flexShrink:0,fontWeight:700}}>{(name||'?')[0]}</div>;
-  return <img src={`${CREST_BASE}${id}.png`} alt="" onError={()=>set(false)} style={{width:size,height:size,objectFit:'contain',flexShrink:0}}/>;
-}
 
 export function StarDisplay({score,size=11}){
   const stars=scoreToStars(score);
@@ -1085,7 +1063,7 @@ export default function App(){
                         <span style={T.chip}>Age {p.age}</span>
                         {p.foot&&p.foot!=='unknown'&&p.foot!=='nan'&&<span style={T.chip}>{formatFoot(p.foot)}</span>}
                         {roleModeScore!=null&&<span style={{...T.chip,color:scoreBandColor(roleModeScore)}}>Role {roleModeScore.toFixed(1)}</span>}
-                        <span style={T.chip}>Peak {p.peakScore.toFixed(1)}</span>
+                        <span style={T.chip}>Peak {p.peakScore?.toFixed(1) ?? '—'}</span>
                         <span style={{...T.chip,color:'#22c55e'}}>Pot {(p.potentialScore||p.careerScore).toFixed(1)}</span>
                         {p.xValue?<span style={{...T.chip,color:'#93c5fd'}}>xV {formatMV(p.xValue)}</span>:null}
                         {p.marketValue>0&&<span style={T.chip}>MV {formatMV(p.marketValue)}</span>}
@@ -1153,9 +1131,9 @@ export default function App(){
                             </div>
                           </td>
                           {scoreMode!=='complete'&&<td style={T.td}>{roleModeScore!=null?<span style={{fontWeight:700,color:scoreBandColor(roleModeScore)}}>{roleModeScore.toFixed(1)}</span>:<span style={{color:'#64748b'}}>—</span>}</td>}
-                          {!hiddenCols.has('peakScore')&&<td style={{...T.td,color:'#94a3b8'}}>{p.peakScore.toFixed(1)}</td>}
+                          {!hiddenCols.has('peakScore')&&<td style={{...T.td,color:'#94a3b8'}}>{p.peakScore?.toFixed(1) ?? '—'}</td>}
                           {!hiddenCols.has('seasons')&&<td style={{...T.td,color:'#94a3b8'}}>{p.seasons}</td>}
-                          {!hiddenCols.has('potentialScore')&&<td style={T.td}><div style={{display:'flex',alignItems:'center',gap:4}}><div style={{width:6,height:6,borderRadius:'50%',background:'#22c55e',flexShrink:0}}/><span style={{fontWeight:600,color:'#22c55e',fontSize:11}}>{(p.potentialScore||p.careerScore).toFixed(1)}</span></div></td>}
+                          {!hiddenCols.has('potentialScore')&&<td style={T.td}><div style={{display:'flex',alignItems:'center',gap:4}}><div style={{width:6,height:6,borderRadius:'50%',background:'#22c55e',flexShrink:0}}/><span style={{fontWeight:600,color:'#22c55e',fontSize:11}}>{(p.potentialScore||p.careerScore)?.toFixed(1) ?? '—'}</span></div></td>}
                           {!hiddenCols.has('xValue')&&<td style={T.td}>{p.xValue?<span style={{fontSize:11,fontWeight:700,color:'#93c5fd'}}>{formatMV(p.xValue)}</span>:<span style={{color:'#475569'}}>—</span>}</td>}
                           {!hiddenCols.has('xValueGapPct')&&<td style={T.td}>{p.xValue&&p.marketValue>0&&p.xValueGapPct!=null?<span style={{fontSize:11,fontWeight:700,color:p.xValueGapPct>20?'#22c55e':p.xValueGapPct<-20?'#ef4444':'#94a3b8'}}>{p.xValueGapPct>0?'+':''}{p.xValueGapPct.toFixed(0)}%</span>:<span style={{color:'#475569'}}>—</span>}</td>}
                           {!hiddenCols.has('marketValue')&&<td style={{...T.td,color:'#94a3b8'}}>{formatMV(p.marketValue)}</td>}

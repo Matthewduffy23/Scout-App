@@ -3617,7 +3617,7 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
           <Section title={`XI & depth · ${formation}`} open={openSection === 'xi'} onToggle={() => toggleSection('xi')}>
             <div style={UI.block}>
               <span style={UI.label}>Formation</span>
-              <select value={formation} onChange={e => { setFormation(e.target.value); setXiOverrides({}); }}
+              <select value={formation} onChange={e => { setFormation(e.target.value); setXiLists({}); }}
                       style={UI.select}>
                 {FORMATION_NAMES.map(f => <option key={f} value={f}>{f}</option>)}
               </select>

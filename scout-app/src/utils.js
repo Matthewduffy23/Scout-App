@@ -7,11 +7,15 @@ function slugN(s) {
   return s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'');
 }
 
+// FIX: was `name.trim()` — any row with a missing/undefined name threw a TypeError
+// here and took the whole card down with it. String() first, always.
 export function photoUrl(name, team) {
-  const parts = name.trim().split('.');
+  const nm = String(name||'').trim();
+  if(!nm) return '/fallback.png';
+  const parts = nm.split('.');
   let ini, sur;
   if(parts.length>=2){ini=parts[0].trim();sur=parts.slice(1).join('.').trim();}
-  else{const b=name.trim().split(' ');ini=b[0]||'';sur=b.slice(1).join(' ')||b[0]||'';}
+  else{const b=nm.split(' ');ini=b[0]||'';sur=b.slice(1).join(' ')||b[0]||'';}
   const t=String(team||'').trim().split(/\s+/).map(w=>slugN(w)).join('_').replace(/^_|_$/g,'');
   return `${PHOTO_BASE}${slugN(ini)}_${slugN(sur)}__${t}.png`;
 }
@@ -48,9 +52,17 @@ export function useIsMobile(bp=768){
   return m;
 }
 
+// FIX: `ok` was seeded from `id` once and never resynced, so this component had two
+// permanent-grey-box failure modes wherever React reuses the instance (squad lists,
+// panel rows, changing team inside a card):
+//   1. a crest 404s -> ok=false -> the NEXT team rendered in that slot keeps ok=false
+//      and shows the initial letter even though its badge is fine;
+//   2. id arrives late (async teamFotmobId) -> mounted with id=null -> ok=false forever.
+// Photo already had this effect; Crest didn't. Reset on id change.
 export function Crest({id,name,size=20}){
   const [ok,set]=useState(!!id);
-  if(!id||!ok) return <div style={{width:size,height:size,borderRadius:3,background:'#1a2740',display:'flex',alignItems:'center',justifyContent:'center',fontSize:size*.5,color:'#94a3b8',flexShrink:0,fontWeight:700}}>{(name||'?')[0]}</div>;
+  React.useEffect(()=>{set(!!id);},[id]);
+  if(!id||!ok) return <div style={{width:size,height:size,borderRadius:3,background:'#1a2740',display:'flex',alignItems:'center',justifyContent:'center',fontSize:size*.5,color:'#94a3b8',flexShrink:0,fontWeight:700}}>{(String(name||'?')[0]||'?')}</div>;
   return <img src={`${CREST_BASE}${id}.png`} alt="" onError={()=>set(false)} style={{width:size,height:size,objectFit:'contain',flexShrink:0}}/>;
 }
 
@@ -136,21 +148,34 @@ export async function deliverPng(dataUrl, filename){
     saveBtn.onclick = async () => {
       // This click is fresh user activation, which is exactly what navigator.share
       // needs and what the original post-render a.click() no longer had.
+      //
+      // FIX: the open-in-tab fallback used to sit after a possible `await`, so on the
+      // path where share() rejected with something other than AbortError the activation
+      // was already spent and iOS silently blocked the popup — Save appeared dead.
+      // Decide whether we can share BEFORE awaiting anything, and keep a hint-only
+      // last resort that needs no popup at all.
+      let file = null;
+      let canShareFiles = false;
       try {
         if(blob && navigator.canShare){
-          const file = new File([blob], filename, { type: 'image/png' });
-          if(navigator.canShare({ files: [file] })){
-            await navigator.share({ files: [file] });
-            cleanup('shared');
-            return;
-          }
+          file = new File([blob], filename, { type: 'image/png' });
+          canShareFiles = navigator.canShare({ files: [file] });
         }
-      } catch(e){
-        if(e && e.name === 'AbortError'){ return; } // user backed out of the sheet
+      } catch(e){ canShareFiles = false; }
+
+      if(!canShareFiles){
+        if(objUrl && window.open(objUrl, '_blank')) return;
+        hint.textContent = 'Press and hold the image above to save it.';
+        return;
       }
-      // No share support: open in its own tab, where iOS offers Save to Photos.
-      if(objUrl) window.open(objUrl, '_blank');
-      else hint.textContent = 'Press and hold the image above to save it.';
+
+      try {
+        await navigator.share({ files: [file] });
+        cleanup('shared');
+      } catch(e){
+        if(e && e.name === 'AbortError') return; // user backed out of the sheet
+        hint.textContent = 'Press and hold the image above to save it.';
+      }
     };
 
     const closeBtn = btn('Close', 'transparent', '#94a3b8', '#1e2d45');
@@ -167,19 +192,42 @@ export async function deliverPng(dataUrl, filename){
 
 // JSON backups (shortlist, coaches) hit the same iOS wall: `download` is ignored, so
 // tapping Export did nothing. Share sheet is the only route to Files on iOS.
+//
+// FIX: when canShare was missing or returned false for a .json File (which iOS Safari
+// does do), this fell through to the anchor+download path — which is precisely the
+// silent no-op it exists to avoid. Export looked like it worked and no file appeared,
+// with no way to recover the data. Now touch devices get a visible last resort
+// (open in a tab, else an on-screen copyable overlay) and the caller gets a status
+// back so it can say so.
 export async function deliverJson(text, filename){
   const blob = new Blob([text], { type: 'application/json' });
-  if(isTouchDevice() && navigator.canShare){
+  if(isTouchDevice()){
+    let file = null, canShareFiles = false;
     try {
-      const file = new File([blob], filename, { type: 'application/json' });
-      if(navigator.canShare({ files: [file] })){
+      if(navigator.canShare){
+        file = new File([blob], filename, { type: 'application/json' });
+        canShareFiles = navigator.canShare({ files: [file] });
+      }
+    } catch(e){ canShareFiles = false; }
+
+    if(canShareFiles){
+      try {
         await navigator.share({ files: [file] });
         return 'shared';
+      } catch(e){
+        if(e && e.name === 'AbortError') return 'cancelled';
       }
-    } catch(e){
-      if(e && e.name === 'AbortError') return 'cancelled';
     }
+    const url = URL.createObjectURL(blob);
+    if(window.open(url, '_blank')){
+      setTimeout(()=>URL.revokeObjectURL(url), 60000);
+      return 'opened';
+    }
+    URL.revokeObjectURL(url);
+    showTextFallback(text, filename);
+    return 'shown';
   }
+
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -189,6 +237,44 @@ export async function deliverJson(text, filename){
   a.remove();
   setTimeout(()=>URL.revokeObjectURL(url), 20000);
   return 'downloaded';
+}
+
+// Last-resort backup route: the raw JSON on screen, selected and copyable. Ugly, but
+// a backup you can paste into Notes beats an Export button that does nothing.
+function showTextFallback(text, filename){
+  const wrap = document.createElement('div');
+  wrap.setAttribute('style',
+    'position:fixed;inset:0;z-index:100000;background:rgba(2,4,10,.96);'+
+    'display:flex;flex-direction:column;padding:14px;box-sizing:border-box;'+
+    'font-family:system-ui,-apple-system,sans-serif;');
+  const hint = document.createElement('div');
+  hint.textContent = `Couldn't save ${filename} directly. Copy the text below and paste it somewhere safe.`;
+  hint.setAttribute('style','color:#94a3b8;font-size:12.5px;text-align:center;margin-bottom:10px;line-height:1.45;');
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.setAttribute('readonly','readonly');
+  ta.setAttribute('style',
+    'flex:1;width:100%;box-sizing:border-box;background:#09111e;color:#cbd5e1;'+
+    'border:1px solid #1e2d45;border-radius:8px;padding:10px;font-size:11px;'+
+    'font-family:ui-monospace,Menlo,monospace;');
+  const row = document.createElement('div');
+  row.setAttribute('style','display:flex;gap:10px;margin-top:12px;');
+  const mk = (label,bg,color,border)=>{
+    const b=document.createElement('button');
+    b.textContent=label;
+    b.setAttribute('style',`flex:1;padding:13px 0;border-radius:8px;border:1px solid ${border};background:${bg};color:${color};font-size:13px;font-weight:700;`);
+    return b;
+  };
+  const copy = mk('Copy','#3b7de8','#fff','#3b7de8');
+  copy.onclick = async () => {
+    try { await navigator.clipboard.writeText(text); copy.textContent='Copied'; }
+    catch(e){ ta.select(); }
+  };
+  const close = mk('Close','transparent','#94a3b8','#1e2d45');
+  close.onclick = () => { if(wrap.parentNode) wrap.parentNode.removeChild(wrap); };
+  row.appendChild(copy); row.appendChild(close);
+  wrap.appendChild(hint); wrap.appendChild(ta); wrap.appendChild(row);
+  document.body.appendChild(wrap);
 }
 
 // ---------------------------------------------------------------------------
@@ -206,30 +292,56 @@ export async function deliverJson(text, filename){
 const _squadCache = {};
 
 function normLeagueName(l){ return String(l||'').trim().replace(/\.$/,'').toLowerCase(); }
+function normTeamName(t){ return String(t||'').trim().toLowerCase(); }
 
 export async function loadSquad(team, league, onProgress){
-  const key = `${String(team).toLowerCase()}|${normLeagueName(league)}`;
+  const key = `${normTeamName(team)}|${normLeagueName(league)}`;
   if(_squadCache[key]) return _squadCache[key];
 
   let manifest = null;
   try { const r = await fetch('/players_manifest.json'); if(r.ok) manifest = await r.json(); } catch(e){}
-  const files = manifest
+  // FIX: dedupe the file list. A manifest that lists the same chunk under two position
+  // groups (or a player who qualifies for two groups) put the same player in the squad
+  // twice, which shows up as duplicate names in the XI and in every squad panel.
+  const files = Array.from(new Set(manifest
     ? Object.values(manifest).flat()
-    : ['gk','cb','fb','cm','att','cf'].map(f=>`players_${f}.json`);
+    : ['gk','cb','fb','cm','att','cf'].map(f=>`players_${f}.json`)));
 
+  const wantTeam = normTeamName(team);
+  const wantLeague = normLeagueName(league);
   const squad = [];
+  const seen = new Set();
+  // FIX: a single failed chunk used to `continue` and then the short squad got cached
+  // forever — one flaky fetch and that club is permanently missing a keeper for the
+  // rest of the session, with no retry and no sign anything went wrong. Track failures
+  // and only cache a complete read, so the next call retries.
+  let failures = 0;
+
   for(let i=0;i<files.length;i++){
     if(onProgress) onProgress(i+1, files.length);
     let rows = null;
-    try { rows = await fetch(`/${files[i]}`).then(r=>r.json()); } catch(e){ continue; }
+    try {
+      const r = await fetch(`/${files[i]}`);
+      if(!r.ok) throw new Error(`HTTP ${r.status} for ${files[i]}`);
+      rows = await r.json();
+    } catch(e){
+      failures++;
+      console.warn('[loadSquad] chunk failed:', files[i], e);
+      continue;
+    }
+    if(!Array.isArray(rows)){ failures++; rows = null; continue; }
     for(const p of rows){
-      if(p && String(p.team).toLowerCase() === String(team).toLowerCase()
-           && normLeagueName(p.league) === normLeagueName(league)){
-        squad.push(p);
-      }
+      if(!p) continue;
+      if(normTeamName(p.team) !== wantTeam) continue;
+      if(normLeagueName(p.league) !== wantLeague) continue;
+      const id = p.wyscoutId ?? p.wyId ?? p.id ?? `${normTeamName(p.name)}|${wantTeam}`;
+      if(seen.has(id)) continue;
+      seen.add(id);
+      squad.push(p);
     }
     rows = null; // drop the chunk before fetching the next one
   }
-  _squadCache[key] = squad;
+
+  if(!failures) _squadCache[key] = squad;
   return squad;
 }
