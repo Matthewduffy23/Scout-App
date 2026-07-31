@@ -676,6 +676,13 @@ function positionBlockHtml(player, x, w, ink, manualColors, pcts, heatmap, heatO
   const primary = slots[0] || shortPos(String(player.position || '').split(',')[0]);
   const secondary = slots[1] || null;
   const full = (sl) => POS_FULL[sl] || POSITION_LABELS[sl] || sl || '—';
+  // Same resolution as the pitch's tierFor: a manual tier wins, otherwise the
+  // slot's rank picks from the tier ladder. Hard-coding Primary/Secondary here
+  // is what left the dot green while the disc it points at had been recoloured.
+  const tierCol = (sl, i) => {
+    if (sl && manualColors && manualColors[sl]) return PP_TIERS[manualColors[sl]] || manualColors[sl];
+    return PP_TIERS[PP_TIER_ORDER[Math.min(i, PP_TIER_ORDER.length - 1)]];
+  };
 
   const textW = PB_TEXT_W;
   // The position names are nowrap, so a long one has to be MEASURED rather than
@@ -701,7 +708,7 @@ function positionBlockHtml(player, x, w, ink, manualColors, pcts, heatmap, heatO
            says. The dot carries the link without adding a third colour voice. -->
       <div style="margin-top:9px;display:flex;align-items:center;white-space:nowrap;">
         <span style="width:9px;height:9px;border-radius:50%;flex-shrink:0;
-                     background:${PP_TIERS.Primary};margin-right:9px;"></span>
+                     background:${tierCol(primary, 0)};margin-right:9px;"></span>
         <span style="font-size:${posFs}px;font-weight:700;color:${ink.primary};
                      line-height:1.05;">${esc(full(primary))}</span>
       </div>
@@ -709,7 +716,7 @@ function positionBlockHtml(player, x, w, ink, manualColors, pcts, heatmap, heatO
                   color:${ink.muted};white-space:nowrap;">SECONDARY POSITION</div>
       <div style="margin-top:9px;display:flex;align-items:center;white-space:nowrap;">
         ${secondary ? `<span style="width:9px;height:9px;border-radius:50%;flex-shrink:0;
-                     background:${PP_TIERS.Secondary};margin-right:9px;"></span>` : ''}
+                     background:${tierCol(secondary, 1)};margin-right:9px;"></span>` : ''}
         <span style="font-size:${posFs}px;font-weight:700;color:${ink.muted};
                      line-height:1.05;">${secondary ? esc(full(secondary)) : '&mdash;'}</span>
       </div>
@@ -929,11 +936,12 @@ function swEligible(sd, posKey) {
 export const SW_MANUAL_TERMS = [
   'Aerial Presence', 'Aggression', 'Agility', 'Athleticism', 'Availability',
   'Balance', 'Ball Striking', 'Bravery', 'Composure', 'Consistency',
-  'Decision Making', 'Dynamism', 'First Touch', 'Injury Record', 'Intensity', 'IQ',
+  'Decision Making', 'Dynamism', 'First Touch', 'Fouls', 'Heading',
+  'Injury Record', 'Intensity', 'IQ',
   'Leadership', 'Mentality', 'Movement', 'Pace', 'Physicality',
   'Positioning', 'Receiving Under Pressure', 'Resilience', 'Running Power',
   'Set Pieces',
-  'Size', 'Stamina', 'Strength', 'Unique', 'Versatility', 'Weak Foot',
+  'Size', 'Stamina', 'Strength', 'Technique', 'Unique', 'Versatility', 'Weak Foot',
 ];
 // The same five steps the position tiers and score wheels use, so a pill on this
 // tile means what the same colour means anywhere else on the card.
@@ -1069,7 +1077,10 @@ export function swBlockHtml(w, h, rows, opts = {}) {
 // column, same 50px centred value column with its caption underneath. Only the
 // caption word changes, because these are fit scores rather than match scores.
 export function clubsPanelBody(w, h, rows, coreOnly, mode, hideScores, notes, noteColour) {
-  const NOTE_COL = noteColour || ACCENT_PINK;
+  // White-grey by default — the note is an annotation, not a highlight, and pink
+  // made every manual line read as a warning. Sits between the sub-line's #8b98ad
+  // and the title's #eaf0f8 so it's legible without competing with the club name.
+  const NOTE_COL = noteColour || '#cbd5e1';
   const isPlayers = mode === 'players';
   if (!rows || !rows.length) {
     return `<div style="position:absolute;inset:0;display:flex;align-items:center;
@@ -1839,6 +1850,10 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
   }, [player]);
   const autoSlots = useMemo(() => occupiedSlots(player, {}), [player]);
   const [extraSlots, setExtraSlots] = useState([]);
+  // Per-slot tier overrides ({ LB: 'Third', … }). Empty = the automatic ladder,
+  // so the secondary slot no longer has to be light green. Fed straight through
+  // as positionColors, which the pitch's tierFor already resolves.
+  const [positionTiers, setPositionTiers] = useState({});
   const pagerSlots = useMemo(
     () => [...autoSlots, ...extraSlots.filter(sl => !autoSlots.includes(sl))],
     [autoSlots, extraSlots]);
@@ -1965,6 +1980,7 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
     headerColourName, seasonOverride, nameOverride, teamOverride,
     uploadedPhotoDataUrl, viewText, clubRows,
     clubsMode, hideFitScores, ukOnly, positionPcts,
+    positionColors: positionTiers,
     heatmapDataUrl, heatOpacity: Number(heatOpacity) / 100, shownSlots: pagerSlots,
     heightOverride, footOverride, showXValue, xValueOverride, showTierBadge,
     overallOverride, potentialOverride, overallUnclear, potentialUnclear,
@@ -2288,6 +2304,7 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
                     if (locked) return;
                     setExtraSlots(list => on ? list.filter(x => x !== sl) : [...list, sl]);
                     if (on) setPositionPcts(o => { const n = { ...o }; delete n[sl]; return n; });
+                    if (on) setPositionTiers(o => { const n = { ...o }; delete n[sl]; return n; });
                   }}
                   title={locked ? 'From the player\u2019s own position data' : ''}
                   style={{ padding: '3px 8px', marginRight: 5, marginBottom: 5, borderRadius: 10,
@@ -2299,7 +2316,16 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
               );
             })}
           </div>
-          {pagerSlots.map(slot => (
+          {(() => {
+            // The tier ladder runs down the ORDERED slots (minutes first), not the
+            // raw toggle order, so each row's automatic colour has to be looked up
+            // by its ordered rank or the swatch marked "auto" wouldn't match the disc.
+            const ordered = orderSlots(pagerSlots, positionPcts);
+            const autoTier = (slot) => {
+              const i = ordered.indexOf(slot);
+              return PP_TIER_ORDER[Math.min(i < 0 ? 0 : i, PP_TIER_ORDER.length - 1)];
+            };
+            return pagerSlots.map(slot => (
             <div key={slot} style={{ display: 'flex', alignItems: 'center', marginBottom: 5 }}>
               <span style={{ width: 44, flexShrink: 0, fontSize: 11, fontWeight: 800,
                              color: '#93c5fd' }}>{slot}</span>
@@ -2312,10 +2338,32 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
                     return n;
                   });
                 }}
-                style={{ ...UI.input, width: 70, flex: '0 0 auto' }} />
-              <span style={{ fontSize: 11, color: '#64748b', marginLeft: 8 }}>% of minutes</span>
+                style={{ ...UI.input, width: 52, flex: '0 0 auto' }} />
+              <span style={{ fontSize: 11, color: '#64748b', marginLeft: 5, marginRight: 8 }}>%</span>
+              {PP_TIER_ORDER.map(tier => {
+                const active = (positionTiers[slot] || autoTier(slot)) === tier;
+                const isAuto = !positionTiers[slot] && autoTier(slot) === tier;
+                return (
+                  <button key={tier}
+                    title={tier + (isAuto ? ' (auto)' : '')}
+                    onClick={() => setPositionTiers(o => {
+                      const n = { ...o };
+                      // Re-tapping the active swatch, or picking the automatic
+                      // tier, drops the override rather than freezing it.
+                      if (n[slot] === tier || autoTier(slot) === tier) delete n[slot];
+                      else n[slot] = tier;
+                      return n;
+                    })}
+                    style={{ width: 16, height: 16, borderRadius: '50%', padding: 0,
+                             marginRight: 4, flexShrink: 0, cursor: 'pointer',
+                             background: PP_TIERS[tier],
+                             border: active ? '2px solid #eaf0f8' : '2px solid transparent',
+                             boxShadow: active ? '0 0 0 1px #0b1524' : 'none' }} />
+                );
+              })}
             </div>
-          ))}
+            ));
+          })()}
           <div style={UI.note}>
             {!pagerSlots.length ? 'Switch on the positions he plays.'
               : pctTotal === 0 ? 'Blank leaves the discs unlabelled.'
