@@ -1,4 +1,4 @@
-// QuickCard v68 - Edit position label, upload player photo, edit team name, flag gap fix.
+// QuickCard v69 - Heat-style pitch option (Player Pager pitch + heatmap upload); Team Context follows selected season.
 import React, { useState } from 'react';
 import { scoreLabel, formatFoot, formatMV, GBE_LEAGUE_BANDS } from './constants';
 import { useIsMobile, deliverPng } from './utils';
@@ -94,6 +94,223 @@ function pitchSvgFromColors(dotColors) {
     ${dots}
   </svg>`;
 }
+// ─── Heatmap extraction ────────────────────────────────────────────────────
+// Heatmaps arrive as opaque PNGs with a pitch baked in — a flat pale green plus
+// white lines. Compositing that onto the header can't work: mix-blend-mode is
+// exactly the sort of CSS property this render pipeline drops silently, so it
+// would look right on screen and break in the export.
+//
+// (Moved here from PlayerPager.js; PlayerPager re-exports it so existing
+// importers are untouched.)
+// So the background is removed at upload time instead, on a canvas, before the
+// image ever reaches the card. The test is warmth: heat runs yellow -> red, all
+// of which have red far above blue, while pale green (206,230,196) and white
+// lines (255,255,255) have red and blue nearly equal. Alpha therefore comes from
+// (R-B), squared so the faint wash at the edges falls away faster than the hot
+// core, leaving the blobs on transparency with the pitch and its lines gone.
+//
+// The card then draws its OWN pitch underneath in the header's palette, which is
+// what makes the heat sit in the design rather than on top of it.
+export function extractHeat(dataUrl) {
+  return new Promise((resolve) => {
+    try {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const maxW = 1000;
+          const scale = Math.min(1, maxW / img.width);
+          const c = document.createElement('canvas');
+          c.width = Math.max(1, Math.round(img.width * scale));
+          c.height = Math.max(1, Math.round(img.height * scale));
+          const g = c.getContext('2d');
+          g.drawImage(img, 0, 0, c.width, c.height);
+          const data = g.getImageData(0, 0, c.width, c.height);
+          const px = data.data;
+          for (let i = 0; i < px.length; i += 4) {
+            const warmth = (px[i] - px[i + 2]) / 130;      // red over blue
+            const a = Math.max(0, Math.min(1, warmth));
+            px[i + 3] = Math.round(255 * a * a);
+          }
+          g.putImageData(data, 0, 0);
+          resolve(c.toDataURL('image/png'));
+        } catch (e) { resolve(dataUrl); }   // tainted canvas etc — use it raw
+      };
+      img.onerror = () => resolve(dataUrl);
+      img.src = dataUrl;
+    } catch (e) { resolve(dataUrl); }
+  });
+}
+
+// ─── Position pitch (heat-style, shared with PlayerPager) ──────────────────
+// Moved here from PlayerPager.js so both cards render it from ONE function —
+// QuickCard is the canonical home for player-side shared renderers, and the
+// quick card now offers this pitch as an alternative to pitchDiagramSvg above.
+// A different system to pitchDiagramSvg, which is built for a 390px
+// slot on a dark panel. Shrunk to 150px on a coloured band it read as noise:
+// thirteen dots, ten of them grey and meaningless, on an opaque #0d1117 box that
+// looked pasted onto the gradient.
+//
+// This draws only the positions the player actually plays, labelled, on a
+// transparent outline in the band's own rule colour — so it sits IN the header
+// rather than on top of it, and every mark on it carries information. Tier
+// colours and the token-to-slot mapping are QuickCard's, so a player reads the
+// same on both cards.
+// One landscape slot set, attacking right. The upright version is gone: a pitch
+// is landscape, every heatmap is landscape, and switching orientation between the
+// two modes meant one card drew the same information two different shapes.
+// Coordinates are on a 320x208 viewBox — 1.54:1, the real ratio — so nothing
+// stretches whatever sits behind it.
+export const PP_SLOTS = {
+  GK:  [26, 104],
+  CB:  [70, 104],
+  LB:  [62, 22], RB: [62, 186],
+  LWB: [116, 22], RWB: [116, 186],
+  DM:  [112, 104], CM: [158, 104], AM: [208, 104],
+  LW:  [238, 28], RW: [238, 180],
+  ST:  [280, 104],
+};
+// LCB, CB and RCB collapse to ONE slot. Wyscout emits the side a centre back
+// happened to line up on, not a different position — a player listed "CB, RCB"
+// was drawing two discs and printing "Centre Back" twice, once as his primary and
+// once as his secondary. Which side he's comfortable on is a shading question,
+// which the manual position-colour override already answers.
+export const PP_TOKEN_TO_SLOT = {
+  GK: 'GK', RB: 'RB', RWB: 'RWB', LCB: 'CB', CB: 'CB', RCB: 'CB', LB: 'LB', LWB: 'LWB',
+  DMF: 'DM', LDMF: 'DM', RDMF: 'DM', LCMF: 'CM', RCMF: 'CM', CMF: 'CM', AMF: 'AM',
+  RAMF: 'RW', RWF: 'RW', RW: 'RW', LAMF: 'LW', LWF: 'LW', LW: 'LW', CF: 'ST',
+};
+export const PP_TIERS = { Primary: '#00bf63', Secondary: '#7ed957', Third: '#c1ff72',
+                   Fourth: '#ffde59', Fifth: '#ffbd59', Sixth: '#ff914d', Seventh: '#ff3131' };
+export const PP_TIER_ORDER = ['Primary', 'Secondary', 'Third', 'Fourth', 'Fifth', 'Sixth', 'Seventh'];
+
+// Full position names for the stated line. POSITION_LABELS carries these already
+// but in "Right Winger (RW)" form; the code is printed separately here so the two
+// can be typed differently.
+export const POS_FULL = {
+  GK: 'Goalkeeper', CB: 'Centre Back', LB: 'Left Back', RB: 'Right Back',
+  LWB: 'Left Wing Back', RWB: 'Right Wing Back', DM: 'Defensive Midfielder',
+  CM: 'Central Midfielder', AM: 'Attacking Midfielder',
+  LW: 'Left Winger', RW: 'Right Winger', CF: 'Striker', ST: 'Striker',
+};
+
+// Which slots this player occupies, in tier order. Shared by the pitch and the
+// editor, so the percentage boxes can only ever appear for slots actually drawn.
+export function occupiedSlots(player, manualColors) {
+  const out = [];
+  if (manualColors && Object.keys(manualColors).length) {
+    for (const slot of Object.keys(manualColors)) {
+      if (manualColors[slot] && PP_SLOTS[slot]) out.push(slot);
+    }
+    return out;
+  }
+  const toks = String(player.position || '').split(',').map(t => t.trim().toUpperCase()).filter(Boolean);
+  for (const tok of toks) {
+    const slot = PP_TOKEN_TO_SLOT[tok];
+    if (slot && !out.includes(slot) && out.length < PP_TIER_ORDER.length) out.push(slot);
+  }
+  return out;
+}
+
+// Order by minutes share when there is one, otherwise by the order the position
+// string lists them. Whoever has the most minutes IS the primary — a player
+// listed CF first but playing 60% at LW is a left winger, and the tier colours
+// have to follow the same order or the pitch would contradict the text.
+export function orderSlots(slots, pcts) {
+  const withPct = (slots || []).filter(sl => pcts && pcts[sl] != null && pcts[sl] !== '');
+  if (!withPct.length) return slots || [];
+  return (slots || []).slice().sort((a, b) => {
+    const pa = Number(pcts[a]); const pb = Number(pcts[b]);
+    const va = isNaN(pa) ? -1 : pa; const vb = isNaN(pb) ? -1 : pb;
+    return vb - va;
+  });
+}
+
+export function positionPitchSvg(player, w, h, manualColors, pcts, heatmap, heatOpacity, shownSlots) {
+  const slots = orderSlots((shownSlots && shownSlots.length)
+    ? shownSlots : occupiedSlots(player, manualColors), pcts);
+  const colourFor = (slot, i) => {
+    if (manualColors && manualColors[slot]) return PP_TIERS[manualColors[slot]] || manualColors[slot];
+    return PP_TIERS[PP_TIER_ORDER[Math.min(i, PP_TIER_ORDER.length - 1)]];
+  };
+
+  const VB = [320, 208];
+  const GHOST = 'rgba(255,255,255,0.10)';
+  // Markings sit ABOVE the heat and have to hold their own against a bright blob,
+  // so they're drawn at 0.42 rather than the 0.26 that reads fine on an empty
+  // pitch. Two weights: the boundary and halfway line carry the shape, the boxes
+  // and arcs are furniture and stay a step back.
+  const LINE = 'rgba(255,255,255,0.42)';
+  const LINE_SOFT = 'rgba(255,255,255,0.30)';
+
+  const discs = Object.keys(PP_SLOTS).map(slot => {
+    const [x, y] = PP_SLOTS[slot];
+    const i = slots.indexOf(slot);
+    if (i < 0) return heatmap ? '' : `<circle cx="${x}" cy="${y}" r="3.6" fill="${GHOST}"/>`;
+    const col = colourFor(slot, i);
+    const pct = pcts && pcts[slot] != null && pcts[slot] !== '' ? Number(pcts[slot]) : null;
+    // The share IS the disc size. A number chip under every disc was a second
+    // label competing with the position code for the same 40px, and the reader
+    // has to do the comparing anyway — area does it for them at a glance.
+    // 13 at 0% up to 23 at 100%, so even a 5% cameo still holds a readable code.
+    const r = pct == null ? 18 : 13 + (Math.max(0, Math.min(100, pct)) / 100) * 10;
+    const fs = Math.max(9, Math.min(13, r * 0.68));
+    // No ring: a dark stroke round a bright disc on a dark pitch drew a halo and
+    // made every position look outlined rather than placed. The drop shadow alone
+    // gives the lift. Type down to 700 too — 800 at this size was heavier than
+    // anything else on the card.
+    return `
+      <circle cx="${x}" cy="${y}" r="${r.toFixed(1)}" fill="${col}" filter="url(#ppShadow)"/>
+      <text x="${x}" y="${y + fs * 0.35}" text-anchor="middle" font-family="Montserrat,sans-serif"
+            font-size="${fs.toFixed(1)}" font-weight="700" fill="#07090f">${slot}</text>`;
+  }).join('');
+
+  // Heat under the markings, clipped to the pitch, deliberately faint: a backdrop
+  // saying "he operates here", not a chart to be read off.
+  const heatLayer = heatmap ? `
+      <image href="${heatmap}" x="4" y="4" width="312" height="200"
+             preserveAspectRatio="none" opacity="${heatOpacity}" clip-path="url(#ppClip)"/>` : '';
+
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${VB[0]} ${VB[1]}" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <clipPath id="ppClip"><rect x="4" y="4" width="312" height="200" rx="8"/></clipPath>
+        <filter id="ppShadow" x="-50%" y="-50%" width="200%" height="200%">
+          <feDropShadow dx="0" dy="1.5" stdDeviation="1.6" flood-color="#000" flood-opacity="0.45"/>
+        </filter>
+        <linearGradient id="ppTurf" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="rgba(255,255,255,0.075)"/>
+          <stop offset="100%" stop-color="rgba(255,255,255,0.025)"/>
+        </linearGradient>
+      </defs>
+
+      <rect x="4" y="4" width="312" height="200" rx="8" fill="url(#ppTurf)"/>
+      ${heatLayer}
+
+      <g fill="none" stroke="${LINE}" stroke-width="1.6">
+        <rect x="4" y="4" width="312" height="200" rx="8"/>
+        <line x1="160" y1="4" x2="160" y2="204"/>
+      </g>
+      <g fill="none" stroke="${LINE_SOFT}" stroke-width="1.4">
+        <circle cx="160" cy="104" r="31"/>
+        <rect x="4" y="49" width="54" height="110"/>
+        <rect x="262" y="49" width="54" height="110"/>
+        <rect x="4" y="79" width="20" height="50"/>
+        <rect x="296" y="79" width="20" height="50"/>
+        <path d="M 58 87 A 22 22 0 0 1 58 121"/>
+        <path d="M 262 87 A 22 22 0 0 0 262 121"/>
+        <path d="M 4 14 A 10 10 0 0 0 14 4"/>
+        <path d="M 306 4 A 10 10 0 0 0 316 14"/>
+        <path d="M 4 194 A 10 10 0 0 1 14 204"/>
+        <path d="M 316 194 A 10 10 0 0 0 306 204"/>
+      </g>
+      <g fill="${LINE_SOFT}">
+        <circle cx="160" cy="104" r="2.4"/>
+        <circle cx="40" cy="104" r="2.2"/>
+        <circle cx="280" cy="104" r="2.2"/>
+      </g>
+      ${discs}
+    </svg>`;
+}
+
 function hexToRgb(hex) {
   const h = hex.replace('#', '');
   const n = parseInt(h.length === 3 ? h.split('').map(c => c + c).join('') : h, 16);
@@ -893,6 +1110,27 @@ function buildQuickCardElement(player, players, manual = {}) {
   const teamTextLeft = manual.shiftTeamText ? 912 : 892; // manual toggle for badges with unusual/wide shapes that overlap the text; default off
   const photo = manual.uploadedPhotoDataUrl || photoUrl(player.name, player.team);
   const groups = sd.g || {};
+  // Team Context follows whatever season+club is selected at the top, exactly as
+  // PlayerPager does: the selected season row's stored teamContext wins, and the
+  // player's current-club context is only the fallback for rows the pipeline
+  // didn't store one for. Without this, a 24-25 card described the 25-26 club —
+  // and for a player who moved, that's a different club entirely.
+  const tcSource = (sd.teamContext && Object.keys(sd.teamContext).length)
+    ? sd.teamContext : (player.teamContext || {});
+
+  // The heat-style pitch (positionPitchSvg) collapses LCB/CB/RCB to a single CB
+  // slot, so the classic picker's LCB/RCB choices are mapped onto CB here — the
+  // first non-empty tier wins. Every other slot key matches 1:1.
+  const qcPpColors = (() => {
+    const src = manual.positionColors || {};
+    const out = {};
+    for (const slot of Object.keys(src)) {
+      if (!src[slot]) continue;
+      const ppSlot = (slot === 'LCB' || slot === 'RCB') ? 'CB' : slot;
+      if (out[ppSlot] == null) out[ppSlot] = src[slot];
+    }
+    return out;
+  })();
 
   // xG/xA aren't stored as season totals — bar-chart group A carries the per-90
   // raw value (e.g. ['xG', pct, 0.42]). Season total = per90 × (mins/90). Same
@@ -1121,11 +1359,17 @@ function buildQuickCardElement(player, players, manual = {}) {
         <div style="position:absolute;left:1208px;top:${50 + i*48}px;font-size:18px;font-weight:500;color:#9aa3b8;white-space:nowrap;">${k}</div>
         <div style="position:absolute;left:1353px;top:${50 + i*48}px;font-size:18px;font-weight:600;color:#fff;white-space:nowrap;">${truncateText(v, 20)}</div>`).join('')}
 
-      ${manual.showPitchPosition ? `
+      ${manual.showPitchPosition ? (manual.pitchStyle === 'heat' ? `
+      <!-- PITCH POSITION — Player Pager heat-style pitch (replaces GBE). Same
+           renderer the pager uses (positionPitchSvg), so a player reads
+           identically on both cards; supports the same optional heatmap layer. -->
+      <div style="position:absolute;top:24px;left:1510px;width:390px;height:260px;display:flex;align-items:center;justify-content:center;">
+        ${positionPitchSvg(player, 390, 254, qcPpColors, null, manual.heatmapDataUrl || '', manual.heatOpacity != null ? manual.heatOpacity : 0.3, null)}
+      </div>` : `
       <!-- PITCH POSITION (replaces GBE) -->
       <div style="position:absolute;top:24px;left:1510px;width:390px;height:260px;display:flex;align-items:center;justify-content:center;">
         <div style="width:100%;max-width:390px;">${pitchDiagramSvg(player, manual.positionColors)}</div>
-      </div>` : `
+      </div>`) : `
       <!-- GBE -->
       <div style="position:absolute;top:24px;left:1510px;width:390px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.10);border-radius:12px;padding:20px 24px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
@@ -1185,7 +1429,7 @@ function buildQuickCardElement(player, players, manual = {}) {
       <!-- TEAM CONTEXT panel — half width (aligned with Style) when toggled, full width otherwise -->
       <div style="position:absolute;top:${ROW2_TOP}px;left:984px;width:${teamContextPanelW}px;height:${ROW2_PANEL_H}px;background:${PANEL_BG};border:1px solid ${PANEL_BORDER};border-radius:${PANEL_RADIUS}px;padding:${PANEL_PAD}px;box-sizing:border-box;overflow:hidden;box-shadow:${PANEL_SHADOW};">
         <div style="font-size:22px;font-weight:700;color:${ACCENT_PINK};margin-bottom:14px;">Team Context</div>
-        ${teamRangeBarHtml(player, posKey, teamContextBarW)}
+        ${teamRangeBarHtml({ ...player, teamContext: tcSource }, posKey, teamContextBarW)}
       </div>
 
       ${(manual.halfTeamContext && (manual.biography || manual.scoutStatus)) ? `
@@ -1228,6 +1472,11 @@ export default function QuickCardModal({ player, players, onClose }) {
   const [showScorePills, setShowScorePills] = useState(true);
   const [headerColorOverride, setHeaderColorOverride] = useState('');
   const [showPitchPosition, setShowPitchPosition] = useState(false);
+  const [pitchStyle, setPitchStyle] = useState('classic'); // 'classic' dots | 'heat' Player Pager pitch
+  const [heatRaw, setHeatRaw] = useState('');
+  const [heatmapDataUrl, setHeatmapDataUrl] = useState('');
+  const [heatExtract, setHeatExtract] = useState(true);
+  const [heatOpacity, setHeatOpacity] = useState(30);
   const [escOverride, setEscOverride] = useState(false);
   const [positionColors, setPositionColors] = useState({});
   const [gbeOv, setGbeOv] = useState({});
@@ -1256,7 +1505,7 @@ export default function QuickCardModal({ player, players, onClose }) {
   const handleDownload = async () => {
     setDownloading(true);
     const { toPng } = await import('html-to-image');
-    const el = buildQuickCardElement(player, players, { agentOverride, nameOverride, valueOverride, heightOverride, teamOverride, posLabelOverride, uploadedPhotoDataUrl, biography, halfTeamContext, showForecast, scoutStatus, showScorePills, headerColorOverride, showPitchPosition, useBestRoleCareer, seasonOverride, shiftTeamText, escOverride, escReason, positionColors, gbeOv });
+    const el = buildQuickCardElement(player, players, { agentOverride, nameOverride, valueOverride, heightOverride, teamOverride, posLabelOverride, uploadedPhotoDataUrl, biography, halfTeamContext, showForecast, scoutStatus, showScorePills, headerColorOverride, showPitchPosition, pitchStyle, heatmapDataUrl, heatOpacity: Number(heatOpacity) / 100, useBestRoleCareer, seasonOverride, shiftTeamText, escOverride, escReason, positionColors, gbeOv });
     try {
       const cardNode = el.querySelector('#qc-card-root') || el;
       const opts = {
@@ -1364,8 +1613,79 @@ export default function QuickCardModal({ player, players, onClose }) {
           <label htmlFor="qc-pitch" style={{fontSize:11.5,color:'#cbd5e1',cursor:'pointer'}}>Replace GBE card with pitch position diagram</label>
         </div>
 
+        {/* Pitch style — the original 13-dot diagram, or the Player Pager's
+            labelled landscape pitch (same renderer, so both cards agree), which
+            also takes an optional heatmap layer exactly like the pager. Only
+            meaningful when the pitch replaces GBE, so hidden until then. */}
+        {showPitchPosition && (
+          <div style={{marginBottom:12,textAlign:'left',border:'1px solid #1e2d45',borderRadius:6,padding:10}}>
+            <div style={{fontSize:11,fontWeight:700,color:'#cbd5e1',marginBottom:6}}>Pitch style</div>
+            <div style={{display:'flex',gap:6}}>
+              {[['classic','Classic dots'],['heat','Pager / heatmap']].map(([val,label])=>(
+                <button key={val} type="button" onClick={()=>setPitchStyle(val)}
+                  style={{flex:1,padding:'7px 0',borderRadius:5,fontSize:10.5,fontWeight:700,cursor:'pointer',
+                          border:`1px solid ${pitchStyle===val?'#3b7de8':'#1e2d45'}`,
+                          background:pitchStyle===val?'#0e2040':'transparent',
+                          color:pitchStyle===val?'#60a5fa':'#8b98ad'}}>{label}</button>
+              ))}
+            </div>
+            {pitchStyle==='heat' && (
+              <div style={{marginTop:10}}>
+                <div style={{display:'flex',alignItems:'center',gap:8}}>
+                  <label style={{flex:1,cursor:'pointer',fontSize:10.5,fontWeight:700,padding:'7px 10px',
+                                 borderRadius:5,textAlign:'center',
+                                 border:`1px solid ${heatRaw?'#3b7de8':'#1e2d45'}`,
+                                 background:heatRaw?'#0e2040':'transparent',
+                                 color:heatRaw?'#60a5fa':'#8b98ad'}}>
+                    {heatRaw ? 'Heatmap loaded ✓' : 'Upload heatmap (optional)'}
+                    <input type="file" accept="image/*" style={{display:'none'}}
+                      onChange={e=>{
+                        const f=e.target.files&&e.target.files[0];
+                        if(!f)return;
+                        const r=new FileReader();
+                        r.onload=async(ev)=>{
+                          const raw=String(ev.target.result);
+                          setHeatRaw(raw);
+                          setHeatmapDataUrl(heatExtract ? await extractHeat(raw) : raw);
+                        };
+                        r.readAsDataURL(f);
+                        e.target.value='';
+                      }} />
+                  </label>
+                  {heatRaw && (
+                    <button type="button" onClick={()=>{setHeatRaw('');setHeatmapDataUrl('');}}
+                      style={{padding:'7px 10px',background:'none',border:'1px solid #1e2d45',
+                              borderRadius:5,color:'#f87171',fontSize:11,cursor:'pointer'}}>✕</button>
+                  )}
+                </div>
+                {heatRaw && (
+                  <>
+                    <div style={{display:'flex',alignItems:'center',gap:8,marginTop:8}}>
+                      <input type="checkbox" id="qc-heat-extract" checked={heatExtract}
+                        onChange={async e=>{
+                          const v=e.target.checked;
+                          setHeatExtract(v);
+                          setHeatmapDataUrl(v ? await extractHeat(heatRaw) : heatRaw);
+                        }} style={{cursor:'pointer'}} />
+                      <label htmlFor="qc-heat-extract" style={{fontSize:10.5,color:'#cbd5e1',cursor:'pointer'}}>Strip the pitch background (keep the heat only)</label>
+                    </div>
+                    <div style={{display:'flex',alignItems:'center',marginTop:6}}>
+                      <span style={{fontSize:10.5,color:'#94a3b8',width:54,flexShrink:0}}>Strength</span>
+                      <input type="range" min="15" max="100" value={heatOpacity}
+                        onChange={e=>setHeatOpacity(e.target.value)}
+                        style={{flex:1,accentColor:'#3b7de8'}} />
+                      <span style={{fontSize:10.5,color:'#64748b',width:34,textAlign:'right'}}>{heatOpacity}%</span>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Position colours — only meaningful when the pitch replaces GBE, so it
-            stays hidden until that toggle is on. */}
+            stays hidden until that toggle is on. On the heat-style pitch LCB and
+            RCB both feed the single CB slot. */}
         {showPitchPosition && (
           <div style={{marginBottom:12,textAlign:'left',border:'1px solid #1e2d45',borderRadius:6,padding:10}}>
             <div style={{fontSize:11,fontWeight:700,color:'#cbd5e1',marginBottom:6}}>Position colours</div>

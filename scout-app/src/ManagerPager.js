@@ -648,7 +648,7 @@ export const MP_MANUAL_TERMS = [
   'Recruitment Judgement', 'Resilience', 'Rotation Management', 'Second Balls',
   'Set-Piece Coaching', 'Squad Building', 'Squad Cohesion', 'Staff Retention',
   'Style Consistency', 'Tactical Flexibility', 'Territorial Dominance',
-  'Transitional Play', 'Wide Overloads', 'Winning Mentality',
+  'Transitional Play', 'Wide Overloads', 'Winning Mentality', 'Work Rate',
   'Working To A Budget', 'Working With A Young Squad',
 ];
 

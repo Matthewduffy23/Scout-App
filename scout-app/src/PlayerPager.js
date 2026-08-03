@@ -48,7 +48,12 @@ import {
   scoreTierColor, barRow,
   TOKEN_TO_POS_KEY, POSITION_LABELS, METRIC_LABEL_MAP,
   POSITION_TEAM_CONTEXT_CATS, TEAM_CONTEXT_BANDS, computeEscReasons, ESC_REASON_OPTIONS,
+  extractHeat, occupiedSlots, orderSlots, positionPitchSvg,
+  PP_TIERS, PP_TIER_ORDER, POS_FULL,
 } from './QuickCard';
+// Re-exported for backwards compatibility: ManagerPager (and anything else)
+// already imports these from PlayerPager; the definitions now live in QuickCard.
+export { extractHeat, occupiedSlots, orderSlots };
 import { computeClubFit, computeSimilarPlayers, simGroup } from './clubFit';
 
 // ─── Canvas geometry — identical to TeamReport.js ──────────────────────────
@@ -403,49 +408,10 @@ const cmToFeet = (cm) => {
 };
 
 // ─── Heatmap extraction ────────────────────────────────────────────────────
-// Heatmaps arrive as opaque PNGs with a pitch baked in — a flat pale green plus
-// white lines. Compositing that onto the header can't work: mix-blend-mode is
-// exactly the sort of CSS property this render pipeline drops silently, so it
-// would look right on screen and break in the export.
-//
-// So the background is removed at upload time instead, on a canvas, before the
-// image ever reaches the card. The test is warmth: heat runs yellow -> red, all
-// of which have red far above blue, while pale green (206,230,196) and white
-// lines (255,255,255) have red and blue nearly equal. Alpha therefore comes from
-// (R-B), squared so the faint wash at the edges falls away faster than the hot
-// core, leaving the blobs on transparency with the pitch and its lines gone.
-//
-// The card then draws its OWN pitch underneath in the header's palette, which is
-// what makes the heat sit in the design rather than on top of it.
-export function extractHeat(dataUrl) {
-  return new Promise((resolve) => {
-    try {
-      const img = new Image();
-      img.onload = () => {
-        try {
-          const maxW = 1000;
-          const scale = Math.min(1, maxW / img.width);
-          const c = document.createElement('canvas');
-          c.width = Math.max(1, Math.round(img.width * scale));
-          c.height = Math.max(1, Math.round(img.height * scale));
-          const g = c.getContext('2d');
-          g.drawImage(img, 0, 0, c.width, c.height);
-          const data = g.getImageData(0, 0, c.width, c.height);
-          const px = data.data;
-          for (let i = 0; i < px.length; i += 4) {
-            const warmth = (px[i] - px[i + 2]) / 130;      // red over blue
-            const a = Math.max(0, Math.min(1, warmth));
-            px[i + 3] = Math.round(255 * a * a);
-          }
-          g.putImageData(data, 0, 0);
-          resolve(c.toDataURL('image/png'));
-        } catch (e) { resolve(dataUrl); }   // tainted canvas etc — use it raw
-      };
-      img.onerror = () => resolve(dataUrl);
-      img.src = dataUrl;
-    } catch (e) { resolve(dataUrl); }
-  });
-}
+// extractHeat moved to QuickCard.js — the canonical home for player-side shared
+// renderers — so the quick card's heat-style pitch and this pager call the SAME
+// function. Imported above and re-exported below so ManagerPager's existing
+// `import { extractHeat } from './PlayerPager'` keeps working unchanged.
 
 // Score -> the badge of the English tier that score corresponds to. The cut-offs
 // are the career chart's own (CAREER_LEAGUE_BANDS) so the badge and the chart's
@@ -492,171 +458,11 @@ function unclearWheel({ cx, cy, r, stroke, label, ink, big, labelY }) {
 }
 
 // ─── Position pitch ────────────────────────────────────────────────────────
-// A different system to QuickCard's pitchDiagramSvg, which is built for a 390px
-// slot on a dark panel. Shrunk to 150px on a coloured band it read as noise:
-// thirteen dots, ten of them grey and meaningless, on an opaque #0d1117 box that
-// looked pasted onto the gradient.
-//
-// This draws only the positions the player actually plays, labelled, on a
-// transparent outline in the band's own rule colour — so it sits IN the header
-// rather than on top of it, and every mark on it carries information. Tier
-// colours and the token-to-slot mapping are QuickCard's, so a player reads the
-// same on both cards.
-// One landscape slot set, attacking right. The upright version is gone: a pitch
-// is landscape, every heatmap is landscape, and switching orientation between the
-// two modes meant one card drew the same information two different shapes.
-// Coordinates are on a 320x208 viewBox — 1.54:1, the real ratio — so nothing
-// stretches whatever sits behind it.
-const PP_SLOTS = {
-  GK:  [26, 104],
-  CB:  [70, 104],
-  LB:  [62, 22], RB: [62, 186],
-  LWB: [116, 22], RWB: [116, 186],
-  DM:  [112, 104], CM: [158, 104], AM: [208, 104],
-  LW:  [238, 28], RW: [238, 180],
-  ST:  [280, 104],
-};
-// LCB, CB and RCB collapse to ONE slot. Wyscout emits the side a centre back
-// happened to line up on, not a different position — a player listed "CB, RCB"
-// was drawing two discs and printing "Centre Back" twice, once as his primary and
-// once as his secondary. Which side he's comfortable on is a shading question,
-// which the manual position-colour override already answers.
-const PP_TOKEN_TO_SLOT = {
-  GK: 'GK', RB: 'RB', RWB: 'RWB', LCB: 'CB', CB: 'CB', RCB: 'CB', LB: 'LB', LWB: 'LWB',
-  DMF: 'DM', LDMF: 'DM', RDMF: 'DM', LCMF: 'CM', RCMF: 'CM', CMF: 'CM', AMF: 'AM',
-  RAMF: 'RW', RWF: 'RW', RW: 'RW', LAMF: 'LW', LWF: 'LW', LW: 'LW', CF: 'ST',
-};
-const PP_TIERS = { Primary: '#00bf63', Secondary: '#7ed957', Third: '#c1ff72',
-                   Fourth: '#ffde59', Fifth: '#ffbd59', Sixth: '#ff914d', Seventh: '#ff3131' };
-const PP_TIER_ORDER = ['Primary', 'Secondary', 'Third', 'Fourth', 'Fifth', 'Sixth', 'Seventh'];
-
-// Full position names for the stated line. POSITION_LABELS carries these already
-// but in "Right Winger (RW)" form; the code is printed separately here so the two
-// can be typed differently.
-const POS_FULL = {
-  GK: 'Goalkeeper', CB: 'Centre Back', LB: 'Left Back', RB: 'Right Back',
-  LWB: 'Left Wing Back', RWB: 'Right Wing Back', DM: 'Defensive Midfielder',
-  CM: 'Central Midfielder', AM: 'Attacking Midfielder',
-  LW: 'Left Winger', RW: 'Right Winger', CF: 'Striker', ST: 'Striker',
-};
-
-// Which slots this player occupies, in tier order. Shared by the pitch and the
-// editor, so the percentage boxes can only ever appear for slots actually drawn.
-export function occupiedSlots(player, manualColors) {
-  const out = [];
-  if (manualColors && Object.keys(manualColors).length) {
-    for (const slot of Object.keys(manualColors)) {
-      if (manualColors[slot] && PP_SLOTS[slot]) out.push(slot);
-    }
-    return out;
-  }
-  const toks = String(player.position || '').split(',').map(t => t.trim().toUpperCase()).filter(Boolean);
-  for (const tok of toks) {
-    const slot = PP_TOKEN_TO_SLOT[tok];
-    if (slot && !out.includes(slot) && out.length < PP_TIER_ORDER.length) out.push(slot);
-  }
-  return out;
-}
-
-// Order by minutes share when there is one, otherwise by the order the position
-// string lists them. Whoever has the most minutes IS the primary — a player
-// listed CF first but playing 60% at LW is a left winger, and the tier colours
-// have to follow the same order or the pitch would contradict the text.
-export function orderSlots(slots, pcts) {
-  const withPct = (slots || []).filter(sl => pcts && pcts[sl] != null && pcts[sl] !== '');
-  if (!withPct.length) return slots || [];
-  return (slots || []).slice().sort((a, b) => {
-    const pa = Number(pcts[a]); const pb = Number(pcts[b]);
-    const va = isNaN(pa) ? -1 : pa; const vb = isNaN(pb) ? -1 : pb;
-    return vb - va;
-  });
-}
-
-function positionPitchSvg(player, w, h, manualColors, pcts, heatmap, heatOpacity, shownSlots) {
-  const slots = orderSlots((shownSlots && shownSlots.length)
-    ? shownSlots : occupiedSlots(player, manualColors), pcts);
-  const colourFor = (slot, i) => {
-    if (manualColors && manualColors[slot]) return PP_TIERS[manualColors[slot]] || manualColors[slot];
-    return PP_TIERS[PP_TIER_ORDER[Math.min(i, PP_TIER_ORDER.length - 1)]];
-  };
-
-  const VB = [320, 208];
-  const GHOST = 'rgba(255,255,255,0.10)';
-  // Markings sit ABOVE the heat and have to hold their own against a bright blob,
-  // so they're drawn at 0.42 rather than the 0.26 that reads fine on an empty
-  // pitch. Two weights: the boundary and halfway line carry the shape, the boxes
-  // and arcs are furniture and stay a step back.
-  const LINE = 'rgba(255,255,255,0.42)';
-  const LINE_SOFT = 'rgba(255,255,255,0.30)';
-
-  const discs = Object.keys(PP_SLOTS).map(slot => {
-    const [x, y] = PP_SLOTS[slot];
-    const i = slots.indexOf(slot);
-    if (i < 0) return heatmap ? '' : `<circle cx="${x}" cy="${y}" r="3.6" fill="${GHOST}"/>`;
-    const col = colourFor(slot, i);
-    const pct = pcts && pcts[slot] != null && pcts[slot] !== '' ? Number(pcts[slot]) : null;
-    // The share IS the disc size. A number chip under every disc was a second
-    // label competing with the position code for the same 40px, and the reader
-    // has to do the comparing anyway — area does it for them at a glance.
-    // 13 at 0% up to 23 at 100%, so even a 5% cameo still holds a readable code.
-    const r = pct == null ? 18 : 13 + (Math.max(0, Math.min(100, pct)) / 100) * 10;
-    const fs = Math.max(9, Math.min(13, r * 0.68));
-    // No ring: a dark stroke round a bright disc on a dark pitch drew a halo and
-    // made every position look outlined rather than placed. The drop shadow alone
-    // gives the lift. Type down to 700 too — 800 at this size was heavier than
-    // anything else on the card.
-    return `
-      <circle cx="${x}" cy="${y}" r="${r.toFixed(1)}" fill="${col}" filter="url(#ppShadow)"/>
-      <text x="${x}" y="${y + fs * 0.35}" text-anchor="middle" font-family="Montserrat,sans-serif"
-            font-size="${fs.toFixed(1)}" font-weight="700" fill="#07090f">${slot}</text>`;
-  }).join('');
-
-  // Heat under the markings, clipped to the pitch, deliberately faint: a backdrop
-  // saying "he operates here", not a chart to be read off.
-  const heatLayer = heatmap ? `
-      <image href="${heatmap}" x="4" y="4" width="312" height="200"
-             preserveAspectRatio="none" opacity="${heatOpacity}" clip-path="url(#ppClip)"/>` : '';
-
-  return `<svg width="${w}" height="${h}" viewBox="0 0 ${VB[0]} ${VB[1]}" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <clipPath id="ppClip"><rect x="4" y="4" width="312" height="200" rx="8"/></clipPath>
-        <filter id="ppShadow" x="-50%" y="-50%" width="200%" height="200%">
-          <feDropShadow dx="0" dy="1.5" stdDeviation="1.6" flood-color="#000" flood-opacity="0.45"/>
-        </filter>
-        <linearGradient id="ppTurf" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="rgba(255,255,255,0.075)"/>
-          <stop offset="100%" stop-color="rgba(255,255,255,0.025)"/>
-        </linearGradient>
-      </defs>
-
-      <rect x="4" y="4" width="312" height="200" rx="8" fill="url(#ppTurf)"/>
-      ${heatLayer}
-
-      <g fill="none" stroke="${LINE}" stroke-width="1.6">
-        <rect x="4" y="4" width="312" height="200" rx="8"/>
-        <line x1="160" y1="4" x2="160" y2="204"/>
-      </g>
-      <g fill="none" stroke="${LINE_SOFT}" stroke-width="1.4">
-        <circle cx="160" cy="104" r="31"/>
-        <rect x="4" y="49" width="54" height="110"/>
-        <rect x="262" y="49" width="54" height="110"/>
-        <rect x="4" y="79" width="20" height="50"/>
-        <rect x="296" y="79" width="20" height="50"/>
-        <path d="M 58 87 A 22 22 0 0 1 58 121"/>
-        <path d="M 262 87 A 22 22 0 0 0 262 121"/>
-        <path d="M 4 14 A 10 10 0 0 0 14 4"/>
-        <path d="M 306 4 A 10 10 0 0 0 316 14"/>
-        <path d="M 4 194 A 10 10 0 0 1 14 204"/>
-        <path d="M 316 194 A 10 10 0 0 0 306 204"/>
-      </g>
-      <g fill="${LINE_SOFT}">
-        <circle cx="160" cy="104" r="2.4"/>
-        <circle cx="40" cy="104" r="2.2"/>
-        <circle cx="280" cy="104" r="2.2"/>
-      </g>
-      ${discs}
-    </svg>`;
-}
+// positionPitchSvg, occupiedSlots, orderSlots and the PP_* slot/tier tables all
+// moved to QuickCard.js so the quick card's new heat-style pitch option renders
+// with literally the same function as this pager (single canonical source —
+// same reason every other shared renderer lives there). Imported above; nothing
+// about the drawing changed in the move.
 
 // The pitch now takes the height the band allows and the width that follows from
 // the true ratio, rather than being sized to leave a comfortable text column and
