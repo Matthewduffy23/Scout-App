@@ -504,7 +504,7 @@ export default function App(){
         for(const key of attrFilters){
           const attr=posAttrs.find(a=>a.key===key);
           if(attr){
-            const adj=softMode?{...attr,tests:attr.tests.map(t=>({...t,p:Math.max(0,t.p-10)}))}:attr;
+            const adj=softMode?{...attr,tests:attr.tests.map(t=>({...t,p:Math.max(0,t.p-10),...(t.gap!=null?{gap:Math.max(0,t.gap-10)}:{})}))}:attr;
             if(!playerHasAttribute(adj,g)) return false;
           }
         }

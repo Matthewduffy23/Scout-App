@@ -246,7 +246,7 @@ export const POSITION_ATTRIBUTES = {
     { key:'tackler',      label:'Tackler',         tests:[{m:'Defensive duels won, %',p:70}] },
     { key:'securePasser', label:'Secure Passer',   tests:[{m:'Accurate passes, %',p:70}] },
     { key:'progressive',  label:'Progressive',     tests:[{m:'Progressive passes per 90',p:70}] },
-    { key:'verticalPass', label:'Vertical Passer', tests:[{m:'Progressive passes per 90',vs:'Passes per 90',ratio:2}] },
+    { key:'verticalPass', label:'Vertical Passer', tests:[{m:'Progressive passes per 90',vs:'Passes per 90',gap:25}] },
     { key:'ballCarrier',  label:'Ball Carrier',    tests:[{m:'Dribbles per 90',p:70},{m:'Progressive runs per 90',p:70}] },
   ],
   FB: [
@@ -255,7 +255,7 @@ export const POSITION_ATTRIBUTES = {
     { key:'lockdown',     label:'Lockdown',        tests:[{m:'Defensive duels per 90',p:70},{m:'Defensive duels won, %',p:70}] },
     { key:'securePasser', label:'Secure Passer',   tests:[{m:'Accurate passes, %',p:70}] },
     { key:'progressive',  label:'Progressive',     tests:[{m:'Progressive passes per 90',p:70}] },
-    { key:'verticalPass', label:'Vertical Passer', tests:[{m:'Progressive passes per 90',vs:'Passes per 90',ratio:2}] },
+    { key:'verticalPass', label:'Vertical Passer', tests:[{m:'Progressive passes per 90',vs:'Passes per 90',gap:25}] },
     { key:'ballCarrier',  label:'Ball Carrier',    tests:[{m:'Dribbles per 90',p:70},{m:'Progressive runs per 90',p:70}] },
     { key:'veryAttacking',label:'Very Attacking',  tests:[{m:'Touches in box per 90',p:75}] },
   ],
@@ -265,7 +265,7 @@ export const POSITION_ATTRIBUTES = {
     { key:'advPlaymaker', label:'Advanced Playmaker',tests:[{m:'Passes to penalty area per 90',p:70}] },
     { key:'chanceCreator',label:'Chance Creator',   tests:[{m:'xA per 90',p:70}] },
     { key:'securePasser', label:'Secure Passer',    tests:[{m:'Accurate passes, %',p:75}] },
-    { key:'verticalPass', label:'Vertical Passer',  tests:[{m:'Progressive passes per 90',vs:'Passes per 90',ratio:2}] },
+    { key:'verticalPass', label:'Vertical Passer',  tests:[{m:'Progressive passes per 90',vs:'Passes per 90',gap:25}] },
     { key:'ballCarrier',  label:'Ball Carrier',     tests:[{m:'Dribbles per 90',p:70},{m:'Progressive runs per 90',p:70}] },
     { key:'boxCrasher',   label:'Box Crasher',      tests:[{m:'Touches in box per 90',p:80}] },
     { key:'aerial',       label:'Aerial',           tests:[{m:'Aerial duels won, %',p:70}] },
@@ -324,6 +324,12 @@ export function playerHasAttribute(attr, gGroups) {
       const foundVs = find(t.vs);
       if(!foundM||!foundVs) return false;
       const pctM = foundM[1], pctVs = foundVs[1];
+      // Difference test: { m, vs, gap:25 } means m's percentile must beat vs's
+      // by at least the gap. Replaces the 2x ratio for Vertical Passer, which
+      // was mathematically unreachable above 50th-percentile volume (2x50=100).
+      // A gap scales the same at every volume level, and soft mode lowers it
+      // by 10 like any other threshold.
+      if(t.gap!=null) return pctM >= pctVs + t.gap;
       if(pctVs<=0) return pctM>0; // avoid div-by-zero; any signal beats zero baseline
       return pctM >= pctVs * (t.ratio||2);
     }
