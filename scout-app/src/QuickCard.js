@@ -1,5 +1,5 @@
 // QuickCard v69 - Heat-style pitch option (Player Pager pitch + heatmap upload); Team Context follows selected season.
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { scoreLabel, formatFoot, formatMV, GBE_LEAGUE_BANDS } from './constants';
 import { useIsMobile, deliverPng } from './utils';
 
@@ -1106,7 +1106,20 @@ function buildQuickCardElement(player, players, manual = {}) {
   const crestId = sdTeamFull === player.team
     ? player.teamFotmobId
     : (TEAM_FOTMOB_MAP[sdTeamFull] || TEAM_FOTMOB_MAP[_normTeam(sdTeamFull)] || '');
-  const crest = crestId ? `${CREST_BASE}${crestId}.png` : '';
+  // Team identity override — a club picked from search replaces the displayed
+  // club name, crest, league name and league flag, WITHOUT touching which
+  // season's stats are shown. For players whose newest data row lags a real
+  // transfer (signed in January, data still at the old club). pick.fotmobId is
+  // carried from the picked club's own players, so the crest resolves even for
+  // clubs TEAM_FOTMOB_MAP doesn't know; the map is the fallback.
+  const pick = (manual.teamPick && manual.teamPick.team) ? manual.teamPick : null;
+  const hdrTeamFull = pick ? pick.team : sdTeamFull;
+  const hdrTeam = pick ? truncateText(hdrTeamFull, 16) : sdTeam;
+  const hdrLeague = pick ? (pick.league || sdLeague) : sdLeague;
+  const hdrCrestId = pick
+    ? (pick.fotmobId || TEAM_FOTMOB_MAP[hdrTeamFull] || TEAM_FOTMOB_MAP[_normTeam(hdrTeamFull)] || '')
+    : crestId;
+  const hdrCrest = hdrCrestId ? `${CREST_BASE}${hdrCrestId}.png` : '';
   const teamTextLeft = manual.shiftTeamText ? 912 : 892; // manual toggle for badges with unusual/wide shapes that overlap the text; default off
   const photo = manual.uploadedPhotoDataUrl || photoUrl(player.name, player.team);
   const groups = sd.g || {};
@@ -1260,7 +1273,7 @@ function buildQuickCardElement(player, players, manual = {}) {
 
   const isGK = rawPosToken === 'GK' || (player.roleKey || '').startsWith('GK');
 
-  const leagueDisplayName = LEAGUE_DISPLAY_NAMES[sdLeague] || sdLeague;
+  const leagueDisplayName = LEAGUE_DISPLAY_NAMES[hdrLeague] || hdrLeague;
 
   const container = document.createElement('div');
   container.style.position = 'fixed';
@@ -1343,11 +1356,11 @@ function buildQuickCardElement(player, players, manual = {}) {
       </div>
 
   <!-- CREST / TEAM / LEAGUE -->
-      ${crest ? `<div style="position:absolute;left:${sdTeam.length >= 12 ? 720 : 740}px;top:22px;width:155px;height:210px;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${crest}');filter:drop-shadow(0 1px 2px rgba(0,0,0,0.3));"></div>` : ''}
-      <div style="position:absolute;left:${teamTextLeft}px;top:90px;width:275px;font-size:32px;font-weight:800;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${(manual.teamOverride || sdTeam).length >= 16 ? 'letter-spacing:-1px;' : ''}">${manual.teamOverride || sdTeam}</div>
+      ${hdrCrest ? `<div style="position:absolute;left:${hdrTeam.length >= 12 ? 720 : 740}px;top:22px;width:155px;height:210px;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${hdrCrest}');filter:drop-shadow(0 1px 2px rgba(0,0,0,0.3));"></div>` : ''}
+      <div style="position:absolute;left:${teamTextLeft}px;top:90px;width:275px;font-size:32px;font-weight:800;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${(manual.teamOverride || hdrTeam).length >= 16 ? 'letter-spacing:-1px;' : ''}">${manual.teamOverride || hdrTeam}</div>
       <div style="position:absolute;left:${teamTextLeft}px;top:150px;display:flex;align-items:center;">
         <span style="font-size:21px;font-weight:500;color:#fff;white-space:nowrap;">${leagueDisplayName}</span>
-        ${countryToIso2(leagueToCountry(sdLeague)) ? `<div style="width:32px;height:20px;flex-shrink:0;margin-left:${manual.shiftTeamText ? 30 : 27}px;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(leagueToCountry(sdLeague))}.png');border-radius:2px;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15);"></div>` : ''}
+        ${countryToIso2(leagueToCountry(hdrLeague)) ? `<div style="width:32px;height:20px;flex-shrink:0;margin-left:${manual.shiftTeamText ? 30 : 27}px;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(leagueToCountry(hdrLeague))}.png');border-radius:2px;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15);"></div>` : ''}
       </div>
       ${player.onLoan ? `<div style="position:absolute;left:${teamTextLeft}px;top:194px;font-size:21.3px;color:#d9d9d9;white-space:nowrap;">On Loan</div>` : ''}
 
@@ -1461,6 +1474,12 @@ export default function QuickCardModal({ player, players, onClose }) {
   const [valueOverride, setValueOverride] = useState('');
   const [heightOverride, setHeightOverride] = useState('');
   const [teamOverride, setTeamOverride] = useState('');
+  // Search-picked display club — { team, league, fotmobId } — swaps club name,
+  // badge, league name and league flag on the card while stats stay from the
+  // selected season. fotmobId is taken from the picked club's own players so
+  // the badge resolves without depending on the static map.
+  const [teamPick, setTeamPick] = useState(null);
+  const [teamPickQuery, setTeamPickQuery] = useState('');
   const [posLabelOverride, setPosLabelOverride] = useState('');
   const [uploadedPhotoDataUrl, setUploadedPhotoDataUrl] = useState('');
   const [biography, setBiography] = useState('');
@@ -1502,10 +1521,30 @@ export default function QuickCardModal({ player, players, onClose }) {
       }));
   })();
 
+  // Diacritic-folded search over every distinct club in the loaded pool, so
+  // "plzen" finds "Viktoria Plzeň". On mobile the pool is one position chunk;
+  // a club with no players in that chunk won't appear — search on desktop or
+  // pick a player from that club's group first.
+  const teamPickChoices = useMemo(() => {
+    const fold = (s) => String(s || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const q = fold(teamPickQuery.trim());
+    if (q.length < 2) return [];
+    const seen = new Set();
+    const out = [];
+    for (const p of (players || [])) {
+      if (!p || !p.team || seen.has(p.team)) continue;
+      if (!fold(p.team).includes(q)) continue;
+      seen.add(p.team);
+      out.push({ team: p.team, league: p.league || '', fotmobId: p.teamFotmobId || '' });
+      if (out.length >= 10) break;
+    }
+    return out;
+  }, [players, teamPickQuery]);
+
   const handleDownload = async () => {
     setDownloading(true);
     const { toPng } = await import('html-to-image');
-    const el = buildQuickCardElement(player, players, { agentOverride, nameOverride, valueOverride, heightOverride, teamOverride, posLabelOverride, uploadedPhotoDataUrl, biography, halfTeamContext, showForecast, scoutStatus, showScorePills, headerColorOverride, showPitchPosition, pitchStyle, heatmapDataUrl, heatOpacity: Number(heatOpacity) / 100, useBestRoleCareer, seasonOverride, shiftTeamText, escOverride, escReason, positionColors, gbeOv });
+    const el = buildQuickCardElement(player, players, { agentOverride, nameOverride, valueOverride, heightOverride, teamOverride, teamPick, posLabelOverride, uploadedPhotoDataUrl, biography, halfTeamContext, showForecast, scoutStatus, showScorePills, headerColorOverride, showPitchPosition, pitchStyle, heatmapDataUrl, heatOpacity: Number(heatOpacity) / 100, useBestRoleCareer, seasonOverride, shiftTeamText, escOverride, escReason, positionColors, gbeOv });
     try {
       const cardNode = el.querySelector('#qc-card-root') || el;
       const opts = {
@@ -1771,6 +1810,42 @@ export default function QuickCardModal({ player, players, onClose }) {
         <div style={{marginBottom:12}}>
           <label style={qcLabelStyle}>Team Name</label>
           <input style={qcInputStyle} value={teamOverride} onChange={e=>setTeamOverride(e.target.value)} placeholder={player.team} />
+        </div>
+
+        <div style={{marginBottom:12}}>
+          <label style={qcLabelStyle}>Display Club (badge + league)</label>
+          {teamPick ? (
+            <div style={{display:'flex',alignItems:'center',gap:8}}>
+              <div style={{...qcInputStyle,display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
+                <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                  {teamPick.team}<span style={{color:'#64748b'}}> — {teamPick.league || '—'}</span>
+                </span>
+              </div>
+              <button type="button" onClick={() => { setTeamPick(null); setTeamPickQuery(''); }}
+                style={{padding:'6px 10px',background:'none',border:'1px solid #1e2d45',borderRadius:6,color:'#f87171',fontSize:11,cursor:'pointer',flexShrink:0}}>✕</button>
+            </div>
+          ) : (
+            <>
+              <input style={qcInputStyle} value={teamPickQuery}
+                     onChange={e=>setTeamPickQuery(e.target.value)} placeholder="Search any club…" />
+              {teamPickQuery.trim().length >= 2 && (
+                <div style={{border:'1px solid #1e2d45',borderRadius:6,marginTop:4,maxHeight:168,overflowY:'auto',background:'#0e1e38'}}>
+                  {teamPickChoices.length ? teamPickChoices.map(t => (
+                    <div key={`${t.team}|${t.league}`}
+                         onClick={() => { setTeamPick(t); setTeamPickQuery(''); }}
+                         style={{padding:'6px 9px',fontSize:11.5,color:'#e2e8f4',cursor:'pointer',borderBottom:'1px solid #13233d'}}>
+                      {t.team}<span style={{color:'#64748b'}}> — {t.league || '—'}</span>
+                    </div>
+                  )) : (
+                    <div style={{padding:'6px 9px',fontSize:11,color:'#64748b'}}>No match.</div>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+          <div style={{fontSize:10,color:'#64748b',marginTop:4,lineHeight:1.4}}>
+            Swaps club name, badge, league name and flag. Stats stay from the selected season.
+          </div>
         </div>
 
         <div style={{marginBottom:12}}>

@@ -1034,7 +1034,7 @@ export function setPagerImageMap(images) { IMG = images || {}; }
 function headerHtml(player, ctx, opts) {
   const { sd, statsRow, league, team } = ctx;
   const {
-    headerColour, nameOverride, teamOverride, positionColors, gbeOv,
+    headerColour, nameOverride, teamOverride, teamPick, positionColors, gbeOv,
     showPitch, isGK, positionPcts, heatmapDataUrl, heatOpacity, shownSlots,
     heightOverride, footOverride, showXValue, xValueOverride, showTierBadge,
     overallOverride, potentialOverride, overallUnclear, potentialUnclear,
@@ -1043,9 +1043,15 @@ function headerHtml(player, ctx, opts) {
   const spec = headerColour;
   const ink = headerInk(spec);
   const displayName = (nameOverride && nameOverride.trim()) || player.name;
-  const displayTeam = (teamOverride && teamOverride.trim()) || team;
+  // A club picked from search replaces the club IDENTITY — name, crest, league
+  // logo and league flag — without touching which season's stats are shown.
+  // Needed when the data's latest row lags a transfer (e.g. signed for Plzeň in
+  // January but the newest stats row is still the Latvian club). The plain text
+  // override still wins on the name alone, for spelling fixes on top of a pick.
+  const pick = (teamPick && teamPick.team) ? teamPick : null;
+  const displayTeam = (teamOverride && teamOverride.trim()) || (pick ? pick.team : team);
   const photo = opts.uploadedPhotoDataUrl || photoUrl(player.name, player.team);
-  const crest = teamCrest(team);
+  const crest = teamCrest(pick ? pick.team : team);
   // A long club name needs a touch more air before the league badge. "Viktoria
   // Plzeň" was close enough to the badge that its caron read as touching it — and
   // a diacritic sits outside the glyph box the width estimate accounts for, so the
@@ -1054,8 +1060,9 @@ function headerHtml(player, ctx, opts) {
   // it fires on width, not on how many letters happen to be in it.
   const LONG_CLUB_W = nameEmWidth('Viktoria Plze');
   const LONG_CLUB = nameEmWidth(truncateText(displayTeam, 16)) >= LONG_CLUB_W;
-  const logo = leagueLogo(league);
-  const flag = leagueFlag(league);
+  const hdrLeague = pick ? (pick.league || league) : league;
+  const logo = leagueLogo(hdrLeague);
+  const flag = leagueFlag(hdrLeague);
   const natFlag = personFlagUrl(player);
 
   // xG/xA are stored per 90 in bar-chart group A, not as season totals. Same
@@ -1133,7 +1140,7 @@ function headerHtml(player, ctx, opts) {
                   box-shadow:inset 0 0 0 1px rgba(255,255,255,0.18);
                   background-image:url('${src(flag)}');"></div>` : ''}
       <span style="font-size:12.5px;font-weight:700;letter-spacing:0.08em;
-                   color:${ink.muted};margin-left:12px;">${esc(leagueAbbrev(league))}</span>
+                   color:${ink.muted};margin-left:12px;">${esc(leagueAbbrev(hdrLeague))}</span>
 
       <span style="width:1px;height:16px;background:${ink.rule};margin:0 6px 0 7px;flex-shrink:0;"></span>
 
@@ -1306,13 +1313,21 @@ function headerHtml(player, ctx, opts) {
 // Four remote references only — nothing like TeamReport's ~16 — but the same
 // treatment, because html-to-image refetches every remote image on each of the
 // two render passes and a cold GitHub fetch is slower than the render.
-export function pagerImageUrls(player, ctx, uploadedPhotoDataUrl, clubRows = []) {
+export function pagerImageUrls(player, ctx, uploadedPhotoDataUrl, clubRows = [], teamPick = null) {
   const urls = [
     uploadedPhotoDataUrl ? '' : photoUrl(player.name, player.team),
     leagueLogo(ctx.league),
     leagueFlag(ctx.league),
     teamCrest(ctx.team),
   ];
+  // A search-picked display club swaps the crest and league marks in the header,
+  // and anything remote that isn't preloaded blanks out in the export.
+  if (teamPick && teamPick.team) {
+    urls.push(teamCrest(teamPick.team));
+    if (teamPick.league) {
+      urls.push(leagueLogo(teamPick.league), leagueFlag(teamPick.league));
+    }
+  }
   const iso = countryToIso2(player.birthCountry);
   if (iso) urls.push(`https://flagcdn.com/w80/${iso}.png`);
   // Potential Clubs crests. Without these they would be the only remote
@@ -1336,7 +1351,7 @@ export function pagerImageUrls(player, ctx, uploadedPhotoDataUrl, clubRows = [])
 export function buildPlayerPagerElement(player, opts = {}) {
   const {
     images = {}, headerColourName = 'Default', seasonOverride = '',
-    nameOverride = '', teamOverride = '', uploadedPhotoDataUrl = '',
+    nameOverride = '', teamOverride = '', teamPick = null, uploadedPhotoDataUrl = '',
     viewText = '', clubRows = [], clubsCoreOnly = true,
     clubsMode = 'clubs', hideFitScores = false, ukOnly = true, clubNotes = {},
     showForecast = false, useBestRoleCareer = false, showPitch = true,
@@ -1427,7 +1442,7 @@ export function buildPlayerPagerElement(player, opts = {}) {
          font-family:'Montserrat',sans-serif;color:#fff;position:relative;box-sizing:border-box;">
 
       ${headerHtml(player, ctx, {
-        headerColour: HEADER_COLOURS[headerColourName], nameOverride, teamOverride,
+        headerColour: HEADER_COLOURS[headerColourName], nameOverride, teamOverride, teamPick,
         uploadedPhotoDataUrl, positionColors, gbeOv, showPitch, isGK, positionPcts, heatmapDataUrl, heatOpacity, shownSlots,
         heightOverride, footOverride, showXValue, xValueOverride, showTierBadge,
         overallOverride, potentialOverride, overallUnclear, potentialUnclear,
@@ -1602,6 +1617,12 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
   const [seasonOverride, setSeasonOverride] = useState('');
   const [nameOverride, setNameOverride] = useState('');
   const [teamOverride, setTeamOverride] = useState('');
+  // A club picked from search — { team, league } — that replaces the club
+  // identity in the header (name, crest, league logo, league flag) without
+  // changing which season's stats are shown. For players whose newest data row
+  // lags a real transfer.
+  const [teamPick, setTeamPick] = useState(null);
+  const [teamPickQuery, setTeamPickQuery] = useState('');
   const [uploadedPhotoDataUrl, setUploadedPhotoDataUrl] = useState('');
   const [viewText, setViewText] = useState('');
   const [showForecast, setShowForecast] = useState(false);
@@ -1782,8 +1803,17 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
     return [...ranked, ...extra].slice(0, 10);
   }, [autoRows, manualRows, rowQuery, clubsMode, players]);
 
+  // Display-club picker: any club in the loaded data, same search the Potential
+  // Clubs manual row uses. Each result carries its league, which is what lets a
+  // pick swap the league logo and flag along with the crest.
+  const teamPickChoices = useMemo(() => {
+    const q = teamPickQuery.trim();
+    if (q.length < 2) return [];
+    return teamOptions(players || [], q, 10);
+  }, [players, teamPickQuery]);
+
   const buildOpts = () => ({
-    headerColourName, seasonOverride, nameOverride, teamOverride,
+    headerColourName, seasonOverride, nameOverride, teamOverride, teamPick,
     uploadedPhotoDataUrl, viewText, clubRows,
     clubsMode, hideFitScores, ukOnly, positionPcts,
     positionColors: positionTiers,
@@ -1800,7 +1830,7 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
     let el = null;
     try {
       const { toPng } = await import('html-to-image');
-      const urls = pagerImageUrls(player, ctx, uploadedPhotoDataUrl, clubRows);
+      const urls = pagerImageUrls(player, ctx, uploadedPhotoDataUrl, clubRows, teamPick);
       const images = await preloadImages(urls, (d, t) => setProgress(`Images ${d}/${t}`));
       setProgress('Rendering…');
       el = buildPlayerPagerElement(player, { ...buildOpts(), images });
@@ -1880,6 +1910,53 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
             <span style={UI.label}>Club name on card</span>
             <input style={UI.input} value={teamOverride}
                    onChange={e => setTeamOverride(e.target.value)} placeholder={ctx.team} />
+          </div>
+
+          <div style={UI.block}>
+            <span style={UI.label}>Display club (badge + league)</span>
+            {teamPick ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ ...UI.input, display: 'flex', alignItems: 'center',
+                              justifyContent: 'space-between', gap: 8 }}>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {teamPick.team}
+                    <span style={{ color: '#64748b' }}> — {teamPick.league || '—'}</span>
+                  </span>
+                </div>
+                <button type="button"
+                        onClick={() => { setTeamPick(null); setTeamPickQuery(''); }}
+                        style={{ padding: '6px 10px', background: 'none', border: '1px solid #1e2d45',
+                                 borderRadius: 6, color: '#f87171', fontSize: 11, cursor: 'pointer',
+                                 flexShrink: 0 }}>✕</button>
+              </div>
+            ) : (
+              <>
+                <input style={UI.input} value={teamPickQuery}
+                       onChange={e => setTeamPickQuery(e.target.value)}
+                       placeholder="Search any club…" />
+                {teamPickQuery.trim().length >= 2 && (
+                  <div style={{ border: '1px solid #1e2d45', borderRadius: 5, marginTop: 4,
+                                maxHeight: 168, overflowY: 'auto', background: '#0d1220' }}>
+                    {teamPickChoices.length ? teamPickChoices.map(t => (
+                      <div key={`${t.team}|${t.league || ''}`}
+                           onClick={() => { setTeamPick({ team: t.team, league: t.league || '' });
+                                            setTeamPickQuery(''); }}
+                           style={{ padding: '6px 9px', fontSize: 11.5, color: '#e2e8f4',
+                                    cursor: 'pointer', borderBottom: '1px solid #131c30' }}>
+                        {t.team}
+                        <span style={{ color: '#64748b' }}> — {t.league || '—'}</span>
+                      </div>
+                    )) : (
+                      <div style={{ padding: '6px 9px', fontSize: 11, color: '#64748b' }}>No match.</div>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+            <div style={UI.note}>
+              Swaps club name, badge, league logo and flag on the card. Stats and
+              percentiles stay from the selected season.
+            </div>
           </div>
 
           <div style={UI.block}>
