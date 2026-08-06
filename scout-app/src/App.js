@@ -94,6 +94,20 @@ function countryToIso2(name) {
 }
 
 
+// Color scale for Outlier Search (z-mode). 50 = league median, 65 = +1SD,
+// 80 = +2SD. Deliberately separate from scoreBandColor, which is tuned for
+// the 40-95 careerScore scale — reusing it here would paint the entire
+// average-ish 35-65 band as misleadingly "low", defeating the point of a
+// scale built to make outliers pop.
+export function zScoreColor(v){
+  if(v==null) return '#64748b';
+  if(v>=80) return '#22c55e';
+  if(v>=65) return '#4ade80';
+  if(v>=35) return '#94a3b8';
+  if(v>=20) return '#f87171';
+  return '#ef4444';
+}
+
 const PAGE = 50;
 
 export function StarDisplay({score,size=11}){
@@ -342,6 +356,7 @@ export default function App(){
     reader.readAsText(file);
   };
   const [rawMode,setRawMode]=useState(false); // no league weight
+  const [outlierMode,setOutlierMode]=useState(false); // z-score, within-league only
   const [onlyElite,setOnlyElite]=useState(false); // only elite in their division
   const [sort,setSort]=useState({col:'careerScore',asc:false});
   const [recentOnly,setRecentOnly]=useState(true);
@@ -400,6 +415,13 @@ export default function App(){
 
   // Get display score based on all mode toggles
   const getDisplayScore=useCallback((p)=>{
+    if(outlierMode){
+      // z-mode ignores the season filter — zScore/zRoles are career
+      // aggregates only (index-only storage), and the point is spotting
+      // within-league outliers, not diluting the figure by season.
+      if(scoreMode!=='complete') return (p.zRoles||{})[scoreMode]??null;
+      return p.zScore??null;
+    }
     if(rawMode){
       if(seasonFilter!=='all'){
         const h=p.sh?.find(x=>x.s===seasonFilter);
@@ -414,7 +436,7 @@ export default function App(){
     }
     if(scoreMode!=='complete') return (p.roleCareerScores||{})[scoreMode]||null;
     return p.careerScore;
-  },[seasonFilter,scoreMode,rawMode]);
+  },[seasonFilter,scoreMode,rawMode,outlierMode]);
 
   const addMetricFilter=()=>{if(metricFilters.length<10)setMetricFilters(f=>[...f,{key:'',label:'',min:0,max:100}]);};
 
@@ -529,8 +551,9 @@ export default function App(){
     const roleName=scoreMode!=='complete'?scoreMode:roleFilter;
     a.sort((x,y)=>{
       if(sort.col==='roleScore'&&roleName){
-        const av=(x.roleCareerScores||{})[roleName]||0;
-        const bv=(y.roleCareerScores||{})[roleName]||0;
+        const src=outlierMode?'zRoles':'roleCareerScores';
+        const av=(x[src]||{})[roleName]||0;
+        const bv=(y[src]||{})[roleName]||0;
         return sort.asc?av-bv:bv-av;
       }
       if(sort.col==='careerScore'){
@@ -543,22 +566,22 @@ export default function App(){
       return sort.asc?av-bv:bv-av;
     });
     return a;
-  },[filtered,sort,roleFilter,scoreMode,seasonFilter,getDisplayScore]);
+  },[filtered,sort,roleFilter,scoreMode,seasonFilter,getDisplayScore,outlierMode]);
 
   const pageData=sorted.slice(page*PAGE,(page+1)*PAGE);
   const totalPages=Math.ceil(sorted.length/PAGE);
   const stats=useMemo(()=>({
     count:filtered.length,
-    avg:filtered.length?filtered.reduce((s,p)=>s+(getDisplayScore(p)||p.careerScore),0)/filtered.length:0,
+    avg:filtered.length?filtered.reduce((s,p)=>s+(getDisplayScore(p)??p.careerScore),0)/filtered.length:0,
     elite:filtered.filter(p=>p.careerScore>=80).length,
     avgAge:filtered.length?filtered.reduce((s,p)=>s+p.age,0)/filtered.length:0,
   }),[filtered,getDisplayScore]);
 
-  const reset=()=>{setSearch('');setPos('All');setSideFilter('Any');setRoleFilter('');setRoleFilters(new Set());setSoftMode(false);setRoleFilters(new Set());setSoftMode(false);setRoleScoreMin(50);setActivePreset('');setActivePresetLeagues(null);setShowHidden(false);setShowYouth(false);setActiveBands(new Set());setActiveRegions(new Set());setLsMin(0);setLsMax(101);setAgeMin(16);setAgeMax(38);setHeightMin(152);setHeightMax(211);setFoot('Any');setMinScore(40);setMinSeas(1);setShowMvFilter(false);setMvMax(50);setShowContractFilter(false);setContractBefore(2028);setSeasonFilter('all');setScoreMode('complete');setMetricFilters([]);setXValueFilter('');setRawMode(false);setOnlyElite(false);setRecentOnly(true);setShowXValueFilter(false);setXValueMin(0);setXValueMax(50);setAttrFilters(new Set());setMinMins(500);setCurrentLeagueOnly(false);setPotentialMin(40);setPlayed2526(false);setEscOnly(false);setGbeMin(0);setNatFilter('');setNotPlayingOnly(false);setDomesticOnly(false);setInternationalOnly(false);setTierFilters(new Set());setShowShortlist(false);setSoftMode(false);setRoleFilters(new Set());setPage(0);};
+  const reset=()=>{setSearch('');setPos('All');setSideFilter('Any');setRoleFilter('');setRoleFilters(new Set());setSoftMode(false);setRoleFilters(new Set());setSoftMode(false);setRoleScoreMin(50);setActivePreset('');setActivePresetLeagues(null);setShowHidden(false);setShowYouth(false);setActiveBands(new Set());setActiveRegions(new Set());setLsMin(0);setLsMax(101);setAgeMin(16);setAgeMax(38);setHeightMin(152);setHeightMax(211);setFoot('Any');setMinScore(40);setMinSeas(1);setShowMvFilter(false);setMvMax(50);setShowContractFilter(false);setContractBefore(2028);setSeasonFilter('all');setScoreMode('complete');setMetricFilters([]);setXValueFilter('');setRawMode(false);setOutlierMode(false);setOnlyElite(false);setRecentOnly(true);setShowXValueFilter(false);setXValueMin(0);setXValueMax(50);setAttrFilters(new Set());setMinMins(500);setCurrentLeagueOnly(false);setPotentialMin(40);setPlayed2526(false);setEscOnly(false);setGbeMin(0);setNatFilter('');setNotPlayingOnly(false);setDomesticOnly(false);setInternationalOnly(false);setTierFilters(new Set());setShowShortlist(false);setSoftMode(false);setRoleFilters(new Set());setPage(0);};
 
   if(loading) return <div style={{...T.app,alignItems:'center',justifyContent:'center'}}><style>{'@keyframes spin{to{transform:rotate(360deg)}}'}</style><div style={{width:24,height:24,border:'2px solid #1e2d45',borderTop:'2px solid #3b7de8',borderRadius:'50%',animation:'spin 0.8s linear infinite'}}/><div style={{color:'#94a3b8',fontSize:11,marginTop:8}}>Loading…</div></div>;
 
-  const colLabel=rawMode?'Raw':scoreMode!=='complete'?scoreMode.split(' ')[0]+'…':seasonFilter!=='all'?seasonFilter.slice(2):'Career';
+  const colLabel=outlierMode?'Outlier':rawMode?'Raw':scoreMode!=='complete'?scoreMode.split(' ')[0]+'…':seasonFilter!=='all'?seasonFilter.slice(2):'Career';
 
   return(
     <div style={T.app}>
@@ -574,6 +597,7 @@ export default function App(){
           <button onClick={()=>setActiveTab('team')} style={{padding:isMobile?'7px 12px':'4px 10px',borderRadius:5,...(isMobile?{flexShrink:0}:{}),border:`1px solid ${activeTab==='team'?'#3b7de8':'transparent'}`,background:activeTab==='team'?'#0e2040':'transparent',color:activeTab==='team'?'#60a5fa':'#94a3b8',fontSize:isMobile?11:10,fontWeight:600,cursor:'pointer',...(isMobile?{whiteSpace:'nowrap'}:{})}}>Team Index</button>
         </div>
         {rawMode&&<div style={{padding:'2px 8px',borderRadius:4,background:'#1e3a5f',color:'#60a5fa',fontSize:10,fontWeight:700,...(isMobile?{flexShrink:0,whiteSpace:'nowrap'}:{})}}>{isMobile?'RAW':'RAW MODE — no league weighting'}</div>}
+        {outlierMode&&<div style={{padding:'2px 8px',borderRadius:4,background:'#3b1e5f',color:'#c084fc',fontSize:10,fontWeight:700,...(isMobile?{flexShrink:0,whiteSpace:'nowrap'}:{})}}>{isMobile?'OUTLIER':'OUTLIER SEARCH — z-score within league'}</div>}
         {!isMobile&&<div style={{marginLeft:'auto',fontSize:9,color:'#94a3b8',background:'#0d1220',border:'1px solid #1e2d45',borderRadius:4,padding:'2px 6px'}}>{all.length.toLocaleString()} players</div>}
       </div>
 
@@ -677,9 +701,13 @@ export default function App(){
           <div style={T.fg}>
             <span style={T.fl}>Scoring Options</span>
             <div style={{display:'flex',flexDirection:'column',gap:6}}>
-              <label style={T.cr} onClick={()=>{setRawMode(p=>!p);setPage(0);}}>
+              <label style={T.cr} onClick={()=>{setRawMode(p=>!p);setOutlierMode(false);setPage(0);}}>
                 <div style={T.cb(rawMode)}>{rawMode&&<span style={{color:'#fff',fontSize:8}}>✓</span>}</div>
                 <span style={T.cl(rawMode)}>Raw score (no league weight)</span>
+              </label>
+              <label style={T.cr} onClick={()=>{setOutlierMode(p=>!p);setRawMode(false);setPage(0);}}>
+                <div style={T.cb(outlierMode)}>{outlierMode&&<span style={{color:'#fff',fontSize:8}}>✓</span>}</div>
+                <span style={T.cl(outlierMode)}>Outlier Search (z-score, within league)</span>
               </label>
               <label style={T.cr} onClick={()=>{setOnlyElite(p=>!p);setPage(0);}}>
                 <div style={T.cb(onlyElite)}>{onlyElite&&<span style={{color:'#fff',fontSize:8}}>✓</span>}</div>
@@ -1030,11 +1058,11 @@ export default function App(){
                    hides exactly the columns that matter, so the rows become cards. Same
                    data, same click-through to PlayerCard, same shortlist toggle. */
                 pageData.map((p,i)=>{
-                  const rcs=p.roleCareerScores||{};
+                  const rcs=(outlierMode?p.zRoles:p.roleCareerScores)||{};
                   const bestEntry=Object.entries(rcs).sort((a,b)=>b[1]-a[1])[0];
                   const bestRole=bestEntry?bestEntry[0]:'—';
-                  const ds=getDisplayScore(p)??p.careerScore;
-                  const roleModeScore=scoreMode!=='complete'?(rcs[scoreMode]||null):null;
+                  const ds=getDisplayScore(p)??(outlierMode?null:p.careerScore);
+                  const roleModeScore=scoreMode!=='complete'?(rcs[scoreMode]??null):null;
                   const promo=promotionBadge(p.careerScore,p.league);
                   const starred=shortlist.includes(p.id);
                   return(
@@ -1054,22 +1082,22 @@ export default function App(){
                           </div>
                         </div>
                         <div style={T.cardStat}>
-                          <span style={{fontWeight:800,fontSize:18,color:scoreBandColor(ds),lineHeight:1}}>{ds.toFixed(1)}</span>
-                          <StarDisplay score={ds}/>
+                          <span style={{fontWeight:800,fontSize:18,color:outlierMode?zScoreColor(ds):scoreBandColor(ds),lineHeight:1}}>{ds!=null?ds.toFixed(1):'—'}</span>
+                          {!outlierMode&&<StarDisplay score={ds}/>}
                         </div>
                       </div>
                       <div style={T.cardMetaRow}>
                         <span style={{...T.chip,color:'#93c5fd',background:'#0e1e38',borderColor:'#16305a'}}>{bestRole}</span>
                         <span style={T.chip}>Age {p.age}</span>
                         {p.foot&&p.foot!=='unknown'&&p.foot!=='nan'&&<span style={T.chip}>{formatFoot(p.foot)}</span>}
-                        {roleModeScore!=null&&<span style={{...T.chip,color:scoreBandColor(roleModeScore)}}>Role {roleModeScore.toFixed(1)}</span>}
+                        {roleModeScore!=null&&<span style={{...T.chip,color:outlierMode?zScoreColor(roleModeScore):scoreBandColor(roleModeScore)}}>Role {roleModeScore.toFixed(1)}</span>}
                         <span style={T.chip}>Peak {p.peakScore?.toFixed(1) ?? '—'}</span>
                         <span style={{...T.chip,color:'#22c55e'}}>Pot {(p.potentialScore||p.careerScore).toFixed(1)}</span>
                         {p.xValue?<span style={{...T.chip,color:'#93c5fd'}}>xV {formatMV(p.xValue)}</span>:null}
                         {p.marketValue>0&&<span style={T.chip}>MV {formatMV(p.marketValue)}</span>}
                         {p.xValue&&p.marketValue>0&&p.xValueGapPct!=null&&<span style={{...T.chip,color:p.xValueGapPct>20?'#22c55e':p.xValueGapPct<-20?'#ef4444':'#94a3b8'}}>{p.xValueGapPct>0?'+':''}{p.xValueGapPct.toFixed(0)}% vs MV</span>}
                         {p.contract&&p.contract!=='nan'&&<span style={{...T.chip,color:p.contractYear<=2026?'#fbbf24':'#94a3b8'}}>{p.contract}</span>}
-                        {promo&&<span style={{...T.chip,color:'#22c55e'}}>{promo}</span>}
+                        {!outlierMode&&promo&&<span style={{...T.chip,color:'#22c55e'}}>{promo}</span>}
                       </div>
                     </div>
                   );
@@ -1097,11 +1125,11 @@ export default function App(){
                   </tr></thead>
                   <tbody>
                     {pageData.map((p,i)=>{
-                      const rcs=p.roleCareerScores||{};
+                      const rcs=(outlierMode?p.zRoles:p.roleCareerScores)||{};
                       const bestEntry=Object.entries(rcs).sort((a,b)=>b[1]-a[1])[0];
                       const bestRole=bestEntry?bestEntry[0]:'—';
-                      const ds=getDisplayScore(p)??p.careerScore;
-                      const roleModeScore=scoreMode!=='complete'?(rcs[scoreMode]||null):null;
+                      const ds=getDisplayScore(p)??(outlierMode?null:p.careerScore);
+                      const roleModeScore=scoreMode!=='complete'?(rcs[scoreMode]??null):null;
                       const promo=promotionBadge(p.careerScore,p.league);
                       const ls=LEAGUE_STRENGTHS[p.league]||50;
                       return(
@@ -1123,14 +1151,14 @@ export default function App(){
                           <td style={T.td}>
                             <div style={{display:'flex',flexDirection:'column',gap:2}}>
                               <div style={{display:'flex',alignItems:'center',gap:4}}>
-                                <div style={{width:6,height:6,borderRadius:'50%',background:scoreBandColor(ds),flexShrink:0}}/>
-                                <span style={{fontWeight:700,color:scoreBandColor(ds)}}>{ds.toFixed(1)}</span>
+                                <div style={{width:6,height:6,borderRadius:'50%',background:outlierMode?zScoreColor(ds):scoreBandColor(ds),flexShrink:0}}/>
+                                <span style={{fontWeight:700,color:outlierMode?zScoreColor(ds):scoreBandColor(ds)}}>{ds!=null?ds.toFixed(1):'—'}</span>
                               </div>
-                              <StarDisplay score={ds}/>
-                              {promo&&<span style={{fontSize:8,color:'#22c55e',fontWeight:600}}>{promo}</span>}
+                              {!outlierMode&&<StarDisplay score={ds}/>}
+                              {!outlierMode&&promo&&<span style={{fontSize:8,color:'#22c55e',fontWeight:600}}>{promo}</span>}
                             </div>
                           </td>
-                          {scoreMode!=='complete'&&<td style={T.td}>{roleModeScore!=null?<span style={{fontWeight:700,color:scoreBandColor(roleModeScore)}}>{roleModeScore.toFixed(1)}</span>:<span style={{color:'#64748b'}}>—</span>}</td>}
+                          {scoreMode!=='complete'&&<td style={T.td}>{roleModeScore!=null?<span style={{fontWeight:700,color:outlierMode?zScoreColor(roleModeScore):scoreBandColor(roleModeScore)}}>{roleModeScore.toFixed(1)}</span>:<span style={{color:'#64748b'}}>—</span>}</td>}
                           {!hiddenCols.has('peakScore')&&<td style={{...T.td,color:'#94a3b8'}}>{p.peakScore?.toFixed(1) ?? '—'}</td>}
                           {!hiddenCols.has('seasons')&&<td style={{...T.td,color:'#94a3b8'}}>{p.seasons}</td>}
                           {!hiddenCols.has('potentialScore')&&<td style={T.td}><div style={{display:'flex',alignItems:'center',gap:4}}><div style={{width:6,height:6,borderRadius:'50%',background:'#22c55e',flexShrink:0}}/><span style={{fontWeight:600,color:'#22c55e',fontSize:11}}>{(p.potentialScore||p.careerScore)?.toFixed(1) ?? '—'}</span></div></td>}
