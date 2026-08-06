@@ -1,0 +1,32 @@
+{
+  "Possession": {
+    "low": 12.0,
+    "avg": 52.0,
+    "high": 93.0
+  },
+  "Pressing": {
+    "low": 12.0,
+    "avg": 52.0,
+    "high": 93.0
+  },
+  "Attack": {
+    "low": 18.0,
+    "avg": 52.0,
+    "high": 89.0
+  },
+  "Defence": {
+    "low": 16.0,
+    "avg": 52.0,
+    "high": 90.0
+  },
+  "Passing": {
+    "low": 17.0,
+    "avg": 52.0,
+    "high": 90.0
+  },
+  "Quality": {
+    "low": 16.0,
+    "avg": 52.0,
+    "high": 92.0
+  }
+}
