@@ -983,8 +983,15 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
   // Build selectable options from allSeasonsSummary standard rows, deduped by season+league
   const allStdRows=(()=>{
     const seen=new Set();
+    // Hidden and youth leagues have full seasonsDetail entries (stats,
+    // percentiles, roles) built by the pipeline exactly like standard
+    // leagues — only international/continental rows lack them. Restricting
+    // this to 'standard' left hidden/youth-only players with no selectable
+    // season at all, so sd resolved to {} and the whole percentiles/stats
+    // block rendered empty while top-level role scores (which don't depend
+    // on sd) kept showing — that was the "role scores but no stats" bug.
     return (player.allSeasonsSummary||[])
-      .filter(s=>(s.type==='standard'||!s.type)&&SEASON_ORDER_ARR.includes(s.s))
+      .filter(s=>(s.type==='standard'||s.type==='hidden'||s.type==='youth'||!s.type)&&SEASON_ORDER_ARR.includes(s.s))
       .filter(s=>{const k=`${s.s}||${s.l}`;if(seen.has(k))return false;seen.add(k);return true;})
       .sort((a,b)=>{const ai=SEASON_ORDER_ARR.indexOf(a.s),bi=SEASON_ORDER_ARR.indexOf(b.s);return (ai===-1?99:ai)-(bi===-1?99:bi);});
   })();
