@@ -303,65 +303,111 @@ function ForecastTab({player}) {
   );
 }
 
-const ROLE_METRICS_PC = {
-  GK:['Prevented goals per 90','Save rate, %','Exits per 90','Accurate passes, %','Accurate long passes, %'],
-  CB:['Aerial duels won, %','Defensive duels won, %','Accurate passes, %','Accurate forward passes, %','Progressive runs per 90','Progressive passes per 90','PAdj Interceptions','Dribbles per 90'],
-  FB:['PAdj Interceptions','Defensive duels won, %','Accurate passes, %','Dribbles per 90','Progressive runs per 90','Progressive passes per 90','Passes to final third per 90','xA per 90','Passes to penalty area per 90'],
-  CM:['PAdj Interceptions','Defensive duels won, %','Accurate passes, %','Dribbles per 90','Progressive runs per 90','Progressive passes per 90','xA per 90','Non-penalty goals per 90','xG per 90','Key passes per 90'],
-  ATT:['Accurate passes, %','Dribbles per 90','Progressive runs per 90','xA per 90','Passes to penalty area per 90','Non-penalty goals per 90','xG per 90','Touches in box per 90'],
-  CF:['Dribbles per 90','Progressive runs per 90','xA per 90','Non-penalty goals per 90','xG per 90','Touches in box per 90','Aerial duels won, %'],
+// ─── Similar Players — ported from ScoutBoard Pro (server.py /api/similar) ───
+// Same feature sets and weights per role, same percentile-distance + league-
+// strength-ratio adjustment. Not ported: the 30% standardized-value blend —
+// the player JSON only ships pre-computed percentiles (plus a raw value string
+// per metric), no raw pool to standardize against client-side, and per Matty's
+// instruction this stays percentile-only rather than approximating a z-score.
+// Raw metric names below match server.py's *_SIM_FEATURES exactly; METRIC_TO_LABEL
+// maps each to the friendly label build_players.py's G_GROUPS stores them under
+// (needed to look them up in seasonsDetail[season].g.A/D/P).
+const SIM_FEATURES = {
+  GK:['Passes per 90','Accurate passes, %','Long passes per 90','Accurate long passes, %','Conceded goals per 90','Shots against per 90','Save rate, %','xG against per 90','Prevented goals per 90','Exits per 90'],
+  CB:['Defensive duels per 90','Defensive duels won, %','Aerial duels per 90','Aerial duels won, %','Shots blocked per 90','PAdj Interceptions','Dribbles per 90','Successful dribbles, %','Progressive runs per 90','Accelerations per 90','Passes per 90','Accurate passes, %','Forward passes per 90','Accurate forward passes, %','Long passes per 90','Accurate long passes, %','Passes to final third per 90','Accurate passes to final third, %','Progressive passes per 90'],
+  FB:['Defensive duels per 90','Defensive duels won, %','Aerial duels per 90','Aerial duels won, %','Shots blocked per 90','PAdj Interceptions','Dribbles per 90','Successful dribbles, %','Progressive runs per 90','Accelerations per 90','Passes per 90','Accurate passes, %','Forward passes per 90','Accurate forward passes, %','Passes to final third per 90','Accurate passes to final third, %','Progressive passes per 90','Crosses per 90','Accurate crosses, %','Passes to penalty area per 90','xA per 90','Touches in box per 90'],
+  CM:['Defensive duels per 90','Defensive duels won, %','Aerial duels per 90','Aerial duels won, %','Shots blocked per 90','PAdj Interceptions','Non-penalty goals per 90','xG per 90','Shots per 90','Dribbles per 90','Successful dribbles, %','Offensive duels per 90','Offensive duels won, %','Touches in box per 90','Progressive runs per 90','Passes per 90','Accurate passes, %','Forward passes per 90','Accurate forward passes, %','Long passes per 90','Accurate long passes, %','xA per 90','Smart passes per 90','Key passes per 90','Passes to final third per 90','Accurate passes to final third, %','Passes to penalty area per 90','Accurate passes to penalty area, %','Deep completions per 90','Progressive passes per 90'],
+  ATT:['Defensive duels per 90','Aerial duels per 90','Aerial duels won, %','PAdj Interceptions','xG per 90','Non-penalty goals per 90','Shots per 90','Crosses per 90','Accurate crosses, %','Dribbles per 90','Successful dribbles, %','Touches in box per 90','Progressive runs per 90','Accelerations per 90','Passes per 90','Accurate passes, %','xA per 90','Smart passes per 90','Key passes per 90','Passes to final third per 90','Accurate passes to final third, %','Passes to penalty area per 90','Accurate passes to penalty area, %','Deep completions per 90','Progressive passes per 90'],
+  CF:['Defensive duels per 90','Aerial duels per 90','Aerial duels won, %','Non-penalty goals per 90','xG per 90','Shots per 90','Crosses per 90','Dribbles per 90','Successful dribbles, %','Touches in box per 90','Progressive runs per 90','Passes per 90','Accurate passes, %','xA per 90','Smart passes per 90','Passes to penalty area per 90','Deep completions per 90'],
 };
-const MLABEL_PC = {
-  'Aerial duels won, %':'Aerial Duel %','Aerial duels per 90':'Aerial Duels',
-  'Defensive duels won, %':'Defensive Duel %','Defensive duels per 90':'Defensive Duels',
-  'Accurate passes, %':'Pass %','Accurate forward passes, %':'Forward Pass %',
-  'Progressive runs per 90':'Progressive Runs','Progressive passes per 90':'Progressive Passes',
-  'PAdj Interceptions':'PAdj Interceptions','Dribbles per 90':'Dribbles',
-  'Passes to final third per 90':'Passes to F3rd','xA per 90':'xA',
-  'Passes to penalty area per 90':'Passes to Box','Non-penalty goals per 90':'Goals: Non-Penalty',
-  'xG per 90':'xG','Key passes per 90':'Key Passes','Touches in box per 90':'Touches in Box',
-  'Prevented goals per 90':'Goals Prevented','Exits per 90':'Exits',
-  'Save rate, %':'Save Rate','Accurate long passes, %':'Long Pass %',
+const SIM_WEIGHTS = {
+  GK:{'Prevented goals per 90':3,'Save rate, %':2,'xG against per 90':2,'Conceded goals per 90':2,'Exits per 90':2,'Accurate passes, %':2,'Accurate long passes, %':2},
+  CB:{'Passes per 90':2,'Accurate passes, %':2,'Progressive passes per 90':2,'Defensive duels per 90':2,'Defensive duels won, %':2,'Dribbles per 90':2,'PAdj Interceptions':1,'Progressive runs per 90':2,'Aerial duels per 90':2,'Aerial duels won, %':3},
+  FB:{'xA per 90':3,'Crosses per 90':2,'Dribbles per 90':2,'Progressive runs per 90':2,'Defensive duels won, %':2,'PAdj Interceptions':2,'Passes per 90':1,'Passes to penalty area per 90':2},
+  CM:{'Passes per 90':2,'Progressive runs per 90':2,'Progressive passes per 90':2,'Dribbles per 90':2,'xA per 90':2,'Touches in box per 90':2,'Accurate passes, %':2,'Aerial duels won, %':2,'Passes to penalty area per 90':2,'Defensive duels per 90':2},
+  ATT:{'Passes per 90':3,'Accurate passes, %':2,'Dribbles per 90':3,'Non-penalty goals per 90':2,'Shots per 90':2,'Successful dribbles, %':2,'Aerial duels won, %':2,'xA per 90':2,'xG per 90':2,'Touches in box per 90':2,'Passes to penalty area per 90':2,'Passes to final third per 90':2,'Crosses per 90':2},
+  CF:{'Passes per 90':2,'Dribbles per 90':2,'Non-penalty goals per 90':2,'Aerial duels per 90':2,'Aerial duels won, %':2,'xA per 90':2,'xG per 90':2,'Touches in box per 90':2},
 };
+const METRIC_TO_LABEL = {
+  GK:{'Exits per 90':'Exits','Prevented goals per 90':'Goals Prevented','Conceded goals per 90':'Goals Conceded','Save rate, %':'Save Rate','Shots against per 90':'Shots Against','xG against per 90':'xG Against','Long passes per 90':'Long Passes','Accurate long passes, %':'Long Pass %','Passes per 90':'Passes','Accurate passes, %':'Pass %'},
+  CB:{'Non-penalty goals per 90':'Goals: Non-Penalty','xG per 90':'xG','Offensive duels per 90':'Offensive Duels','Offensive duels won, %':'Offensive Duel %','Progressive runs per 90':'Progressive Runs','Aerial duels per 90':'Aerial Duels','Aerial duels won, %':'Aerial Duel %','Defensive duels per 90':'Defensive Duels','Defensive duels won, %':'Defensive Duel %','PAdj Interceptions':'PAdj Interceptions','Shots blocked per 90':'Shots Blocked','Accelerations per 90':'Accelerations','Dribbles per 90':'Dribbles','Successful dribbles, %':'Dribble %','Forward passes per 90':'Forward Passes','Accurate forward passes, %':'Forward Pass %','Long passes per 90':'Long Passes','Accurate long passes, %':'Long Pass %','Passes per 90':'Passes','Accurate passes, %':'Pass %','Passes to final third per 90':'Passes to F3rd','Accurate passes to final third, %':'Passes to F3rd %','Progressive passes per 90':'Progressive Passes'},
+  FB:{'Crosses per 90':'Crosses','Accurate crosses, %':'Cross %','Non-penalty goals per 90':'Goals: Non-Penalty','xG per 90':'xG','xA per 90':'xA','Offensive duels per 90':'Offensive Duels','Offensive duels won, %':'Offensive Duel %','Progressive runs per 90':'Progressive Runs','Touches in box per 90':'Touches in Box','Aerial duels per 90':'Aerial Duels','Aerial duels won, %':'Aerial Duel %','Defensive duels per 90':'Defensive Duels','Defensive duels won, %':'Defensive Duel %','Shots blocked per 90':'Shots Blocked','PAdj Interceptions':'PAdj Interceptions','Accelerations per 90':'Accelerations','Dribbles per 90':'Dribbles','Successful dribbles, %':'Dribble %','Forward passes per 90':'Forward Passes','Accurate forward passes, %':'Forward Pass %','Passes per 90':'Passes','Accurate passes, %':'Pass %','Passes to final third per 90':'Passes to F3rd','Accurate passes to final third, %':'Passes to F3rd %','Passes to penalty area per 90':'Passes to Box','Progressive passes per 90':'Progressive Passes'},
+  CM:{'Crosses per 90':'Crosses','Non-penalty goals per 90':'Goals: Non-Penalty','xG per 90':'xG','xA per 90':'xA','Offensive duels per 90':'Offensive Duels','Offensive duels won, %':'Offensive Duel %','Progressive runs per 90':'Progressive Runs','Shots per 90':'Shots','Touches in box per 90':'Touches in Box','Aerial duels per 90':'Aerial Duels','Aerial duels won, %':'Aerial Duel %','Defensive duels per 90':'Defensive Duels','Defensive duels won, %':'Defensive Duel %','Shots blocked per 90':'Shots Blocked','PAdj Interceptions':'PAdj Interceptions','Dribbles per 90':'Dribbles','Successful dribbles, %':'Dribble %','Forward passes per 90':'Forward Passes','Accurate forward passes, %':'Forward Pass %','Key passes per 90':'Key Passes','Long passes per 90':'Long Passes','Accurate long passes, %':'Long Pass %','Passes per 90':'Passes','Accurate passes, %':'Pass %','Passes to final third per 90':'Passes to F3rd','Accurate passes to final third, %':'Passes to F3rd %','Passes to penalty area per 90':'Passes to Box','Accurate passes to penalty area, %':'Passes to Box %','Progressive passes per 90':'Progressive Passes','Smart passes per 90':'Smart Passes'},
+  ATT:{'Crosses per 90':'Crosses','Accurate crosses, %':'Cross %','Non-penalty goals per 90':'Goals: Non-Penalty','xG per 90':'xG','xA per 90':'xA','Progressive runs per 90':'Progressive Runs','Shots per 90':'Shots','Touches in box per 90':'Touches in Box','Aerial duels per 90':'Aerial Duels','Aerial duels won, %':'Aerial Duel %','Defensive duels per 90':'Defensive Duels','PAdj Interceptions':'PAdj Interceptions','Accelerations per 90':'Accelerations','Dribbles per 90':'Dribbles','Successful dribbles, %':'Dribble %','Key passes per 90':'Key Passes','Passes per 90':'Passes','Accurate passes, %':'Pass %','Passes to final third per 90':'Passes to F3rd','Accurate passes to final third, %':'Passes to F3rd %','Passes to penalty area per 90':'Passes to Box','Accurate passes to penalty area, %':'Passes to Box %','Progressive passes per 90':'Progressive Passes','Smart passes per 90':'Smart Passes','Deep completions per 90':'Deep Completions'},
+  CF:{'Crosses per 90':'Crosses','Non-penalty goals per 90':'Goals: Non-Penalty','xG per 90':'xG','xA per 90':'xA','Progressive runs per 90':'Progressive Runs','Shots per 90':'Shots','Touches in box per 90':'Touches in Box','Aerial duels per 90':'Aerial Duels','Aerial duels won, %':'Aerial Duel %','Defensive duels per 90':'Defensive Duels','PAdj Interceptions':'PAdj Interceptions','Dribbles per 90':'Dribbles','Successful dribbles, %':'Dribble %','Passes per 90':'Passes','Accurate passes, %':'Pass %','Passes to penalty area per 90':'Passes to Box','Smart passes per 90':'Smart Passes','Deep completions per 90':'Deep Completions'},
+};
+const UK_LEAGUES = ['England 1.','England 2.','England 3.','Scotland 1.'];
+const SIM_SEASON_ORDER = ['2026','2025-26','2025','2024-25','2024','2023-24','2023','2022-23','2022','2021-22','2021','2020-21','2020','2019-20','2018-19'];
+const SIM_MIN_MATCHED = 6; // minimum overlapping metrics required before a candidate counts
 
-function getSimilar(player, allPlayers){
+function getSimSeasonDetail(player){
+  // Deterministic latest-season pick — the old version took Object.values(...)[0],
+  // an arbitrary object-key order, not necessarily the current season. That meant
+  // target and candidate could silently be compared on different-vintage seasons.
+  const sd=player.seasonsDetail||{};
+  for(const s of SIM_SEASON_ORDER){ if(sd[s]&&sd[s].g) return sd[s]; }
+  const vals=Object.values(sd).filter(v=>v&&v.g);
+  return vals[0]||null;
+}
+
+function simVector(sd, feats, labelMap){
+  const pool=[...(sd.g?.A||[]),...(sd.g?.D||[]),...(sd.g?.P||[])];
+  return feats.map(f=>{
+    const lbl=labelMap[f];
+    const item=pool.find(x=>x[0]===lbl);
+    return item?Number(item[1]):null;
+  });
+}
+
+function getSimilar(player, allPlayers, ukOnly){
   if(!allPlayers?.length) return [];
   const rk=player.roleKey;
-  const keys=ROLE_METRICS_PC[rk]||[];
-  const pSd=Object.values(player.seasonsDetail||{})[0]||{};
-  const pMets=[...(pSd.g?.A||[]),...(pSd.g?.D||[]),...(pSd.g?.P||[])];
-  if(!pMets.length) return [];
-  const pls=LEAGUE_STRENGTHS[player.league]||50;
+  const feats=SIM_FEATURES[rk];
+  if(!feats) return [];
+  const weights=SIM_WEIGHTS[rk]||{};
+  const labelMap=METRIC_TO_LABEL[rk]||{};
+  const pSd=getSimSeasonDetail(player);
+  if(!pSd) return [];
+  const pVec=simVector(pSd,feats,labelMap);
+  const tgtLs=LEAGUE_STRENGTHS[player.league]||1e-6;
 
-  return allPlayers
-    .filter(c=>{
-      if(c.id===player.id||c.roleKey!==rk) return false;
-      const cls=LEAGUE_STRENGTHS[c.league]||50;
-      return Math.abs(cls-pls)<=20; // within ~2 tier band
-    })
-    .map(c=>{
-      const cSd=Object.values(c.seasonsDetail||{})[0]||{};
-      const cMets=[...(cSd.g?.A||[]),...(cSd.g?.D||[]),...(cSd.g?.P||[])];
-      let sumSq=0,total=0;
-      for(const mk of keys){
-        const lbl=MLABEL_PC[mk]||mk;
-        const p=pMets.find(x=>x[0]===lbl||x[0]===mk);
-        const cc=cMets.find(x=>x[0]===lbl||x[0]===mk);
-        if(p&&cc){
-          const cls=LEAGUE_STRENGTHS[c.league]||50;
-          const leaguePenalty=Math.abs(cls-pls)/100*15;
-          sumSq+=(p[1]-cc[1])**2;
-          total++;
-          if(total===1) sumSq+=leaguePenalty**2; // add league penalty once
-        }
-      }
-      if(!total) return null;
-      const match=Math.max(0,Math.round(100-Math.sqrt(sumSq/total)*1.8));
-      return{...c,_sim:match};
-    })
-    .filter(Boolean)
-    .sort((a,b)=>b._sim-a._sim)
-    .slice(0,5);
+  let pool=allPlayers.filter(c=>c.id!==player.id&&c.roleKey===rk);
+  if(ukOnly) pool=pool.filter(c=>UK_LEAGUES.includes(c.league));
+
+  const scored=[];
+  for(const c of pool){
+    const cSd=getSimSeasonDetail(c);
+    if(!cSd) continue;
+    const cVec=simVector(cSd,feats,labelMap);
+    let sumSq=0,matched=0;
+    for(let i=0;i<feats.length;i++){
+      if(pVec[i]==null||cVec[i]==null) continue;
+      const w=weights[feats[i]]||1;
+      sumSq+=((pVec[i]-cVec[i])**2)*w;
+      matched++;
+    }
+    if(matched<SIM_MIN_MATCHED) continue;
+    scored.push({c,dist:Math.sqrt(sumSq/matched)});
+  }
+  if(!scored.length) return [];
+
+  // Min-max normalize distance across the whole candidate pool, same as
+  // server.py — this is what makes the % spread meaningfully (best match in
+  // the pool sits near 100, worst near 0), rather than an arbitrary fixed
+  // formula that clusters everyone in a narrow band.
+  const dists=scored.map(s=>s.dist);
+  const dMin=Math.min(...dists),dMax=Math.max(...dists);
+  const range=dMax-dMin;
+
+  return scored.map(({c,dist})=>{
+    const rawSim=(1-(range>0?(dist-dMin)/range:0))*100;
+    const candLs=Math.max(LEAGUE_STRENGTHS[c.league]||1e-6,1e-6);
+    const ratio=Math.min(candLs/tgtLs,tgtLs/candLs);
+    const adjSim=Math.round(rawSim*(0.8+0.2*ratio));
+    return {...c,_sim:adjSim};
+  })
+  .sort((a,b)=>b._sim-a._sim)
+  .slice(0,5);
 }
 
 
@@ -1256,31 +1302,41 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
 
             {/* Similar Players */}
             {(()=>{
-              const similar=getSimilar(player,players);
-              if(!similar.length) return null;
+              const globalSim=getSimilar(player,players,false);
+              const ukSim=getSimilar(player,players,true);
+              if(!globalSim.length&&!ukSim.length) return null;
+              const Row=(p,i)=>(
+                <div key={p.id||p.name} style={{display:'flex',alignItems:'center',gap:10,background:'#07090f',border:'1px solid #131c2e',borderRadius:8,padding:'8px 12px'}}>
+                  <div style={{width:18,fontSize:10,fontWeight:700,color:'#475569',textAlign:'center',flexShrink:0}}>#{i+1}</div>
+                  <Photo name={p.name} team={p.team} size={30}/>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:12,fontWeight:700,color:'#e2e8f4',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{p.name}</div>
+                    <div style={{fontSize:10,color:'#64748b'}}>{p.team} · {p.league} · Age {p.age}</div>
+                  </div>
+                  <div style={{textAlign:'right',flexShrink:0}}>
+                    <div style={{fontSize:13,fontWeight:800,color:scoreBandColor(p.careerScore)}}>{p.careerScore?.toFixed(1) ?? '—'}</div>
+                    <div style={{fontSize:9,color:'#475569'}}>career</div>
+                  </div>
+                  <div style={{width:44,textAlign:'right',flexShrink:0}}>
+                    <div style={{fontSize:13,fontWeight:800,color:p._sim>=70?'#22c55e':p._sim>=50?'#f59e0b':'#64748b'}}>{p._sim}%</div>
+                    <div style={{fontSize:9,color:'#475569'}}>match</div>
+                  </div>
+                  <Crest id={p.teamFotmobId} name={p.team} size={20}/>
+                </div>
+              );
               return(
-                <div>
-                  <div style={SEC}>Similar Players — Within League Band</div>
-                  <div style={{display:'flex',flexDirection:'column',gap:6}}>
-                    {similar.map((p,i)=>(
-                      <div key={p.id||p.name} style={{display:'flex',alignItems:'center',gap:10,background:'#07090f',border:'1px solid #131c2e',borderRadius:8,padding:'8px 12px'}}>
-                        <div style={{width:18,fontSize:10,fontWeight:700,color:'#475569',textAlign:'center',flexShrink:0}}>#{i+1}</div>
-                        <Photo name={p.name} team={p.team} size={30}/>
-                        <div style={{flex:1,minWidth:0}}>
-                          <div style={{fontSize:12,fontWeight:700,color:'#e2e8f4',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{p.name}</div>
-                          <div style={{fontSize:10,color:'#64748b'}}>{p.team} · {p.league} · Age {p.age}</div>
-                        </div>
-                        <div style={{textAlign:'right',flexShrink:0}}>
-                          <div style={{fontSize:13,fontWeight:800,color:scoreBandColor(p.careerScore)}}>{p.careerScore?.toFixed(1) ?? '—'}</div>
-                          <div style={{fontSize:9,color:'#475569'}}>career</div>
-                        </div>
-                        <div style={{width:44,textAlign:'right',flexShrink:0}}>
-                          <div style={{fontSize:13,fontWeight:800,color:p._sim>=70?'#22c55e':p._sim>=50?'#f59e0b':'#64748b'}}>{p._sim}%</div>
-                          <div style={{fontSize:9,color:'#475569'}}>match</div>
-                        </div>
-                        <Crest id={p.teamFotmobId} name={p.team} size={20}/>
-                      </div>
-                    ))}
+                <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:14}}>
+                  <div>
+                    <div style={SEC}>Similar Players — Global</div>
+                    {globalSim.length
+                      ? <div style={{display:'flex',flexDirection:'column',gap:6}}>{globalSim.map(Row)}</div>
+                      : <div style={{fontSize:11,color:'#475569',padding:'8px 0'}}>No matches found</div>}
+                  </div>
+                  <div>
+                    <div style={SEC}>Similar Players — UK</div>
+                    {ukSim.length
+                      ? <div style={{display:'flex',flexDirection:'column',gap:6}}>{ukSim.map(Row)}</div>
+                      : <div style={{fontSize:11,color:'#475569',padding:'8px 0'}}>No matches found</div>}
                   </div>
                 </div>
               );

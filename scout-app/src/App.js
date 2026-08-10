@@ -110,6 +110,26 @@ export function zScoreColor(v){
 
 const PAGE = 50;
 
+// Versatile: 5+ distinct position tokens ever recorded across a player's full
+// season history. Uses seasonsDetailAll (not just seasonsDetail) so hidden/
+// youth seasons count too — a player who bounced around positions in lower
+// leagues before settling is still evidence of versatility. Wyscout's
+// Position field is comma-separated per season (e.g. "LCB, RCB, LB"), so a
+// single busy season can already contribute multiple tokens toward the count.
+function getPositionSet(player){
+  const seasons=player.seasonsDetailAll||Object.values(player.seasonsDetail||{});
+  const set=new Set();
+  for(const s of seasons){
+    const raw=s?.position;
+    if(!raw) continue;
+    raw.split(/[,/]/).map(t=>t.trim().toUpperCase()).filter(Boolean).forEach(t=>set.add(t));
+  }
+  return set;
+}
+function isVersatile(player){
+  return getPositionSet(player).size>=5;
+}
+
 export function StarDisplay({score,size=11}){
   const stars=scoreToStars(score);
   const full=Math.floor(stars);
@@ -358,6 +378,7 @@ export default function App(){
   const [rawMode,setRawMode]=useState(false); // no league weight
   const [outlierMode,setOutlierMode]=useState(false); // z-score, within-league only
   const [onlyElite,setOnlyElite]=useState(false); // only elite in their division
+  const [versatileOnly,setVersatileOnly]=useState(false); // played 5+ distinct positions across career
   const [sort,setSort]=useState({col:'careerScore',asc:false});
   const [recentOnly,setRecentOnly]=useState(true);
   const [minMins,setMinMins]=useState(500);
@@ -517,6 +538,7 @@ export default function App(){
         if(!roleScoreMin&&!rs) return false;
       }
       if(onlyElite&&!promotionBadge(p.careerScore,p.league)) return false;
+      if(versatileOnly&&!isVersatile(p)) return false;
       // Attribute filters
       if(attrFilters.size>0&&rk){
         const sdEntries=p.seasonsDetail||{};
@@ -544,7 +566,7 @@ export default function App(){
       }
       return true;
     });
-  },[all,search,pos,leagues,ageMin,ageMax,heightMin,heightMax,foot,minScore,minSeas,showMvFilter,mvMax,showContractFilter,contractBefore,roleFilter,roleScoreMin,seasonFilter,metricFilters,xValueFilter,onlyElite,getDisplayScore,recentOnly,showXValueFilter,xValueMin,xValueMax,attrFilters,minMins,currentLeagueOnly,played2526,potentialMin,lsMin,lsMax,escOnly,gbeMin,natFilter,softMode,roleFilters,shortlist,showShortlist,notPlayingOnly,domesticOnly,internationalOnly,tierFilters,sideFilter,rk]);
+  },[all,search,pos,leagues,ageMin,ageMax,heightMin,heightMax,foot,minScore,minSeas,showMvFilter,mvMax,showContractFilter,contractBefore,roleFilter,roleScoreMin,seasonFilter,metricFilters,xValueFilter,onlyElite,versatileOnly,getDisplayScore,recentOnly,showXValueFilter,xValueMin,xValueMax,attrFilters,minMins,currentLeagueOnly,played2526,potentialMin,lsMin,lsMax,escOnly,gbeMin,natFilter,softMode,roleFilters,shortlist,showShortlist,notPlayingOnly,domesticOnly,internationalOnly,tierFilters,sideFilter,rk]);
 
   const sorted=useMemo(()=>{
     const a=[...filtered];
@@ -577,7 +599,7 @@ export default function App(){
     avgAge:filtered.length?filtered.reduce((s,p)=>s+p.age,0)/filtered.length:0,
   }),[filtered,getDisplayScore]);
 
-  const reset=()=>{setSearch('');setPos('All');setSideFilter('Any');setRoleFilter('');setRoleFilters(new Set());setSoftMode(false);setRoleFilters(new Set());setSoftMode(false);setRoleScoreMin(50);setActivePreset('');setActivePresetLeagues(null);setShowHidden(false);setShowYouth(false);setActiveBands(new Set());setActiveRegions(new Set());setLsMin(0);setLsMax(101);setAgeMin(16);setAgeMax(38);setHeightMin(152);setHeightMax(211);setFoot('Any');setMinScore(40);setMinSeas(1);setShowMvFilter(false);setMvMax(50);setShowContractFilter(false);setContractBefore(2028);setSeasonFilter('all');setScoreMode('complete');setMetricFilters([]);setXValueFilter('');setRawMode(false);setOutlierMode(false);setOnlyElite(false);setRecentOnly(true);setShowXValueFilter(false);setXValueMin(0);setXValueMax(50);setAttrFilters(new Set());setMinMins(500);setCurrentLeagueOnly(false);setPotentialMin(40);setPlayed2526(false);setEscOnly(false);setGbeMin(0);setNatFilter('');setNotPlayingOnly(false);setDomesticOnly(false);setInternationalOnly(false);setTierFilters(new Set());setShowShortlist(false);setSoftMode(false);setRoleFilters(new Set());setPage(0);};
+  const reset=()=>{setSearch('');setPos('All');setSideFilter('Any');setRoleFilter('');setRoleFilters(new Set());setSoftMode(false);setRoleFilters(new Set());setSoftMode(false);setRoleScoreMin(50);setActivePreset('');setActivePresetLeagues(null);setShowHidden(false);setShowYouth(false);setActiveBands(new Set());setActiveRegions(new Set());setLsMin(0);setLsMax(101);setAgeMin(16);setAgeMax(38);setHeightMin(152);setHeightMax(211);setFoot('Any');setMinScore(40);setMinSeas(1);setShowMvFilter(false);setMvMax(50);setShowContractFilter(false);setContractBefore(2028);setSeasonFilter('all');setScoreMode('complete');setMetricFilters([]);setXValueFilter('');setRawMode(false);setOutlierMode(false);setOnlyElite(false);setVersatileOnly(false);setRecentOnly(true);setShowXValueFilter(false);setXValueMin(0);setXValueMax(50);setAttrFilters(new Set());setMinMins(500);setCurrentLeagueOnly(false);setPotentialMin(40);setPlayed2526(false);setEscOnly(false);setGbeMin(0);setNatFilter('');setNotPlayingOnly(false);setDomesticOnly(false);setInternationalOnly(false);setTierFilters(new Set());setShowShortlist(false);setSoftMode(false);setRoleFilters(new Set());setPage(0);};
 
   if(loading) return <div style={{...T.app,alignItems:'center',justifyContent:'center'}}><style>{'@keyframes spin{to{transform:rotate(360deg)}}'}</style><div style={{width:24,height:24,border:'2px solid #1e2d45',borderTop:'2px solid #3b7de8',borderRadius:'50%',animation:'spin 0.8s linear infinite'}}/><div style={{color:'#94a3b8',fontSize:11,marginTop:8}}>Loading…</div></div>;
 
@@ -712,6 +734,10 @@ export default function App(){
               <label style={T.cr} onClick={()=>{setOnlyElite(p=>!p);setPage(0);}}>
                 <div style={T.cb(onlyElite)}>{onlyElite&&<span style={{color:'#fff',fontSize:8}}>✓</span>}</div>
                 <span style={T.cl(onlyElite)}>Elite in division only</span>
+              </label>
+              <label style={T.cr} onClick={()=>{setVersatileOnly(p=>!p);setPage(0);}}>
+                <div style={T.cb(versatileOnly)}>{versatileOnly&&<span style={{color:'#fff',fontSize:8}}>✓</span>}</div>
+                <span style={T.cl(versatileOnly)}>Versatile (5+ positions played)</span>
               </label>
             </div>
           </div>
