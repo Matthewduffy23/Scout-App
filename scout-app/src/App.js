@@ -437,10 +437,15 @@ export default function App(){
   // Get display score based on all mode toggles
   const getDisplayScore=useCallback((p)=>{
     if(outlierMode){
-      // z-mode ignores the season filter — zScore/zRoles are career
-      // aggregates only (index-only storage), and the point is spotting
-      // within-league outliers, not diluting the figure by season.
+      // Complete z respects the season filter (per-season z stored on sh,
+      // same as raw mode) — pick a season to see outliers within just that
+      // year. Role-mode z stays career-blended for now; per-season role z
+      // wasn't part of this build.
       if(scoreMode!=='complete') return (p.zRoles||{})[scoreMode]??null;
+      if(seasonFilter!=='all'){
+        const h=p.sh?.find(x=>x.s===seasonFilter);
+        return h?h.z:null;  // per-season z; null if that season's league pool was too small (<8) for a valid z
+      }
       return p.zScore??null;
     }
     if(rawMode){
