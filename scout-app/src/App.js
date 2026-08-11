@@ -108,6 +108,24 @@ export function zScoreColor(v){
   return '#ef4444';
 }
 
+
+// A split-year season "bucket" (e.g. "2025-26") also matches the literal
+// calendar-year season that's concurrent with it (e.g. "2025"). Calendar
+// leagues (Brazil, Argentina, etc.) store their own literal Wyscout season
+// label in p.sh — "2025", "2026" — never rewritten to split-year format,
+// unlike the season-sliced CSVs the other apps read (that relabeling
+// happens in split_seasons.py, not here — Scout Index deliberately keeps
+// every season's literal label distinct for accurate career history).
+// Year Y is concurrent with split-year bucket "Y-(Y+1)": calendar 2026
+// belongs in the "2026-27" bucket, NOT "2025-26" (already finished by the
+// time 2026 started) — added 2026-08-11, matches the same direction fixed
+// in the pipeline's split_seasons.py the same day.
+function seasonBucketMatch(literalSeason, bucketLabel){
+  if(literalSeason===bucketLabel) return true;
+  const m=bucketLabel.match(/^(\d{4})-\d{2}$/);
+  return !!(m && literalSeason===m[1]);
+}
+
 const PAGE = 50;
 
 // Versatile: 5+ distinct position tokens ever recorded across a player's full
@@ -443,21 +461,21 @@ export default function App(){
       // wasn't part of this build.
       if(scoreMode!=='complete') return (p.zRoles||{})[scoreMode]??null;
       if(seasonFilter!=='all'){
-        const h=p.sh?.find(x=>x.s===seasonFilter);
+        const h=p.sh?.find(x=>seasonBucketMatch(x.s,seasonFilter));
         return h?h.z:null;  // per-season z; null if that season's league pool was too small (<8) for a valid z
       }
       return p.zScore??null;
     }
     if(rawMode){
       if(seasonFilter!=='all'){
-        const h=p.sh?.find(x=>x.s===seasonFilter);
+        const h=p.sh?.find(x=>seasonBucketMatch(x.s,seasonFilter));
         return h?(h.r??h.sc):null;  // use raw score if available
       }
       // Raw career: use stored careerRaw (true unweighted league-relative score)
       return p.careerRaw??p.careerScore;
     }
     if(seasonFilter!=='all'){
-      const h=p.sh?.find(x=>x.s===seasonFilter);
+      const h=p.sh?.find(x=>seasonBucketMatch(x.s,seasonFilter));
       return h?h.sc:null;
     }
     if(scoreMode!=='complete') return (p.roleCareerScores||{})[scoreMode]||null;
@@ -477,7 +495,7 @@ export default function App(){
       // Current league only: player must be currently in one of the selected leagues
       if(currentLeagueOnly&&!leagues.has(p.league)) return false;
       // When specific season selected, player must have data for that season
-      if(seasonFilter!=='all'&&!p.sh?.find(x=>x.s===seasonFilter)) return false;
+      if(seasonFilter!=='all'&&!p.sh?.find(x=>seasonBucketMatch(x.s,seasonFilter))) return false;
       if(pos!=='All'&&ROLE_KEY_LABELS[p.roleKey]!==pos) return false;
       if(sideFilter!=='Any'){
         if(rk==='FB'){
@@ -497,7 +515,7 @@ export default function App(){
       if(ds<minScore) return false;
       if(p.seasons<minSeas) return false;
       if(potentialMin>40&&(p.potentialScore||p.careerScore)<potentialMin) return false;
-      if(played2526&&!p.sh?.find(x=>x.s==='2025-26'||x.s==='2026')) return false;
+      if(played2526&&!p.sh?.find(x=>seasonBucketMatch(x.s,'2025-26'))) return false;
       if(escOnly&&!p.escEligible) return false;
       if(gbeMin>0&&(p.gbeTotal||0)<gbeMin) return false;
       if(natFilter&&!(p.passportCountries||'').toLowerCase().includes(natFilter.toLowerCase())&&!(p.birthCountry||'').toLowerCase().includes(natFilter.toLowerCase())) return false;
@@ -523,8 +541,8 @@ export default function App(){
       }
       if(notPlayingOnly){
         const allS=p.allSeasonsSummary||[];
-        const curr=allS.filter(x=>x.s==='2025-26'||x.s==='2026');
-        const prev=allS.filter(x=>x.s==='2024-25'||x.s==='2025');
+        const curr=allS.filter(x=>seasonBucketMatch(x.s,'2026-27'));
+        const prev=allS.filter(x=>seasonBucketMatch(x.s,'2025-26'));
         const currMins=curr.reduce((a,x)=>a+(x.mins||0),0);
         const prevMins=prev.reduce((a,x)=>a+(x.mins||0),0);
         if(!(prevMins>400&&currMins<prevMins*0.4)) return false;
@@ -547,7 +565,7 @@ export default function App(){
       // Attribute filters
       if(attrFilters.size>0&&rk){
         const sdEntries=p.seasonsDetail||{};
-        const sd=sdEntries['2025-26']||sdEntries['2026']||sdEntries['2025']||Object.values(sdEntries)[0]||{};
+        const sd=sdEntries['2026-27']||sdEntries['2026']||sdEntries['2025-26']||Object.values(sdEntries)[0]||{};
         const g=sd.g||{};
         const posAttrs=POSITION_ATTRIBUTES[rk]||[];
         for(const key of attrFilters){

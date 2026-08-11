@@ -131,7 +131,7 @@ export const ROLES_BY_KEY={
   ATT:['Playmaker ATT','Goal Threat ATT','Ball Carrier ATT'],
   CF:['Target Man CF','Goal Threat CF','Link Up CF','False-9 Runner CF','False-9 Passer CF'],
 };
-export const ALL_SEASONS=['2025-26','2024-25','2023-24','2022-23','2021-22','2020-21','2019-20','2018-19'];
+export const ALL_SEASONS=['2026-27','2025-26','2024-25','2023-24','2022-23','2021-22','2020-21','2019-20','2018-19'];
 
 export function scoreBandColor(s){
   if(s>=81) return '#22c55e';
