@@ -1,26 +1,13 @@
-const PHOTO_BASE = 'https://raw.githubusercontent.com/Matthewduffy23/scouting-photos/main/photos/';
 const CREST_BASE = 'https://images.fotmob.com/image_resources/logo/teamlogo/';
 
-function slugN(s) {
-  s = String(s||'').toLowerCase();
-  'ø,o|œ,oe|æ,ae|å,a|ä,a|ö,o|ü,u|ß,ss|ł,l|đ,d|ð,d|þ,th|ç,c|ş,s|ğ,g|ı,i'.split('|').forEach(p=>{const[k,v]=p.split(',');s=s.split(k).join(v);});
-  return s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'');
-}
-
-// FIX: was `name.trim()` — any row with a missing/undefined name threw a TypeError
-// here and took the whole card down with it. String() first, always.
-export function photoUrl(name, team) {
-  const nm = String(name||'').trim();
-  if(!nm) return '/fallback.png';
-  const parts = nm.split('.');
-  let ini, sur;
-  if(parts.length>=2){ini=parts[0].trim();sur=parts.slice(1).join('.').trim();}
-  else{const b=nm.split(' ');ini=b[0]||'';sur=b.slice(1).join(' ')||b[0]||'';}
-  const t=String(team||'').trim().split(/\s+/).map(w=>slugN(w)).join('_').replace(/^_|_$/g,'');
-  return `${PHOTO_BASE}${slugN(ini)}_${slugN(sur)}__${t}.png`;
-}
-
 import React, { useState } from 'react';
+
+// Player photo naming lives in photoName.js — a character-for-character port of
+// download_photos.py's safe_filename(), the function that actually names the files
+// on disk. The local slugN()/photoUrl() that used to sit here disagreed with disk
+// for 2,562 players (single-token names, multi-word surnames, transliteration).
+export { photoUrl } from './photoName';
+import { photoUrl } from './photoName';
 
 export function Photo({name,team,size=34}){
   const [src,set]=useState(()=>photoUrl(name,team));

@@ -11,7 +11,14 @@
 // mechanical job (delete the local const, add an import). Nothing breaks until
 // then; this file is purely additive.
 
-export const PHOTO_BASE = 'https://raw.githubusercontent.com/Matthewduffy23/scouting-photos/main/photos/';
+// Re-exported from photoName.js so external importers keep working.
+export { PHOTO_BASE } from './photoName';
+
+// Player photo naming lives in photoName.js — a character-for-character port of
+// download_photos.py's safe_filename(), the function that actually names the files
+// on disk. The local slugN()/photoUrl() that used to sit here disagreed with disk
+// for 2,562 players (single-token names, multi-word surnames, transliteration).
+export { photoUrl } from './photoName';
 export const CREST_BASE = 'https://raw.githubusercontent.com/Matthewduffy23/scouting-photos/main/crests/';
 
 export const LEAGUE_DISPLAY_NAMES = {
@@ -66,29 +73,6 @@ export function leagueDisplayName(league) {
       || LEAGUE_DISPLAY_NAMES[raw + '.']
       || LEAGUE_DISPLAY_NAMES[raw.replace(/\.$/, '')]
       || raw;
-}
-
-// Player photo URL — this is a VERBATIM copy of QuickCard.js's slugN/photoUrl.
-// Do not "tidy" it: the explicit character map and the split-on-"." branch both
-// matter. Wyscout names arrive as "J. Smith", so the dot split is the normal
-// path, not the fallback. slugN strips every non-alphanumeric (no underscores
-// inside a word); words in the TEAM name are slugged individually then joined
-// with "_". Result: firstinitial_surname__team_name.png
-function slugN(s) {
-  s = String(s || '').toLowerCase();
-  'ø,o|œ,oe|æ,ae|å,a|ä,a|ö,o|ü,u|ß,ss|ł,l|đ,d|ð,d|þ,th|ç,c|ş,s|ğ,g|ı,i'.split('|').forEach(p => {
-    const [k, v] = p.split(','); s = s.split(k).join(v);
-  });
-  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '');
-}
-
-export function photoUrl(name, team) {
-  const parts = String(name || '').trim().split('.');
-  let ini, sur;
-  if (parts.length >= 2) { ini = parts[0].trim(); sur = parts.slice(1).join('.').trim(); }
-  else { const b = String(name || '').trim().split(' '); ini = b[0] || ''; sur = b.slice(1).join(' ') || b[0] || ''; }
-  const t = String(team || '').trim().split(/\s+/).map(w => slugN(w)).join('_').replace(/^_|_$/g, '');
-  return `${PHOTO_BASE}${slugN(ini)}_${slugN(sur)}__${t}.png`;
 }
 
 // ─── League logos & country flags ──────────────────────────────────────────

@@ -1,22 +1,13 @@
 import { scoreBandColor, scoreLabel, scoreToStars, ROLE_KEY_LABELS, formatMV, formatFoot, LEAGUE_STRENGTHS } from './constants';
 
-const PHOTO_BASE = 'https://raw.githubusercontent.com/Matthewduffy23/scouting-photos/main/photos/';
+// Player photo naming lives in photoName.js — a character-for-character port of
+// download_photos.py's safe_filename(), the function that actually names the files
+// on disk. The local slugN()/photoUrl() that used to sit here disagreed with disk
+// for 2,562 players (single-token names, multi-word surnames, transliteration).
+import { photoUrl } from './photoName';
+
 const CREST_BASE = 'https://images.fotmob.com/image_resources/logo/teamlogo/';
 const FLAG_BASE = 'https://flagcdn.com/24x18/';
-
-function slugN(s) {
-  s = String(s||'').toLowerCase();
-  'ø,o|œ,oe|æ,ae|å,a|ä,a|ö,o|ü,u|ß,ss|ł,l|đ,d|ð,d|þ,th|ç,c|ş,s|ğ,g|ı,i'.split('|').forEach(p=>{const[k,v]=p.split(',');s=s.split(k).join(v);});
-  return s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'');
-}
-function photoUrl(name, team) {
-  const parts = name.trim().split('.');
-  let ini,sur;
-  if(parts.length>=2){ini=parts[0].trim();sur=parts.slice(1).join('.').trim();}
-  else{const b=name.trim().split(' ');ini=b[0]||'';sur=b.slice(1).join(' ')||b[0]||'';}
-  const t=String(team||'').toLowerCase().trim().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
-  return `${PHOTO_BASE}${slugN(ini)}_${slugN(sur)}__${t}.png`;
-}
 
 function starsHtml(score, size=16) {
   const stars = scoreToStars(score);
