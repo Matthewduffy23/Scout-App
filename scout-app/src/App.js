@@ -403,7 +403,7 @@ export default function App(){
   const [outlierMode,setOutlierMode]=useState(false); // z-score, within-league only
   const [onlyElite,setOnlyElite]=useState(false); // only elite in their division
   const [versatileOnly,setVersatileOnly]=useState(false); // played 5+ distinct positions across career
-  const [careerPosFilters,setCareerPosFilters]=useState(new Set()); // display-group labels from CAREER_POSITION_GROUPS; OR between selections, matched against the player's whole career
+  const [careerPosFilters,setCareerPosFilters]=useState(new Set()); // display-group labels from CAREER_POSITION_GROUPS; AND between selections, each matched against the player's whole career
   const [sort,setSort]=useState({col:'careerScore',asc:false});
   const [recentOnly,setRecentOnly]=useState(true);
   const [minMins,setMinMins]=useState(500);
@@ -492,7 +492,9 @@ export default function App(){
   const addMetricFilter=()=>{if(metricFilters.length<10)setMetricFilters(f=>[...f,{key:'',label:'',min:0,max:100}]);};
 
   // Selected display chips -> the flat set of raw Wyscout tokens they cover.
-  const careerPosTokens=useMemo(()=>CAREER_POSITION_GROUPS.filter(g=>careerPosFilters.has(g.label)).flatMap(g=>g.tokens),[careerPosFilters]);
+  // Selected chips as separate token lists — kept per-group, not flattened, because
+  // matching is AND across chips and OR within a chip's own tokens.
+  const careerPosTokenGroups=useMemo(()=>CAREER_POSITION_GROUPS.filter(g=>careerPosFilters.has(g.label)).map(g=>g.tokens),[careerPosFilters]);
 
   const filtered=useMemo(()=>{
     const _norm=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
@@ -572,7 +574,10 @@ export default function App(){
       }
       if(onlyElite&&!promotionBadge(p.careerScore,p.league)) return false;
       if(versatileOnly&&!isVersatile(p)) return false;
-      if(careerPosFilters.size>0&&!careerPosTokens.some(t=>getPositionSet(p).has(t))) return false;
+      if(careerPosFilters.size>0){
+        const careerToks=getPositionSet(p);
+        if(!careerPosTokenGroups.every(toks=>toks.some(t=>careerToks.has(t)))) return false;
+      }
       // Attribute filters
       if(attrFilters.size>0&&rk){
         const sdEntries=p.seasonsDetail||{};
@@ -600,7 +605,7 @@ export default function App(){
       }
       return true;
     });
-  },[all,search,pos,leagues,ageMin,ageMax,heightMin,heightMax,foot,minScore,minSeas,showMvFilter,mvMax,showContractFilter,contractBefore,roleFilter,roleScoreMin,seasonFilter,metricFilters,xValueFilter,onlyElite,versatileOnly,getDisplayScore,recentOnly,showXValueFilter,xValueMin,xValueMax,attrFilters,minMins,currentLeagueOnly,played2526,potentialMin,lsMin,lsMax,escOnly,gbeMin,natFilter,softMode,roleFilters,shortlist,showShortlist,notPlayingOnly,domesticOnly,internationalOnly,tierFilters,sideFilter,rk,careerPosFilters,careerPosTokens]);
+  },[all,search,pos,leagues,ageMin,ageMax,heightMin,heightMax,foot,minScore,minSeas,showMvFilter,mvMax,showContractFilter,contractBefore,roleFilter,roleScoreMin,seasonFilter,metricFilters,xValueFilter,onlyElite,versatileOnly,getDisplayScore,recentOnly,showXValueFilter,xValueMin,xValueMax,attrFilters,minMins,currentLeagueOnly,played2526,potentialMin,lsMin,lsMax,escOnly,gbeMin,natFilter,softMode,roleFilters,shortlist,showShortlist,notPlayingOnly,domesticOnly,internationalOnly,tierFilters,sideFilter,rk,careerPosFilters,careerPosTokenGroups]);
 
   const sorted=useMemo(()=>{
     const a=[...filtered];
@@ -692,7 +697,7 @@ export default function App(){
               {CAREER_POSITION_GROUPS.map(g=>{
                 const on=careerPosFilters.has(g.label);
                 return(
-                  <button key={g.label} title={g.tokens.length>1?`Matches ${g.tokens.join(', ')}`:g.label}
+                  <button key={g.label} title={g.tokens.length>1?`Any of: ${g.tokens.join(', ')}`:g.label}
                     onClick={()=>{setCareerPosFilters(p=>{const n=new Set(p);n.has(g.label)?n.delete(g.label):n.add(g.label);return n;});setPage(0);}}
                     style={{padding:'3px 8px',borderRadius:12,border:`1px solid ${on?'#3b7de8':'#1e2d45'}`,background:on?'#0e2040':'transparent',color:on?'#60a5fa':'#64748b',fontSize:9.5,fontWeight:on?700:400,cursor:'pointer'}}>
                     {g.label}
@@ -700,7 +705,7 @@ export default function App(){
                 );
               })}
             </div>
-            {careerPosFilters.size>0&&<div style={{fontSize:9,color:'#64748b',marginTop:4}}>Matches players who played there in <strong style={{color:'#60a5fa'}}>any</strong> season, not just their current one.</div>}
+            {careerPosFilters.size>0&&<div style={{fontSize:9,color:'#64748b',marginTop:4}}>Matches players who played <strong style={{color:'#60a5fa'}}>all</strong> selected positions at some point in their career (any season), not just their current one.</div>}
           </div>
 
           {(rk==='FB'||rk==='ATT')&&(
