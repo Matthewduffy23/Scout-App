@@ -339,3 +339,29 @@ export function playerHasAttribute(attr, gGroups) {
     return (t.op==='<') ? pct < t.p : pct >= t.p;
   });
 }
+
+// Career-wide position filter. Wyscout's per-season Position string is a
+// comma-separated token list (e.g. "LCB, RCB, LB"); these are the 21 real
+// tokens that appear anywhere in the data. Several are collapsed into one
+// display chip because scouts think in terms of the role, not the sideism:
+// the three DMF variants are one job, RCMF/LCMF are one job, and a right
+// winger is recorded as RW, RWF or RAMF depending on the shape he played in.
+// AMF stays separate — it's the central 10, not a wide role.
+// A player matches a chip if ANY of its tokens appear in ANY season of his
+// career, so this finds converted players their current position hides.
+export const CAREER_POSITION_GROUPS=[
+  {label:'GK',  tokens:['GK']},
+  {label:'RB',  tokens:['RB']},
+  {label:'RCB', tokens:['RCB']},
+  {label:'CB',  tokens:['CB']},
+  {label:'LCB', tokens:['LCB']},
+  {label:'LB',  tokens:['LB']},
+  {label:'RWB', tokens:['RWB']},
+  {label:'LWB', tokens:['LWB']},
+  {label:'DMF', tokens:['RDMF','DMF','LDMF']},
+  {label:'CMF', tokens:['RCMF','LCMF']},
+  {label:'AMF', tokens:['AMF']},
+  {label:'RW',  tokens:['RW','RWF','RAMF']},
+  {label:'LW',  tokens:['LW','LWF','LAMF']},
+  {label:'CF',  tokens:['CF']},
+];

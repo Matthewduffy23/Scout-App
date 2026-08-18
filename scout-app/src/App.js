@@ -4,7 +4,7 @@ import PlayerCard from './PlayerCard';
 import ClubTool from './ClubTool';
 import TeamIndex from './TeamIndex';
 import { Photo, Crest, photoUrl, useIsMobile, deliverJson } from './utils';
-import { scoreBandColor, formatMV, formatFoot, ROLE_KEY_LABELS, ROLES_BY_KEY, POSITION_ATTRIBUTES, playerHasAttribute, ALL_LEAGUES, DEFAULT_LEAGUES, HIDDEN_LEAGUES, YOUTH_LEAGUES, PRESET_LEAGUES, COUNTRY_TO_REGION, GBE_LEAGUE_BANDS, leagueToRegion, leagueToBand, scoreLabel, scoreToStars, promotionBadge, ALL_SEASONS, LEAGUE_STRENGTHS } from './constants';
+import { scoreBandColor, formatMV, formatFoot, ROLE_KEY_LABELS, ROLES_BY_KEY, POSITION_ATTRIBUTES, playerHasAttribute, ALL_LEAGUES, DEFAULT_LEAGUES, HIDDEN_LEAGUES, YOUTH_LEAGUES, PRESET_LEAGUES, COUNTRY_TO_REGION, GBE_LEAGUE_BANDS, leagueToRegion, leagueToBand, scoreLabel, scoreToStars, promotionBadge, ALL_SEASONS, LEAGUE_STRENGTHS, CAREER_POSITION_GROUPS } from './constants';
 
 // Re-exported so anything that already imports these from App.js keeps working —
 // but there is now ONE implementation, in utils.js, rather than a second copy here.
@@ -134,14 +134,20 @@ const PAGE = 50;
 // leagues before settling is still evidence of versatility. Wyscout's
 // Position field is comma-separated per season (e.g. "LCB, RCB, LB"), so a
 // single busy season can already contribute multiple tokens toward the count.
+const posSetCache=new WeakMap(); // career position sets are immutable per player; recomputing 84k of them on every filter keystroke is wasted work
 function getPositionSet(player){
+  const hit=posSetCache.get(player);
+  if(hit) return hit;
   const seasons=player.seasonsDetailAll||Object.values(player.seasonsDetail||{});
   const set=new Set();
   for(const s of seasons){
     const raw=s?.position;
     if(!raw) continue;
-    raw.split(/[,/]/).map(t=>t.trim().toUpperCase()).filter(Boolean).forEach(t=>set.add(t));
+    // 'NAN' is a pandas null that survived the export (~680 season rows, all GKs)
+    // — it's a missing position, not a position played, so it must not count.
+    raw.split(/[,/]/).map(t=>t.trim().toUpperCase()).filter(t=>t&&t!=='NAN').forEach(t=>set.add(t));
   }
+  posSetCache.set(player,set);
   return set;
 }
 function isVersatile(player){
@@ -397,6 +403,7 @@ export default function App(){
   const [outlierMode,setOutlierMode]=useState(false); // z-score, within-league only
   const [onlyElite,setOnlyElite]=useState(false); // only elite in their division
   const [versatileOnly,setVersatileOnly]=useState(false); // played 5+ distinct positions across career
+  const [careerPosFilters,setCareerPosFilters]=useState(new Set()); // display-group labels from CAREER_POSITION_GROUPS; OR between selections, matched against the player's whole career
   const [sort,setSort]=useState({col:'careerScore',asc:false});
   const [recentOnly,setRecentOnly]=useState(true);
   const [minMins,setMinMins]=useState(500);
@@ -484,6 +491,9 @@ export default function App(){
 
   const addMetricFilter=()=>{if(metricFilters.length<10)setMetricFilters(f=>[...f,{key:'',label:'',min:0,max:100}]);};
 
+  // Selected display chips -> the flat set of raw Wyscout tokens they cover.
+  const careerPosTokens=useMemo(()=>CAREER_POSITION_GROUPS.filter(g=>careerPosFilters.has(g.label)).flatMap(g=>g.tokens),[careerPosFilters]);
+
   const filtered=useMemo(()=>{
     const _norm=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
     const q=_norm(search.trim());
@@ -562,6 +572,7 @@ export default function App(){
       }
       if(onlyElite&&!promotionBadge(p.careerScore,p.league)) return false;
       if(versatileOnly&&!isVersatile(p)) return false;
+      if(careerPosFilters.size>0&&!careerPosTokens.some(t=>getPositionSet(p).has(t))) return false;
       // Attribute filters
       if(attrFilters.size>0&&rk){
         const sdEntries=p.seasonsDetail||{};
@@ -589,7 +600,7 @@ export default function App(){
       }
       return true;
     });
-  },[all,search,pos,leagues,ageMin,ageMax,heightMin,heightMax,foot,minScore,minSeas,showMvFilter,mvMax,showContractFilter,contractBefore,roleFilter,roleScoreMin,seasonFilter,metricFilters,xValueFilter,onlyElite,versatileOnly,getDisplayScore,recentOnly,showXValueFilter,xValueMin,xValueMax,attrFilters,minMins,currentLeagueOnly,played2526,potentialMin,lsMin,lsMax,escOnly,gbeMin,natFilter,softMode,roleFilters,shortlist,showShortlist,notPlayingOnly,domesticOnly,internationalOnly,tierFilters,sideFilter,rk]);
+  },[all,search,pos,leagues,ageMin,ageMax,heightMin,heightMax,foot,minScore,minSeas,showMvFilter,mvMax,showContractFilter,contractBefore,roleFilter,roleScoreMin,seasonFilter,metricFilters,xValueFilter,onlyElite,versatileOnly,getDisplayScore,recentOnly,showXValueFilter,xValueMin,xValueMax,attrFilters,minMins,currentLeagueOnly,played2526,potentialMin,lsMin,lsMax,escOnly,gbeMin,natFilter,softMode,roleFilters,shortlist,showShortlist,notPlayingOnly,domesticOnly,internationalOnly,tierFilters,sideFilter,rk,careerPosFilters,careerPosTokens]);
 
   const sorted=useMemo(()=>{
     const a=[...filtered];
@@ -670,6 +681,26 @@ export default function App(){
               <option>All</option>
               {Object.values(ROLE_KEY_LABELS).map(v=><option key={v}>{v}</option>)}
             </select>
+          </div>
+
+          <div style={T.fg}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:5}}>
+              <span style={T.fl}>Position Played (any season){careerPosFilters.size>0&&<span style={{color:'#60a5fa'}}> ({careerPosFilters.size})</span>}</span>
+              {careerPosFilters.size>0&&<button onClick={()=>{setCareerPosFilters(new Set());setPage(0);}} style={{fontSize:8,padding:'1px 6px',borderRadius:3,border:'1px solid #1e2d45',background:'transparent',color:'#f87171',cursor:'pointer'}}>Clear</button>}
+            </div>
+            <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
+              {CAREER_POSITION_GROUPS.map(g=>{
+                const on=careerPosFilters.has(g.label);
+                return(
+                  <button key={g.label} title={g.tokens.length>1?`Matches ${g.tokens.join(', ')}`:g.label}
+                    onClick={()=>{setCareerPosFilters(p=>{const n=new Set(p);n.has(g.label)?n.delete(g.label):n.add(g.label);return n;});setPage(0);}}
+                    style={{padding:'3px 8px',borderRadius:12,border:`1px solid ${on?'#3b7de8':'#1e2d45'}`,background:on?'#0e2040':'transparent',color:on?'#60a5fa':'#64748b',fontSize:9.5,fontWeight:on?700:400,cursor:'pointer'}}>
+                    {g.label}
+                  </button>
+                );
+              })}
+            </div>
+            {careerPosFilters.size>0&&<div style={{fontSize:9,color:'#64748b',marginTop:4}}>Matches players who played there in <strong style={{color:'#60a5fa'}}>any</strong> season, not just their current one.</div>}
           </div>
 
           {(rk==='FB'||rk==='ATT')&&(
