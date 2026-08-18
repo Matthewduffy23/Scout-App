@@ -26,6 +26,17 @@ export function Photo({name,team,size=34}){
 // actual touch devices (and DevTools device emulation, which sets it) can match.
 const MOBILE_Q = (bp) => `(max-width: ${bp}px) and (pointer: coarse)`;
 
+// iPadOS 13+ Safari deliberately reports the desktop UA string ("Macintosh; Intel
+// Mac OS X…") and a viewport wider than the 768px breakpoint, so MOBILE_Q misses it
+// and the iPad boots the full desktop app — which then loads the entire dataset and
+// crashes Safari on memory. maxTouchPoints is the reliable tell: a real Mac has no
+// touchscreen and reports 0, so a Mac UA with touch points can only be an iPad.
+// Evaluated once at module load, not in the resize listener — this is a fact about
+// the device, not the layout, and cannot change without a page load.
+const IS_IPAD = typeof navigator !== 'undefined'
+  && navigator.maxTouchPoints > 1
+  && /Mac/.test(navigator.userAgent);
+
 export function useIsMobile(bp=768){
   const [m,setM]=useState(()=>typeof window!=='undefined'&&window.matchMedia(MOBILE_Q(bp)).matches);
   React.useEffect(()=>{
@@ -36,7 +47,10 @@ export function useIsMobile(bp=768){
     setM(q.matches);
     return()=>{q.removeEventListener?q.removeEventListener('change',h):q.removeListener(h);};
   },[bp]);
-  return m;
+  // OR, not a widened breakpoint: the media query is left to decide phones exactly as
+  // before, and only an actual iPad adds a second way to qualify. Nothing a desktop or
+  // laptop reports can satisfy IS_IPAD, so their behaviour is bit-for-bit unchanged.
+  return m||IS_IPAD;
 }
 
 // FIX: `ok` was seeded from `id` once and never resynced, so this component had two
