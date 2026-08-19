@@ -154,6 +154,35 @@ function isVersatile(player){
   return getPositionSet(player).size>=5;
 }
 
+// Career minutes: every minute a player has on record, summed across every season+club
+// row the dataset holds for them — deliberately NOT p.minutesLatest, which is the latest
+// season only. Reads the same per-player rows the other career-wide features (position
+// set, career history) already aggregate, so it needs nothing beyond the player object:
+// on mobile, where only one position group is loaded, a player's own career total is
+// still complete and no cross-group fetch is triggered.
+// allSeasonsSummary is preferred over seasonsDetailAll because it also carries continental
+// rows (Champions League etc.); the fallbacks cover data built before it existed.
+const careerMinsCache=new WeakMap(); // career totals are immutable per player; don't re-sum 84k of them on every filter keystroke
+function getCareerMinutes(player){
+  const hit=careerMinsCache.get(player);
+  if(hit!==undefined) return hit;
+  let total=0;
+  const summary=player.allSeasonsSummary;
+  if(Array.isArray(summary)&&summary.length){
+    const seen=new Set(); // same season+league+team+mins dedupe key PlayerCard uses to list career history
+    for(const r of summary){
+      const k=`${r.s}|${r.l}|${r.team}|${r.mins}`;
+      if(seen.has(k)) continue;
+      seen.add(k);
+      total+=r.mins||0;
+    }
+  } else {
+    for(const r of (player.seasonsDetailAll||Object.values(player.seasonsDetail||{}))) total+=r?.minutes||0;
+  }
+  careerMinsCache.set(player,total);
+  return total;
+}
+
 export function StarDisplay({score,size=11}){
   const stars=scoreToStars(score);
   const full=Math.floor(stars);
@@ -407,6 +436,8 @@ export default function App(){
   const [sort,setSort]=useState({col:'careerScore',asc:false});
   const [recentOnly,setRecentOnly]=useState(true);
   const [minMins,setMinMins]=useState(500);
+  const [showCareerMinsFilter,setShowCareerMinsFilter]=useState(false); // off by default — while off, career minutes are never consulted and behaviour is exactly as before
+  const [careerMinMins,setCareerMinMins]=useState(500);
   const [currentLeagueOnly,setCurrentLeagueOnly]=useState(false);
   const [activeTab,setActiveTab]=useState('scout'); // 'scout' | 'club' | 'team'
   const [hiddenCols,setHiddenCols]=useState(new Set(['marketValue']));
@@ -504,6 +535,9 @@ export default function App(){
       // RecentOnly: skip if no recent data, BUT allow all if a specific season is selected
       if(recentOnly&&!p.hasRecentData&&seasonFilter==='all'&&!played2526&&!showYouth) return false;
       if(minMins>0&&(p.minutesLatest||0)<(showYouth?100:minMins)) return false;
+      // Career minimum minutes: total across every season on record, independent of how they're spread.
+      // Applies on top of the per-season filter above, never instead of it.
+      if(showCareerMinsFilter&&getCareerMinutes(p)<careerMinMins) return false;
       // Current league only: player must be currently in one of the selected leagues
       if(currentLeagueOnly&&!leagues.has(p.league)) return false;
       // When specific season selected, player must have data for that season
@@ -605,7 +639,7 @@ export default function App(){
       }
       return true;
     });
-  },[all,search,pos,leagues,ageMin,ageMax,heightMin,heightMax,foot,minScore,minSeas,showMvFilter,mvMax,showContractFilter,contractBefore,roleFilter,roleScoreMin,seasonFilter,metricFilters,xValueFilter,onlyElite,versatileOnly,getDisplayScore,recentOnly,showXValueFilter,xValueMin,xValueMax,attrFilters,minMins,currentLeagueOnly,played2526,potentialMin,lsMin,lsMax,escOnly,gbeMin,natFilter,softMode,roleFilters,shortlist,showShortlist,notPlayingOnly,domesticOnly,internationalOnly,tierFilters,sideFilter,rk,careerPosFilters,careerPosTokenGroups]);
+  },[all,search,pos,leagues,ageMin,ageMax,heightMin,heightMax,foot,minScore,minSeas,showMvFilter,mvMax,showContractFilter,contractBefore,roleFilter,roleScoreMin,seasonFilter,metricFilters,xValueFilter,onlyElite,versatileOnly,getDisplayScore,recentOnly,showXValueFilter,xValueMin,xValueMax,attrFilters,minMins,showCareerMinsFilter,careerMinMins,currentLeagueOnly,played2526,potentialMin,lsMin,lsMax,escOnly,gbeMin,natFilter,softMode,roleFilters,shortlist,showShortlist,notPlayingOnly,domesticOnly,internationalOnly,tierFilters,sideFilter,rk,careerPosFilters,careerPosTokenGroups]);
 
   const sorted=useMemo(()=>{
     const a=[...filtered];
@@ -638,7 +672,7 @@ export default function App(){
     avgAge:filtered.length?filtered.reduce((s,p)=>s+p.age,0)/filtered.length:0,
   }),[filtered,getDisplayScore]);
 
-  const reset=()=>{setSearch('');setPos('All');setSideFilter('Any');setRoleFilter('');setRoleFilters(new Set());setSoftMode(false);setRoleFilters(new Set());setSoftMode(false);setRoleScoreMin(50);setActivePreset('');setActivePresetLeagues(null);setShowHidden(false);setShowYouth(false);setActiveBands(new Set());setActiveRegions(new Set());setLsMin(0);setLsMax(101);setAgeMin(16);setAgeMax(38);setHeightMin(152);setHeightMax(211);setFoot('Any');setMinScore(40);setMinSeas(1);setShowMvFilter(false);setMvMax(50);setShowContractFilter(false);setContractBefore(2028);setSeasonFilter('all');setScoreMode('complete');setMetricFilters([]);setXValueFilter('');setRawMode(false);setOutlierMode(false);setOnlyElite(false);setVersatileOnly(false);setRecentOnly(true);setShowXValueFilter(false);setXValueMin(0);setXValueMax(50);setAttrFilters(new Set());setMinMins(500);setCurrentLeagueOnly(false);setPotentialMin(40);setPlayed2526(false);setEscOnly(false);setGbeMin(0);setNatFilter('');setNotPlayingOnly(false);setDomesticOnly(false);setInternationalOnly(false);setTierFilters(new Set());setShowShortlist(false);setSoftMode(false);setRoleFilters(new Set());setPage(0);};
+  const reset=()=>{setSearch('');setPos('All');setSideFilter('Any');setRoleFilter('');setRoleFilters(new Set());setSoftMode(false);setRoleFilters(new Set());setSoftMode(false);setRoleScoreMin(50);setActivePreset('');setActivePresetLeagues(null);setShowHidden(false);setShowYouth(false);setActiveBands(new Set());setActiveRegions(new Set());setLsMin(0);setLsMax(101);setAgeMin(16);setAgeMax(38);setHeightMin(152);setHeightMax(211);setFoot('Any');setMinScore(40);setMinSeas(1);setShowMvFilter(false);setMvMax(50);setShowContractFilter(false);setContractBefore(2028);setSeasonFilter('all');setScoreMode('complete');setMetricFilters([]);setXValueFilter('');setRawMode(false);setOutlierMode(false);setOnlyElite(false);setVersatileOnly(false);setRecentOnly(true);setShowXValueFilter(false);setXValueMin(0);setXValueMax(50);setAttrFilters(new Set());setMinMins(500);setShowCareerMinsFilter(false);setCareerMinMins(500);setCurrentLeagueOnly(false);setPotentialMin(40);setPlayed2526(false);setEscOnly(false);setGbeMin(0);setNatFilter('');setNotPlayingOnly(false);setDomesticOnly(false);setInternationalOnly(false);setTierFilters(new Set());setShowShortlist(false);setSoftMode(false);setRoleFilters(new Set());setPage(0);};
 
   if(loading) return <div style={{...T.app,alignItems:'center',justifyContent:'center'}}><style>{'@keyframes spin{to{transform:rotate(360deg)}}'}</style><div style={{width:24,height:24,border:'2px solid #1e2d45',borderTop:'2px solid #3b7de8',borderRadius:'50%',animation:'spin 0.8s linear infinite'}}/><div style={{color:'#94a3b8',fontSize:11,marginTop:8}}>Loading…</div></div>;
 
@@ -924,6 +958,17 @@ export default function App(){
                 </button>
               ))}
             </div>
+          </div>
+          <div style={T.fg}>
+            <label style={T.cr} onClick={()=>{setShowCareerMinsFilter(p=>!p);setPage(0);}}>
+              <div style={T.cb(showCareerMinsFilter)}>{showCareerMinsFilter&&<span style={{color:'#fff',fontSize:8,lineHeight:1}}>✓</span>}</div>
+              <span style={T.cl(showCareerMinsFilter)}>Career Minimum Minutes</span>
+            </label>
+            {showCareerMinsFilter&&<div style={{marginTop:6}}>
+              <span style={{fontSize:9,color:'#94a3b8',display:'block',marginBottom:4}}>Career total: <strong style={{color:'#60a5fa'}}>{careerMinMins.toLocaleString()}+</strong> mins</span>
+              <input type="range" style={T.sl} min={500} max={20000} step={500} value={careerMinMins} onChange={e=>{setCareerMinMins(Number(e.target.value));setPage(0);}}/>
+              <span style={{fontSize:8.5,color:'#64748b',display:'block',marginTop:3}}>Summed across every season on record</span>
+            </div>}
           </div>
           <div style={T.fg}>
             <span style={T.fl}>Preferred Foot</span>
