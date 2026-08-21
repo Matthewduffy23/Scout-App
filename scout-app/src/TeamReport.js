@@ -1,4 +1,4 @@
-// TeamReport.js v61 — Team All-in-One report. 1920x1080 PNG export.
+// TeamReport.js v62 — Team All-in-One report. 1920x1080 PNG export.
 //
 // v2: bigger team name; country flag + league logo beside the league name;
 //     mini coach profile in the header gap; XI is now formation-driven and
@@ -201,6 +201,28 @@
 // layout to work out. The xValue editor is also gated on either departures panel, so
 // choosing Departures — Replace no longer gives a fee box with no way to correct the
 // xValue it is compared against.
+//
+// v62: three fixes.
+// (1) Every face was drawn as TWO stacked background layers, photo over silhouette.
+//     The silhouette was there to cover a 404, but any photo with transparency —
+//     which is most of the cut-out repo PNGs — let the grey head show through as a
+//     ghost around the subject, and it was worse in the export than on screen
+//     because html-to-image rasterises both layers. The card is only ever built for
+//     an export, and by then every usable image is already in the preloaded map, so
+//     faceImage() can simply ask whether a real photo EXISTS: one layer if it does,
+//     silhouette alone if it doesn't. Nothing is ever layered behind a photo again.
+// (2) New Signings — a bottom-row panel, offered in both slots like the rest.
+//     Auto-populates from allSeasonsSummary: a squad player whose history has no
+//     earlier season at this club, and does have one elsewhere, arrived from that
+//     club. Fee shares the same typed map as Departures — Replace, xValue the same
+//     override map as everything else, and the from-club is editable because the
+//     derivation is an inference, not a transfer record.
+// (3) Manual picks now OVERRIDE rather than replace-or-be-replaced. Every panel with
+//     a picker went through the same all-or-nothing branch — pick one player and the
+//     other two rows vanished, empty the list and the card silently fell back to auto
+//     while the editor showed something else. mergeManual() puts the manual rows first,
+//     in the order chosen, and lets auto fill only what's left. The editor and the card
+//     now read the same resolved list, so what is listed is what exports.
 
 import React, { useState, useMemo, useCallback } from 'react';
 import {
@@ -266,14 +288,64 @@ const COACH_W = 538;
 
 // ─── Palette ───────────────────────────────────────────────────────────────
 // Generic head-and-shoulders, inlined as a data URI so it needs no network and
-// survives the html-to-image pass. Layered UNDER the photo: if the photo 404s
-// html-to-image swaps in a transparent placeholder and this shows through.
+// survives the html-to-image pass. It REPLACES a missing photo — it is never
+// layered behind a present one. It used to be, as a 404 guard, and every cut-out
+// PNG with transparent edges showed it through as a grey ghost round the subject.
 export const SILHOUETTE = "data:image/svg+xml;utf8," + encodeURIComponent(
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">' +
   '<rect width="64" height="64" fill="#1a2233"/>' +
   '<circle cx="32" cy="24" r="11" fill="#39445c"/>' +
   '<path d="M10 62c0-12 10-19 22-19s22 7 22 19z" fill="#39445c"/>' +
   '</svg>');
+
+// The flat disc every face sits on. Same colour as the silhouette's own backdrop,
+// so a photo whose edges are transparent reads as the same disc either way.
+const FACE_BG = '#1a2233';
+
+// Does a real image exist for this url? Data URLs are already inline; everything
+// else has to be in the preloaded map, because src() falls back to the remote URL
+// and a remote URL is a dead reference by the time html-to-image rasterises.
+// Returns '' — not the url — when nothing resolved, which is what lets the callers
+// below choose the silhouette INSTEAD OF a photo rather than underneath one.
+function resolveImg(url) {
+  if (!url) return '';
+  if (String(url).startsWith('data:')) return url;
+  return IMG[url] || '';
+}
+// A player's face: hand-uploaded override first, then the photo repo.
+function faceImage(p, photoOverrides = {}) {
+  const ov = p ? photoOverrides[playerKey(p)] : '';
+  const hit = resolveImg(ov);
+  if (hit) return hit;
+  return resolveImg(p ? photoUrl(p.name, p.team) : '');
+}
+// Background shorthand for a circular face. Exactly ONE background-image layer:
+// the real photo when there is one, the silhouette when there isn't.
+function faceBg(img) {
+  return `background-color:${FACE_BG};
+                    background-image:url('${img || SILHOUETTE}');
+                    background-size:cover;background-position:center top;
+                    background-repeat:no-repeat;`;
+}
+
+// Manual picks are a decision, the auto list only a suggestion — so the manual
+// rows come first, in the order they were chosen, and auto fills whatever slots
+// are left. Every panel with a picker used to take one list or the other whole,
+// which is why picking a single player blanked the other two rows.
+export function mergeManual(manual, auto, n = 3) {
+  const out = [];
+  const seen = new Set();
+  for (const p of (manual || [])) {
+    if (!p || out.length >= n || seen.has(playerKey(p))) continue;
+    seen.add(playerKey(p)); out.push(p);
+  }
+  for (const p of (auto || [])) {
+    if (out.length >= n) break;
+    if (!p || seen.has(playerKey(p))) continue;
+    seen.add(playerKey(p)); out.push(p);
+  }
+  return out;
+}
 
 const ACCENT_PINK = '#ff66c4';
 // Loan players get a quiet "(L)" rather than a coloured name — colour on the
@@ -1107,7 +1179,7 @@ function xiPanelHtml(w, h, xi, opts = {}) {
     : new Set(Array.isArray(starKeys) ? starKeys : []);
   const loanTag = hideLoanTags ? '' : LOAN_TAG;
   const loanTagSm = hideLoanTags ? '' : LOAN_TAG_SM;
-  const faceUrl = (pl) => (pl && photoOverrides[playerKey(pl)]) || (pl ? photoUrl(pl.name, pl.team) : '');
+  const faceUrl = (pl) => faceImage(pl, photoOverrides);
   const line = 'rgba(255,255,255,0.10)';
 
   const blocks = xi.map(({ slot, starter, oop, depth }) => {
@@ -1131,11 +1203,11 @@ function xiPanelHtml(w, h, xi, opts = {}) {
     const face = starter
       ? `<div style="position:absolute;left:50%;margin-left:-${FACE / 2}px;top:0;
                      width:${FACE}px;height:${FACE}px;border-radius:50%;
-                     background-color:#1a2233;
-                     background-image:url('${src(img)}'), url('${SILHOUETTE}');
-                     background-size:cover, cover;
-                     background-position:center top, center top;
-                     background-repeat:no-repeat, no-repeat;
+                     background-color:${FACE_BG};
+                     background-image:url('${img || SILHOUETTE}');
+                     background-size:cover;
+                     background-position:center top;
+                     background-repeat:no-repeat;
                      border:1.5px solid rgba(190,203,224,0.26);
                      box-shadow:0 0 0 3px rgba(255,255,255,0.035);"></div>`
       : `<div style="position:absolute;left:50%;margin-left:-${FACE / 2}px;top:0;
@@ -1546,7 +1618,8 @@ export function leagueTablePanelHtml(w, h, team, allTeams) {
 // Either bottom slot can hold any of these.
 export const BOTTOM_PANELS = ['Similar Teams', 'Key Players', 'Recruitment Recommendations',
                               'Coach Shortlist', 'Selling Assets', 'Youth Prospects',
-                              'Summary', 'Possible Departures', 'Departures — Replace', 'None'];
+                              'Summary', 'Possible Departures', 'Departures — Replace',
+                              'New Signings', 'None'];
 
 // Did they hit it? Rendered as a small badge beside the objective.
 // Where each objective expects a side to finish, as a fraction of the league
@@ -1656,12 +1729,8 @@ function coachShortlistPanelHtml(w, h, rows, hideScores = false) {
                   background:rgba(255,255,255,0.035);border:1px solid rgba(255,255,255,0.07);
                   border-radius:9px;">
         <div style="position:absolute;left:${FACE_X}px;top:50%;margin-top:-${FACE / 2}px;
-                    width:${FACE}px;height:${FACE}px;
-                    border-radius:50%;background-color:#1a2233;
-                    background-image:url('${src(c.photo || '')}'), url('${SILHOUETTE}');
-                    background-size:cover, cover;
-                    background-position:center top, center top;
-                    background-repeat:no-repeat, no-repeat;
+                    width:${FACE}px;height:${FACE}px;border-radius:50%;
+                    ${faceBg(resolveImg(c.photo || ''))}
                     border:1.5px solid rgba(190,203,224,0.26);"></div>
         <div style="position:absolute;left:${TEXT_X}px;width:${textW}px;top:50%;margin-top:-16px;">
           <div style="white-space:nowrap;line-height:1.15;font-size:14px;">
@@ -1913,11 +1982,8 @@ function keyPlayersPanelHtml(w, h, rows, showClub = false, hideScores = false, p
                   border-radius:9px;">
         <div style="position:absolute;left:${FACE_X}px;top:50%;margin-top:-${FACE / 2}px;
                     width:${FACE}px;height:${FACE}px;
-                    border-radius:50%;background-color:#1a2233;
-                    background-image:url('${photoOverrides[playerKey(p)] || src(photoUrl(p.name, p.team))}'), url('${SILHOUETTE}');
-                    background-size:cover, cover;
-                    background-position:center top, center top;
-                    background-repeat:no-repeat, no-repeat;
+                    border-radius:50%;
+                    ${faceBg(faceImage(p, photoOverrides))}
                     border:1.5px solid rgba(190,203,224,0.26);"></div>
         <!-- text box ends exactly where the pills begin — previously it was a
              fixed max-width guess, which is why names were ellipsising early -->
@@ -2205,10 +2271,8 @@ function sellingAssetsPanelHtml(w, h, rows, xValueOverrides = {}, photoOverrides
                   background:rgba(255,255,255,0.035);border:1px solid rgba(255,255,255,0.07);
                   border-radius:9px;">
         <div style="position:absolute;left:${FACE_X}px;top:50%;margin-top:-${FACE / 2}px;
-                    width:${FACE}px;height:${FACE}px;border-radius:50%;background-color:#1a2233;
-                    background-image:url('${photoOverrides[playerKey(p)] || src(photoUrl(p.name, p.team))}'), url('${SILHOUETTE}');
-                    background-size:cover, cover;background-position:center top, center top;
-                    background-repeat:no-repeat, no-repeat;
+                    width:${FACE}px;height:${FACE}px;border-radius:50%;
+                    ${faceBg(faceImage(p, photoOverrides))}
                     border:1.5px solid rgba(190,203,224,0.26);"></div>
         <div style="position:absolute;left:${TEXT_X}px;width:${textW}px;top:50%;margin-top:-16px;">
           <div style="white-space:nowrap;line-height:1.15;font-size:14px;">
@@ -2256,10 +2320,8 @@ function departuresReplacePanelHtml(w, h, rows, feeValues = {}, xValueOverrides 
                   background:rgba(255,255,255,0.035);border:1px solid rgba(255,255,255,0.07);
                   border-radius:9px;">
         <div style="position:absolute;left:${FACE_X}px;top:50%;margin-top:-${FACE / 2}px;
-                    width:${FACE}px;height:${FACE}px;border-radius:50%;background-color:#1a2233;
-                    background-image:url('${photoOverrides[playerKey(p)] || src(photoUrl(p.name, p.team))}'), url('${SILHOUETTE}');
-                    background-size:cover, cover;background-position:center top, center top;
-                    background-repeat:no-repeat, no-repeat;
+                    width:${FACE}px;height:${FACE}px;border-radius:50%;
+                    ${faceBg(faceImage(p, photoOverrides))}
                     border:1.5px solid rgba(190,203,224,0.26);"></div>
         <div style="position:absolute;left:${TEXT_X}px;width:${textW}px;top:50%;margin-top:-16px;">
           <div style="white-space:nowrap;line-height:1.15;font-size:14px;">
@@ -2307,11 +2369,8 @@ function departuresPanelHtml(w, h, rows, season, photoOverrides = {}, xValueOver
                   background:rgba(255,255,255,0.035);border:1px solid rgba(255,255,255,0.07);
                   border-radius:9px;">
         <div style="position:absolute;left:${FACE_X}px;top:50%;margin-top:-${FACE / 2}px;
-                    width:${FACE}px;height:${FACE}px;
-                    border-radius:50%;background-color:#1a2233;
-                    background-image:url('${photoOverrides[playerKey(p)] || src(photoUrl(p.name, p.team))}'), url('${SILHOUETTE}');
-                    background-size:cover, cover;background-position:center top, center top;
-                    background-repeat:no-repeat, no-repeat;
+                    width:${FACE}px;height:${FACE}px;border-radius:50%;
+                    ${faceBg(faceImage(p, photoOverrides))}
                     border:1.5px solid rgba(190,203,224,0.26);"></div>
         <div style="position:absolute;left:${TEXT_X}px;right:96px;top:50%;margin-top:-16px;">
           <div style="font-size:13.5px;font-weight:700;color:#eaf0f8;line-height:1.15;white-space:nowrap;
@@ -2332,6 +2391,104 @@ function departuresPanelHtml(w, h, rows, season, photoOverrides = {}, xValueOver
             ${onLoan ? 'LOAN' : (p.contractYear ? esc(String(p.contractYear)) : '—')}</span>
           ${onLoan ? '' : `<span style="font-size:10px;font-weight:700;
             color:${urgent ? '#f87171' : '#8b98ad'};margin-left:5px;">${left}</span>`}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// New Signings. There is no transfer feed in this data, so an arrival is inferred
+// from allSeasonsSummary, which carries {s, l, team} per season: a squad player who
+// has NO season at this club before the current one, and does have one somewhere
+// else, arrived from that somewhere else. Rows at the current season are ignored
+// entirely — a mid-season signing has rows at both clubs in the same season, and a
+// continental row sits at the current club under a different league.
+// Returns null for anyone who was already here, which is the "not a signing" answer.
+export function previousClub(p, season) {
+  const rows = Array.isArray(p && p.allSeasonsSummary) ? p.allSeasonsSummary : [];
+  if (!rows.length) return null;
+  const end = seasonEndYear(season);
+  const here = String((p && p.team) || '').toLowerCase();
+  let best = null;
+  for (const r of rows) {
+    if (!r || !r.team) continue;
+    const y = seasonEndYear(r.s);
+    if (!y || (end && y >= end)) continue;             // current season and later aren't history
+    if (String(r.team).toLowerCase() === here) return null;   // he was already here
+    // Most recent previous club wins; within a season, the one he actually played for.
+    if (!best || y > best.year || (y === best.year && (Number(r.mins) || 0) > best.mins))
+      best = { year: y, team: r.team, league: r.l || '', mins: Number(r.mins) || 0 };
+  }
+  return best;
+}
+
+// Auto list, ranked by xValue then score — the signings worth putting on a card are
+// the expensive ones, the same logic Selling Assets uses at the other end.
+export function likelySignings(squad, season, n = 3) {
+  return (squad || [])
+    .map(p => ({ p, from: previousClub(p, season) }))
+    .filter(x => x.from)
+    .sort((a, b) => (Number(b.p.xValue) || 0) - (Number(a.p.xValue) || 0)
+                 || (b.p.careerScore || 0) - (a.p.careerScore || 0))
+    .slice(0, n)
+    .map(x => x.p);
+}
+
+// Same row skeleton as Departures — Replace, read the other way round: the fee is
+// what was PAID, so beating xValue is now the bad outcome and green means value.
+// fromValues overrides the inferred club, because the inference is a guess made from
+// season history and a real transfer can contradict it.
+function newSigningsPanelHtml(w, h, rows, season, feeValues = {}, xValueOverrides = {},
+                              fromValues = {}, photoOverrides = {}) {
+  if (!rows || !rows.length) {
+    return `<div style="position:absolute;inset:0;display:flex;align-items:center;
+             justify-content:center;font-size:12px;color:#55617a;">No signings listed.</div>`;
+  }
+  const rowH = Math.floor((h - 4) / 3);
+  const COL_FEE = 72, COL_XV = 62, COL_GAP = 8;
+  const VAL_W = COL_XV + COL_FEE + COL_GAP;
+  const FACE = 40, FACE_X = 11, TEXT_X = FACE_X + FACE + 11;
+  const textW = w - TEXT_X - VAL_W - 18;
+  return rows.slice(0, 3).map((p, i) => {
+    const xv = xvFor(p, xValueOverrides);
+    const fee = parseMoney(feeValues[playerKey(p)]);
+    const typedFrom = fromValues[playerKey(p)];
+    const prev = previousClub(p, season);
+    const from = (typedFrom !== undefined && typedFrom !== '') ? String(typedFrom)
+      : (prev ? prev.team : '');
+    const fromLeague = (typedFrom !== undefined && typedFrom !== '') ? '' : (prev ? prev.league : '');
+    // Undecided is neutral. Paying under the model is the win here, not over it.
+    const col = fee == null ? '#c3ccdd'
+      : (xv != null && fee <= xv) ? '#4ade80' : '#f87171';
+    const pos = String(p.position || '').split(',')[0].trim();
+    return `
+      <div style="position:absolute;left:0;top:${i * rowH + 2}px;width:${w}px;height:${rowH - 6}px;
+                  background:rgba(255,255,255,0.035);border:1px solid rgba(255,255,255,0.07);
+                  border-radius:9px;">
+        <div style="position:absolute;left:${FACE_X}px;top:50%;margin-top:-${FACE / 2}px;
+                    width:${FACE}px;height:${FACE}px;border-radius:50%;
+                    ${faceBg(faceImage(p, photoOverrides))}
+                    border:1.5px solid rgba(190,203,224,0.26);"></div>
+        <div style="position:absolute;left:${TEXT_X}px;width:${textW}px;top:50%;margin-top:-16px;">
+          <div style="white-space:nowrap;line-height:1.15;font-size:14px;">
+            <span style="font-weight:700;color:#eaf0f8;">${esc(p.name)}</span>&nbsp;<span
+                  style="font-weight:600;color:#7c8798;">${p.age != null ? p.age : '—'}</span>${
+            natStamp(p, 14)}
+          </div>
+          <div style="font-size:10.5px;color:#8b98ad;margin-top:4px;line-height:1.15;white-space:nowrap;
+                      overflow:hidden;">${esc(pos)}${
+            from ? `<span style="color:#6f7c92;"> · from </span>${
+              fromLeague ? clubStamp(fromLeague, from, 10.5) : esc(from)}` : ''}</div>
+        </div>
+        <div style="position:absolute;right:11px;top:50%;margin-top:-16px;width:${VAL_W}px;">
+          <div style="display:inline-block;width:${COL_XV}px;text-align:right;vertical-align:top;">
+            <div style="font-size:13px;font-weight:800;line-height:1;color:#93c5fd;">${
+              xv == null ? '—' : formatMoney(xv)}</div>
+            <div style="font-size:7px;font-weight:700;letter-spacing:0.14em;color:#6f7c92;margin-top:5px;">XVALUE</div>
+          </div><div style="display:inline-block;width:${COL_FEE}px;text-align:right;vertical-align:top;">
+            <div style="font-size:15px;font-weight:800;line-height:1;color:${col};">${
+              fee == null ? '—' : formatMoney(fee)}</div>
+            <div style="font-size:7px;font-weight:700;letter-spacing:0.14em;color:#6f7c92;margin-top:5px;">FEE</div>
+          </div>
         </div>
       </div>`;
   }).join('');
@@ -2709,6 +2866,8 @@ export function buildTeamReportElement(team, opts = {}) {
     recruitRows = [],              // Recruitment Recommendations list
     coachRows = [],                // Coach Shortlist, pre-resolved in the component
     departureRows = null,          // null = auto (shortest contracts)
+    signingRows = null,            // null = auto (arrivals inferred from season history)
+    signingFrom = {},              // playerKey -> typed previous club, beats the inference
     sellRows = null,               // null = auto (squad by xValue, highest first)
     similarRows = null,            // null = auto (computed top 3)
     youthRows = null,              // null = auto (squad under-23s by potential)
@@ -2749,6 +2908,7 @@ export function buildTeamReportElement(team, opts = {}) {
   const xi = buildXI(formation, squad, depthCount, team.season, null, xiOverridePool, xiSlotLists);
   const players3 = keyRows || topPlayers(squad, 3);
   const departures = departureRows || likelyDepartures(squad, team.season, 3);
+  const signings = signingRows || likelySignings(squad, team.season, 3);
   const selling = sellRows || squad.slice()
     .filter(p => xvFor(p, xValueOverrides) != null)
     .sort((a, b) => xvFor(b, xValueOverrides) - xvFor(a, xValueOverrides))
@@ -2796,6 +2956,10 @@ export function buildTeamReportElement(team, opts = {}) {
           return panel({ x, y: ROW_3, w: COL_W, h: ROW3_H, title: 'Departures — Replace',
                          body: departuresReplacePanelHtml(innerW, ih, departures, feeValues,
                                  xValueOverrides, photoOverrides) });
+        if (kind === 'New Signings')
+          return panel({ x, y: ROW_3, w: COL_W, h: ROW3_H, title: 'New Signings',
+                         body: newSigningsPanelHtml(innerW, ih, signings, team.season, feeValues,
+                                 xValueOverrides, signingFrom, photoOverrides) });
         if (kind === 'Possible Departures')
           return panel({ x, y: ROW_3, w: COL_W, h: ROW3_H, title: 'Possible Departures',
                          body: departuresPanelHtml(innerW, ih, departures, team.season, photoOverrides, xValueOverrides) });
@@ -3147,6 +3311,10 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
   const [bottomLeft, setBottomLeft] = useState('Similar Teams');
   const [bottomRight, setBottomRight] = useState('Key Players');
   const [departureKeys, setDepartureKeys] = useState(null);
+  // New Signings. Same shape as the departures pair: keys the user pinned, plus a
+  // typed from-club per player because the arrival is inferred, not recorded.
+  const [signingKeys, setSigningKeys] = useState([]);
+  const [signingFrom, setSigningFrom] = useState({});
   const [teamNameOverride, setTeamNameOverride] = useState('');
   const [summaryText, setSummaryText] = useState('');
   const [keyMode, setKeyMode] = useState('auto');          // auto | manual | recruit
@@ -3212,7 +3380,7 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
     .filter(p => xvFor(p, xValueOverrides) != null)
     .sort((a, b) => xvFor(b, xValueOverrides) - xvFor(a, xValueOverrides))
     .slice(0, 3), [squad, xValueOverrides]);
-  const sellShown = sellPicked.length ? sellPicked : sellAuto;
+  const sellShown = mergeManual(sellPicked, sellAuto, 3);
   const similarPool = useMemo(() => resolveSimilarTeams(team, allTeams, 7), [team, allTeams]);
   const similarRows = useMemo(() => {
     const chosen = similarPicked
@@ -3230,7 +3398,7 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
   }, [players, youthQuery]);
   const youthPicked = useMemo(() => youthManual
     .map(k => players.find(p => playerKey(p) === k)).filter(Boolean), [youthManual, players]);
-  const youthRows = youthPicked.length ? youthPicked : youthAuto;
+  const youthRows = mergeManual(youthPicked, youthAuto, 3);
 
   const savedCoaches = useMemo(() => listSavedCoaches(), []);
   const autoCoach = useMemo(() => findCoachForTeam(team), [team]);
@@ -3387,13 +3555,23 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
   const autoDepth = useMemo(() => uncoveredSlots(xi), [xi]);
   const autoUpgrade = useMemo(() => improveSlots(xi, team.season, 4).map(x => x.k), [xi, team]);
 
-  const manualPicked = useMemo(() => findByKeys(squad, manualKeys), [squad, manualKeys]);
+  // Manual keys resolve against the FULL player list, not just the squad: `players`
+  // is a superset of `squad` (it carries the mobile squad backfill too), so a name
+  // typed into a picker whose pool reaches outside this club still comes back.
+  const manualPicked = useMemo(() => findByKeys(players, manualKeys), [players, manualKeys]);
   const recruitPicked = useMemo(() => findByKeys(players, recruitKeys), [players, recruitKeys]);
 
-  const keyRows = keyMode === 'manual' ? manualPicked : topPlayers(squad, 3, team.season);
+  // Every list below follows the same rule: manual first, auto fills the rest. The
+  // card and the editor read THESE, so what is listed here is what exports.
+  const autoKeyRows = useMemo(() => topPlayers(squad, 3, team.season), [squad, team]);
+  const keyRows = keyMode === 'manual'
+    ? mergeManual(manualPicked, autoKeyRows, 3) : autoKeyRows;
   const autoDepartures = useMemo(() => likelyDepartures(squad, team.season, 3), [squad, team]);
-  const departurePicked = departureKeys === null ? autoDepartures : findByKeys(squad, departureKeys);
-  const departuresShown = departurePicked.length ? departurePicked : autoDepartures;
+  const departureManual = departureKeys === null ? [] : findByKeys(players, departureKeys);
+  const departuresShown = mergeManual(departureManual, autoDepartures, 3);
+  const autoSignings = useMemo(() => likelySignings(squad, team.season, 3), [squad, team]);
+  const signingManual = useMemo(() => findByKeys(players, signingKeys), [players, signingKeys]);
+  const signingsShown = mergeManual(signingManual, autoSignings, 3);
   const shown = [bottomLeft, bottomRight];
 
   const unmapped = useMemo(() => reportUnmappedTokens(squad), [squad]);
@@ -3406,8 +3584,9 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
     squad, formation, coach, depthCount, coachScore, allTeams,
     headerColour: HEADER_COLOURS[headerColourName], rawOverall,
     bottomLeft, bottomRight, summaryText,
-    keyRows, recruitRows: recruitPicked, departureRows: departurePicked,
-    sellRows: sellPicked.length ? sellPicked : null, xValueOverrides,
+    keyRows, recruitRows: mergeManual(recruitPicked, [], 3), departureRows: departuresShown,
+    signingRows: signingsShown, signingFrom,
+    sellRows: mergeManual(sellPicked, sellAuto, 3), xValueOverrides,
     similarRows, youthRows, hideLoanTags, hideYouthScores, starKeys, feeValues,
     teamNameOverride,
     depthList: depthSel, upgradeList: upgradeSel,
@@ -3430,7 +3609,8 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
       const outsiders = findByKeys(players, Object.values(xiLists || {}).flat())
         .filter(p => !squad.includes(p));
       const urls = cardImageUrls(team, squad, coach, allTeams,
-        [...(keyRows || []), ...recruitPicked, ...departurePicked, ...outsiders], coachRows);
+        [...(keyRows || []), ...recruitPicked, ...departuresShown, ...signingsShown,
+         ...(youthRows || []), ...outsiders], coachRows);
       const images = await preloadImages(urls, (d, t) => setProgress(`Images ${d}/${t}`));
       setProgress('Rendering…');
       el = buildTeamReportElement(team, { ...buildOpts(), images });
@@ -3738,7 +3918,7 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
               <span style={UI.label}>Mode</span>
               <select value={keyMode} onChange={e => setKeyMode(e.target.value)} style={UI.select}>
                 <option value="auto">Top 3 by score</option>
-                <option value="manual">Pick manually</option>
+                <option value="manual">Pick manually (auto fills the rest)</option>
               </select>
             </div>
             {keyMode === 'manual' && (
@@ -3748,6 +3928,10 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
                   placeholder="Search squad…"
                   onPick={p => setManualKeys(k => [...k, playerKey(p)])}
                   onRemove={p => setManualKeys(k => k.filter(x => x !== playerKey(p)))} />
+                <div style={UI.note}>
+                  {manualPicked.length >= 3 ? 'All three chosen.'
+                    : `Top-by-score fills the remaining ${3 - manualPicked.length}.`}
+                </div>
               </div>
             )}
             {shown.includes('Recruitment Recommendations') && (
@@ -4027,16 +4211,105 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
                 <div style={UI.note}>Accepts 10m, £10m or 750k. Shared with Selling Assets — one xValue per player.</div>
               </div>
             )}
+            {shown.includes('New Signings') && (
+              <div style={UI.block}>
+                <span style={UI.label}>
+                  New Signings — {signingManual.length
+                    ? `${signingManual.length} pinned, auto fills the rest`
+                    : 'auto: arrivals from season history'}
+                  {signingManual.length > 0 && (
+                    <button onClick={() => setSigningKeys([])}
+                      style={{ marginLeft: 8, background: 'transparent', border: '1px solid #26456f',
+                               borderRadius: 4, color: '#60a5fa', fontSize: 9, padding: '1px 6px',
+                               cursor: 'pointer' }}>reset</button>
+                  )}
+                </span>
+                {/* Pool is every player, not just the squad: a signing announced before
+                    the data catches up is still sitting at his old club's row. */}
+                <PlayerPicker pool={players} picked={signingManual} max={3}
+                  placeholder="Search all players…"
+                  onPick={p => setSigningKeys(k => [...k, playerKey(p)])}
+                  onRemove={p => setSigningKeys(k => k.filter(x => x !== playerKey(p)))} />
+                {/* Fee, xValue and from-club for whichever three are actually on the
+                    card, pinned or auto — same treatment Selling Assets gives its rows. */}
+                <div style={{ marginTop: 7 }}>
+                  {signingsShown.map(p => {
+                    const k = playerKey(p);
+                    const prev = previousClub(p, team.season);
+                    const fee = parseMoney(feeValues[k]);
+                    const xv = xvFor(p, xValueOverrides);
+                    return (
+                      <div key={k} style={{ marginBottom: 7 }}>
+                        <div style={{ fontSize: 10.5, color: '#cbd5e1', marginBottom: 3,
+                                      whiteSpace: 'nowrap', overflow: 'hidden',
+                                      textOverflow: 'ellipsis' }}>{p.name}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <input value={signingFrom[k] !== undefined ? signingFrom[k] : ''}
+                            onChange={e => setSigningFrom(o => ({ ...o, [k]: e.target.value }))}
+                            placeholder={prev ? prev.team : 'from club'}
+                            style={{ ...UI.select, flex: 1, minWidth: 0, cursor: 'text',
+                                     color: signingFrom[k] ? '#93c5fd' : '#cbd5e1' }} />
+                          <input value={feeValues[k] !== undefined ? feeValues[k] : ''}
+                            onChange={e => setFeeValues(o => ({ ...o, [k]: e.target.value }))}
+                            placeholder={xv ? `xV ${Math.round(xv / 1e6 * 10) / 10}m` : 'fee'}
+                            style={{ ...UI.select, width: 86, cursor: 'text',
+                                     color: fee == null ? '#cbd5e1'
+                                       : (xv != null && fee <= xv) ? '#4ade80' : '#f87171' }} />
+                          {signingKeys.includes(k) && (
+                            <button onClick={() => setSigningKeys(ids => ids.filter(x => x !== k))}
+                              title="Remove from the manual list"
+                              style={{ background: 'none', border: 'none', color: '#8b98ad',
+                                       cursor: 'pointer', padding: 0, fontSize: 11, lineHeight: 1 }}>unpin</button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {!signingsShown.length && (
+                    <div style={UI.note}>No arrivals found in this squad's season history — pick them above.</div>
+                  )}
+                </div>
+                <div style={UI.note}>Fee accepts 10m, £10m or 750k. Green means the fee came in under xValue.</div>
+              </div>
+            )}
+            {shown.includes('New Signings') && signingsShown.length > 0 && (
+              <div style={UI.block}>
+                <span style={UI.label}>New Signings — xValue</span>
+                {signingsShown.map(p => {
+                  const k = playerKey(p);
+                  const overridden = xValueOverrides[k] !== undefined && xValueOverrides[k] !== '';
+                  return (
+                    <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
+                      <span style={{ flex: 1, fontSize: 10.5, color: '#cbd5e1', whiteSpace: 'nowrap',
+                                     overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</span>
+                      <input value={xValueOverrides[k] !== undefined ? xValueOverrides[k] : ''}
+                        onChange={e => setXValueOverrides(o => ({ ...o, [k]: e.target.value }))}
+                        placeholder={p.xValue ? String(Math.round(p.xValue)) : 'xValue'}
+                        inputMode="numeric"
+                        style={{ ...UI.select, width: 96, cursor: 'text',
+                                 color: overridden ? '#93c5fd' : '#cbd5e1' }} />
+                      {overridden && (
+                        <button onClick={() => setXValueOverrides(o => { const n = { ...o }; delete n[k]; return n; })}
+                          title="Back to the model's xValue"
+                          style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer',
+                                   padding: 0, fontSize: 12, lineHeight: 1 }}>×</button>
+                      )}
+                    </div>
+                  );
+                })}
+                <div style={UI.note}>Shared with Selling Assets and Departures — one xValue per player.</div>
+              </div>
+            )}
             {shown.includes('Possible Departures') && (
               <div style={{ ...UI.block, marginTop: 4 }}>
                 <span style={UI.label}>
                   Departures {departureKeys === null && <span style={{ color: '#475569' }}>(auto — shortest contracts)</span>}
                 </span>
-                <PlayerPicker pool={squad} picked={departurePicked} max={3}
+                <PlayerPicker pool={squad} picked={departuresShown} max={3}
                   placeholder="Search squad…"
-                  onPick={p => setDepartureKeys(k => [...(k === null ? autoDepartures.map(playerKey) : k), playerKey(p)])}
-                  onRemove={p => setDepartureKeys(k => (k === null ? autoDepartures.map(playerKey) : k)
-                    .filter(x => x !== playerKey(p)))} />
+                  onPick={p => setDepartureKeys(k => [...(k === null ? [] : k), playerKey(p)])}
+                  onRemove={p => setDepartureKeys(() => departuresShown
+                    .filter(x => playerKey(x) !== playerKey(p)).map(playerKey))} />
                 {departureKeys !== null && (
                   <button onClick={() => setDepartureKeys(null)}
                     style={{ marginTop: 5, background: 'transparent', border: '1px solid #1e2d45',
