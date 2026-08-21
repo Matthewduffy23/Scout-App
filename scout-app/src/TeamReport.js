@@ -242,6 +242,31 @@
 // departureKeys also loses its null "auto" sentinel and defaults to [], the same
 // shape signingKeys uses: [] means nothing pinned, and auto is simply what fills
 // the slots mergeManual leaves empty.
+//
+// v64: the value editing on every bottom panel, rebuilt, plus a Show toggle.
+// The editing was three separate problems wearing one coat:
+//   - the boxes committed on EVERY keystroke, so the "1" on the way to "10m" parsed
+//     as £1 and the field moved under the user mid-word. MoneyField now holds a
+//     free-text draft while it has focus and only parses on blur, through
+//     normaliseMoneyInput — which is deliberately NOT formatMoney, because that is
+//     the card formatter and rounds 10.5m to £11m; using it to normalise input would
+//     silently mangle what was typed.
+//   - the same player's fee and xValue lived in different collapsed blocks, both in
+//     96px unlabelled boxes, with no indication of which was which. One captioned
+//     row per player now: name, then xValue and Fee side by side, each with a visible
+//     £ prefix, each saying whether it is shared or panel-local.
+//   - the fee map was flat and shared, so selling a player for £10m and signing him
+//     for £4m on another card were the same number. Fees are now nested per panel;
+//     the xValue stays one value per player, because it is a property of the player
+//     rather than of the deal, and the labels say so.
+// The Show toggle picks which value each panel prints beside its players: Fee,
+// xValue, Score or Potential. Score is careerScore and Potential is potentialScore —
+// the same two numbers Key Players prints as its OVR and POT pills, so a card cannot
+// disagree with itself. Defaults are exactly what each panel printed before, so an
+// untouched report exports unchanged. On the two-column panels xValue keeps its
+// reference column beside whatever is promoted, except when xValue IS the promoted
+// value; Possible Departures keeps its contract badge and swaps only the inline
+// value on the position line.
 
 import React, { useState, useMemo, useCallback } from 'react';
 import {
@@ -2274,7 +2299,83 @@ function xvFor(p, overrides = {}) {
   return isNaN(v) || !v ? null : v;
 }
 
-function sellingAssetsPanelHtml(w, h, rows, xValueOverrides = {}, photoOverrides = {}) {
+// v64. Every bottom panel that carries a money value now edits it the same way, and
+// every one of them can choose WHICH value it prints.
+//
+// Typing was the first problem: the boxes committed on every keystroke, so the "1" on
+// the way to "10m" parsed as £1 and the field moved under the user mid-word. Values are
+// now held as free text while the field has focus and only canonicalised on blur.
+// formatMoney is the CARD formatter and rounds 10.5m to £11m, so it must NOT be used to
+// normalise input — it would silently mangle what was typed. normaliseMoneyInput is
+// lossless and drops the unit symbol, because the £ is a visible prefix on the input.
+export function normaliseMoneyInput(v) {
+  const raw = v == null ? '' : String(v).trim();
+  const n = parseMoney(raw);
+  if (n == null) return raw;                 // '' clears back to the model; anything
+  const trim = (x) => String(Math.round(x * 1000) / 1000);   // unparseable is kept verbatim
+  if (n >= 1e6) return `${trim(n / 1e6)}m`;
+  if (n >= 1e3) return `${trim(n / 1e3)}k`;
+  return trim(n);
+}
+
+// The bottom panels with editable values, and the id each one's typed fees live under.
+// The fee is PER PANEL — the same player is a £10m sale on one card and a £4m arrival
+// on another — while the xValue is one number per player shared by every panel, because
+// it is a property of the player rather than of the transaction.
+export const VALUE_PANELS = {
+  'Selling Assets': 'selling',
+  'Departures — Replace': 'departuresReplace',
+  'Possible Departures': 'possibleDepartures',
+  'New Signings': 'newSignings',
+};
+// Defaults are exactly what each panel printed before the toggle existed.
+export const PANEL_SHOW_DEFAULT = {
+  selling: 'xvalue',
+  departuresReplace: 'fee',
+  possibleDepartures: 'xvalue',
+  newSignings: 'fee',
+};
+// Potential is real data, not a stand-in: players_*.json carries potentialScore and Key
+// Players already prints it as the POT pill. Score is careerScore, the OVR pill — same
+// fields, so two panels on one card can't disagree about the same player.
+export const SHOW_OPTIONS = [
+  { id: 'fee', label: 'Fee' },
+  { id: 'xvalue', label: 'xValue' },
+  { id: 'score', label: 'Score' },
+  { id: 'potential', label: 'Potential' },
+];
+export function panelShowMode(panelShow, id) {
+  const v = panelShow && panelShow[id];
+  return SHOW_OPTIONS.some(o => o.id === v) ? v : PANEL_SHOW_DEFAULT[id];
+}
+
+// One resolver for all four panels, so the toggle can't drift between them. feeGood is
+// which direction of fee-against-xValue is the good outcome: +1 for a sale (beating the
+// model is good), -1 for an arrival (paying under it is good).
+export function showValueFor(p, mode, fees = {}, xValueOverrides = {}, feeGood = 1) {
+  if (mode === 'score' || mode === 'potential') {
+    const cap = mode === 'score' ? 'OVR' : 'POT';
+    const raw = mode === 'score' ? (p && p.careerScore)
+      : (p && p.potentialScore != null ? p.potentialScore : p && p.careerScore);
+    const n = Number(raw);
+    if (raw == null || raw === '' || isNaN(n)) return { text: '—', colour: '#55617a', cap };
+    return { text: String(Math.round(n)), colour: gradeColor(n), cap };
+  }
+  const xv = xvFor(p, xValueOverrides);
+  if (mode === 'fee') {
+    const fee = parseMoney(fees[playerKey(p)]);
+    // Undecided is neutral, not bad — an empty fee is a blank, not a failure.
+    const colour = fee == null ? '#c3ccdd'
+      : xv == null ? '#e8eef8'
+      : ((feeGood > 0 ? fee >= xv : fee <= xv) ? '#4ade80' : '#f87171');
+    return { text: fee == null ? '—' : formatMoney(fee), colour, cap: 'FEE' };
+  }
+  return { text: xv == null ? '—' : formatMoney(xv),
+           colour: xv == null ? '#55617a' : '#e8eef8', cap: 'XVALUE' };
+}
+
+export function sellingAssetsPanelHtml(w, h, rows, xValueOverrides = {}, photoOverrides = {},
+                                show = 'xvalue', fees = {}) {
   if (!rows || !rows.length) {
     return `<div style="position:absolute;inset:0;display:flex;align-items:center;
              justify-content:center;font-size:12px;color:#55617a;">No players selected.</div>`;
@@ -2284,7 +2385,7 @@ function sellingAssetsPanelHtml(w, h, rows, xValueOverrides = {}, photoOverrides
   const FACE = 40, FACE_X = 11, TEXT_X = FACE_X + FACE + 11;
   const textW = w - TEXT_X - VAL_W - 18;
   return rows.slice(0, 3).map((p, i) => {
-    const xv = xvFor(p, xValueOverrides);
+    const v = showValueFor(p, show, fees, xValueOverrides, 1);
     return `
       <div style="position:absolute;left:0;top:${i * rowH + 2}px;width:${w}px;height:${rowH - 6}px;
                   background:rgba(255,255,255,0.035);border:1px solid rgba(255,255,255,0.07);
@@ -2305,10 +2406,8 @@ function sellingAssetsPanelHtml(w, h, rows, xValueOverrides = {}, photoOverrides
             bestRole(p) ? ` <span style="color:#a7b4c8;">${esc(bestRole(p))}</span>` : ''}</div>
         </div>
         <div style="position:absolute;right:11px;top:50%;margin-top:-16px;width:${VAL_W}px;text-align:right;">
-          <div style="font-size:15px;font-weight:800;line-height:1;
-                      color:${xv == null ? '#55617a' : '#e8eef8'};">${
-            xv == null ? '—' : formatMoney(xv)}</div>
-          <div style="font-size:7px;font-weight:700;letter-spacing:0.14em;color:#6f7c92;margin-top:5px;">XVALUE</div>
+          <div style="font-size:15px;font-weight:800;line-height:1;color:${v.colour};">${v.text}</div>
+          <div style="font-size:7px;font-weight:700;letter-spacing:0.14em;color:#6f7c92;margin-top:5px;">${v.cap}</div>
         </div>
       </div>`;
   }).join('');
@@ -2318,22 +2417,23 @@ function sellingAssetsPanelHtml(w, h, rows, xValueOverrides = {}, photoOverrides
 // is what they are worth against what was actually offered or agreed. The fee is typed
 // per player; xValue sits underneath as the reference, and the gap between them is the
 // whole point of the panel — green when the fee beats the model, red when it doesn't.
-function departuresReplacePanelHtml(w, h, rows, feeValues = {}, xValueOverrides = {}, photoOverrides = {}) {
+export function departuresReplacePanelHtml(w, h, rows, feeValues = {}, xValueOverrides = {},
+                                   photoOverrides = {}, show = 'fee') {
   if (!rows || !rows.length) {
     return `<div style="position:absolute;inset:0;display:flex;align-items:center;
              justify-content:center;font-size:12px;color:#55617a;">No players selected.</div>`;
   }
   const rowH = Math.floor((h - 4) / 3);
   const COL_XV = 62, COL_FEE = 72, COL_GAP = 8;
-  const VAL_W = COL_XV + COL_FEE + COL_GAP;
+  // xValue keeps its reference column beside whatever the Show toggle promotes —
+  // except when the toggle IS xValue, where a second copy of the same number is noise.
+  const dual = show !== 'xvalue';
+  const VAL_W = dual ? COL_XV + COL_FEE + COL_GAP : COL_FEE;
   const FACE = 40, FACE_X = 11, TEXT_X = FACE_X + FACE + 11;
   const textW = w - TEXT_X - VAL_W - 18;
   return rows.slice(0, 3).map((p, i) => {
     const xv = xvFor(p, xValueOverrides);
-    const fee = parseMoney(feeValues[playerKey(p)]);
-    // No fee yet is a neutral state, not a bad one — it means undecided.
-    const col = fee == null ? '#c3ccdd'
-      : (xv != null && fee >= xv) ? '#4ade80' : '#f87171';
+    const v = showValueFor(p, show, feeValues, xValueOverrides, 1);
     return `
       <div style="position:absolute;left:0;top:${i * rowH + 2}px;width:${w}px;height:${rowH - 6}px;
                   background:rgba(255,255,255,0.035);border:1px solid rgba(255,255,255,0.07);
@@ -2354,21 +2454,22 @@ function departuresReplacePanelHtml(w, h, rows, feeValues = {}, xValueOverrides 
             bestRole(p) ? ` <span style="color:#a7b4c8;">${esc(bestRole(p))}</span>` : ''}</div>
         </div>
         <div style="position:absolute;right:11px;top:50%;margin-top:-16px;width:${VAL_W}px;">
-          <div style="display:inline-block;width:${COL_XV}px;text-align:right;vertical-align:top;">
+          ${dual ? `<div style="display:inline-block;width:${COL_XV}px;text-align:right;vertical-align:top;">
             <div style="font-size:13px;font-weight:800;line-height:1;color:#93c5fd;">${
               xv == null ? '—' : formatMoney(xv)}</div>
             <div style="font-size:7px;font-weight:700;letter-spacing:0.14em;color:#6f7c92;margin-top:5px;">XVALUE</div>
-          </div><div style="display:inline-block;width:${COL_FEE}px;text-align:right;vertical-align:top;">
-            <div style="font-size:15px;font-weight:800;line-height:1;color:${col};">${
-              fee == null ? '—' : formatMoney(fee)}</div>
-            <div style="font-size:7px;font-weight:700;letter-spacing:0.14em;color:#6f7c92;margin-top:5px;">FEE</div>
+          </div>` : ''}<div style="display:inline-block;width:${
+            dual ? COL_FEE : VAL_W}px;text-align:right;vertical-align:top;">
+            <div style="font-size:15px;font-weight:800;line-height:1;color:${v.colour};">${v.text}</div>
+            <div style="font-size:7px;font-weight:700;letter-spacing:0.14em;color:#6f7c92;margin-top:5px;">${v.cap}</div>
           </div>
         </div>
       </div>`;
   }).join('');
 }
 
-function departuresPanelHtml(w, h, rows, season, photoOverrides = {}, xValueOverrides = {}) {
+export function departuresPanelHtml(w, h, rows, season, photoOverrides = {}, xValueOverrides = {},
+                            show = 'xvalue', fees = {}) {
   if (!rows || !rows.length) {
     return `<div style="position:absolute;inset:0;display:flex;align-items:center;
              justify-content:center;font-size:12px;color:#55617a;">No departures flagged.</div>`;
@@ -2383,6 +2484,11 @@ function departuresPanelHtml(w, h, rows, season, photoOverrides = {}, xValueOver
     const left = contractLeft(p, season);
     const urgent = onLoan || left === '+0';
     const pos = String(p.position || '').split(',')[0].trim();
+    // The contract badge is this panel's whole point, so the Show toggle drives the
+    // inline value on the position line rather than replacing the badge.
+    const v = showValueFor(p, show, fees, xValueOverrides, 1);
+    const cap = show === 'xvalue' ? 'xV' : show === 'fee' ? 'fee' : v.cap;
+    const vCol = show === 'xvalue' ? '#93c5fd' : v.colour;
     return `
       <div style="position:absolute;left:0;top:${i * rowH + 2}px;width:${w}px;height:${rowH - 6}px;
                   background:rgba(255,255,255,0.035);border:1px solid rgba(255,255,255,0.07);
@@ -2398,9 +2504,9 @@ function departuresPanelHtml(w, h, rows, season, photoOverrides = {}, xValueOver
             natStamp(p, 13.5)}</div>
           <div style="font-size:10.5px;color:#8b98ad;margin-top:4px;line-height:1.15;white-space:nowrap;
                       overflow:hidden;">${esc(pos)}${
-            xvFor(p, xValueOverrides) != null
-              ? `<span style="color:#6f7c92;"> · xV </span><span style="color:#93c5fd;">${
-                  formatMoney(xvFor(p, xValueOverrides))}</span>` : ''}</div>
+            v.text !== '—'
+              ? `<span style="color:#6f7c92;"> · ${cap} </span><span style="color:${vCol};">${
+                  v.text}</span>` : ''}</div>
         </div>
         <div style="position:absolute;right:11px;top:50%;margin-top:-13px;width:76px;text-align:center;
                     padding:4px 0;border-radius:13px;
@@ -2456,28 +2562,27 @@ export function likelySignings(squad, season, n = 3) {
 // what was PAID, so beating xValue is now the bad outcome and green means value.
 // fromValues overrides the inferred club, because the inference is a guess made from
 // season history and a real transfer can contradict it.
-function newSigningsPanelHtml(w, h, rows, season, feeValues = {}, xValueOverrides = {},
-                              fromValues = {}, photoOverrides = {}) {
+export function newSigningsPanelHtml(w, h, rows, season, feeValues = {}, xValueOverrides = {},
+                              fromValues = {}, photoOverrides = {}, show = 'fee') {
   if (!rows || !rows.length) {
     return `<div style="position:absolute;inset:0;display:flex;align-items:center;
              justify-content:center;font-size:12px;color:#55617a;">No signings listed.</div>`;
   }
   const rowH = Math.floor((h - 4) / 3);
   const COL_FEE = 72, COL_XV = 62, COL_GAP = 8;
-  const VAL_W = COL_XV + COL_FEE + COL_GAP;
+  const dual = show !== 'xvalue';
+  const VAL_W = dual ? COL_XV + COL_FEE + COL_GAP : COL_FEE;
   const FACE = 40, FACE_X = 11, TEXT_X = FACE_X + FACE + 11;
   const textW = w - TEXT_X - VAL_W - 18;
   return rows.slice(0, 3).map((p, i) => {
     const xv = xvFor(p, xValueOverrides);
-    const fee = parseMoney(feeValues[playerKey(p)]);
+    // feeGood is -1 at this end: paying UNDER the model is the win, not over it.
+    const v = showValueFor(p, show, feeValues, xValueOverrides, -1);
     const typedFrom = fromValues[playerKey(p)];
     const prev = previousClub(p, season);
     const from = (typedFrom !== undefined && typedFrom !== '') ? String(typedFrom)
       : (prev ? prev.team : '');
     const fromLeague = (typedFrom !== undefined && typedFrom !== '') ? '' : (prev ? prev.league : '');
-    // Undecided is neutral. Paying under the model is the win here, not over it.
-    const col = fee == null ? '#c3ccdd'
-      : (xv != null && fee <= xv) ? '#4ade80' : '#f87171';
     const pos = String(p.position || '').split(',')[0].trim();
     return `
       <div style="position:absolute;left:0;top:${i * rowH + 2}px;width:${w}px;height:${rowH - 6}px;
@@ -2499,14 +2604,14 @@ function newSigningsPanelHtml(w, h, rows, season, feeValues = {}, xValueOverride
               fromLeague ? clubStamp(fromLeague, from, 10.5) : esc(from)}` : ''}</div>
         </div>
         <div style="position:absolute;right:11px;top:50%;margin-top:-16px;width:${VAL_W}px;">
-          <div style="display:inline-block;width:${COL_XV}px;text-align:right;vertical-align:top;">
+          ${dual ? `<div style="display:inline-block;width:${COL_XV}px;text-align:right;vertical-align:top;">
             <div style="font-size:13px;font-weight:800;line-height:1;color:#93c5fd;">${
               xv == null ? '—' : formatMoney(xv)}</div>
             <div style="font-size:7px;font-weight:700;letter-spacing:0.14em;color:#6f7c92;margin-top:5px;">XVALUE</div>
-          </div><div style="display:inline-block;width:${COL_FEE}px;text-align:right;vertical-align:top;">
-            <div style="font-size:15px;font-weight:800;line-height:1;color:${col};">${
-              fee == null ? '—' : formatMoney(fee)}</div>
-            <div style="font-size:7px;font-weight:700;letter-spacing:0.14em;color:#6f7c92;margin-top:5px;">FEE</div>
+          </div>` : ''}<div style="display:inline-block;width:${
+            dual ? COL_FEE : VAL_W}px;text-align:right;vertical-align:top;">
+            <div style="font-size:15px;font-weight:800;line-height:1;color:${v.colour};">${v.text}</div>
+            <div style="font-size:7px;font-weight:700;letter-spacing:0.14em;color:#6f7c92;margin-top:5px;">${v.cap}</div>
           </div>
         </div>
       </div>`;
@@ -2893,8 +2998,11 @@ export function buildTeamReportElement(team, opts = {}) {
     hideLoanTags = false,          // drop the (L) marker in XI + Depth
     hideYouthScores = false,       // Youth Prospects pills only
     starKeys = null,               // playerKeys to mark with a star in XI + Depth
-    feeValues = {},                // playerKey -> typed transfer fee, for Departures — Replace
-    xValueOverrides = {},          // playerKey -> typed xValue, beats the model
+    feeValues = {},                // panelId -> playerKey -> typed fee. Per panel: the same
+                                   // player is a sale on one card and an arrival on another.
+    xValueOverrides = {},          // playerKey -> typed xValue, beats the model. Not per
+                                   // panel — it is a property of the player, not the deal.
+    panelShow = {},                // panelId -> 'fee' | 'xvalue' | 'score' | 'potential'
     depthList = null, upgradeList = null,
     xiSlotLists = null,
     xiOverridePool = null,
@@ -2932,6 +3040,8 @@ export function buildTeamReportElement(team, opts = {}) {
     .filter(p => xvFor(p, xValueOverrides) != null)
     .sort((a, b) => xvFor(b, xValueOverrides) - xvFor(a, xValueOverrides))
     .slice(0, 3);
+  const feesFor = (id) => (feeValues && feeValues[id]) || {};
+  const showFor = (id) => panelShowMode(panelShow, id);
 
   container.innerHTML = `
     <div id="tr-card-root" style="width:${W}px;height:${H}px;overflow:hidden;background:${BG};
@@ -2970,18 +3080,23 @@ export function buildTeamReportElement(team, opts = {}) {
                                  hideYouthScores, photoOverrides) });
         if (kind === 'Selling Assets')
           return panel({ x, y: ROW_3, w: COL_W, h: ROW3_H, title: 'Selling Assets',
-                         body: sellingAssetsPanelHtml(innerW, ih, selling, xValueOverrides, photoOverrides) });
+                         body: sellingAssetsPanelHtml(innerW, ih, selling, xValueOverrides,
+                                 photoOverrides, showFor('selling'), feesFor('selling')) });
         if (kind === 'Departures — Replace')
           return panel({ x, y: ROW_3, w: COL_W, h: ROW3_H, title: 'Departures — Replace',
-                         body: departuresReplacePanelHtml(innerW, ih, departures, feeValues,
-                                 xValueOverrides, photoOverrides) });
+                         body: departuresReplacePanelHtml(innerW, ih, departures,
+                                 feesFor('departuresReplace'), xValueOverrides, photoOverrides,
+                                 showFor('departuresReplace')) });
         if (kind === 'New Signings')
           return panel({ x, y: ROW_3, w: COL_W, h: ROW3_H, title: 'New Signings',
-                         body: newSigningsPanelHtml(innerW, ih, signings, team.season, feeValues,
-                                 xValueOverrides, signingFrom, photoOverrides) });
+                         body: newSigningsPanelHtml(innerW, ih, signings, team.season,
+                                 feesFor('newSignings'), xValueOverrides, signingFrom,
+                                 photoOverrides, showFor('newSignings')) });
         if (kind === 'Possible Departures')
           return panel({ x, y: ROW_3, w: COL_W, h: ROW3_H, title: 'Possible Departures',
-                         body: departuresPanelHtml(innerW, ih, departures, team.season, photoOverrides, xValueOverrides) });
+                         body: departuresPanelHtml(innerW, ih, departures, team.season,
+                                 photoOverrides, xValueOverrides, showFor('possibleDepartures'),
+                                 feesFor('possibleDepartures')) });
         if (kind === 'Coach Shortlist')
           return panel({ x, y: ROW_3, w: COL_W, h: ROW3_H, title: 'Coach Shortlist',
                          body: coachShortlistPanelHtml(innerW, ih, coachRows,
@@ -3211,6 +3326,115 @@ function Section({ title, open, onToggle, children }) {
   );
 }
 
+
+// --- Panel value editing --------------------------------------------------
+// The old boxes were 96px wide, unlabelled, and split across separate blocks: a fee box
+// for a player in one place, his xValue in another, neither saying which was which. One
+// captioned row per player now, both numbers side by side, both parsed only on blur.
+const MONEY_CAP = { fontSize: 8.5, fontWeight: 700, letterSpacing: '.07em',
+                    textTransform: 'uppercase', color: '#64748b', display: 'block',
+                    marginBottom: 3 };
+
+// draft is non-null ONLY while the field has focus, and nothing is parsed until it
+// loses it. Committing per keystroke is what made "10m" impossible to type: the "1"
+// parsed as £1 and the value moved under the user before the "0" arrived.
+function MoneyField({ label, value, onCommit, placeholder, tone }) {
+  const [draft, setDraft] = useState(null);
+  const shown = draft != null ? draft : (value || '');
+  return (
+    <label style={{ flex: 1, minWidth: 0, display: 'block' }}>
+      <span style={MONEY_CAP}>{label}</span>
+      <span style={{ position: 'relative', display: 'block' }}>
+        <span style={{ position: 'absolute', left: 8, top: 0, bottom: 0, display: 'flex',
+                       alignItems: 'center', fontSize: 12.5, color: '#64748b',
+                       pointerEvents: 'none' }}>£</span>
+        <input value={shown}
+          onFocus={() => setDraft(value || '')}
+          onChange={e => setDraft(e.target.value)}
+          onBlur={() => { const d = draft; setDraft(null);
+                          if (d != null) onCommit(normaliseMoneyInput(d)); }}
+          onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+          placeholder={placeholder}
+          style={{ ...UI.input, padding: '8px 8px 8px 20px', fontSize: 13,
+                   cursor: 'text', color: tone || '#e2e8f4' }} />
+      </span>
+    </label>
+  );
+}
+
+// What the panel prints beside each player on the exported card.
+function ShowToggle({ value, onChange }) {
+  return (
+    <div style={{ display: 'flex', gap: 4, marginBottom: 9 }}>
+      {SHOW_OPTIONS.map(o => {
+        const on = o.id === value;
+        return (
+          <button key={o.id} onClick={() => onChange(o.id)}
+            style={{ flex: 1, padding: '5px 3px', borderRadius: 5,
+                     border: `1px solid ${on ? '#3b7de8' : '#1e2d45'}`,
+                     background: on ? '#0e2040' : 'transparent',
+                     color: on ? '#60a5fa' : '#94a3b8', fontSize: 10, fontWeight: 700,
+                     cursor: 'pointer' }}>{o.label}</button>
+        );
+      })}
+    </div>
+  );
+}
+
+// One editor shape for every panel that carries values, so they can't drift apart.
+// renderExtra is for anything panel-specific (New Signings' from-club box).
+export function PanelValueEditor({ rows, show, onShow, fees, onFee, xValueOverrides, onXValue,
+                            feeGood = 1, renderExtra, renderAside, note }) {
+  return (
+    <>
+      <ShowToggle value={show} onChange={onShow} />
+      {rows.map(p => {
+        const k = playerKey(p);
+        const fee = parseMoney(fees[k]);
+        const xv = xvFor(p, xValueOverrides);
+        const overridden = xValueOverrides[k] !== undefined && xValueOverrides[k] !== '';
+        return (
+          <div key={k} style={{ marginBottom: 9, padding: '8px 9px', borderRadius: 7,
+                                background: 'rgba(255,255,255,0.02)',
+                                border: '1px solid #16233a' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7 }}>
+              <span style={{ flex: 1, minWidth: 0, fontSize: 11.5, fontWeight: 700,
+                             color: '#e2e8f4', whiteSpace: 'nowrap', overflow: 'hidden',
+                             textOverflow: 'ellipsis' }}>{p.name}</span>
+              {overridden && (
+                <button onClick={() => onXValue(k, '')} title="Back to the model's xValue"
+                  style={{ background: 'none', border: 'none', color: '#f87171',
+                           cursor: 'pointer', padding: 0, fontSize: 10 }}>reset xValue</button>
+              )}
+              {renderAside ? renderAside(p) : null}
+            </div>
+            {renderExtra ? renderExtra(p) : null}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <MoneyField label="xValue — shared"
+                value={xValueOverrides[k] !== undefined ? xValueOverrides[k] : ''}
+                onCommit={v => onXValue(k, v)}
+                placeholder={p.xValue ? normaliseMoneyInput(String(Math.round(p.xValue))) : 'model'}
+                tone={overridden ? '#93c5fd' : '#e2e8f4'} />
+              <MoneyField label="Fee — this panel"
+                value={fees[k] !== undefined ? fees[k] : ''}
+                onCommit={v => onFee(k, v)}
+                placeholder={xv != null ? normaliseMoneyInput(String(xv)) : 'none'}
+                tone={fee == null ? '#e2e8f4'
+                  : xv == null ? '#e2e8f4'
+                  : ((feeGood > 0 ? fee >= xv : fee <= xv) ? '#4ade80' : '#f87171')} />
+            </div>
+          </div>
+        );
+      })}
+      <div style={UI.note}>
+        xValue is one number per player, shared by every panel. The fee is this panel's
+        only. Both take 10m, £10m, 750k or a bare number, and are read when you click
+        away — an empty fee prints as —.{note ? ` ${note}` : ''}
+      </div>
+    </>
+  );
+}
+
 function Chips({ options, selected, onToggle }) {
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap' }}>
@@ -3355,7 +3579,13 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
   const [hideLoanTags, setHideLoanTags] = useState(false);
   const [hideYouthScores, setHideYouthScores] = useState(false);
   const [starKeys, setStarKeys] = useState([]);
+  // panelId -> playerKey -> raw typed text. Nested because the fee belongs to the
+  // transaction, not the player: selling him for £10m and buying him for £4m are two
+  // different cards, and one flat map made them overwrite each other.
   const [feeValues, setFeeValues] = useState({});
+  // panelId -> which value the panel prints beside each player. Missing = the panel's
+  // historic default, so an untouched report exports exactly as it did before.
+  const [panelShow, setPanelShow] = useState({});
   // Similar Teams: the seven nearest are offered and any three chosen from them.
   // Empty means auto, i.e. whatever the model ranks top three.
   const [similarPicked, setSimilarPicked] = useState([]);
@@ -3376,6 +3606,11 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
   // the model, so a known asking price can replace it.
   const [sellIds, setSellIds] = useState([]);
   const [xValueOverrides, setXValueOverrides] = useState({});
+  const feesFor = (id) => feeValues[id] || {};
+  const setFee = (id, k, v) => setFeeValues(o =>
+    ({ ...o, [id]: { ...(o[id] || {}), [k]: v } }));
+  const setXValue = (k, v) => setXValueOverrides(o => ({ ...o, [k]: v }));
+  const setShow = (id, v) => setPanelShow(o => ({ ...o, [id]: v }));
   const [spAtt, setSpAtt] = useState('');
   const [spDef, setSpDef] = useState('');
   // Ranks are out of the league's actual size, so the percentile is right for a
@@ -3610,7 +3845,7 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
     keyRows, recruitRows: mergeManual(recruitPicked, [], 3), departureRows: departuresShown,
     signingRows: signingsShown, signingFrom,
     sellRows: mergeManual(sellPicked, sellAuto, 3), xValueOverrides,
-    similarRows, youthRows, hideLoanTags, hideYouthScores, starKeys, feeValues,
+    similarRows, youthRows, hideLoanTags, hideYouthScores, starKeys, feeValues, panelShow,
     teamNameOverride,
     depthList: depthSel, upgradeList: upgradeSel,
     xiSlotLists: xiLists, xiOverridePool: xiPool,
@@ -4131,7 +4366,7 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
                 <select value="" onChange={e => {
                   const k = e.target.value;
                   if (k) setSellIds(ids => ids.includes(k) || ids.length >= 3 ? ids : [...ids, k]);
-                }} style={UI.select}>
+                }} style={{ ...UI.select, marginBottom: 9 }}>
                   <option value="">{sellPicked.length ? 'Add a player…' : 'Override with a specific player…'}</option>
                   {squad.slice()
                     .sort((a, b) => (xvFor(b, xValueOverrides) || 0) - (xvFor(a, xValueOverrides) || 0))
@@ -4142,96 +4377,54 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
                       </option>
                     ))}
                 </select>
-                {/* xValue is editable for whichever three are actually on the card,
-                    auto-picked or not — blank the field to fall back to the model. */}
-                <div style={{ marginTop: 7 }}>
-                  {sellShown.map(p => {
-                    const k = playerKey(p);
-                    const overridden = xValueOverrides[k] !== undefined && xValueOverrides[k] !== '';
-                    return (
-                      <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
-                        <span style={{ flex: 1, fontSize: 10.5, color: '#cbd5e1', whiteSpace: 'nowrap',
-                                       overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</span>
-                        <input value={xValueOverrides[k] !== undefined ? xValueOverrides[k] : ''}
-                          onChange={e => setXValueOverrides(o => ({ ...o, [k]: e.target.value }))}
-                          placeholder={p.xValue ? String(Math.round(p.xValue)) : 'xValue'}
-                          inputMode="numeric"
-                          style={{ ...UI.select, width: 96, cursor: 'text',
-                                   color: overridden ? '#93c5fd' : '#cbd5e1' }} />
-                        {overridden && (
-                          <button onClick={() => setXValueOverrides(o => { const n = { ...o }; delete n[k]; return n; })}
-                            title="Back to the model's xValue"
-                            style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer',
-                                     padding: 0, fontSize: 12, lineHeight: 1 }}>×</button>
-                        )}
-                        {sellIds.includes(k) && (
-                          <button onClick={() => setSellIds(ids => ids.filter(x => x !== k))}
-                            title="Remove from the manual list"
-                            style={{ background: 'none', border: 'none', color: '#8b98ad', cursor: 'pointer',
-                                     padding: 0, fontSize: 11, lineHeight: 1 }}>unpin</button>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-                <div style={UI.note}>Accepts 10m, £10m, 750k or a bare number — blank the box to use the model.</div>
+                {/* Values are editable for whichever three are actually on the card,
+                    auto-picked or not — blank the xValue box to fall back to the model. */}
+                <PanelValueEditor
+                  rows={sellShown}
+                  show={panelShowMode(panelShow, 'selling')}
+                  onShow={v => setShow('selling', v)}
+                  fees={feesFor('selling')}
+                  onFee={(k, v) => setFee('selling', k, v)}
+                  xValueOverrides={xValueOverrides}
+                  onXValue={setXValue}
+                  feeGood={1}
+                  note="Green means the fee beats the model."
+                  renderAside={p => sellIds.includes(playerKey(p)) ? (
+                    <button onClick={() => setSellIds(ids => ids.filter(x => x !== playerKey(p)))}
+                      title="Remove from the manual list"
+                      style={{ background: 'none', border: 'none', color: '#8b98ad',
+                               cursor: 'pointer', padding: 0, fontSize: 10 }}>unpin</button>
+                  ) : null} />
               </div>
             )}
             {shown.includes('Departures — Replace') && departuresShown.length > 0 && (
               <div style={UI.block}>
-                <span style={UI.label}>Departures — Replace: fee received</span>
-                {departuresShown.map(p => {
-                  const k = playerKey(p);
-                  const fee = parseMoney(feeValues[k]);
-                  const xv = xvFor(p, xValueOverrides);
-                  return (
-                    <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
-                      <span style={{ flex: 1, fontSize: 10.5, color: '#cbd5e1', whiteSpace: 'nowrap',
-                                     overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</span>
-                      <input value={feeValues[k] !== undefined ? feeValues[k] : ''}
-                        onChange={e => setFeeValues(o => ({ ...o, [k]: e.target.value }))}
-                        placeholder={xv ? `xV ${Math.round(xv / 1e6 * 10) / 10}m` : 'fee'}
-                        style={{ ...UI.select, width: 96, cursor: 'text',
-                                 color: fee == null ? '#cbd5e1'
-                                   : (xv != null && fee >= xv) ? '#4ade80' : '#f87171' }} />
-                      {feeValues[k] !== undefined && feeValues[k] !== '' && (
-                        <button onClick={() => setFeeValues(o => { const n = { ...o }; delete n[k]; return n; })}
-                          style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer',
-                                   padding: 0, fontSize: 12, lineHeight: 1 }}>×</button>
-                      )}
-                    </div>
-                  );
-                })}
-                <div style={UI.note}>Accepts 10m, £10m, 750k or a bare number. Green beats xValue.</div>
+                <span style={UI.label}>Departures — Replace: values</span>
+                <PanelValueEditor
+                  rows={departuresShown}
+                  show={panelShowMode(panelShow, 'departuresReplace')}
+                  onShow={v => setShow('departuresReplace', v)}
+                  fees={feesFor('departuresReplace')}
+                  onFee={(k, v) => setFee('departuresReplace', k, v)}
+                  xValueOverrides={xValueOverrides}
+                  onXValue={setXValue}
+                  feeGood={1}
+                  note="Green means the fee received beats the model." />
               </div>
             )}
-            {(shown.includes('Possible Departures') || shown.includes('Departures — Replace'))
-              && departuresShown.length > 0 && (
+            {shown.includes('Possible Departures') && departuresShown.length > 0 && (
               <div style={UI.block}>
-                <span style={UI.label}>Departures — xValue</span>
-                {departuresShown.map(p => {
-                  const k = playerKey(p);
-                  const overridden = xValueOverrides[k] !== undefined && xValueOverrides[k] !== '';
-                  return (
-                    <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
-                      <span style={{ flex: 1, fontSize: 10.5, color: '#cbd5e1', whiteSpace: 'nowrap',
-                                     overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</span>
-                      <input value={xValueOverrides[k] !== undefined ? xValueOverrides[k] : ''}
-                        onChange={e => setXValueOverrides(o => ({ ...o, [k]: e.target.value }))}
-                        placeholder={p.xValue ? String(Math.round(p.xValue)) : 'xValue'}
-                        inputMode="numeric"
-                        style={{ ...UI.select, width: 96, cursor: 'text',
-                                 color: overridden ? '#93c5fd' : '#cbd5e1' }} />
-                      {overridden && (
-                        <button onClick={() => setXValueOverrides(o => { const n = { ...o }; delete n[k]; return n; })}
-                          title="Back to the model's xValue"
-                          style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer',
-                                   padding: 0, fontSize: 12, lineHeight: 1 }}>×</button>
-                      )}
-                    </div>
-                  );
-                })}
-                <div style={UI.note}>Accepts 10m, £10m or 750k. Shared with Selling Assets — one xValue per player.</div>
+                <span style={UI.label}>Possible Departures: values</span>
+                <PanelValueEditor
+                  rows={departuresShown}
+                  show={panelShowMode(panelShow, 'possibleDepartures')}
+                  onShow={v => setShow('possibleDepartures', v)}
+                  fees={feesFor('possibleDepartures')}
+                  onFee={(k, v) => setFee('possibleDepartures', k, v)}
+                  xValueOverrides={xValueOverrides}
+                  onXValue={setXValue}
+                  feeGood={1}
+                  note="The contract badge stays; this is the value on the position line." />
               </div>
             )}
             {shown.includes('New Signings') && (
@@ -4253,74 +4446,41 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
                   placeholder="Search all players…"
                   onPick={p => setSigningKeys(k => [...k, playerKey(p)])}
                   onRemove={p => setSigningKeys(k => k.filter(x => x !== playerKey(p)))} />
-                {/* Fee, xValue and from-club for whichever three are actually on the
-                    card, pinned or auto — same treatment Selling Assets gives its rows. */}
-                <div style={{ marginTop: 7 }}>
-                  {signingsShown.map(p => {
-                    const k = playerKey(p);
-                    const prev = previousClub(p, team.season);
-                    const fee = parseMoney(feeValues[k]);
-                    const xv = xvFor(p, xValueOverrides);
-                    return (
-                      <div key={k} style={{ marginBottom: 7 }}>
-                        <div style={{ fontSize: 10.5, color: '#cbd5e1', marginBottom: 3,
-                                      whiteSpace: 'nowrap', overflow: 'hidden',
-                                      textOverflow: 'ellipsis' }}>{p.name}</div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ height: 9 }} />
+                {signingsShown.length ? (
+                  <PanelValueEditor
+                    rows={signingsShown}
+                    show={panelShowMode(panelShow, 'newSignings')}
+                    onShow={v => setShow('newSignings', v)}
+                    fees={feesFor('newSignings')}
+                    onFee={(k, v) => setFee('newSignings', k, v)}
+                    xValueOverrides={xValueOverrides}
+                    onXValue={setXValue}
+                    feeGood={-1}
+                    note="Green means the fee came in under xValue."
+                    renderAside={p => signingKeys.includes(playerKey(p)) ? (
+                      <button onClick={() => setSigningKeys(ids => ids.filter(x => x !== playerKey(p)))}
+                        title="Remove from the manual list"
+                        style={{ background: 'none', border: 'none', color: '#8b98ad',
+                                 cursor: 'pointer', padding: 0, fontSize: 10 }}>unpin</button>
+                    ) : null}
+                    renderExtra={p => {
+                      const k = playerKey(p);
+                      const prev = previousClub(p, team.season);
+                      return (
+                        <label style={{ display: 'block', marginBottom: 8 }}>
+                          <span style={MONEY_CAP}>From club</span>
                           <input value={signingFrom[k] !== undefined ? signingFrom[k] : ''}
                             onChange={e => setSigningFrom(o => ({ ...o, [k]: e.target.value }))}
                             placeholder={prev ? prev.team : 'from club'}
-                            style={{ ...UI.select, flex: 1, minWidth: 0, cursor: 'text',
-                                     color: signingFrom[k] ? '#93c5fd' : '#cbd5e1' }} />
-                          <input value={feeValues[k] !== undefined ? feeValues[k] : ''}
-                            onChange={e => setFeeValues(o => ({ ...o, [k]: e.target.value }))}
-                            placeholder={xv ? `xV ${Math.round(xv / 1e6 * 10) / 10}m` : 'fee'}
-                            style={{ ...UI.select, width: 86, cursor: 'text',
-                                     color: fee == null ? '#cbd5e1'
-                                       : (xv != null && fee <= xv) ? '#4ade80' : '#f87171' }} />
-                          {signingKeys.includes(k) && (
-                            <button onClick={() => setSigningKeys(ids => ids.filter(x => x !== k))}
-                              title="Remove from the manual list"
-                              style={{ background: 'none', border: 'none', color: '#8b98ad',
-                                       cursor: 'pointer', padding: 0, fontSize: 11, lineHeight: 1 }}>unpin</button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                  {!signingsShown.length && (
-                    <div style={UI.note}>No arrivals found in this squad's season history — pick them above.</div>
-                  )}
-                </div>
-                <div style={UI.note}>Fee accepts 10m, £10m or 750k. Green means the fee came in under xValue.</div>
-              </div>
-            )}
-            {shown.includes('New Signings') && signingsShown.length > 0 && (
-              <div style={UI.block}>
-                <span style={UI.label}>New Signings — xValue</span>
-                {signingsShown.map(p => {
-                  const k = playerKey(p);
-                  const overridden = xValueOverrides[k] !== undefined && xValueOverrides[k] !== '';
-                  return (
-                    <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
-                      <span style={{ flex: 1, fontSize: 10.5, color: '#cbd5e1', whiteSpace: 'nowrap',
-                                     overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</span>
-                      <input value={xValueOverrides[k] !== undefined ? xValueOverrides[k] : ''}
-                        onChange={e => setXValueOverrides(o => ({ ...o, [k]: e.target.value }))}
-                        placeholder={p.xValue ? String(Math.round(p.xValue)) : 'xValue'}
-                        inputMode="numeric"
-                        style={{ ...UI.select, width: 96, cursor: 'text',
-                                 color: overridden ? '#93c5fd' : '#cbd5e1' }} />
-                      {overridden && (
-                        <button onClick={() => setXValueOverrides(o => { const n = { ...o }; delete n[k]; return n; })}
-                          title="Back to the model's xValue"
-                          style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer',
-                                   padding: 0, fontSize: 12, lineHeight: 1 }}>×</button>
-                      )}
-                    </div>
-                  );
-                })}
-                <div style={UI.note}>Shared with Selling Assets and Departures — one xValue per player.</div>
+                            style={{ ...UI.input, padding: '8px', fontSize: 12.5, cursor: 'text',
+                                     color: signingFrom[k] ? '#93c5fd' : '#e2e8f4' }} />
+                        </label>
+                      );
+                    }} />
+                ) : (
+                  <div style={UI.note}>No arrivals found in this squad's season history — pick them above.</div>
+                )}
               </div>
             )}
             {/* Gated on EITHER departures panel. It used to be 'Possible Departures'
