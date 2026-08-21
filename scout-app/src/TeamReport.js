@@ -1,4 +1,4 @@
-// TeamReport.js v62 — Team All-in-One report. 1920x1080 PNG export.
+// TeamReport.js v63 — Team All-in-One report. 1920x1080 PNG export.
 //
 // v2: bigger team name; country flag + league logo beside the league name;
 //     mini coach profile in the header gap; XI is now formation-driven and
@@ -223,6 +223,25 @@
 //     while the editor showed something else. mergeManual() puts the manual rows first,
 //     in the order chosen, and lets auto fill only what's left. The editor and the card
 //     now read the same resolved list, so what is listed is what exports.
+//
+// v63: Departures — Replace exported the auto three (shortest contracts) no matter
+// what was picked. The render path was never the problem — departureRows already
+// went through mergeManual. The editor was. Three faults, all of which New
+// Signings avoids and which is why that panel worked:
+//   - the picker was gated on `shown.includes('Possible Departures')` ALONE, so
+//     selecting Departures — Replace gave a fee box and an xValue box and no way
+//     to choose the players at all. Nothing was being overridden because nothing
+//     could be picked. Now gated on either departures panel, since both render the
+//     same three rows.
+//   - `picked` was the MERGED list. PlayerPicker hides its search box once
+//     picked.length reaches max, and the merged list is always 3 because auto fills
+//     it — so the box never rendered even under Possible Departures. `picked` is
+//     now the manual list, as New Signings has always passed it.
+//   - onRemove wrote the merged list back into departureKeys, quietly promoting the
+//     two auto-filled rows to manual picks.
+// departureKeys also loses its null "auto" sentinel and defaults to [], the same
+// shape signingKeys uses: [] means nothing pinned, and auto is simply what fills
+// the slots mergeManual leaves empty.
 
 import React, { useState, useMemo, useCallback } from 'react';
 import {
@@ -3310,7 +3329,11 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
   const [rawOverall, setRawOverall] = useState(false);
   const [bottomLeft, setBottomLeft] = useState('Similar Teams');
   const [bottomRight, setBottomRight] = useState('Key Players');
-  const [departureKeys, setDepartureKeys] = useState(null);
+  // Keys the user pinned. [] is "nothing pinned", NOT "auto" — auto is what
+  // mergeManual fills the empty slots with, exactly as New Signings does it. The
+  // old null sentinel meant the picker and the export disagreed about what a
+  // manual list even was.
+  const [departureKeys, setDepartureKeys] = useState([]);
   // New Signings. Same shape as the departures pair: keys the user pinned, plus a
   // typed from-club per player because the arrival is inferred, not recorded.
   const [signingKeys, setSigningKeys] = useState([]);
@@ -3567,7 +3590,7 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
   const keyRows = keyMode === 'manual'
     ? mergeManual(manualPicked, autoKeyRows, 3) : autoKeyRows;
   const autoDepartures = useMemo(() => likelyDepartures(squad, team.season, 3), [squad, team]);
-  const departureManual = departureKeys === null ? [] : findByKeys(players, departureKeys);
+  const departureManual = useMemo(() => findByKeys(players, departureKeys), [players, departureKeys]);
   const departuresShown = mergeManual(departureManual, autoDepartures, 3);
   const autoSignings = useMemo(() => likelySignings(squad, team.season, 3), [squad, team]);
   const signingManual = useMemo(() => findByKeys(players, signingKeys), [players, signingKeys]);
@@ -4300,22 +4323,37 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
                 <div style={UI.note}>Shared with Selling Assets and Departures — one xValue per player.</div>
               </div>
             )}
-            {shown.includes('Possible Departures') && (
+            {/* Gated on EITHER departures panel. It used to be 'Possible Departures'
+                only, so choosing Departures — Replace gave a fee box and an xValue box
+                and no way whatsoever to choose who the three players were — which is
+                why that panel looked like it was ignoring manual picks: there were
+                none to ignore. Both panels render the same three rows, so they share
+                one picker. */}
+            {(shown.includes('Possible Departures') || shown.includes('Departures — Replace')) && (
               <div style={{ ...UI.block, marginTop: 4 }}>
                 <span style={UI.label}>
-                  Departures {departureKeys === null && <span style={{ color: '#475569' }}>(auto — shortest contracts)</span>}
+                  Departures — {departureManual.length
+                    ? `${departureManual.length} pinned, auto fills the rest`
+                    : 'auto: shortest contracts'}
+                  {departureManual.length > 0 && (
+                    <button onClick={() => setDepartureKeys([])}
+                      style={{ marginLeft: 8, background: 'transparent', border: '1px solid #26456f',
+                               borderRadius: 4, color: '#60a5fa', fontSize: 9, padding: '1px 6px',
+                               cursor: 'pointer' }}>reset</button>
+                  )}
                 </span>
-                <PlayerPicker pool={squad} picked={departuresShown} max={3}
+                {/* picked is the MANUAL list, never the merged one. PlayerPicker hides
+                    its search box once picked.length hits max, and the merged list is
+                    always 3 because auto fills it — so passing the merged list meant
+                    the box never appeared and nothing could be pinned at all. */}
+                <PlayerPicker pool={squad} picked={departureManual} max={3}
                   placeholder="Search squad…"
-                  onPick={p => setDepartureKeys(k => [...(k === null ? [] : k), playerKey(p)])}
-                  onRemove={p => setDepartureKeys(() => departuresShown
-                    .filter(x => playerKey(x) !== playerKey(p)).map(playerKey))} />
-                {departureKeys !== null && (
-                  <button onClick={() => setDepartureKeys(null)}
-                    style={{ marginTop: 5, background: 'transparent', border: '1px solid #1e2d45',
-                             borderRadius: 5, color: '#94a3b8', fontSize: 10.5, padding: '4px 9px',
-                             cursor: 'pointer' }}>Back to auto</button>
-                )}
+                  onPick={p => setDepartureKeys(k => [...k, playerKey(p)])}
+                  onRemove={p => setDepartureKeys(k => k.filter(x => x !== playerKey(p)))} />
+                <div style={UI.note}>
+                  {departureManual.length >= 3 ? 'All three chosen.'
+                    : `Shortest contracts fill the remaining ${3 - departureManual.length}.`}
+                </div>
               </div>
             )}
           </Section>
