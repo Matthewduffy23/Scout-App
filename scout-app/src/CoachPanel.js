@@ -341,7 +341,22 @@ function CoachQuickOverrides({ coach, coachId, overrides, teams, onFieldChange, 
             <option value="view">View</option>
           </select>
         </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <span style={lbl}>Impact slot</span>
+          <select
+            style={{ fontSize: 11, background: '#080f1c', border: '1px solid #2b1e45', borderRadius: 4, color: '#e2e8f4', padding: '4px 6px', width: 190 }}
+            value={overrides.rightMid || 'impact'}
+            onChange={function(e) { onFieldChange(coachId, 'rightMid', e.target.value === 'impact' ? undefined : e.target.value); }}>
+            <option value="impact">Impact radar (default)</option>
+            <option value="table">League Table</option>
+          </select>
+        </div>
       </div>
+      {overrides.rightMid === 'table' ? (
+        <div style={{ fontSize: 9, color: '#475569', marginTop: 4 }}>
+          Table is drawn for the club, league and season the card is showing — change it with the Season picker above. A Biography still wins the slot.
+        </div>
+      ) : null}
       {overrides.leftMid === 'view' ? (
         <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 3 }}>
           <span style={lbl}>View — replaces Team Context</span>
@@ -754,6 +769,7 @@ export default function CoachPanel({ allTeams, allPlayers, onClose }) {
       if (q.dob) overrides.dob = q.dob;
       if (q.topRight) overrides.topRight = q.topRight;
       if (q.leftMid) overrides.leftMid = q.leftMid;
+      if (q.rightMid) overrides.rightMid = q.rightMid;
       if (q.viewText && q.viewText.trim()) overrides.viewText = q.viewText.trim();
       if (q.gbeC36 || q.gbeC24 || q.gbeExceptions) {
         overrides.gbe = {

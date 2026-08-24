@@ -243,6 +243,22 @@
 // shape signingKeys uses: [] means nothing pinned, and auto is simply what fills
 // the slots mergeManual leaves empty.
 //
+// v65: Similar Teams gains a UK-only mode. The five entries on each team row come
+// from build_teams.py and are the five most similar teams in the WORLD, so a toggle
+// could not simply filter them — for most clubs none of the five are British and the
+// panel would come back empty (asserted, not assumed). UK-only therefore RECOMPUTES,
+// with build_teams.py's algorithm ported over: same 14 features and weights, the same
+// 50/50 percentile/z blend, the same exp(-k*dist), the same league-strength discount
+// and floor, the same reserve exclusion. Normalisation stays over the whole season
+// pool so the two modes' percentages remain comparable — only the candidate list is
+// restricted. It tracks the pipeline to about a point rather than matching it exactly
+// (teams_final.json rounds the raw per-90s to 2dp), which is why All leagues still
+// reads the stored list verbatim and is byte-identical to before.
+//
+// leagueTablePanelHtml is now also imported by CoachQuickCard, which closes a cycle
+// with this file. It is safe because every binding across it is an `export function`
+// declaration — hoisted, and never touched at module-init time by either side.
+//
 // v64: the value editing on every bottom panel, rebuilt, plus a Show toggle.
 // The editing was three separate problems wearing one coat:
 //   - the boxes committed on EVERY keystroke, so the "1" on the way to "10m" parsed
@@ -277,6 +293,7 @@ import { loadCoaches } from './coachStorage';
 import { FOTMOB_PHOTO_BASE, countryToIso2, computeAge, fadeHexToBG } from './CoachCard';
 import { computeCoachScore } from './CoachQuickCard';
 import { useIsMobile, deliverPng, loadSquad } from './utils';
+import { LEAGUE_STRENGTHS } from './constants';
 
 // ─── Canvas geometry ───────────────────────────────────────────────────────
 const W = 1920;
@@ -1549,6 +1566,159 @@ export function resolveSimilarTeams(team, allTeams, n = 3) {
   return out;
 }
 
+
+// ─── Similar Teams, computed here ──────────────────────────────────────────
+// The five entries on each row come from build_teams.py and are the five most
+// similar teams IN THE WORLD. That is the right default and stays untouched — but it
+// is also why a "UK only" toggle cannot just filter them: for most clubs none of the
+// five are British, and the panel would come back empty.
+//
+// So UK-only recomputes. This is build_teams.py's algorithm ported straight over —
+// same 14 features and weights, the same 50/50 blend of within-league percentile
+// distance and season-wide z-distance, the same exp(-k*dist) transforms, the same
+// league-strength discount with its 0.8 floor, the same reserve/youth exclusion.
+// Normalisation stays over the WHOLE season pool, not the UK subset: percentiles and
+// z-scores computed inside a nine-league pool would put every number on a different
+// scale, and the two modes' percentages would stop being comparable. Only the
+// CANDIDATE list is restricted, which is what "UK only" actually means.
+//
+// It does not reproduce the stored numbers exactly. teams_final.json rounds the raw
+// per-90s to 2dp and the pipeline computes on the full-precision CSV, so this lands
+// within about a point and can swap two near-identical neighbours. Close enough to
+// rank by; not close enough to use for the default, which is why the default still
+// reads the stored list.
+const SIM_FEATURES = [
+  ['Attack', 'Crosses', 1], ['Attack', 'Goals Scored', 1], ['Attack', 'xG', 1],
+  ['Attack', 'Touches in Box', 1],
+  ['Defence', 'Goals Against', 1], ['Defence', 'xG Against', 1],
+  ['Defence', 'Defensive Duels', 1], ['Defence', 'PPDA', 2],
+  ['Possession', 'Possession', 2], ['Possession', 'Passes', 2],
+  ['Possession', 'Passing Accuracy %', 2], ['Possession', 'Long Passes', 2],
+  ['Possession', 'Passes to Final 3rd', 1], ['Possession', 'Progressive Passes', 1],
+];
+const SIM_W = (() => {
+  const total = SIM_FEATURES.reduce((a, f) => a + f[2], 0);
+  return SIM_FEATURES.map(f => f[2] / total);
+})();
+const SIM_LEAGUE_FLOOR = 0.8;
+const SIM_RESERVE_RE = /\s(II|B|U\d{2})$/;
+const simIsReserve = (name) => {
+  const n = String(name || '').trim();
+  return n !== 'Willem II' && SIM_RESERVE_RE.test(n);
+};
+// teams_final.json spells team leagues WITHOUT the trailing period the players CSV
+// uses ('England 1', not 'England 1.'). Matched period-insensitively so a row from
+// either source lands in the same bucket.
+const simNormLeague = (l) => String(l == null ? '' : l).trim().replace(/\.+$/, '').trim().toLowerCase();
+// The British pyramid as the teams data spells it. Scotland 4 and any England tier
+// below 6 simply aren't in the file yet; naming them here costs nothing and means the
+// set doesn't need revisiting when they arrive.
+export const SIMILAR_UK_LEAGUES = [
+  'England 1', 'England 2', 'England 3', 'England 4', 'England 5', 'England 6',
+  'Scotland 1', 'Scotland 2', 'Scotland 3', 'Scotland 4',
+];
+const SIM_UK_SET = new Set(SIMILAR_UK_LEAGUES.map(simNormLeague));
+export const isUkTeamLeague = (l) => SIM_UK_SET.has(simNormLeague(l));
+
+const simLeagueStrength = (l) => {
+  const k = simNormLeague(l);
+  for (const name in LEAGUE_STRENGTHS) {
+    if (simNormLeague(name) === k) return LEAGUE_STRENGTHS[name];
+  }
+  return 30;
+};
+const simVector = (t) => {
+  const out = [];
+  for (const [group, name] of SIM_FEATURES) {
+    const rows = t && t.metricGroups && t.metricGroups[group];
+    const row = rows && rows.find(r => r[0] === name);
+    const v = row && row[2] != null ? Number(row[2]) : null;
+    if (v == null || !isFinite(v)) return null;
+    out.push(v);
+  }
+  return out;
+};
+
+// Returns the same row shape resolveSimilarTeams does, so the panel and the picker
+// cannot tell which of the two produced a list.
+export function computeSimilarTeams(subject, allTeams, n = 3, ukOnly = false) {
+  if (!subject || !Array.isArray(allTeams) || !allTeams.length) return [];
+  const season = String(subject.season);
+  const pool = [];
+  for (const t of allTeams) {
+    if (String(t.season) !== season) continue;
+    const v = simVector(t);
+    if (v) pool.push({ t, v });
+  }
+  const self = pool.findIndex(x => x.t.team === subject.team
+                                && simNormLeague(x.t.league) === simNormLeague(subject.league));
+  if (self < 0 || pool.length < 2) return [];
+  const K = SIM_FEATURES.length, N = pool.length;
+
+  // Percentile rank WITHIN each league — pandas groupby('League').rank(pct=True),
+  // which is average-rank over group size, so ties share a value.
+  const pct = pool.map(() => new Array(K).fill(0));
+  const byLeague = {};
+  pool.forEach((x, i) => { (byLeague[x.t.league] = byLeague[x.t.league] || []).push(i); });
+  for (const lg in byLeague) {
+    const idxs = byLeague[lg];
+    for (let c = 0; c < K; c++) {
+      const order = idxs.slice().sort((a, b) => pool[a].v[c] - pool[b].v[c]);
+      let j = 0;
+      while (j < order.length) {
+        let e = j;
+        while (e + 1 < order.length && pool[order[e + 1]].v[c] === pool[order[j]].v[c]) e++;
+        const avgRank = (j + 1 + e + 1) / 2;
+        for (let q = j; q <= e; q++) pct[order[q]][c] = avgRank / order.length;
+        j = e + 1;
+      }
+    }
+  }
+  // z-score across the whole season pool (numpy std: population, not sample)
+  const z = pool.map(() => new Array(K).fill(0));
+  for (let c = 0; c < K; c++) {
+    let mean = 0;
+    for (let i = 0; i < N; i++) mean += pool[i].v[c];
+    mean /= N;
+    let sd = 0;
+    for (let i = 0; i < N; i++) sd += (pool[i].v[c] - mean) ** 2;
+    sd = Math.sqrt(sd / N) || 1;
+    for (let i = 0; i < N; i++) z[i][c] = (pool[i].v[c] - mean) / sd;
+  }
+
+  const ls = pool.map(x => Math.max(simLeagueStrength(x.t.league), 1e-6));
+  // A first team never matches reserve or youth sides; a reserve side can.
+  const selfReserve = simIsReserve(pool[self].t.team);
+  const scored = [];
+  for (let i = 0; i < N; i++) {
+    if (i === self) continue;
+    if (pool[i].t.team === subject.team) continue;
+    if (!selfReserve && simIsReserve(pool[i].t.team)) continue;
+    if (ukOnly && !isUkTeamLeague(pool[i].t.league)) continue;
+    let pd = 0, ad = 0;
+    for (let c = 0; c < K; c++) {
+      pd += Math.abs(pct[i][c] - pct[self][c]) * SIM_W[c];
+      ad += Math.abs(z[i][c] - z[self][c]) * SIM_W[c];
+    }
+    let sim = Math.exp(-2.8 * pd) * 50 + Math.exp(-0.6 * ad) * 50;
+    const ratio = Math.min(ls[i] / ls[self], ls[self] / ls[i]);
+    sim *= SIM_LEAGUE_FLOOR + (1 - SIM_LEAGUE_FLOOR) * ratio;
+    if (sim <= 0) continue;
+    scored.push({ team: pool[i].t.team, league: pool[i].t.league, season: pool[i].t.season,
+                  __sim: Math.round(sim * 10) / 10,
+                  completeScore: pool[i].t.completeScore });
+  }
+  scored.sort((a, b) => b.__sim - a.__sim);
+  return scored.slice(0, n);
+}
+
+// One entry point for both modes, so the panel, the picker and the crest preloader
+// can never disagree about which list is on the card.
+export function similarTeamsFor(team, allTeams, n = 3, ukOnly = false) {
+  return ukOnly ? computeSimilarTeams(team, allTeams, n, true)
+                : resolveSimilarTeams(team, allTeams, n);
+}
+
 // TeamCard's exact thresholds, so a match reads the same colour on both.
 function similarityColor(v) {
   return v >= 70 ? '#22c55e' : v >= 50 ? '#f59e0b' : '#64748b';
@@ -1798,8 +1968,8 @@ function coachShortlistPanelHtml(w, h, rows, hideScores = false) {
 
 // Rows can be supplied, so the editor can present the top 7 candidates and let three
 // be chosen from them; with none supplied it falls back to the computed top 3.
-export function similarTeamsPanelHtml(w, h, team, allTeams, rows = null) {
-  rows = (rows && rows.length) ? rows.slice(0, 3) : resolveSimilarTeams(team, allTeams, 3);
+export function similarTeamsPanelHtml(w, h, team, allTeams, rows = null, ukOnly = false) {
+  rows = (rows && rows.length) ? rows.slice(0, 3) : similarTeamsFor(team, allTeams, 3, ukOnly);
   if (!rows.length) {
     return `<div style="position:absolute;inset:0;display:flex;align-items:center;
              justify-content:center;font-size:12px;color:#55617a;">No similar teams in the data.</div>`;
@@ -2908,10 +3078,12 @@ const src = (url) => (url && IMG[url]) || url || '';
 // assigns IMG itself on every build, so nothing here can be left stale.
 export function setSharedImageMap(images) { IMG = images || {}; }
 
-export function cardImageUrls(team, squad, coach, allTeams = [], extraPlayers = [], coachRows = []) {
+export function cardImageUrls(team, squad, coach, allTeams = [], extraPlayers = [], coachRows = [],
+                             similarUkOnly = false) {
   const urls = [teamCrest(team.team), leagueLogo(team.league), leagueFlag(team.league)];
-  // Similar-team crests, so they're inlined like everything else.
-  for (const t of resolveSimilarTeams(team, allTeams, 3)) urls.push(teamCrest(t.team));
+  // Similar-team crests, so they're inlined like everything else — from whichever of
+  // the two lists the card is actually going to draw.
+  for (const t of similarTeamsFor(team, allTeams, 3, similarUkOnly)) urls.push(teamCrest(t.team));
   // League-table crests.
   const lw = leagueWindow(team, allTeams, 5);
   for (const t of lw.rows) urls.push(teamCrest(t.team));
@@ -2994,6 +3166,7 @@ export function buildTeamReportElement(team, opts = {}) {
     signingFrom = {},              // playerKey -> typed previous club, beats the inference
     sellRows = null,               // null = auto (squad by xValue, highest first)
     similarRows = null,            // null = auto (computed top 3)
+    similarUkOnly = false,         // restrict the MATCHES to the British pyramid
     youthRows = null,              // null = auto (squad under-23s by potential)
     hideLoanTags = false,          // drop the (L) marker in XI + Depth
     hideYouthScores = false,       // Youth Prospects pills only
@@ -3070,7 +3243,8 @@ export function buildTeamReportElement(team, opts = {}) {
         if (kind === 'None') return '';
         if (kind === 'Similar Teams')
           return panel({ x, y: ROW_3, w: COL_W, h: ROW3_H, title: 'Similar Teams',
-                         body: similarTeamsPanelHtml(innerW, ih, team, allTeams, similarRows) });
+                         body: similarTeamsPanelHtml(innerW, ih, team, allTeams, similarRows,
+                                 similarUkOnly) });
         if (kind === 'Summary')
           return panel({ x, y: ROW_3, w: COL_W, h: ROW3_H, title: 'Summary',
                          body: summaryPanelHtml(innerW, ih, summaryText) });
@@ -3589,6 +3763,9 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
   // Similar Teams: the seven nearest are offered and any three chosen from them.
   // Empty means auto, i.e. whatever the model ranks top three.
   const [similarPicked, setSimilarPicked] = useState([]);
+  // Restricts the MATCHES, never the subject: a Bundesliga side can still be the team
+  // the card is about, it just gets shown its nearest British equivalents.
+  const [similarUkOnly, setSimilarUkOnly] = useState(false);
   // Youth Prospects. The academy side is a separate team row in the data, so it has to
   // be searched for rather than derived from this club. Manual picking searches ALL
   // players, not just that team, because a prospect can be out on loan elsewhere.
@@ -3639,7 +3816,12 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
     .sort((a, b) => xvFor(b, xValueOverrides) - xvFor(a, xValueOverrides))
     .slice(0, 3), [squad, xValueOverrides]);
   const sellShown = mergeManual(sellPicked, sellAuto, 3);
-  const similarPool = useMemo(() => resolveSimilarTeams(team, allTeams, 7), [team, allTeams]);
+  // 7 offered, 3 chosen. UK-only recomputes rather than filtering the stored five —
+  // for most clubs none of those five are British, so filtering would empty the panel.
+  const similarPool = useMemo(
+    () => similarTeamsFor(team, allTeams, 7, similarUkOnly),
+    [team, allTeams, similarUkOnly]);
+  useEffect(() => { setSimilarPicked([]); }, [similarUkOnly]);
   const similarRows = useMemo(() => {
     const chosen = similarPicked
       .map(k => similarPool.find(t => `${t.team}|${t.season}` === k)).filter(Boolean);
@@ -3845,7 +4027,8 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
     keyRows, recruitRows: mergeManual(recruitPicked, [], 3), departureRows: departuresShown,
     signingRows: signingsShown, signingFrom,
     sellRows: mergeManual(sellPicked, sellAuto, 3), xValueOverrides,
-    similarRows, youthRows, hideLoanTags, hideYouthScores, starKeys, feeValues, panelShow,
+    similarRows, similarUkOnly, youthRows, hideLoanTags, hideYouthScores, starKeys,
+    feeValues, panelShow,
     teamNameOverride,
     depthList: depthSel, upgradeList: upgradeSel,
     xiSlotLists: xiLists, xiOverridePool: xiPool,
@@ -3868,7 +4051,7 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
         .filter(p => !squad.includes(p));
       const urls = cardImageUrls(team, squad, coach, allTeams,
         [...(keyRows || []), ...recruitPicked, ...departuresShown, ...signingsShown,
-         ...(youthRows || []), ...outsiders], coachRows);
+         ...(youthRows || []), ...outsiders], coachRows, similarUkOnly);
       const images = await preloadImages(urls, (d, t) => setProgress(`Images ${d}/${t}`));
       setProgress('Rendering…');
       el = buildTeamReportElement(team, { ...buildOpts(), images });
@@ -4213,6 +4396,16 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
                                cursor: 'pointer' }}>reset</button>
                   )}
                 </span>
+                <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
+                  {[[false, 'All leagues'], [true, 'UK only']].map(([v, lbl]) => (
+                    <button key={lbl} onClick={() => setSimilarUkOnly(v)}
+                      style={{ flex: 1, padding: '5px 4px', borderRadius: 5,
+                               border: `1px solid ${similarUkOnly === v ? '#3b7de8' : '#1e2d45'}`,
+                               background: similarUkOnly === v ? '#0e2040' : 'transparent',
+                               color: similarUkOnly === v ? '#60a5fa' : '#94a3b8',
+                               fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>{lbl}</button>
+                  ))}
+                </div>
                 {!similarPool.length
                   ? <div style={UI.note}>No comparable teams in this season's data.</div>
                   : similarPool.map(t => {
@@ -4235,11 +4428,16 @@ export default function TeamReport({ team, allTeamSeasons = [], allTeams = [], p
                           <span style={{ fontSize: 9.5, color: '#6f7c92', whiteSpace: 'nowrap' }}>
                             {leagueDisplayName(t.league)}</span>
                           <span style={{ fontSize: 10.5, fontWeight: 700, color: '#93c5fd', width: 30,
-                                         textAlign: 'right' }}>{Math.round(t.similarity)}%</span>
+                                         textAlign: 'right' }}>{t.__sim != null ? `${Math.round(t.__sim)}%` : '—'}</span>
                         </div>
                       );
                     })}
-                <div style={UI.note}>Pick up to 3. The panel shows them in the order chosen.</div>
+                <div style={UI.note}>
+                  Pick up to 3. The panel shows them in the order chosen.
+                  {similarUkOnly
+                    ? ' UK only recomputes against the British pyramid — the stored five are world-wide, so filtering them would usually leave nothing. Percentages are on the same scale, within about a point.'
+                    : ''}
+                </div>
               </div>
             )}
             {shown.includes('Youth Prospects') && (

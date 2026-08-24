@@ -11,6 +11,9 @@
 //     pitch, so the padding is even on all four sides by construction.
 //   - the Team Context tile can hold VIEW, using the pager's own View body, which
 //     moved here for the same reason.
+//   - the Impact radar tile can hold the LEAGUE TABLE, which is TeamReport's own
+//     renderer imported straight in — same columns, same row chrome, same highlight
+//     on the subject's row. That import closes a cycle; see the note on it.
 // A manual birth date also prints beside the age, in the coach card's format, and
 // drives the age itself.
 //
@@ -22,6 +25,15 @@
 // functional helpers imported below.
 import { computeCoachMetricGroups } from './coachMetrics';
 import { deliverPng } from './utils';
+// TeamReport owns the league table — same columns, same row chrome, same highlight of
+// the subject's row — so the quick card imports it rather than drawing a second one.
+// This closes a cycle (TeamReport imports computeCoachScore from here), which is safe
+// because every binding crossing it is an `export function` declaration: those are
+// hoisted and defined before either module body runs, and neither side touches the
+// other at module-init time — only inside functions called later. Do not turn either
+// of them into a `const` arrow without breaking the cycle first.
+import { leagueTablePanelHtml, preloadImages, setSharedImageMap,
+         cardImageUrls } from './TeamReport';
 import {
   computeAge, formatDOB, countryToIso2, leagueToCountry, teamCrestUrl, fadeHexToBG,
   FOTMOB_PHOTO_BASE, ensureMontserratEmbedded, MONTSERRAT_EMBED_CSS, COACH_FORMATIONS,
@@ -734,6 +746,7 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
   // existing quick card exports unchanged.
   const topRight = overrides.topRight === 'pitch' ? 'pitch' : 'gbe';
   const leftMid  = overrides.leftMid === 'view' ? 'view' : 'context';
+  const rightMid = overrides.rightMid === 'table' ? 'table' : 'impact';
   const viewText = String(overrides.viewText || '').trim();
 
   // GBE (manager) — no points. Pass = either route selected, OR autopass.
@@ -766,6 +779,11 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
   const careerHtml = careerChartSvg(careerPts, CAREER_PANEL_W - PANEL_PAD*2, hexH, careerMode);
   const _radarInnerH = ROW2_PANEL_H - PANEL_PAD * 2 - 40;
   const radarHtml = `<div style="height:${_radarInnerH}px;display:flex;align-items:center;justify-content:center;">${impactRadarSvg(rowA, rowB, radarPool, labelA, labelB, subA, subB)}</div>`;
+  // The table reads off statsRow — the club, league and season this card is already
+  // describing everywhere else — against the same pool the radar ranks within, so the
+  // subject's own row is the one leagueTablePanelHtml highlights.
+  const tableHtml = `<div style="position:relative;height:${_radarInnerH}px;">${
+    leagueTablePanelHtml(CAREER_PANEL_W - PANEL_PAD * 2, _radarInnerH, statsRow, _pool)}</div>`;
 
   // Optional Biography — when set, it replaces the Impact tile (same slot), matching
   // the player quick card's biography behaviour (350-char cap, no scout-status here).
@@ -937,6 +955,9 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
         ${bioText ? `
         <div style="font-size:22px;font-weight:700;color:${ACCENT_PINK};margin-bottom:14px;">Biography</div>
         <div style="font-size:20px;line-height:1.5;font-weight:600;color:#fff;">${bioText}</div>
+        ` : rightMid === 'table' ? `
+        <div style="font-size:22px;font-weight:700;color:${ACCENT_PINK};margin-bottom:18px;">League Table</div>
+        ${tableHtml}
         ` : `
         <div style="font-size:22px;font-weight:700;color:${ACCENT_PINK};margin-bottom:18px;">Impact</div>
         ${radarHtml}
@@ -949,6 +970,20 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
 
 export async function downloadCoachQuickCardPNG(coach, tenureRows, traits, overrides = {}) {
   await ensureMontserratEmbedded();
+  // The league table draws a crest per row from a remote URL, and html-to-image can
+  // only rasterise what is already a data URL — every other card preloads for exactly
+  // this reason. Only done when the table is actually on the card.
+  if (overrides.rightMid === 'table') {
+    try {
+      const rows = (tenureRows || []).slice()
+        .sort((a, b) => (a.season < b.season ? 1 : -1));
+      const subject = resolveStatsRow(rows, tenureRows, overrides.statsSeasonKey) || rows[0];
+      if (subject) {
+        const pool = (overrides.allTeams && overrides.allTeams.length) ? overrides.allTeams : tenureRows;
+        setSharedImageMap(await preloadImages(cardImageUrls(subject, [], null, pool)));
+      }
+    } catch (e) { /* crest-less rows beat no card at all */ }
+  }
   const el = buildCoachQuickCardElement(coach, tenureRows, traits, overrides);
   document.body.appendChild(el);
 
