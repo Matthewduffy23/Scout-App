@@ -313,6 +313,48 @@ function CoachQuickOverrides({ coach, coachId, overrides, teams, onFieldChange, 
       </div>
       <StatsSeasonPicker coach={coach} teams={teams} value={overrides.statsSeasonKey}
         onChange={function(v) { onFieldChange(coachId, 'statsSeasonKey', v); }} />
+      <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <span style={lbl}>Birth date {coach.dob ? '(saved: ' + coach.dob + ')' : ''}</span>
+        <input type="date" value={overrides.dob == null ? '' : overrides.dob}
+          onChange={function(e) { set('dob', e.target.value); }}
+          style={Object.assign({}, inp, { width: 150 })} />
+        <span style={{ fontSize: 9, color: '#475569' }}>Prints beside the age in the header. Drives the age too.</span>
+      </div>
+      <div style={{ marginTop: 8, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <span style={lbl}>Top-right block</span>
+          <select
+            style={{ fontSize: 11, background: '#080f1c', border: '1px solid #2b1e45', borderRadius: 4, color: '#e2e8f4', padding: '4px 6px', width: 190 }}
+            value={overrides.topRight || 'gbe'}
+            onChange={function(e) { onFieldChange(coachId, 'topRight', e.target.value === 'gbe' ? undefined : e.target.value); }}>
+            <option value="gbe">GBE Calculation (default)</option>
+            <option value="pitch">Formation pitch</option>
+          </select>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <span style={lbl}>Team Context slot</span>
+          <select
+            style={{ fontSize: 11, background: '#080f1c', border: '1px solid #2b1e45', borderRadius: 4, color: '#e2e8f4', padding: '4px 6px', width: 190 }}
+            value={overrides.leftMid || 'context'}
+            onChange={function(e) { onFieldChange(coachId, 'leftMid', e.target.value === 'context' ? undefined : e.target.value); }}>
+            <option value="context">Team Context (default)</option>
+            <option value="view">View</option>
+          </select>
+        </div>
+      </div>
+      {overrides.leftMid === 'view' ? (
+        <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <span style={lbl}>View — replaces Team Context</span>
+          <textarea
+            value={overrides.viewText == null ? '' : overrides.viewText}
+            maxLength={475}
+            placeholder="Your read on the manager…"
+            onChange={function(e) { set('viewText', e.target.value); }}
+            style={{ width: '100%', minHeight: 66, resize: 'vertical', background: '#080f1c', border: '1px solid #2b1e45', borderRadius: 4, color: '#e2e8f4', fontSize: 12, padding: '6px 8px', boxSizing: 'border-box', fontFamily: 'inherit', lineHeight: 1.45 }}
+          />
+          <span style={{ fontSize: 9, color: '#475569', textAlign: 'right' }}>{(overrides.viewText || '').length}/475</span>
+        </div>
+      ) : null}
       <div style={{ marginTop: 8 }}>
         <span style={{ fontSize: 9, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Career chart</span>
         <select
@@ -709,6 +751,10 @@ export default function CoachPanel({ allTeams, allPlayers, onClose }) {
       if (q.finishOverrides) overrides.finishOverrides = q.finishOverrides;
       if (q.extraFinish) overrides.extraFinish = q.extraFinish;
       if (q.hidePills) overrides.showScorePills = false;
+      if (q.dob) overrides.dob = q.dob;
+      if (q.topRight) overrides.topRight = q.topRight;
+      if (q.leftMid) overrides.leftMid = q.leftMid;
+      if (q.viewText && q.viewText.trim()) overrides.viewText = q.viewText.trim();
       if (q.gbeC36 || q.gbeC24 || q.gbeExceptions) {
         overrides.gbe = {
           c36: !!q.gbeC36,

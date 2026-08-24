@@ -1,4 +1,16 @@
 // CoachQuickCard.js — standalone manager quick card
+// v3: two slots on this card can now be swapped, and both default to what they
+// always drew, so an existing quick card exports unchanged.
+//   - the top-right GBE Calculation tile can hold the FORMATION PITCH instead.
+//     The pitch renderer moved here from ManagerPager (which imports it back) so
+//     there is one pitch, not two: the pager could not be imported from here
+//     without a cycle. It is sized to the gap above the Career panel rather than
+//     to the tile's width — full width would push it through the panel below.
+//   - the Team Context tile can hold VIEW, using the pager's own View body, which
+//     moved here for the same reason.
+// A manual birth date also prints beside the age, in the coach card's format, and
+// drives the age itself.
+//
 // v2: computeCoachScore() extracted and exported (used by TeamReport) — the
 // build function now calls it, so there remains exactly one implementation., formatted to match the
 // player QuickCard EXACTLY (tile chrome, Style hexagons, Career line chart,
@@ -8,8 +20,8 @@
 import { computeCoachMetricGroups } from './coachMetrics';
 import { deliverPng } from './utils';
 import {
-  computeAge, countryToIso2, leagueToCountry, teamCrestUrl, fadeHexToBG,
-  FOTMOB_PHOTO_BASE, ensureMontserratEmbedded, MONTSERRAT_EMBED_CSS,
+  computeAge, formatDOB, countryToIso2, leagueToCountry, teamCrestUrl, fadeHexToBG,
+  FOTMOB_PHOTO_BASE, ensureMontserratEmbedded, MONTSERRAT_EMBED_CSS, COACH_FORMATIONS,
   abbrevLeague, shortSeason, tenureHistory, resolveStatsRow } from './CoachCard';
 
 // ── player-card visual constants (copied verbatim so styling matches exactly) ──
@@ -90,6 +102,155 @@ function gbeCriteriaRow(label, sub, selected) {
         <span style="font-size:11px;font-weight:500;color:#5e6678;">${sub}</span>
       </div>
     </div>`;
+}
+
+// ─── Shared with ManagerPager ──────────────────────────────────────────────
+// Both cards draw these, and the pager imports them from here rather than the
+// other way round, which would be a cycle. Same rule the career chart, the team
+// context bands and the impact radar above already follow.
+const _esc = (s) => String(s == null ? '' : s)
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+// Formation dot tiers — the SAME two greens the position pitch uses for a
+// player's primary and secondary slot, so a dot on this card means the same
+// thing it means on his.
+export const FM_PRIMARY = '#00bf63';
+export const FM_SECONDARY = '#7ed957';
+// Over a zones wash the greens disappear into the zones themselves, so the
+// shape switches to white. It is still the only solid mark on the pitch, which
+// is what makes it read as the shape rather than as more data.
+export const FM_ON_IMAGE = '#ffffff';
+
+// ─── Formation pitch ───────────────────────────────────────────────────────
+// The player pager's pitch chrome, verbatim — same 320x208 viewBox, same two
+// line weights, same clip and shadow, so the two cards draw the same pitch. Only
+// what sits ON it changes: eleven formation dots instead of labelled position
+// discs, and a zones-of-control wash instead of a heatmap.
+//
+// CoachCard's FORMATIONS coordinates live in a 330x220 space with the keeper at
+// the left edge. That maps onto this pitch's playing area (x 4..316, y 4..204)
+// with no distortion, and the two systems already agree — its keeper at [25,110]
+// lands on 27.6, 104 against the position pitch's GK slot at [26,104].
+//
+// ONE SHAPE BY DEFAULT. Drawing the secondary formation as well put 22 marks on
+// a 188px pitch, and at that density neither shape is legible — you read a
+// scatter of dots rather than a back four. The secondary is NAMED in the text
+// column, which is where it belongs, and can be drawn as rings on request for
+// the cases where the contrast between the two is the actual point.
+const FM_VB = [320, 208];
+const fmX = (x) => 4 + (Number(x) / 330) * 312;
+const fmY = (y) => 4 + (Number(y) / 220) * 200;
+
+export function formationPitchSvg(primary, secondary, w, h, mapUrl, mapOpacity, showDots, showSecondary) {
+  const LINE = 'rgba(255,255,255,0.46)';
+  const LINE_SOFT = 'rgba(255,255,255,0.30)';
+  const dotCol = mapUrl ? FM_ON_IMAGE : FM_PRIMARY;
+
+  const coordsFor = (fm) => (fm && COACH_FORMATIONS[fm]) || null;
+  const primaryPts = showDots ? coordsFor(primary) : null;
+  const secondaryPts = (showDots && showSecondary) ? coordsFor(secondary) : null;
+
+  // Mowing bands. Six stripes at a whisker of white — barely visible on their
+  // own, but they give the surface a direction, and direction is the one thing a
+  // formation diagram needs the reader to have (this side attacks right). They
+  // come off under a zones wash, where they'd fight the data for the same pixels.
+  const stripes = mapUrl ? '' : Array.from({ length: 6 }, (_, i) => {
+    if (i % 2) return '';
+    return `<rect x="${(4 + i * 52).toFixed(1)}" y="4" width="52" height="200"
+                  fill="rgba(255,255,255,0.022)"/>`;
+  }).join('');
+
+  // Goals, drawn OUTSIDE the touchline. The pitch previously ended at its own
+  // boundary, which reads as a rectangle; a net at each end reads as a pitch.
+  const goals = `
+      <g fill="none" stroke="${LINE_SOFT}" stroke-width="1.3">
+        <rect x="0" y="90" width="4" height="28"/>
+        <rect x="316" y="90" width="4" height="28"/>
+      </g>`;
+
+  // Secondary FIRST so a shared position doesn't punch a ring through the solid
+  // dot on the same spot — the primary shape always reads on top.
+  const secondaryDots = (secondaryPts || []).map(([x, y]) => `
+      <circle cx="${fmX(x).toFixed(1)}" cy="${fmY(y).toFixed(1)}" r="7.5"
+              fill="none" stroke="${mapUrl ? 'rgba(255,255,255,0.65)' : FM_SECONDARY}"
+              stroke-width="2.2"/>`).join('');
+  // Two circles per player, not one. The wider disc underneath is the same
+  // colour at a tenth opacity, which separates the shape from whatever is behind
+  // it — turf, stripe or zone — without drawing a hard ring around every man.
+  const primaryDots = (primaryPts || []).map(([x, y]) => {
+    const cx = fmX(x).toFixed(1), cy = fmY(y).toFixed(1);
+    return `
+      <circle cx="${cx}" cy="${cy}" r="13" fill="${dotCol}" opacity="0.14"/>
+      <circle cx="${cx}" cy="${cy}" r="7.6" fill="${dotCol}" filter="url(#mpShadow)"/>`;
+  }).join('');
+
+  // The wash sits under the markings, clipped to the pitch. Over the top is what
+  // a screenshot does; underneath is what a design does.
+  const mapLayer = mapUrl ? `
+      <image href="${mapUrl}" x="4" y="4" width="312" height="200"
+             preserveAspectRatio="none" opacity="${mapOpacity}" clip-path="url(#mpClip)"/>` : '';
+
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${FM_VB[0]} ${FM_VB[1]}" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <clipPath id="mpClip"><rect x="4" y="4" width="312" height="200" rx="8"/></clipPath>
+        <filter id="mpShadow" x="-50%" y="-50%" width="200%" height="200%">
+          <feDropShadow dx="0" dy="1.5" stdDeviation="1.6" flood-color="#000" flood-opacity="0.55"/>
+        </filter>
+        <linearGradient id="mpTurf" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="rgba(255,255,255,0.085)"/>
+          <stop offset="100%" stop-color="rgba(255,255,255,0.022)"/>
+        </linearGradient>
+      </defs>
+
+      <rect x="4" y="4" width="312" height="200" rx="8" fill="url(#mpTurf)"/>
+      <g clip-path="url(#mpClip)">${stripes}</g>
+      ${mapLayer}
+      ${goals}
+
+      <g fill="none" stroke="${LINE}" stroke-width="1.6">
+        <rect x="4" y="4" width="312" height="200" rx="8"/>
+        <line x1="160" y1="4" x2="160" y2="204"/>
+      </g>
+      <g fill="none" stroke="${LINE_SOFT}" stroke-width="1.4">
+        <circle cx="160" cy="104" r="31"/>
+        <rect x="4" y="49" width="54" height="110"/>
+        <rect x="262" y="49" width="54" height="110"/>
+        <rect x="4" y="79" width="20" height="50"/>
+        <rect x="296" y="79" width="20" height="50"/>
+        <path d="M 58 87 A 22 22 0 0 1 58 121"/>
+        <path d="M 262 87 A 22 22 0 0 0 262 121"/>
+        <path d="M 4 14 A 10 10 0 0 0 14 4"/>
+        <path d="M 306 4 A 10 10 0 0 0 316 14"/>
+        <path d="M 4 194 A 10 10 0 0 1 14 204"/>
+        <path d="M 316 194 A 10 10 0 0 0 306 204"/>
+      </g>
+      <g fill="${LINE_SOFT}">
+        <circle cx="160" cy="104" r="2.4"/>
+        <circle cx="40" cy="104" r="2.2"/>
+        <circle cx="280" cy="104" r="2.2"/>
+      </g>
+      ${secondaryDots}${primaryDots}
+    </svg>`;
+}
+
+// ─── View ──────────────────────────────────────────────────────────────────
+// The pager's View body, moved here so the quick card can show the SAME panel.
+// The type is sized to the copy so no
+// length overflows, and it picks the LARGEST size that still fits so short copy
+// fills the box as completely as long copy does.
+export function viewPanelBody(w, h, text) {
+  if (!text || !String(text).trim()) {
+    return `<div style="position:absolute;inset:0;display:flex;align-items:center;
+              justify-content:center;color:#3d4a5e;font-size:13px;">No view written.</div>`;
+  }
+  const n = String(text).length;
+  let fs = 13;
+  for (const cand of [18, 17, 16, 15, 14, 13]) {
+    const perLine = Math.max(1, Math.floor(w / (cand * 0.47)));
+    if (Math.ceil(n / perLine) * (cand * 1.45) <= h - 2) { fs = cand; break; }
+  }
+  return `<div style="position:absolute;inset:0;font-size:${fs}px;line-height:1.45;
+            font-weight:500;color:#e2e8f4;overflow:hidden;">${_esc(text)}</div>`;
 }
 
 // STYLE hexagons — identical geometry to player rolesRankedSvgHtml
@@ -452,7 +613,12 @@ export function computeCoachScore(tenureRows, age, overrides = {}) {
 }
 
 export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides = {}) {
-  const age = computeAge(coach.dob);
+  // A typed birth date beats the saved one, and the age is computed from whichever
+  // wins — showing an age derived from one date beside another date is worse than
+  // showing neither. Rendered exactly as CoachCard prints it: the age at full size,
+  // the date smaller and grey immediately beside it.
+  const dob = String(overrides.dob || coach.dob || '').trim();
+  const age = computeAge(dob);
   const sortedDesc = [...tenureRows].sort((a, b) => (a.season < b.season ? 1 : -1));
   const latest = sortedDesc[0] || {};
   const natIso2 = countryToIso2(coach.nationality || '');
@@ -561,6 +727,12 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
     ageVal = String(tc.age);
   }
 
+  // The two swappable slots. Defaults are what the card has always drawn, so an
+  // existing quick card exports unchanged.
+  const topRight = overrides.topRight === 'pitch' ? 'pitch' : 'gbe';
+  const leftMid  = overrides.leftMid === 'view' ? 'view' : 'context';
+  const viewText = String(overrides.viewText || '').trim();
+
   // GBE (manager) — no points. Pass = either route selected, OR autopass.
   // Autopass: managing in an England league, or nationality is a home nation.
   const HOME_NATIONS = new Set(['England','Scotland','Wales','Northern Ireland','Ireland','Republic of Ireland']);
@@ -595,6 +767,31 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
   // Optional Biography — when set, it replaces the Impact tile (same slot), matching
   // the player quick card's biography behaviour (350-char cap, no scout-status here).
   const bioText = overrides.biography ? String(overrides.biography).slice(0, 315) : '';
+
+  // The pitch, in the GBE tile's slot and its box. The pager draws the text column
+  // and the pitch side by side across 538px; 390px here is too narrow for that, so
+  // the name sits in the tile's own header row — the same row GBE puts its PASS
+  // badge in — and the pitch takes the full width under it. The pitch itself is the
+  // pager's, imported, at the pager's aspect. ONE shape, as the pager defaults to.
+  const _fmPrimary = overrides.formation
+    || (Array.isArray(coach.formations) ? coach.formations[0] : coach.formation) || '';
+  // ONE shape, as the pager defaults to — the secondary is named in the info column.
+  //
+  // The height is bounded, not chosen. This tile starts at y=24 and the Career panel
+  // below it starts at y=310, so the box gets 286px: 40 of padding, 46 for the header
+  // row, and the 200 that leaves. A pitch sized to the tile's full 342px WIDTH would
+  // stand 222 tall and push the box 22px through the top of the Career panel.
+  const PITCH_BOX_W = 390, PITCH_CONTENT_W = PITCH_BOX_W - 48;
+  const PITCH_INNER_H = 196;
+  const PITCH_INNER_W = Math.min(PITCH_CONTENT_W, Math.round(PITCH_INNER_H * (320 / 208)));
+  const pitchBlockHtml = `
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
+          <span style="font-size:15px;font-weight:700;color:#9aa3b8;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;">Formation</span>
+          <span style="font-size:16px;font-weight:800;color:#e8eef8;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.16);border-radius:6px;padding:5px 14px;white-space:nowrap;">${_esc(_fmPrimary || '—')}</span>
+        </div>
+        <div style="width:${PITCH_INNER_W}px;height:${PITCH_INNER_H}px;margin:0 auto;">
+          ${formationPitchSvg(_fmPrimary, '', PITCH_INNER_W, PITCH_INNER_H, '', 0, true, false)}
+        </div>`;
 
   const pill = (v) => { if (v == null) return ''; const c = pillColor(v); return `<span style="display:inline-flex;align-items:center;justify-content:center;line-height:1;min-width:18px;font-size:19px;font-weight:800;padding:7px 13px;border-radius:7px;background:${c.bg};color:${c.fg};">${Math.round(v)}</span>`; };
 
@@ -651,6 +848,7 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
       <div style="position:absolute;left:248px;top:148px;display:flex;align-items:center;gap:10px;">
         ${natIso2 ? `<div style="width:36px;height:22px;flex-shrink:0;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${natIso2}.png');border-radius:2px;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15);"></div>` : ''}
         <span style="font-size:26.6px;font-weight:600;color:#fff;white-space:nowrap;">${age != null ? age + ' years old' : ''}</span>
+        ${dob ? `<span style="font-size:21.3px;color:#c0c0c0;white-space:nowrap;">${formatDOB(dob)}</span>` : ''}
         ${showPills ? pill(score) : ''}
         ${showPills ? pill(potential) : ''}
       </div>
@@ -671,7 +869,8 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
       <div style="position:absolute;left:1188px;top:36px;width:2px;height:210px;background:rgba(255,255,255,0.14);"></div>
       ${infoBox}
 
-      <div style="position:absolute;top:${gbeTop}px;left:1510px;width:390px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.10);border-radius:12px;padding:20px 24px;box-sizing:border-box;">
+      <div style="position:absolute;top:${topRight === 'pitch' ? 24 : gbeTop}px;left:1510px;width:${PITCH_BOX_W}px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.10);border-radius:12px;padding:20px 24px;box-sizing:border-box;">
+        ${topRight === 'pitch' ? pitchBlockHtml : `
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
           <span style="font-size:15px;font-weight:700;color:#9aa3b8;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;">GBE Calculation</span>
           <span style="font-size:16px;font-weight:800;color:${gbeCol};background:${gbeCol}22;border:1px solid ${gbeCol};border-radius:6px;padding:5px 14px;white-space:nowrap;">${gbeStatus}</span>
@@ -681,7 +880,7 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
           ${gbeCriteriaRow('24 Months Consecutive', 'Band 1-5 League', gbeC24)}
         </div>
         ${autopass ? `<div style="margin-top:14px;font-size:12px;font-weight:600;color:#3da65b;border-top:1px solid rgba(61,166,91,0.2);padding-top:10px;">✓ Auto Pass — ${englandLeague ? 'English League' : 'Home Nation'}</div>` : ''}
-        ${gbeShowPanel ? `<div style="margin-top:14px;font-size:12px;font-weight:600;color:#f97316;border-top:1px solid rgba(249,115,22,0.2);padding-top:10px;line-height:1.4;">⚡ Exceptions Panel — ${gbeExceptionsText}</div>` : ''}
+        ${gbeShowPanel ? `<div style="margin-top:14px;font-size:12px;font-weight:600;color:#f97316;border-top:1px solid rgba(249,115,22,0.2);padding-top:10px;line-height:1.4;">⚡ Exceptions Panel — ${gbeExceptionsText}</div>` : ''}`}
       </div>
 
       <div style="position:absolute;top:${LEFT_TOP}px;left:0px;width:920px;height:${1080-LEFT_TOP}px;overflow:hidden;box-sizing:border-box;padding-left:24px;padding-top:12px;">
@@ -712,8 +911,13 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
       </div>
 
       <div style="position:absolute;top:${ROW2_TOP}px;left:984px;width:${STYLE_PANEL_W}px;height:${ROW2_PANEL_H}px;background:${PANEL_BG};border:1px solid ${PANEL_BORDER};border-radius:${PANEL_RADIUS}px;padding:${PANEL_PAD}px;box-sizing:border-box;overflow:hidden;box-shadow:${PANEL_SHADOW};display:flex;flex-direction:column;">
+        ${leftMid === 'view' ? `
+        <div style="font-size:22px;font-weight:700;color:${ACCENT_PINK};margin-bottom:14px;">View</div>
+        <div style="position:relative;flex:1;">${
+          viewPanelBody(STYLE_PANEL_W - PANEL_PAD * 2, ROW2_PANEL_H - PANEL_PAD * 2 - 40, viewText)}</div>
+        ` : `
         <div style="font-size:22px;font-weight:700;color:${ACCENT_PINK};margin-bottom:14px;">Team Context</div>
-        ${teamContextHtml(tc, ageVal, agePct)}
+        ${teamContextHtml(tc, ageVal, agePct)}`}
       </div>
 
       <div style="position:absolute;top:${ROW2_TOP}px;left:${984 + STYLE_PANEL_W + PANEL_GAP_H}px;width:${CAREER_PANEL_W}px;height:${ROW2_PANEL_H}px;background:${PANEL_BG};border:1px solid ${PANEL_BORDER};border-radius:${PANEL_RADIUS}px;padding:${PANEL_PAD}px;box-sizing:border-box;overflow:hidden;box-shadow:${PANEL_SHADOW};">

@@ -4469,4 +4469,4 @@ export async function downloadCoachCardPNG(coach, tenureRows, traits, overrides 
   }
 }
 
-export { computeAge, countryToIso2, leagueToCountry, teamCrestUrl, fadeHexToBG, FOTMOB_PHOTO_BASE, ensureMontserratEmbedded, MONTSERRAT_EMBED_CSS, FORMATIONS as COACH_FORMATIONS };
+export { computeAge, formatDOB, countryToIso2, leagueToCountry, teamCrestUrl, fadeHexToBG, FOTMOB_PHOTO_BASE, ensureMontserratEmbedded, MONTSERRAT_EMBED_CSS, FORMATIONS as COACH_FORMATIONS };

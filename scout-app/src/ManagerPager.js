@@ -16,9 +16,11 @@
 //   GBE points + pips    -> GBE routes (36m cumulative / 24m consecutive), which
 //                           for a manager are pass/fail rather than scored
 //   percentile column    -> the same column, off computeCoachMetricGroups
-//   6 bottom panels      -> Style / Career,
-//                           Team Context / Impact OR Strengths & Weaknesses,
-//                           Potential Clubs / View OR League Table
+//   6 bottom panels      -> six FREE slots. Every slot offers every panel
+//                           (Style, Career, Team Context, Impact, Comparison,
+//                           Strengths & Weaknesses, Potential Clubs, View,
+//                           League Table, None), the way the Team Report's
+//                           bottom row already lets either slot hold any panel.
 //
 // NOTHING IS REDRAWN HERE. Every renderer is imported from the card that already
 // owns it — CoachQuickCard for the career chart, team context bands and impact
@@ -28,6 +30,24 @@
 // else, so their existing callers are untouched and this file cannot drift from
 // the other cards: if a bar colour changes in QuickCard it changes here in the
 // same commit, because it is literally the same function.
+//
+// v3: the panel slots came unstuck. Each one used to offer only the panels tied to
+// its own row — Impact/Comparison/S&W in the middle right, View/League Table in the
+// bottom right — which meant League Table and View could never be on the same card,
+// because they were two values of ONE control rather than two panels. There is now a
+// single MP_PANELS list and six slots that all read it. Every renderer already took
+// (w, h), so a panel drawn in row 1 and the same panel drawn in row 3 differ only in
+// the height they are handed; Style was the one exception and now sizes to its own
+// height too. Defaults reproduce the old card exactly.
+//
+// The formation pitch and the View body moved down to CoachQuickCard.js. The quick
+// card needs both, and importing UP from it would have made a cycle — this file
+// already imports the career chart, the team context bands and the impact radar from
+// there. Same rule as ever: one implementation, imported, never redrawn.
+//
+// A manual birth date joins the identity row beside the age, in CoachCard's format.
+// The age is computed from whichever date wins, since an age derived from one date
+// printed beside another is worse than printing neither.
 //
 // v2 changes: contract is gone from the identity row (tenure only, and an
 // Unattached state that reads as a state rather than a missing club); the pitch
@@ -49,11 +69,12 @@ import {
   HEADER_COLOURS, HEADER_COLOUR_NAMES,
 } from './TeamReport';
 import {
-  countryToIso2, fadeHexToBG, computeAge,
+  countryToIso2, fadeHexToBG, computeAge, formatDOB,
   shortSeason, resolveStatsRow, FOTMOB_PHOTO_BASE, COACH_FORMATIONS,
 } from './CoachCard';
 import {
   computeCoachScore, careerChartSvg, teamContextHtml, impactRadarSvg,
+  formationPitchSvg, viewPanelBody, FM_PRIMARY, FM_SECONDARY, FM_ON_IMAGE,
 } from './CoachQuickCard';
 import { computeCoachMetricGroups } from './coachMetrics';
 import { barRow, scoreTierColor } from './QuickCard';
@@ -110,15 +131,6 @@ const PANEL_RADIUS = 14;
 const PANEL_PAD = 20;
 const TITLE_H = 34;
 
-// Formation dot tiers — the SAME two greens the position pitch uses for a
-// player's primary and secondary slot, so a dot on this card means the same
-// thing it means on his.
-const FM_PRIMARY = '#00bf63';
-const FM_SECONDARY = '#7ed957';
-// Over a zones wash the greens disappear into the zones themselves, so the
-// shape switches to white. It is still the only solid mark on the pitch, which
-// is what makes it read as the shape rather than as more data.
-const FM_ON_IMAGE = '#ffffff';
 
 const esc = (s) => String(s == null ? '' : s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -388,118 +400,12 @@ function teamContextBody(w, h, tc, ageVal, agePct, markPct) {
     </div>`;
 }
 
-// ─── Formation pitch ───────────────────────────────────────────────────────
-// The player pager's pitch chrome, verbatim — same 320x208 viewBox, same two
-// line weights, same clip and shadow, so the two cards draw the same pitch. Only
-// what sits ON it changes: eleven formation dots instead of labelled position
-// discs, and a zones-of-control wash instead of a heatmap.
+
+// ─── Formation block ───────────────────────────────────────────────────────
+// The pitch renderer itself moved to CoachQuickCard.js so the quick card can
+// draw the SAME pitch — importing it up from here would have made a cycle.
+// Only this block, which is pager geometry, stayed.
 //
-// CoachCard's FORMATIONS coordinates live in a 330x220 space with the keeper at
-// the left edge. That maps onto this pitch's playing area (x 4..316, y 4..204)
-// with no distortion, and the two systems already agree — its keeper at [25,110]
-// lands on 27.6, 104 against the position pitch's GK slot at [26,104].
-//
-// ONE SHAPE BY DEFAULT. Drawing the secondary formation as well put 22 marks on
-// a 188px pitch, and at that density neither shape is legible — you read a
-// scatter of dots rather than a back four. The secondary is NAMED in the text
-// column, which is where it belongs, and can be drawn as rings on request for
-// the cases where the contrast between the two is the actual point.
-const FM_VB = [320, 208];
-const fmX = (x) => 4 + (Number(x) / 330) * 312;
-const fmY = (y) => 4 + (Number(y) / 220) * 200;
-
-function formationPitchSvg(primary, secondary, w, h, mapUrl, mapOpacity, showDots, showSecondary) {
-  const LINE = 'rgba(255,255,255,0.46)';
-  const LINE_SOFT = 'rgba(255,255,255,0.30)';
-  const dotCol = mapUrl ? FM_ON_IMAGE : FM_PRIMARY;
-
-  const coordsFor = (fm) => (fm && COACH_FORMATIONS[fm]) || null;
-  const primaryPts = showDots ? coordsFor(primary) : null;
-  const secondaryPts = (showDots && showSecondary) ? coordsFor(secondary) : null;
-
-  // Mowing bands. Six stripes at a whisker of white — barely visible on their
-  // own, but they give the surface a direction, and direction is the one thing a
-  // formation diagram needs the reader to have (this side attacks right). They
-  // come off under a zones wash, where they'd fight the data for the same pixels.
-  const stripes = mapUrl ? '' : Array.from({ length: 6 }, (_, i) => {
-    if (i % 2) return '';
-    return `<rect x="${(4 + i * 52).toFixed(1)}" y="4" width="52" height="200"
-                  fill="rgba(255,255,255,0.022)"/>`;
-  }).join('');
-
-  // Goals, drawn OUTSIDE the touchline. The pitch previously ended at its own
-  // boundary, which reads as a rectangle; a net at each end reads as a pitch.
-  const goals = `
-      <g fill="none" stroke="${LINE_SOFT}" stroke-width="1.3">
-        <rect x="0" y="90" width="4" height="28"/>
-        <rect x="316" y="90" width="4" height="28"/>
-      </g>`;
-
-  // Secondary FIRST so a shared position doesn't punch a ring through the solid
-  // dot on the same spot — the primary shape always reads on top.
-  const secondaryDots = (secondaryPts || []).map(([x, y]) => `
-      <circle cx="${fmX(x).toFixed(1)}" cy="${fmY(y).toFixed(1)}" r="7.5"
-              fill="none" stroke="${mapUrl ? 'rgba(255,255,255,0.65)' : FM_SECONDARY}"
-              stroke-width="2.2"/>`).join('');
-  // Two circles per player, not one. The wider disc underneath is the same
-  // colour at a tenth opacity, which separates the shape from whatever is behind
-  // it — turf, stripe or zone — without drawing a hard ring around every man.
-  const primaryDots = (primaryPts || []).map(([x, y]) => {
-    const cx = fmX(x).toFixed(1), cy = fmY(y).toFixed(1);
-    return `
-      <circle cx="${cx}" cy="${cy}" r="13" fill="${dotCol}" opacity="0.14"/>
-      <circle cx="${cx}" cy="${cy}" r="7.6" fill="${dotCol}" filter="url(#mpShadow)"/>`;
-  }).join('');
-
-  // The wash sits under the markings, clipped to the pitch. Over the top is what
-  // a screenshot does; underneath is what a design does.
-  const mapLayer = mapUrl ? `
-      <image href="${mapUrl}" x="4" y="4" width="312" height="200"
-             preserveAspectRatio="none" opacity="${mapOpacity}" clip-path="url(#mpClip)"/>` : '';
-
-  return `<svg width="${w}" height="${h}" viewBox="0 0 ${FM_VB[0]} ${FM_VB[1]}" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <clipPath id="mpClip"><rect x="4" y="4" width="312" height="200" rx="8"/></clipPath>
-        <filter id="mpShadow" x="-50%" y="-50%" width="200%" height="200%">
-          <feDropShadow dx="0" dy="1.5" stdDeviation="1.6" flood-color="#000" flood-opacity="0.55"/>
-        </filter>
-        <linearGradient id="mpTurf" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="rgba(255,255,255,0.085)"/>
-          <stop offset="100%" stop-color="rgba(255,255,255,0.022)"/>
-        </linearGradient>
-      </defs>
-
-      <rect x="4" y="4" width="312" height="200" rx="8" fill="url(#mpTurf)"/>
-      <g clip-path="url(#mpClip)">${stripes}</g>
-      ${mapLayer}
-      ${goals}
-
-      <g fill="none" stroke="${LINE}" stroke-width="1.6">
-        <rect x="4" y="4" width="312" height="200" rx="8"/>
-        <line x1="160" y1="4" x2="160" y2="204"/>
-      </g>
-      <g fill="none" stroke="${LINE_SOFT}" stroke-width="1.4">
-        <circle cx="160" cy="104" r="31"/>
-        <rect x="4" y="49" width="54" height="110"/>
-        <rect x="262" y="49" width="54" height="110"/>
-        <rect x="4" y="79" width="20" height="50"/>
-        <rect x="296" y="79" width="20" height="50"/>
-        <path d="M 58 87 A 22 22 0 0 1 58 121"/>
-        <path d="M 262 87 A 22 22 0 0 0 262 121"/>
-        <path d="M 4 14 A 10 10 0 0 0 14 4"/>
-        <path d="M 306 4 A 10 10 0 0 0 316 14"/>
-        <path d="M 4 194 A 10 10 0 0 1 14 204"/>
-        <path d="M 316 194 A 10 10 0 0 0 306 204"/>
-      </g>
-      <g fill="${LINE_SOFT}">
-        <circle cx="160" cy="104" r="2.4"/>
-        <circle cx="40" cy="104" r="2.2"/>
-        <circle cx="280" cy="104" r="2.2"/>
-      </g>
-      ${secondaryDots}${primaryDots}
-    </svg>`;
-}
-
 // Same block geometry as the player pager's position block: a 236px text column,
 // a 20px gutter and a 188px pitch, nudged 14px left of centre for the same
 // reason (the right-hand rule butts onto GBE while the left has the wheels' air).
@@ -636,6 +542,26 @@ function mpSwEligible(mg, spAttPct = null, spDefPct = null) {
 // pager's SW_MANUAL_TERMS — that list is Pace and Weak Foot, which say nothing
 // about a head coach. Alphabetical rather than grouped, for the same reason:
 // in a long dropdown you're scanning for a word you've already chosen.
+// Every panel this card can draw, offered to EVERY slot — the same rule the Team
+// Report's bottom row already follows, where either slot holds any panel. Each slot
+// used to offer only the panels tied to its own row, which is why League Table and
+// View could never appear together: they were two values of one control.
+//
+// Every renderer below takes (w, h), so a panel drawn in row 1 and the same panel
+// drawn in row 3 differ only in the height they are handed. Nothing is row-specific.
+export const MP_PANELS = [
+  'Style', 'Career', 'Team Context', 'Impact', 'Comparison',
+  'Strengths & Weaknesses', 'Potential Clubs', 'View', 'League Table', 'None',
+];
+// What each slot draws unless told otherwise — exactly the card as it was before
+// the slots became free, so an untouched report exports unchanged.
+export const MP_SLOT_DEFAULTS = {
+  a1: 'Style', b1: 'Career',
+  a2: 'Team Context', b2: 'Impact',
+  a3: 'Potential Clubs', b3: 'View',
+};
+export const MP_SLOT_KEYS = ['a1', 'b1', 'a2', 'b2', 'a3', 'b3'];
+
 export const MP_MANUAL_TERMS = [
   'Adaptability', 'Attacking Set Pieces', 'Board Relations', 'Build-Up Structure',
   'Counter-Attacking', 'Counter-Pressing', 'Defending Set Pieces',
@@ -652,24 +578,6 @@ export const MP_MANUAL_TERMS = [
   'Working To A Budget', 'Working With A Young Squad',
 ];
 
-// ─── View ──────────────────────────────────────────────────────────────────
-// Copied by value from the player pager: the type is sized to the copy so no
-// length overflows, and it picks the LARGEST size that still fits so short copy
-// fills the box as completely as long copy does.
-function viewPanelBody(w, h, text) {
-  if (!text || !String(text).trim()) {
-    return `<div style="position:absolute;inset:0;display:flex;align-items:center;
-              justify-content:center;color:#3d4a5e;font-size:13px;">No view written.</div>`;
-  }
-  const n = String(text).length;
-  let fs = 13;
-  for (const cand of [18, 17, 16, 15, 14, 13]) {
-    const perLine = Math.max(1, Math.floor(w / (cand * 0.47)));
-    if (Math.ceil(n / perLine) * (cand * 1.45) <= h - 2) { fs = cand; break; }
-  }
-  return `<div style="position:absolute;inset:0;font-size:${fs}px;line-height:1.45;
-            font-weight:500;color:#e2e8f4;overflow:hidden;">${esc(text)}</div>`;
-}
 
 // ─── Impact ────────────────────────────────────────────────────────────────
 function impactBody(h, rowA, rowB, pool, labelA, labelB, subA, subB) {
@@ -718,7 +626,7 @@ function headerHtml(coach, ctx, opts) {
     positionMapUrl, mapOpacity, showFormationDots, showSecondaryShape,
     score, potential, overallOverride, potentialOverride,
     overallUnclear, potentialUnclear,
-    allTeams,
+    allTeams, dobOverride,
   } = opts;
 
   const ink = headerInk(headerColour);
@@ -731,7 +639,12 @@ function headerHtml(coach, ctx, opts) {
   const LONG_CLUB = String(displayTeam || '').length > 12;
   const natIso = countryToIso2(coach.nationality || '');
   const natFlag = natIso ? `https://flagcdn.com/w80/${natIso}.png` : '';
-  const age = computeAge(coach.dob);
+  // A typed birth date beats the saved one, and the age is computed from whichever
+  // wins — an age derived from one date printed beside another is worse than
+  // printing neither. The date joins the identity row's own dot-separated list, so
+  // it sits beside the age exactly as the coach card prints it beside "years old".
+  const dob = String(dobOverride || coach.dob || '').trim();
+  const age = computeAge(dob);
 
   const pool = (allTeams && allTeams.length) ? allTeams : [statsRow];
   const ptsR = rankIn(pool, statsRow, 'points')
@@ -819,7 +732,7 @@ function headerHtml(coach, ctx, opts) {
                   background-position:center;border-radius:2px;margin-right:8px;
                   box-shadow:inset 0 0 0 1px rgba(255,255,255,0.18);
                   background-image:url('${src(natFlag)}');"></div>` : ''}
-      ${[age != null ? `${age} y.o.` : null, tenure || null]
+      ${[age != null ? `${age} y.o.` : null, dob ? formatDOB(dob) : null, tenure || null]
         .filter(Boolean).map((v, i) => `
         ${i ? `<span style="color:${ink.muted};margin:0 8px;font-size:11px;">&middot;</span>` : ''}
         <span style="font-size:12.5px;font-weight:700;color:${ink.soft};">${esc(v)}</span>`).join('')}
@@ -993,15 +906,14 @@ export function buildManagerPagerElement(coach, tenureRows, traits, opts = {}) {
     images = {}, allTeams = [], seasonPerf = {},
     headerColour = HEADER_COLOURS.Default,
     statsSeasonKey = '', nameOverride = '', teamOverride = '',
-    uploadedPhotoDataUrl = '', viewText = '',
+    uploadedPhotoDataUrl = '', viewText = '', dobOverride = '',
     tenureOverride = '', unattached = false,
     primaryFormation = '', secondaryFormation = '',
     showFormation = true, showFormationDots = true, showSecondaryShape = false,
     positionMapUrl = '', mapOpacity = 0.15,
     careerMode = 'score', finishOverrides = {}, extraFinish = [],
     teamContext = {},
-    rightMid = 'impact',          // impact | comparison | sw
-    rightLow = 'view',            // view | table
+    slots = {},                   // slot key -> any name in MP_PANELS
     clubsTitle = 'Potential Clubs',
     impactRowA = null, impactRowB = null,
     clubRows = null, clubNotes = {}, hideFitScores = false,
@@ -1023,7 +935,7 @@ export function buildManagerPagerElement(coach, tenureRows, traits, opts = {}) {
 
   const ctx = resolveTenure(tenureRows, statsSeasonKey);
   const { statsRow, sortedDesc } = ctx;
-  const age = computeAge(coach.dob);
+  const age = computeAge(dobOverride || coach.dob);
   const pool = (allTeams && allTeams.length) ? allTeams : tenureRows;
 
   const { score, potential, perSeason } = computeCoachScore(tenureRows, age, { seasonPerf });
@@ -1124,25 +1036,91 @@ export function buildManagerPagerElement(coach, tenureRows, traits, opts = {}) {
   const leftInnerW = LEFT_W - PANEL_PAD * 2;              // 716
   const leftInnerH = LEFT_H - PANEL_PAD * 2 - TITLE_H;    // 815
 
-  const styleRowH = Math.max(30, Math.min(40, Math.floor((row1InnerH - 6) / (styleRows.length || 1))));
-  const styleHtml = styleRows.length
-    ? `<div style="position:absolute;left:0;top:${
-         Math.max(0, Math.round((row1InnerH - (styleRows.length * styleRowH + 6)) / 2))
-       }px;">${styleHexSvg(styleRows, innerW, row1InnerH, 176)}</div>`
-    : `<div style="position:absolute;inset:0;display:flex;align-items:center;
+  // Sized to the height it is HANDED, not to row 1's — Style can now sit in any of
+  // the three rows and the hexes have to centre in whichever one it lands in.
+  const styleBody = (h) => {
+    if (!styleRows.length) {
+      return `<div style="position:absolute;inset:0;display:flex;align-items:center;
                    justify-content:center;font-size:12px;color:#55617a;">No trait scores.</div>`;
+    }
+    const rowH = Math.max(30, Math.min(40, Math.floor((h - 6) / (styleRows.length || 1))));
+    return `<div style="position:absolute;left:0;top:${
+      Math.max(0, Math.round((h - (styleRows.length * rowH + 6)) / 2))
+    }px;">${styleHexSvg(styleRows, innerW, h, 176)}</div>`;
+  };
 
   const swRows = mpSwEligible(mg, spAttPct, spDefPct);
   const rowA = impactRowA || sortedDesc[sortedDesc.length - 1] || null;
   const rowB = impactRowB || sortedDesc[0] || null;
   const clubs = (clubRows && clubRows.length) ? clubRows : potentialClubRows(statsRow, allTeams, 3);
 
+  // One renderer per panel name, keyed by the name the dropdown shows. Returns the
+  // panel's title, its right-hand caption and its body for the height it is given.
+  // Nothing here knows which slot it is in — that is the whole point.
+  const panelFor = (kind, h) => {
+    switch (kind) {
+      case 'Style':
+        return { title: 'Style', body: styleBody(h) };
+      case 'Career':
+        return { title: 'Career',
+                 body: `<div style="position:absolute;left:0;top:0;">${
+                   careerChartSvg(careerPts, innerW, h, careerMode)}</div>` };
+      case 'Team Context':
+        return { title: 'Team Context',
+                 body: teamContextBody(innerW, h, teamContext, ageVal, agePct, finishPct) };
+      case 'Impact':
+      case 'Comparison':
+        // Same radar; the title is the claim being made about it, as before.
+        return { title: kind,
+                 body: impactBody(h, rowA, rowB, pool,
+                   rowA ? String(rowA.team || '') : '', rowB ? String(rowB.team || '') : '',
+                   rowA ? String(rowA.league || '') : '', rowB ? String(rowB.league || '') : '') };
+      case 'Strengths & Weaknesses':
+        return { title: 'Strengths &amp; Weaknesses',
+                 body: swBlockHtml(innerW, h, swRows, { swDrop, swAddStr, swAddWeak }) };
+      case 'Potential Clubs':
+        // A hand-typed note is a scout's own words, so it takes the body ink
+        // rather than the pink the player card uses. Pink there is the only
+        // editorial mark on the tile; here it read as a second accent arguing
+        // with the panel title two lines above it.
+        return { title: esc(clubsTitle),
+                 body: clubsPanelBody(innerW, h, clubs, false, 'clubs', hideFitScores,
+                                      clubNotes, '#c8d2e0') };
+      case 'View':
+        return { title: 'View', body: viewPanelBody(innerW, h, viewText) };
+      case 'League Table':
+        return { title: 'League Table',
+                 right: [leagueDisplayName(ctx.league) || ctx.league, shortSeason(ctx.season)]
+                          .filter(Boolean).join(' · '),
+                 body: leagueTablePanelHtml(innerW, h, statsRow, allTeams) };
+      default:
+        return null;                      // 'None', or anything unrecognised
+    }
+  };
+
+  const SLOT_BOXES = {
+    a1: { x: COL_A_X, y: ROW_1, h: ROW1_H, ih: row1InnerH },
+    b1: { x: COL_B_X, y: ROW_1, h: ROW1_H, ih: row1InnerH },
+    a2: { x: COL_A_X, y: ROW_2, h: ROW2_H, ih: row2InnerH },
+    b2: { x: COL_B_X, y: ROW_2, h: ROW2_H, ih: row2InnerH },
+    a3: { x: COL_A_X, y: ROW_3, h: ROW3_H, ih: row3InnerH },
+    b3: { x: COL_B_X, y: ROW_3, h: ROW3_H, ih: row3InnerH },
+  };
+  const slotsHtml = MP_SLOT_KEYS.map(key => {
+    const box = SLOT_BOXES[key];
+    const kind = slots[key] || MP_SLOT_DEFAULTS[key];
+    const spec = panelFor(kind, box.ih);
+    if (!spec) return '';
+    return panel({ x: box.x, y: box.y, w: COL_W, h: box.h,
+                   title: spec.title, right: spec.right || '', body: spec.body });
+  }).join('');
+
   container.innerHTML = `
     <div id="mp-card-root" style="width:${W}px;height:${H}px;overflow:hidden;background:${BG};
          font-family:'Montserrat',sans-serif;color:#fff;position:relative;box-sizing:border-box;">
 
       ${headerHtml(coach, ctx, {
-        headerColour, nameOverride, teamOverride, uploadedPhotoDataUrl,
+        headerColour, nameOverride, teamOverride, uploadedPhotoDataUrl, dobOverride,
         gbeOv, unattached, tenureOverride,
         showFormation, primaryFormation, secondaryFormation,
         positionMapUrl, mapOpacity, showFormationDots, showSecondaryShape,
@@ -1158,51 +1136,7 @@ export function buildManagerPagerElement(coach, tenureRows, traits, opts = {}) {
         body: percentilePanelBody(leftInnerW, leftInnerH, mg),
       })}
 
-      ${panel({
-        x: COL_A_X, y: ROW_1, w: COL_W, h: ROW1_H, title: 'Style',
-        body: styleHtml,
-      })}
-      ${panel({
-        x: COL_B_X, y: ROW_1, w: COL_W, h: ROW1_H, title: 'Career',
-        body: `<div style="position:absolute;left:0;top:0;">${
-          careerChartSvg(careerPts, innerW, row1InnerH, careerMode)
-        }</div>`,
-      })}
-
-      ${panel({
-        x: COL_A_X, y: ROW_2, w: COL_W, h: ROW2_H, title: 'Team Context',
-        body: teamContextBody(innerW, row2InnerH, teamContext, ageVal, agePct, finishPct),
-      })}
-      ${panel({
-        x: COL_B_X, y: ROW_2, w: COL_W, h: ROW2_H,
-        title: rightMid === 'sw' ? 'Strengths &amp; Weaknesses'
-             : rightMid === 'comparison' ? 'Comparison' : 'Impact',
-        body: rightMid === 'sw'
-          ? swBlockHtml(innerW, row2InnerH, swRows, { swDrop, swAddStr, swAddWeak })
-          : impactBody(row2InnerH, rowA, rowB, pool,
-              rowA ? String(rowA.team || '') : '', rowB ? String(rowB.team || '') : '',
-              rowA ? String(rowA.league || '') : '', rowB ? String(rowB.league || '') : ''),
-      })}
-
-      ${panel({
-        x: COL_A_X, y: ROW_3, w: COL_W, h: ROW3_H, title: esc(clubsTitle),
-        // A hand-typed note is a scout's own words, so it takes the body ink
-        // rather than the pink the player card uses. Pink there is the only
-        // editorial mark on the tile; here it read as a second accent arguing
-        // with the panel title two lines above it.
-        body: clubsPanelBody(innerW, row3InnerH, clubs, false, 'clubs', hideFitScores,
-                             clubNotes, '#c8d2e0'),
-      })}
-      ${panel({
-        x: COL_B_X, y: ROW_3, w: COL_W, h: ROW3_H,
-        title: rightLow === 'table' ? 'League Table' : 'View',
-        right: rightLow === 'table'
-          ? [leagueDisplayName(ctx.league) || ctx.league, shortSeason(ctx.season)].filter(Boolean).join(' · ')
-          : '',
-        body: rightLow === 'table'
-          ? leagueTablePanelHtml(innerW, row3InnerH, statsRow, allTeams)
-          : viewPanelBody(innerW, row3InnerH, viewText),
-      })}
+      ${slotsHtml}
     </div>`;
 
   document.body.appendChild(container);
@@ -1360,8 +1294,11 @@ export default function ManagerPagerModal({
   const [mapOpacity, setMapOpacity] = useState(15);
 
   const [careerMode, setCareerMode] = useState('score');
-  const [rightMid, setRightMid] = useState('impact');
-  const [rightLow, setRightLow] = useState('view');
+  // Slot key -> panel name. Every slot offers every panel, so the shape of the card
+  // is chosen rather than fixed by the row a panel happens to belong to.
+  const [slots, setSlots] = useState(MP_SLOT_DEFAULTS);
+  const setSlot = (key, kind) => setSlots(o => ({ ...o, [key]: kind }));
+  const slotHas = (kind) => MP_SLOT_KEYS.some(k => slots[k] === kind);
 
   const [overallOverride, setOverallOverride] = useState('');
   const [potentialOverride, setPotentialOverride] = useState('');
@@ -1395,7 +1332,9 @@ export default function ManagerPagerModal({
 
   const ctx = useMemo(() => resolveTenure(tenureRows, statsSeasonKey), [tenureRows, statsSeasonKey]);
   const pool = useMemo(() => ((allTeams && allTeams.length) ? allTeams : tenureRows), [allTeams, tenureRows]);
-  const age = useMemo(() => computeAge(coach.dob), [coach.dob]);
+  const [dobOverride, setDobOverride] = useState('');
+  const age = useMemo(() => computeAge(dobOverride || coach.dob),
+    [dobOverride, coach.dob]);
   const scores = useMemo(
     () => computeCoachScore(tenureRows, age, { seasonPerf }),
     [tenureRows, age, seasonPerf]);
@@ -1484,7 +1423,7 @@ export default function ManagerPagerModal({
     tenureOverride, unattached,
     primaryFormation, secondaryFormation, showFormation, showFormationDots, showSecondaryShape,
     positionMapUrl, mapOpacity: Number(mapOpacity) / 100,
-    careerMode, teamContext, rightMid, rightLow,
+    careerMode, teamContext, slots, dobOverride,
     impactRowA: impactA, impactRowB: impactB,
     clubRows, clubNotes, hideFitScores, clubsTitle,
     styleKeys, traitOv, setPiecesPct, spAttPct, spDefPct,
@@ -1565,6 +1504,18 @@ export default function ManagerPagerModal({
                    onChange={e => setNameOverride(e.target.value)} placeholder={coach.name} />
           </div>
 
+          <div style={UI.block}>
+            <span style={UI.label}>Birth date</span>
+            <input style={{ ...UI.input, cursor: 'text' }} type="date" value={dobOverride}
+                   onChange={e => setDobOverride(e.target.value)} />
+            <div style={UI.note}>
+              {coach.dob
+                ? `Saved: ${formatDOB(coach.dob)}. Typing here overrides it on this card.`
+                : 'No date saved against this manager — the age and the date both come from here.'}
+              {' '}Prints beside the age in the identity row.
+            </div>
+          </div>
+
           {seasonOptions.length > 1 && (
             <div style={UI.block}>
               <span style={UI.label}>Season</span>
@@ -1609,16 +1560,24 @@ export default function ManagerPagerModal({
           </div>
 
           <div style={UI.block}>
-            <span style={UI.label}>Bottom-right panels</span>
-            <Seg options={[['impact', 'Impact'], ['comparison', 'Comparison'], ['sw', 'S&W']]}
-                 value={rightMid} onChange={setRightMid} />
-            <Seg options={[['view', 'View'], ['table', 'League Table']]}
-                 value={rightLow} onChange={setRightLow} />
+            <span style={UI.label}>Panels</span>
+            {[['a1', 'b1'], ['a2', 'b2'], ['a3', 'b3']].map(pair => (
+              <div key={pair[0]} style={{ display: 'flex', marginBottom: 6 }}>
+                {pair.map((key, i) => (
+                  <select key={key} value={slots[key]} onChange={e => setSlot(key, e.target.value)}
+                          style={{ ...UI.select, flex: 1, marginLeft: i ? 6 : 0 }}>
+                    {MP_PANELS.map(o => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                ))}
+              </div>
+            ))}
             <Seg options={[['Potential Clubs', 'Potential Clubs'], ['Similar Teams', 'Similar Teams']]}
                  value={clubsTitle} onChange={setClubsTitle} />
             <div style={UI.note}>
-              Impact and Comparison draw the same radar — the title is the claim you
-              are making about it. Potential Clubs and Similar Teams likewise.
+              Any slot holds any panel — League Table and View can both be on the card,
+              or the same panel twice. Impact and Comparison draw the same radar; the
+              title is the claim you are making about it. The Potential Clubs panel
+              takes whichever title is picked above.
             </div>
           </div>
 
@@ -1857,10 +1816,10 @@ export default function ManagerPagerModal({
             </div>
           </div>
 
-          {rightMid !== 'sw' && (
+          {(slotHas('Impact') || slotHas('Comparison')) && (
             <div style={UI.block}>
               <span style={UI.label}>
-                {rightMid === 'comparison' ? 'Comparison' : 'Impact'} — sides compared
+                {slotHas('Impact') ? 'Impact' : 'Comparison'} — sides compared
               </span>
               <TeamSeasonPicker label="A" value={impactA} teams={pool}
                 onPick={setImpactA} onClear={() => setImpactA(null)} />
@@ -1886,7 +1845,7 @@ export default function ManagerPagerModal({
             </div>
           )}
 
-          {rightMid === 'sw' && (
+          {slotHas('Strengths & Weaknesses') && (
             <div style={UI.block}>
               <span style={UI.label}>Strengths &amp; weaknesses</span>
               <div style={{ display: 'flex', flexWrap: 'wrap', marginBottom: 6 }}>
