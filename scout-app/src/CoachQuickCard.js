@@ -4,8 +4,11 @@
 //   - the top-right GBE Calculation tile can hold the FORMATION PITCH instead.
 //     The pitch renderer moved here from ManagerPager (which imports it back) so
 //     there is one pitch, not two: the pager could not be imported from here
-//     without a cycle. It is sized to the gap above the Career panel rather than
-//     to the tile's width — full width would push it through the panel below.
+//     without a cycle. The tile holds the pitch and nothing else — a label and a
+//     shape badge both repeated what the info column's "Formation:" row already
+//     says. The pitch scales to fit whichever ceiling binds first (the tile's
+//     width, or the gap above the Career panel) and the tile is then sized to the
+//     pitch, so the padding is even on all four sides by construction.
 //   - the Team Context tile can hold VIEW, using the pager's own View body, which
 //     moved here for the same reason.
 // A manual birth date also prints beside the age, in the coach card's format, and
@@ -768,29 +771,39 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
   // the player quick card's biography behaviour (350-char cap, no scout-status here).
   const bioText = overrides.biography ? String(overrides.biography).slice(0, 315) : '';
 
-  // The pitch, in the GBE tile's slot and its box. The pager draws the text column
-  // and the pitch side by side across 538px; 390px here is too narrow for that, so
-  // the name sits in the tile's own header row — the same row GBE puts its PASS
-  // badge in — and the pitch takes the full width under it. The pitch itself is the
-  // pager's, imported, at the pager's aspect. ONE shape, as the pager defaults to.
+  // The pitch, in the GBE tile's slot and its box. NOTHING else goes in the tile —
+  // it carried a FORMATION label and a shape badge, and both said again what the
+  // info column two inches to its left already says on its "Formation:" row. The
+  // tile is the pitch. ONE shape, as the pager defaults to.
   const _fmPrimary = overrides.formation
     || (Array.isArray(coach.formations) ? coach.formations[0] : coach.formation) || '';
-  // ONE shape, as the pager defaults to — the secondary is named in the info column.
+
+  // Scale to fit, then size the TILE to the pitch — that way the padding is even on
+  // all four sides by construction rather than by arithmetic that has to be redone
+  // every time something above it moves.
   //
-  // The height is bounded, not chosen. This tile starts at y=24 and the Career panel
-  // below it starts at y=310, so the box gets 286px: 40 of padding, 46 for the header
-  // row, and the 200 that leaves. A pitch sized to the tile's full 342px WIDTH would
-  // stand 222 tall and push the box 22px through the top of the Career panel.
-  const PITCH_BOX_W = 390, PITCH_CONTENT_W = PITCH_BOX_W - 48;
-  const PITCH_INNER_H = 196;
-  const PITCH_INNER_W = Math.min(PITCH_CONTENT_W, Math.round(PITCH_INNER_H * (320 / 208)));
+  // Two ceilings. Width: the tile is 390 wide, less its border and its padding.
+  // Height: the tile starts at PITCH_TILE_TOP and the Career panel starts at
+  // STYLE_TOP, so the pitch plus its padding has to clear that with a gap left over.
+  // Whichever ceiling binds first wins, and the other dimension follows from the
+  // pager's own 320:208 aspect — the shape is never stretched to fill.
+  const PITCH_TILE_TOP = 24, PITCH_TILE_W = 390, PITCH_TILE_PAD = 20, PITCH_TILE_BORDER = 1;
+  const PITCH_TILE_GAP = 12;                 // clear air above the Career panel
+  const PITCH_MAX_W = PITCH_TILE_W - PITCH_TILE_BORDER * 2 - PITCH_TILE_PAD * 2;
+  const PITCH_MAX_H = STYLE_TOP - PITCH_TILE_TOP - PITCH_TILE_GAP
+                      - PITCH_TILE_BORDER * 2 - PITCH_TILE_PAD * 2;
+  const PITCH_W = Math.min(PITCH_MAX_W, Math.round(PITCH_MAX_H * (320 / 208)));
+  const PITCH_H = Math.round(PITCH_W * (208 / 320));
+  const PITCH_TILE_H = PITCH_H + PITCH_TILE_PAD * 2 + PITCH_TILE_BORDER * 2;
+  // Flex-centred rather than margin-centred: the tile is exactly the pitch plus its
+  // padding, so this centres in both axes and can't drift if either ceiling changes.
+  const topRightStyle = topRight === 'pitch'
+    ? `top:${PITCH_TILE_TOP}px;left:1510px;width:${PITCH_TILE_W}px;height:${PITCH_TILE_H}px;`
+      + `padding:${PITCH_TILE_PAD}px;display:flex;align-items:center;justify-content:center;`
+    : `top:${gbeTop}px;left:1510px;width:390px;padding:20px 24px;`;
   const pitchBlockHtml = `
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
-          <span style="font-size:15px;font-weight:700;color:#9aa3b8;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;">Formation</span>
-          <span style="font-size:16px;font-weight:800;color:#e8eef8;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.16);border-radius:6px;padding:5px 14px;white-space:nowrap;">${_esc(_fmPrimary || '—')}</span>
-        </div>
-        <div style="width:${PITCH_INNER_W}px;height:${PITCH_INNER_H}px;margin:0 auto;">
-          ${formationPitchSvg(_fmPrimary, '', PITCH_INNER_W, PITCH_INNER_H, '', 0, true, false)}
+        <div style="width:${PITCH_W}px;height:${PITCH_H}px;flex:none;">
+          ${formationPitchSvg(_fmPrimary, '', PITCH_W, PITCH_H, '', 0, true, false)}
         </div>`;
 
   const pill = (v) => { if (v == null) return ''; const c = pillColor(v); return `<span style="display:inline-flex;align-items:center;justify-content:center;line-height:1;min-width:18px;font-size:19px;font-weight:800;padding:7px 13px;border-radius:7px;background:${c.bg};color:${c.fg};">${Math.round(v)}</span>`; };
@@ -869,7 +882,7 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
       <div style="position:absolute;left:1188px;top:36px;width:2px;height:210px;background:rgba(255,255,255,0.14);"></div>
       ${infoBox}
 
-      <div style="position:absolute;top:${topRight === 'pitch' ? 24 : gbeTop}px;left:1510px;width:${PITCH_BOX_W}px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.10);border-radius:12px;padding:20px 24px;box-sizing:border-box;">
+      <div style="position:absolute;${topRightStyle}background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.10);border-radius:12px;box-sizing:border-box;overflow:hidden;">
         ${topRight === 'pitch' ? pitchBlockHtml : `
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
           <span style="font-size:15px;font-weight:700;color:#9aa3b8;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;">GBE Calculation</span>
