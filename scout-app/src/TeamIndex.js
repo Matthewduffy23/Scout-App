@@ -1,4 +1,17 @@
 // TeamIndex.js v10 - Adds REPORT button per row -> TeamReport (Team All-in-One 1920x1080 export).
+// v10 - Most Improved follows the Season dropdown instead of being pinned to Latest,
+//       and the delta is available as its own column.
+//       The map used to take rows[last] and rows[last-1], which is "newest and the one
+//       before it" — correct only in Latest mode, and the reason the control was gated
+//       to it. It now anchors on the row actually on screen and scans for the newest
+//       row strictly older than it, so picking 2024-25 measures 2023-24 -> 2024-25.
+//       Scanning rather than indexing also fixes a latent bug: a team missing a season
+//       would have been paired with a row two or three years back as if it were last
+//       year's. 'weighted' is the one mode still without it — a blend of every season
+//       has no season before it.
+//       The Δ column and the sort toggle are independent: either one alone computes
+//       the map, and the column can be read while sorting by anything.
+//
 // v9 - Most Improved toggle: sidebar control sorts by adjusted season-on-season
 // score delta for Overall/Attack/Defence/Possession/Pressing. Division-change correction:
 // delta is multiplied by (prev_ls / curr_ls) so promoted teams (harder context) aren't
@@ -268,6 +281,10 @@ export default function TeamIndex({ players = [] }) {
   };
 
   const [mostImproved, setMostImproved] = useState(false);
+  // Separate from mostImproved on purpose: the column is a thing you READ and the
+  // toggle is a thing you SORT BY, and wanting one without the other is normal —
+  // "show me the improvement, ranked by Overall" had no way to be asked for before.
+  const [showImprovement, setShowImprovement] = useState(false);
   const [improvedMode, setImprovedMode] = useState('Overall');
 
   const [minMVPerf, setMinMVPerf] = useState(null); // null = no filter; number = show teams with mvPerf >= this
@@ -357,12 +374,18 @@ export default function TeamIndex({ players = [] }) {
   //   - promoted teams (curr_ls > prev_ls) get their delta multiplied UP (they improved in harder context)
   //   - relegated teams (curr_ls < prev_ls) get their delta multiplied DOWN (easier context)
   //   - same-league teams get factor ~1.0 (no adjustment)
-  // Only meaningful in 'latest' season mode — returns empty map otherwise.
+  // Anchored on whichever season is SELECTED, not on the newest row on file: pick
+  // 2024-25 and the delta is 2023-24 -> 2024-25. 'latest' is just the case where the
+  // selected row happens to be the newest one, so it behaves exactly as it always did.
+  // The one mode with no anchor is 'weighted', which blends every season into a single
+  // row — there is no "the season before" a blend, so it returns an empty map.
   const [sameDivOnly, setSameDivOnly] = useState(false);
 
   const improvementMap = useMemo(() => {
     const map = {};
-    if (season !== 'latest' || !mostImproved) return map;
+    // Computed for EITHER consumer — the sort toggle or the column — since they are
+    // independent and either one alone needs the numbers.
+    if (season === 'weighted' || (!mostImproved && !showImprovement)) return map;
 
     // Build a lookup of ALL seasons per team (team+country key, same as resolved)
     const byTeam = {};
@@ -376,8 +399,20 @@ export default function TeamIndex({ players = [] }) {
       const rows = (byTeam[key] || []).sort((a, b) => a.season < b.season ? -1 : 1);
       if (rows.length < 2) { map[key] = null; continue; }
 
-      const curr = rows[rows.length - 1];
-      const prev = rows[rows.length - 2];
+      // The anchor is the row actually on screen. In 'latest' that IS rows[last], so
+      // this is the same pair the old code picked; with a season chosen it is that
+      // season's row, which is the whole point of the change.
+      const curr = t;
+      // The immediately PRECEDING season on file, found by scanning rather than by
+      // taking rows[i-1]: a team can be missing a season entirely (no data, a spell in
+      // a division that isn't tracked), and index arithmetic would silently pair the
+      // anchor with a season two or three years back as if it were last year.
+      let prev = null;
+      for (const r of rows) {
+        if (!(r.season < curr.season)) continue;
+        if (!prev || r.season > prev.season) prev = r;
+      }
+      if (!prev) { map[key] = null; continue; }
 
       const currDot = toDotLeague(curr.league);
       const prevDot = toDotLeague(prev.league);
@@ -409,12 +444,19 @@ export default function TeamIndex({ players = [] }) {
       map[key] = { delta, rawDelta: currVal - prevVal, sameDiv, prevSeason: prev.season, prevLeague: prev.league, prevVal, currVal, fieldUsed: field };
     }
     return map;
-  }, [all, resolved, season, mostImproved, improvedMode]);
+  }, [all, resolved, season, mostImproved, showImprovement, improvedMode]);
 
   const getImprovement = (t) => {
     const key = t.team + '|' + teamCountry(t.league);
     return improvementMap[key] ?? null;
   };
+  // Whether the Δ column is drawn at all. Declared HERE, above every consumer —
+  // filtered, sorted and the table all read it, and this file has been bitten before
+  // by a const referenced from a useMemo declared above it (temporal dead zone, which
+  // minifies into "Cannot access 'Ka' before initialization").
+  const improvementColor = (d) => d > 5 ? '#4ade80' : d > 0 ? '#86efac' : d > -5 ? '#fca5a5' : '#f87171';
+  const improvementAnchored = season !== 'weighted';
+  const improvementActive = improvementAnchored && (mostImproved || showImprovement);
 
   const filtered = useMemo(() => {
     return resolved.filter(t => {
@@ -445,7 +487,7 @@ export default function TeamIndex({ players = [] }) {
         if (v == null || v < mf.min || v > mf.max) return false;
       }
       // Same division filter
-      if (mostImproved && season === 'latest' && sameDivOnly) {
+      if (mostImproved && improvementAnchored && sameDivOnly) {
         const imp = improvementMap[t.team + '|' + teamCountry(t.league)];
         if (!imp || !imp.sameDiv) return false;
       }
@@ -460,7 +502,7 @@ export default function TeamIndex({ players = [] }) {
 
   const sorted = useMemo(() => {
     const arr = [...filtered];
-    if (mostImproved && season === 'latest') {
+    if (mostImproved && improvementAnchored) {
       // Sort by adjusted improvement delta desc; teams with no prior season sink to bottom
       arr.sort((a, b) => {
         const ai = getImprovement(a);
@@ -576,12 +618,20 @@ export default function TeamIndex({ players = [] }) {
         </label>
         <div style={{ fontSize: 9, color: '#475569', marginTop: -4, marginBottom: 8 }}>Only affects Overall — Attack/Defence/Possession/Pressing are always raw percentiles.</div>
 
-        <label style={{ ...T.cr, opacity: season !== 'latest' ? 0.4 : 1 }} onClick={() => { if (season !== 'latest') return; setMostImproved(p => !p); setPage(0); }}>
-          <div style={T.cb(mostImproved && season === 'latest')}>{(mostImproved && season === 'latest') && <span style={{ color: '#fff', fontSize: 8 }}>✓</span>}</div>
-          <span style={{ ...T.cl(mostImproved && season === 'latest'), fontWeight: 600 }}>📈 Most Improved</span>
+        <label style={{ ...T.cr, opacity: improvementAnchored ? 1 : 0.4 }} onClick={() => { if (!improvementAnchored) return; setMostImproved(p => !p); setPage(0); }}>
+          <div style={T.cb(mostImproved && improvementAnchored)}>{(mostImproved && improvementAnchored) && <span style={{ color: '#fff', fontSize: 8 }}>✓</span>}</div>
+          <span style={{ ...T.cl(mostImproved && improvementAnchored), fontWeight: 600 }}>📈 Most Improved</span>
         </label>
-        {season !== 'latest' && <div style={{ fontSize: 9, color: '#475569', marginTop: -4, marginBottom: 4 }}>Requires "Latest season" mode.</div>}
-        {mostImproved && season === 'latest' && (
+        <label style={{ ...T.cr, opacity: improvementAnchored ? 1 : 0.4 }} onClick={() => { if (!improvementAnchored) return; setShowImprovement(p => !p); setPage(0); }}>
+          <div style={T.cb(showImprovement && improvementAnchored)}>{(showImprovement && improvementAnchored) && <span style={{ color: '#fff', fontSize: 8 }}>✓</span>}</div>
+          <span style={T.cl(showImprovement && improvementAnchored)}>Δ Improvement column</span>
+        </label>
+        <div style={{ fontSize: 9, color: '#475569', marginTop: -4, marginBottom: 4 }}>
+          {improvementAnchored
+            ? `Measured against each team's season before ${season === 'latest' ? 'its latest' : season}.`
+            : 'Needs a single season — the weighted average blends them all, so there is no season before it.'}
+        </div>
+        {improvementActive && (
           <div style={{ marginTop: 2, marginBottom: 8 }}>
             <span style={T.fl}>Improve by</span>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
@@ -593,11 +643,15 @@ export default function TeamIndex({ players = [] }) {
               ))}
             </div>
             <div style={{ fontSize: 9, color: '#475569', marginTop: 5, marginBottom: 6 }}>Sub-scores (Attack etc.) only compare same-division teams. Cross-division uses Overall.</div>
-            <label style={T.cr} onClick={() => { setSameDivOnly(p => !p); setPage(0); }}>
-              <div style={T.cb(sameDivOnly)}>{sameDivOnly && <span style={{ color: '#fff', fontSize: 8 }}>✓</span>}</div>
-              <span style={T.cl(sameDivOnly)}>Same Division Only</span>
-            </label>
-            <div style={{ fontSize: 9, color: '#475569', marginTop: -2 }}>Hide teams that changed league.</div>
+            {mostImproved && (
+              <>
+                <label style={T.cr} onClick={() => { setSameDivOnly(p => !p); setPage(0); }}>
+                  <div style={T.cb(sameDivOnly)}>{sameDivOnly && <span style={{ color: '#fff', fontSize: 8 }}>✓</span>}</div>
+                  <span style={T.cl(sameDivOnly)}>Same Division Only</span>
+                </label>
+                <div style={{ fontSize: 9, color: '#475569', marginTop: -2 }}>Hide teams that changed league.</div>
+              </>
+            )}
           </div>
         )}
 
@@ -802,6 +856,19 @@ export default function TeamIndex({ players = [] }) {
                                             overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.team}</div>
                               <div style={{ fontSize: 10.5, color: '#64748b' }}>{t.league} · {t.season}</div>
                             </div>
+                            {improvementActive && (() => {
+                              const imp = getImprovement(t);
+                              return (
+                                <div style={T.cardStat}
+                                     title={imp ? `${imp.prevSeason} (${imp.prevLeague}) → ${t.league} | ${imp.prevVal?.toFixed(1)} → ${imp.currVal?.toFixed(1)}` : 'No preceding season'}>
+                                  <span style={{ fontWeight: 800, fontSize: 15,
+                                                 color: imp ? improvementColor(imp.delta) : '#334155' }}>
+                                    {imp ? `${imp.delta >= 0 ? '+' : ''}${imp.delta.toFixed(1)}` : '—'}</span>
+                                  <span style={{ fontSize: 8, color: '#475569', letterSpacing: '.08em' }}>
+                                    Δ {improvedMode.toUpperCase()}</span>
+                                </div>
+                              );
+                            })()}
                             <div style={T.cardStat}>
                               <span style={{ fontWeight: 800, fontSize: 17, color: scoreColor(getDisplayScore(t)) }}>
                                 {getDisplayScore(t) != null ? Math.round(getDisplayScore(t)) : '—'}</span>
@@ -831,7 +898,7 @@ export default function TeamIndex({ players = [] }) {
                   <Th col="team" label="Club" sort={sort} onSort={onSort} />
                   <th style={T.th}>League</th>
                   <th style={T.th}>Style</th>
-                  {mostImproved && season === 'latest' && <th style={{ ...T.th, color: '#4ade80' }}>Δ {improvedMode}</th>}
+                  {improvementActive && <th style={{ ...T.th, color: '#4ade80' }}>Δ {improvedMode}</th>}
                   <Th col="overall" label="Overall" sort={sort} onSort={onSort} />
                   <Th col="attack" label="Attack" sort={sort} onSort={onSort} />
                   <Th col="defence" label="Defence" sort={sort} onSort={onSort} />
@@ -869,11 +936,11 @@ export default function TeamIndex({ players = [] }) {
                         <td style={T.td}>
                           <span style={{ display: 'inline-block', padding: '2px 6px', borderRadius: 8, background: t.style ? styleColor(t.style).bg : '#0e1e38', color: t.style ? styleColor(t.style).color : '#93c5fd', fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap' }}>{t.style || '—'}</span>
                         </td>
-                        {mostImproved && season === 'latest' && (() => {
+                        {improvementActive && (() => {
                           const imp = getImprovement(t);
                           if (!imp) return <td style={{ ...T.td, color: '#475569' }}>—</td>;
                           const { delta, rawDelta, sameDiv, prevSeason, prevLeague, prevVal, currVal, fieldUsed } = imp;
-                          const color = delta > 5 ? '#4ade80' : delta > 0 ? '#86efac' : delta > -5 ? '#fca5a5' : '#f87171';
+                          const color = improvementColor(delta);
                           const prefix = delta >= 0 ? '+' : '';
                           const divArrow = !sameDiv ? (LEAGUE_STRENGTHS[toDotLeague(t.league)] > LEAGUE_STRENGTHS[toDotLeague(prevLeague)] ? '↑' : '↓') : '';
                           const tooltip = `${prevSeason} (${prevLeague}) → ${t.league} | ${prevVal?.toFixed(1)} → ${currVal?.toFixed(1)} (${fieldUsed === 'completeScore' && improvedMode !== 'Overall' && improvedMode !== 'Raw Overall' ? 'Overall used — div. changed' : improvedMode})`;
