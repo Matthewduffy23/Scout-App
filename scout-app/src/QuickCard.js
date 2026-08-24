@@ -165,6 +165,14 @@ export function extractHeat(dataUrl) {
 // two modes meant one card drew the same information two different shapes.
 // Coordinates are on a 320x208 viewBox — 1.54:1, the real ratio — so nothing
 // stretches whatever sits behind it.
+// Header nudges. A wide or oddly-shaped badge can crowd the club name, and the two
+// blocks need to move independently. Emitted only when non-zero: at 0 the style
+// string is exactly what it was before these existed.
+const _hdrNudge = (px) => {
+  const n = Number(px);
+  return Number.isFinite(n) && n !== 0 ? `transform:translateX(${n}px);` : '';
+};
+
 export const PP_SLOTS = {
   GK:  [26, 104],
   CB:  [70, 104],
@@ -1110,7 +1118,15 @@ function buildQuickCardElement(player, players, manual = {}) {
     ? (pick.fotmobId || TEAM_FOTMOB_MAP[hdrTeamFull] || TEAM_FOTMOB_MAP[_normTeam(hdrTeamFull)] || '')
     : crestId;
   const hdrCrest = hdrCrestId ? `${CREST_BASE}${hdrCrestId}.png` : '';
-  const teamTextLeft = manual.shiftTeamText ? 912 : 892; // manual toggle for badges with unusual/wide shapes that overlap the text; default off
+  const teamTextLeft = 892;
+  // This file already had a header-text offset: a boolean that jumped the block from
+  // 892 to 912 for wide badges. It is now the 20 of a numeric nudge, so the same fix
+  // is available at any distance and in either direction. A caller still passing the
+  // boolean keeps its old shift exactly.
+  const hdrTextPx = Number(manual.headerTextNudge);
+  const hdrTextNudge = _hdrNudge(Number.isFinite(hdrTextPx) && hdrTextPx !== 0
+    ? hdrTextPx : (manual.shiftTeamText ? 20 : 0));
+  const badgeNudge = _hdrNudge(manual.badgeNudge);
   const photo = manual.uploadedPhotoDataUrl || photoUrl(player.name, player.team);
   const groups = sd.g || {};
   // Team Context follows whatever season+club is selected at the top, exactly as
@@ -1346,13 +1362,13 @@ function buildQuickCardElement(player, players, manual = {}) {
       </div>
 
   <!-- CREST / TEAM / LEAGUE -->
-      ${hdrCrest ? `<div style="position:absolute;left:${hdrTeam.length >= 12 ? 720 : 740}px;top:22px;width:155px;height:210px;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${hdrCrest}');filter:drop-shadow(0 1px 2px rgba(0,0,0,0.3));"></div>` : ''}
-      <div style="position:absolute;left:${teamTextLeft}px;top:90px;width:275px;font-size:32px;font-weight:800;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${(manual.teamOverride || hdrTeam).length >= 16 ? 'letter-spacing:-1px;' : ''}">${manual.teamOverride || hdrTeam}</div>
-      <div style="position:absolute;left:${teamTextLeft}px;top:150px;display:flex;align-items:center;">
+      ${hdrCrest ? `<div style="position:absolute;left:${hdrTeam.length >= 12 ? 720 : 740}px;top:22px;width:155px;height:210px;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${hdrCrest}');filter:drop-shadow(0 1px 2px rgba(0,0,0,0.3));${badgeNudge}"></div>` : ''}
+      <div style="position:absolute;left:${teamTextLeft}px;top:90px;width:275px;font-size:32px;font-weight:800;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${(manual.teamOverride || hdrTeam).length >= 16 ? 'letter-spacing:-1px;' : ''}${hdrTextNudge}">${manual.teamOverride || hdrTeam}</div>
+      <div style="position:absolute;left:${teamTextLeft}px;top:150px;display:flex;align-items:center;${hdrTextNudge}">
         <span style="font-size:21px;font-weight:500;color:#fff;white-space:nowrap;">${leagueDisplayName}</span>
         ${countryToIso2(leagueToCountry(hdrLeague)) ? `<div style="width:32px;height:20px;flex-shrink:0;margin-left:${manual.shiftTeamText ? 30 : 27}px;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(leagueToCountry(hdrLeague))}.png');border-radius:2px;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15);"></div>` : ''}
       </div>
-      ${player.onLoan ? `<div style="position:absolute;left:${teamTextLeft}px;top:194px;font-size:21.3px;color:#d9d9d9;white-space:nowrap;">On Loan</div>` : ''}
+      ${player.onLoan ? `<div style="position:absolute;left:${teamTextLeft}px;top:194px;font-size:21.3px;color:#d9d9d9;white-space:nowrap;${hdrTextNudge}">On Loan</div>` : ''}
 
 
       <div style="position:absolute;left:1188px;top:36px;width:2px;height:210px;background:rgba(255,255,255,0.14);"></div>
@@ -1476,7 +1492,10 @@ export default function QuickCardModal({ player, players, onClose }) {
   const [halfTeamContext, setHalfTeamContext] = useState(false);
   const [showForecast, setShowForecast] = useState(false);
   const [useBestRoleCareer, setUseBestRoleCareer] = useState(false);
-  const [shiftTeamText, setShiftTeamText] = useState(false);
+  // Was a checkbox that jumped the club block 20px right for wide badges. Same
+  // control, now to the pixel and in both directions, with a badge offset beside it.
+  const [headerTextNudge, setHeaderTextNudge] = useState(0);
+  const [badgeNudge, setBadgeNudge] = useState(0);
   const [scoutStatus, setScoutStatus] = useState('');
   const [showScorePills, setShowScorePills] = useState(true);
   const [headerColorOverride, setHeaderColorOverride] = useState('');
@@ -1534,7 +1553,7 @@ export default function QuickCardModal({ player, players, onClose }) {
   const handleDownload = async () => {
     setDownloading(true);
     const { toPng } = await import('html-to-image');
-    const el = buildQuickCardElement(player, players, { agentOverride, nameOverride, valueOverride, heightOverride, teamOverride, teamPick, posLabelOverride, uploadedPhotoDataUrl, biography, halfTeamContext, showForecast, scoutStatus, showScorePills, headerColorOverride, showPitchPosition, pitchStyle, heatmapDataUrl, heatOpacity: Number(heatOpacity) / 100, useBestRoleCareer, seasonOverride, shiftTeamText, escOverride, escReason, positionColors, gbeOv });
+    const el = buildQuickCardElement(player, players, { agentOverride, nameOverride, valueOverride, heightOverride, teamOverride, teamPick, posLabelOverride, uploadedPhotoDataUrl, biography, halfTeamContext, showForecast, scoutStatus, showScorePills, headerColorOverride, showPitchPosition, pitchStyle, heatmapDataUrl, heatOpacity: Number(heatOpacity) / 100, useBestRoleCareer, seasonOverride, headerTextNudge, badgeNudge, escOverride, escReason, positionColors, gbeOv });
     try {
       const cardNode = el.querySelector('#qc-card-root') || el;
       const opts = {
@@ -1609,9 +1628,23 @@ export default function QuickCardModal({ player, players, onClose }) {
           <label htmlFor="qc-best-role" style={{fontSize:11.5,color:'#cbd5e1',cursor:'pointer'}}>Career: best role score (scoutcard logic) instead of career score</label>
         </div>
 
-        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12,textAlign:'left'}}>
-          <input type="checkbox" id="qc-shift-team" checked={shiftTeamText} onChange={e=>setShiftTeamText(e.target.checked)} style={{cursor:'pointer'}} />
-          <label htmlFor="qc-shift-team" style={{fontSize:11.5,color:'#cbd5e1',cursor:'pointer'}}>Shift team/league/flag right (for wide or unusually shaped badges)</label>
+        <div style={{marginBottom:12,textAlign:'left'}}>
+          <label style={qcLabelStyle}>Header nudges (px, header only — for wide or unusually shaped badges)</label>
+          <div style={{display:'flex',gap:8}}>
+            <div style={{flex:1}}>
+              <span style={{fontSize:9,color:'#64748b',display:'block',marginBottom:3}}>Badge</span>
+              <input style={qcInputStyle} type="number" min={-20} max={20} value={badgeNudge}
+                     onChange={e=>setBadgeNudge(e.target.value===''?0:Number(e.target.value))} />
+            </div>
+            <div style={{flex:1}}>
+              <span style={{fontSize:9,color:'#64748b',display:'block',marginBottom:3}}>Header text</span>
+              <input style={qcInputStyle} type="number" min={-20} max={20} value={headerTextNudge}
+                     onChange={e=>setHeaderTextNudge(e.target.value===''?0:Number(e.target.value))} />
+            </div>
+          </div>
+          <div style={{fontSize:9,color:'#475569',marginTop:4}}>
+            Replaces the old "shift team text right" tick — that was a fixed +20, so type 20 for the same result.
+          </div>
         </div>
 
         <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12,textAlign:'left'}}>

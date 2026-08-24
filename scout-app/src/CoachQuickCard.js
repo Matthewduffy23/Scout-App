@@ -55,6 +55,14 @@ export const CQC_BODY_DEFAULTS = { leftMid: 'context', rightMid: 'impact' };
 const cqcBodyPanel = (v, slot) =>
   CQC_BODY_PANELS.some(([id]) => id === v) ? v : CQC_BODY_DEFAULTS[slot];
 
+// Header nudges. A wide or oddly-shaped badge can crowd the club name, and the two
+// blocks need to move independently. Emitted only when non-zero: at 0 the style
+// string is exactly what it was before these existed.
+const _hdrNudge = (px) => {
+  const n = Number(px);
+  return Number.isFinite(n) && n !== 0 ? `transform:translateX(${n}px);` : '';
+};
+
 // ── player-card visual constants (copied verbatim so styling matches exactly) ──
 const BG        = '#0a0f1c';
 const HEADER_L  = 'rgb(23,26,77)';
@@ -888,6 +896,8 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
 
   const tenure = overrides.tenure || coach.tenure || '';
   const unattached = !!overrides.unattached;
+  const badgeNudge = _hdrNudge(overrides.badgeNudge);
+  const hdrTextNudge = _hdrNudge(overrides.headerTextNudge);
 
   // Unattached: no single current club, so the 740-1180px header slot lists the
   // clubs managed, newest first — (crest) Crawley 24-25 L2. Six rows is what fits
@@ -896,7 +906,7 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
   const histRows = unattached ? tenureHistory(tenureRows, HIST_MAX) : [];
   const HIST_ROW_H = 34;
   const histBlockHtml = !unattached ? '' : `
-      <div style="position:absolute;left:740px;top:${Math.max(24, 132 - (histRows.length * HIST_ROW_H) / 2)}px;width:440px;">
+      <div style="position:absolute;left:740px;top:${Math.max(24, 132 - (histRows.length * HIST_ROW_H) / 2)}px;width:440px;${hdrTextNudge}">
         ${histRows.map(r => `
           <div style="display:flex;align-items:center;gap:14px;height:${HIST_ROW_H}px;">
             ${teamCrestUrl(r.team)
@@ -937,13 +947,13 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
       </div>
 
       ${unattached ? histBlockHtml : `
-      ${teamCrestUrl(latest.team) ? `<div style="position:absolute;left:740px;top:22px;width:155px;height:210px;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${teamCrestUrl(latest.team)}');filter:drop-shadow(0 1px 2px rgba(0,0,0,0.3));"></div>` : ''}
-      <div style="position:absolute;left:915px;top:90px;width:266px;font-size:32px;font-weight:800;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${overrides.teamOverride || latest.team || ''}</div>
-      <div style="position:absolute;left:915px;top:140px;display:flex;align-items:center;">
+      ${teamCrestUrl(latest.team) ? `<div style="position:absolute;left:740px;top:22px;width:155px;height:210px;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${teamCrestUrl(latest.team)}');filter:drop-shadow(0 1px 2px rgba(0,0,0,0.3));${badgeNudge}"></div>` : ''}
+      <div style="position:absolute;left:915px;top:90px;width:266px;font-size:32px;font-weight:800;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${hdrTextNudge}">${overrides.teamOverride || latest.team || ''}</div>
+      <div style="position:absolute;left:915px;top:140px;display:flex;align-items:center;${hdrTextNudge}">
         <span style="font-size:21px;font-weight:500;color:#fff;white-space:nowrap;">${latest.league || ''}</span>
         ${leagueIso2 ? `<div style="width:32px;height:20px;flex-shrink:0;margin-left:24px;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${leagueIso2}.png');border-radius:2px;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15);"></div>` : ''}
       </div>
-      ${tenure ? `<div style="position:absolute;left:915px;top:178px;font-size:20px;font-weight:500;color:#9aa3b8;white-space:nowrap;">${tenure}</div>` : ''}`}
+      ${tenure ? `<div style="position:absolute;left:915px;top:178px;font-size:20px;font-weight:500;color:#9aa3b8;white-space:nowrap;${hdrTextNudge}">${tenure}</div>` : ''}`}
 
       <div style="position:absolute;left:1188px;top:36px;width:2px;height:210px;background:rgba(255,255,255,0.14);"></div>
       ${infoBox}

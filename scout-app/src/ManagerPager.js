@@ -401,6 +401,14 @@ function teamContextBody(w, h, tc, ageVal, agePct, markPct) {
 }
 
 
+// Header nudges. A wide or oddly-shaped badge can crowd the club name, and the two
+// blocks need to move independently. Emitted only when non-zero, so 0 leaves the
+// style string exactly as it was before these existed.
+const _hdrNudge = (px) => {
+  const n = Number(px);
+  return Number.isFinite(n) && n !== 0 ? `transform:translateX(${n}px);` : '';
+};
+
 // ─── Formation block ───────────────────────────────────────────────────────
 // The pitch renderer itself moved to CoachQuickCard.js so the quick card can
 // draw the SAME pitch — importing it up from here would have made a cycle.
@@ -643,6 +651,8 @@ function headerHtml(coach, ctx, opts) {
   // wins — an age derived from one date printed beside another is worse than
   // printing neither. The date joins the identity row's own dot-separated list, so
   // it sits beside the age exactly as the coach card prints it beside "years old".
+  const badgeNudge = _hdrNudge(opts.badgeNudge);
+  const hdrTextNudge = _hdrNudge(opts.headerTextNudge);
   const dob = String(dobOverride || coach.dob || '').trim();
   const age = computeAge(dob);
 
@@ -674,25 +684,25 @@ function headerHtml(coach, ctx, opts) {
   const clubBlock = unattached ? `
       ${crest ? `<div style="width:23px;height:23px;flex-shrink:0;background-size:contain;
                   background-repeat:no-repeat;background-position:center;opacity:0.55;
-                  background-image:url('${src(crest)}');"></div>` : ''}
-      <span style="font-size:20px;font-weight:700;color:${ink.muted};${crest ? 'margin-left:9px;' : ''}">${esc(truncateText(displayTeam, 16))}</span>
+                  background-image:url('${src(crest)}');${badgeNudge}"></div>` : ''}
+      <span style="font-size:20px;font-weight:700;color:${ink.muted};${crest ? 'margin-left:9px;' : ''}${hdrTextNudge}">${esc(truncateText(displayTeam, 16))}</span>
       <span style="font-size:9px;font-weight:700;letter-spacing:0.14em;color:${ink.muted};
                    border:1px solid ${ink.rule};border-radius:4px;padding:3px 8px;
-                   margin-left:11px;">UNATTACHED</span>`
+                   margin-left:11px;${hdrTextNudge}">UNATTACHED</span>`
     : `
       ${crest ? `<div style="width:23px;height:23px;flex-shrink:0;background-size:contain;
                   background-repeat:no-repeat;background-position:center;
-                  background-image:url('${src(crest)}');"></div>` : ''}
-      <span style="font-size:20px;font-weight:700;color:${ink.secondary};${crest ? 'margin-left:9px;' : ''}">${esc(truncateText(displayTeam, 16))}</span>
+                  background-image:url('${src(crest)}');${badgeNudge}"></div>` : ''}
+      <span style="font-size:20px;font-weight:700;color:${ink.secondary};${crest ? 'margin-left:9px;' : ''}${hdrTextNudge}">${esc(truncateText(displayTeam, 16))}</span>
       ${logo ? `<div style="width:19px;height:19px;flex-shrink:0;background-size:contain;
                   background-repeat:no-repeat;background-position:center;
-                  background-image:url('${src(logo)}');margin-left:${LONG_CLUB ? 18 : 14}px;"></div>` : ''}
+                  background-image:url('${src(logo)}');margin-left:${LONG_CLUB ? 18 : 14}px;${hdrTextNudge}"></div>` : ''}
       ${flag ? `<div style="width:22px;height:14px;flex-shrink:0;background-size:cover;
                   background-position:center;border-radius:2px;margin-left:12px;
                   box-shadow:inset 0 0 0 1px rgba(255,255,255,0.18);
-                  background-image:url('${src(flag)}');"></div>` : ''}
+                  background-image:url('${src(flag)}');${hdrTextNudge}"></div>` : ''}
       <span style="font-size:12.5px;font-weight:700;letter-spacing:0.08em;
-                   color:${ink.muted};margin-left:12px;">${esc(leagueAbbrev(league))}</span>`;
+                   color:${ink.muted};margin-left:12px;${hdrTextNudge}">${esc(leagueAbbrev(league))}</span>`;
 
   return `
     <div style="position:absolute;top:0;left:0;width:${W}px;height:${HEADER_H}px;
@@ -907,6 +917,7 @@ export function buildManagerPagerElement(coach, tenureRows, traits, opts = {}) {
     headerColour = HEADER_COLOURS.Default,
     statsSeasonKey = '', nameOverride = '', teamOverride = '',
     uploadedPhotoDataUrl = '', viewText = '', dobOverride = '',
+    badgeNudge = 0, headerTextNudge = 0,   // header-only px offsets; 0 renders as before
     tenureOverride = '', unattached = false,
     primaryFormation = '', secondaryFormation = '',
     showFormation = true, showFormationDots = true, showSecondaryShape = false,
@@ -1126,6 +1137,7 @@ export function buildManagerPagerElement(coach, tenureRows, traits, opts = {}) {
         positionMapUrl, mapOpacity, showFormationDots, showSecondaryShape,
         score, potential, overallOverride, potentialOverride,
         overallUnclear, potentialUnclear, allTeams: pool,
+        badgeNudge, headerTextNudge,
       })}
 
       ${panel({
@@ -1333,6 +1345,9 @@ export default function ManagerPagerModal({
   const ctx = useMemo(() => resolveTenure(tenureRows, statsSeasonKey), [tenureRows, statsSeasonKey]);
   const pool = useMemo(() => ((allTeams && allTeams.length) ? allTeams : tenureRows), [allTeams, tenureRows]);
   const [dobOverride, setDobOverride] = useState('');
+  // Header-only px offsets, for a badge whose shape crowds the club name.
+  const [badgeNudge, setBadgeNudge] = useState(0);
+  const [headerTextNudge, setHeaderTextNudge] = useState(0);
   const age = useMemo(() => computeAge(dobOverride || coach.dob),
     [dobOverride, coach.dob]);
   const scores = useMemo(
@@ -1420,6 +1435,7 @@ export default function ManagerPagerModal({
     allTeams, seasonPerf,
     headerColour: COLOURS[headerColourName] || HEADER_COLOURS.Default,
     statsSeasonKey, nameOverride, teamOverride, uploadedPhotoDataUrl, viewText,
+    badgeNudge, headerTextNudge,
     tenureOverride, unattached,
     primaryFormation, secondaryFormation, showFormation, showFormationDots, showSecondaryShape,
     positionMapUrl, mapOpacity: Number(mapOpacity) / 100,
@@ -1542,6 +1558,28 @@ export default function ManagerPagerModal({
             <div style={{ marginTop: 8 }}>
               <Check label="Unattached — club greys out and takes an Unattached tag"
                      value={unattached} onChange={setUnattached} />
+            </div>
+          </div>
+
+          <div style={UI.block}>
+            <span style={UI.label}>Header nudges</span>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <label style={{ flex: 1 }}>
+                <span style={{ fontSize: 9, color: '#64748b', display: 'block', marginBottom: 3 }}>Badge</span>
+                <input style={{ ...UI.input, cursor: 'text' }} type="number" min={-20} max={20}
+                       value={badgeNudge}
+                       onChange={e => setBadgeNudge(e.target.value === '' ? 0 : Number(e.target.value))} />
+              </label>
+              <label style={{ flex: 1 }}>
+                <span style={{ fontSize: 9, color: '#64748b', display: 'block', marginBottom: 3 }}>Header text</span>
+                <input style={{ ...UI.input, cursor: 'text' }} type="number" min={-20} max={20}
+                       value={headerTextNudge}
+                       onChange={e => setHeaderTextNudge(e.target.value === '' ? 0 : Number(e.target.value))} />
+              </label>
+            </div>
+            <div style={UI.note}>
+              Pixels left (negative) or right, header only. Badge moves the crest;
+              header text moves the club name, league marks and abbreviation. 0 is off.
             </div>
           </div>
 

@@ -254,7 +254,8 @@ function CoachQuickOverrides({ coach, coachId, overrides, teams, onFieldChange, 
   var sizeHint = latestRow && latestRow.leagueSize != null ? String(latestRow.leagueSize) : '20';
 
   var VR  = [['squadValue', 'Squad Cost', '£340m'], ['wageBill', 'Wage Bill*', '£120m'], ['odds', 'Betting Forecast', '5/1']];
-  var TXT = [['agent', 'Agent', ''], ['formation', 'Formation', '4-3-3'], ['tenure', 'Tenure', '2024-Present']];
+  var TXT = [['agent', 'Agent', ''], ['formation', 'Formation', '4-3-3'], ['tenure', 'Tenure', '2024-Present'],
+             ['teamOverride', 'Club name on card', latestT ? latestT.team : 'Club']];
   var lbl = { fontSize: 9, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' };
   var inp = { width: 100, background: '#080f1c', border: '1px solid #2b1e45', borderRadius: 4, color: '#e2e8f4', fontSize: 11, padding: '4px 6px' };
   var rankInp = Object.assign({}, inp, { width: 58 });
@@ -319,6 +320,25 @@ function CoachQuickOverrides({ coach, coachId, overrides, teams, onFieldChange, 
           onChange={function(e) { set('dob', e.target.value); }}
           style={Object.assign({}, inp, { width: 150 })} />
         <span style={{ fontSize: 9, color: '#475569' }}>Prints beside the age in the header. Drives the age too.</span>
+      </div>
+      <div style={{ marginTop: 8, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <span style={lbl}>Badge nudge (px)</span>
+          <input type="number" min={-20} max={20}
+            value={overrides.badgeNudge == null ? '' : overrides.badgeNudge}
+            placeholder="0" onChange={function(e) { set('badgeNudge', e.target.value); }}
+            style={Object.assign({}, inp, { width: 72 })} />
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <span style={lbl}>Header text nudge (px)</span>
+          <input type="number" min={-20} max={20}
+            value={overrides.headerTextNudge == null ? '' : overrides.headerTextNudge}
+            placeholder="0" onChange={function(e) { set('headerTextNudge', e.target.value); }}
+            style={Object.assign({}, inp, { width: 72 })} />
+        </div>
+        <span style={{ fontSize: 9, color: '#475569', paddingBottom: 5 }}>
+          Header only. Badge moves the crest; header text moves club, league and tenure. 0 is off.
+        </span>
       </div>
       <div style={{ marginTop: 8, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -772,6 +792,9 @@ export default function CoachPanel({ allTeams, allPlayers, onClose }) {
       if (q.topRight) overrides.topRight = q.topRight;
       if (q.leftMid) overrides.leftMid = q.leftMid;
       if (q.rightMid) overrides.rightMid = q.rightMid;
+      if (q.teamOverride && q.teamOverride.trim()) overrides.teamOverride = q.teamOverride.trim();
+      if (q.badgeNudge) overrides.badgeNudge = Number(q.badgeNudge) || 0;
+      if (q.headerTextNudge) overrides.headerTextNudge = Number(q.headerTextNudge) || 0;
       if (q.viewText && q.viewText.trim()) overrides.viewText = q.viewText.trim();
       if (q.gbeC36 || q.gbeC24 || q.gbeExceptions) {
         overrides.gbe = {

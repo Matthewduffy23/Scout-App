@@ -998,6 +998,14 @@ export function clubsPanelBody(w, h, rows, coreOnly, mode, hideScores, notes, no
   }</div>`;
 }
 
+// Header nudges. A wide or oddly-shaped badge can crowd the club name, and the two
+// blocks need to move independently. Emitted only when non-zero, so 0 leaves the
+// style string exactly as it was before these existed.
+const _hdrNudge = (px) => {
+  const n = Number(px);
+  return Number.isFinite(n) && n !== 0 ? `transform:translateX(${n}px);` : '';
+};
+
 // ─── View ──────────────────────────────────────────────────────────────────
 function viewPanelBody(w, h, text) {
   if (!text || !String(text).trim()) {
@@ -1050,6 +1058,8 @@ function headerHtml(player, ctx, opts) {
   // override still wins on the name alone, for spelling fixes on top of a pick.
   const pick = (teamPick && teamPick.team) ? teamPick : null;
   const displayTeam = (teamOverride && teamOverride.trim()) || (pick ? pick.team : team);
+  const badgeNudge = _hdrNudge(opts.badgeNudge);
+  const hdrTextNudge = _hdrNudge(opts.headerTextNudge);
   const photo = opts.uploadedPhotoDataUrl || photoUrl(player.name, player.team);
   const crest = teamCrest(pick ? pick.team : team);
   // A long club name needs a touch more air before the league badge. "Viktoria
@@ -1130,17 +1140,17 @@ function headerHtml(player, ctx, opts) {
                 white-space:nowrap;">
       ${crest ? `<div style="width:23px;height:23px;flex-shrink:0;background-size:contain;
                   background-repeat:no-repeat;background-position:center;
-                  background-image:url('${src(crest)}');"></div>` : ''}
-      <span style="font-size:20px;font-weight:700;color:${ink.secondary};${crest ? 'margin-left:9px;' : ''}">${esc(truncateText(displayTeam, 16))}</span>
+                  background-image:url('${src(crest)}');${badgeNudge}"></div>` : ''}
+      <span style="font-size:20px;font-weight:700;color:${ink.secondary};${crest ? 'margin-left:9px;' : ''}${hdrTextNudge}">${esc(truncateText(displayTeam, 16))}</span>
       ${logo ? `<div style="width:19px;height:19px;flex-shrink:0;background-size:contain;
                   background-repeat:no-repeat;background-position:center;
-                  background-image:url('${src(logo)}');margin-left:${LONG_CLUB ? 18 : 14}px;"></div>` : ''}
+                  background-image:url('${src(logo)}');margin-left:${LONG_CLUB ? 18 : 14}px;${hdrTextNudge}"></div>` : ''}
       ${flag ? `<div style="width:22px;height:14px;flex-shrink:0;background-size:cover;
                   background-position:center;border-radius:2px;margin-left:12px;
                   box-shadow:inset 0 0 0 1px rgba(255,255,255,0.18);
-                  background-image:url('${src(flag)}');"></div>` : ''}
+                  background-image:url('${src(flag)}');${hdrTextNudge}"></div>` : ''}
       <span style="font-size:12.5px;font-weight:700;letter-spacing:0.08em;
-                   color:${ink.muted};margin-left:12px;">${esc(leagueAbbrev(hdrLeague))}</span>
+                   color:${ink.muted};margin-left:12px;${hdrTextNudge}">${esc(leagueAbbrev(hdrLeague))}</span>
 
       <span style="width:1px;height:16px;background:${ink.rule};margin:0 6px 0 7px;flex-shrink:0;"></span>
 
@@ -1352,6 +1362,7 @@ export function buildPlayerPagerElement(player, opts = {}) {
   const {
     images = {}, headerColourName = 'Default', seasonOverride = '',
     nameOverride = '', teamOverride = '', teamPick = null, uploadedPhotoDataUrl = '',
+    badgeNudge = 0, headerTextNudge = 0,   // header-only px offsets; 0 renders as before
     viewText = '', clubRows = [], clubsCoreOnly = true,
     clubsMode = 'clubs', hideFitScores = false, ukOnly = true, clubNotes = {},
     showForecast = false, useBestRoleCareer = false, showPitch = true,
@@ -1446,6 +1457,7 @@ export function buildPlayerPagerElement(player, opts = {}) {
         uploadedPhotoDataUrl, positionColors, gbeOv, showPitch, isGK, positionPcts, heatmapDataUrl, heatOpacity, shownSlots,
         heightOverride, footOverride, showXValue, xValueOverride, showTierBadge,
         overallOverride, potentialOverride, overallUnclear, potentialUnclear,
+        badgeNudge, headerTextNudge,
       })}
 
       ${panel({
@@ -1617,6 +1629,9 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
   const [seasonOverride, setSeasonOverride] = useState('');
   const [nameOverride, setNameOverride] = useState('');
   const [teamOverride, setTeamOverride] = useState('');
+  // Header-only px offsets, for a badge whose shape crowds the club name.
+  const [badgeNudge, setBadgeNudge] = useState(0);
+  const [headerTextNudge, setHeaderTextNudge] = useState(0);
   // A club picked from search — { team, league } — that replaces the club
   // identity in the header (name, crest, league logo, league flag) without
   // changing which season's stats are shown. For players whose newest data row
@@ -1814,6 +1829,7 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
 
   const buildOpts = () => ({
     headerColourName, seasonOverride, nameOverride, teamOverride, teamPick,
+    badgeNudge, headerTextNudge,
     uploadedPhotoDataUrl, viewText, clubRows,
     clubsMode, hideFitScores, ukOnly, positionPcts,
     positionColors: positionTiers,
@@ -1910,6 +1926,28 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
             <span style={UI.label}>Club name on card</span>
             <input style={UI.input} value={teamOverride}
                    onChange={e => setTeamOverride(e.target.value)} placeholder={ctx.team} />
+          </div>
+
+          <div style={UI.block}>
+            <span style={UI.label}>Header nudges</span>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <label style={{ flex: 1 }}>
+                <span style={{ fontSize: 9, color: '#64748b', display: 'block', marginBottom: 3 }}>Badge</span>
+                <input style={{ ...UI.input, cursor: 'text' }} type="number" min={-20} max={20}
+                       value={badgeNudge}
+                       onChange={e => setBadgeNudge(e.target.value === '' ? 0 : Number(e.target.value))} />
+              </label>
+              <label style={{ flex: 1 }}>
+                <span style={{ fontSize: 9, color: '#64748b', display: 'block', marginBottom: 3 }}>Header text</span>
+                <input style={{ ...UI.input, cursor: 'text' }} type="number" min={-20} max={20}
+                       value={headerTextNudge}
+                       onChange={e => setHeaderTextNudge(e.target.value === '' ? 0 : Number(e.target.value))} />
+              </label>
+            </div>
+            <div style={UI.note}>
+              Pixels left (negative) or right, header only. Badge moves the crest;
+              header text moves the club name, league marks and abbreviation. 0 is off.
+            </div>
           </div>
 
           <div style={UI.block}>
