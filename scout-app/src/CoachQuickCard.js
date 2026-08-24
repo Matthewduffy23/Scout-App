@@ -11,9 +11,14 @@
 //     pitch, so the padding is even on all four sides by construction.
 //   - the Team Context tile can hold VIEW, using the pager's own View body, which
 //     moved here for the same reason.
-//   - the Impact radar tile can hold the LEAGUE TABLE, which is TeamReport's own
-//     renderer imported straight in — same columns, same row chrome, same highlight
-//     on the subject's row. That import closes a cycle; see the note on it.
+//   - EITHER body tile holds any of Team Context / View / Impact / League Table, from
+//     one shared list, the way the Team Report's bottom row already works. The table
+//     is TeamReport's own renderer imported straight in — same columns, same row
+//     chrome, same highlight on the subject's row. That import closes a cycle; see
+//     the note on it. Defaults are Team Context left, Impact right, unchanged.
+//   - Team Context draws the league-finish caret the pager has always drawn. The
+//     quick card called teamContextHtml without it, so its bars showed a rank line
+//     and no league position. Age is excluded: its marker is the age figure itself.
 // A manual birth date also prints beside the age, in the coach card's format, and
 // drives the age itself.
 //
@@ -38,6 +43,17 @@ import {
   computeAge, formatDOB, countryToIso2, leagueToCountry, teamCrestUrl, fadeHexToBG,
   FOTMOB_PHOTO_BASE, ensureMontserratEmbedded, MONTSERRAT_EMBED_CSS, COACH_FORMATIONS,
   abbrevLeague, shortSeason, tenureHistory, resolveStatsRow } from './CoachCard';
+
+// The two body tiles each hold any of these, the way the Team Report's bottom row
+// and the pager's six slots already work. Ids are the ones the overrides already
+// used, so a saved quick-card input keeps meaning what it meant.
+export const CQC_BODY_PANELS = [
+  ['context', 'Team Context'], ['view', 'View'],
+  ['impact', 'Impact'], ['table', 'League Table'],
+];
+export const CQC_BODY_DEFAULTS = { leftMid: 'context', rightMid: 'impact' };
+const cqcBodyPanel = (v, slot) =>
+  CQC_BODY_PANELS.some(([id]) => id === v) ? v : CQC_BODY_DEFAULTS[slot];
 
 // ── player-card visual constants (copied verbatim so styling matches exactly) ──
 const BG        = '#0a0f1c';
@@ -742,11 +758,22 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
     ageVal = String(tc.age);
   }
 
+  // Where they actually FINISHED, on the same 0-100 scale the context bars use, so
+  // the white caret sits comparably against squad cost, wages and the odds. The pager
+  // has always drawn this; the quick card called teamContextHtml without it, so its
+  // bars carried a rank line and no league position. Age is deliberately left out —
+  // its own marker is the average-age figure, and a finish caret on it would be
+  // claiming something about a number that isn't a league position.
+  const _finRank = _n(statsRow.pointsRank) ?? (_ptsR ? _ptsR.rank : null);
+  const _finSize = _n(statsRow.leagueSize) || (_ptsR ? _ptsR.size : null);
+  const finishPct = (_finRank != null && _finSize != null && _finSize > 1)
+    ? _clamp(((_finSize - _finRank) / (_finSize - 1)) * 100) : null;
+
   // The two swappable slots. Defaults are what the card has always drawn, so an
   // existing quick card exports unchanged.
   const topRight = overrides.topRight === 'pitch' ? 'pitch' : 'gbe';
-  const leftMid  = overrides.leftMid === 'view' ? 'view' : 'context';
-  const rightMid = overrides.rightMid === 'table' ? 'table' : 'impact';
+  const leftMid  = cqcBodyPanel(overrides.leftMid, 'leftMid');
+  const rightMid = cqcBodyPanel(overrides.rightMid, 'rightMid');
   const viewText = String(overrides.viewText || '').trim();
 
   // GBE (manager) — no points. Pass = either route selected, OR autopass.
@@ -785,9 +812,30 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
   const tableHtml = `<div style="position:relative;height:${_radarInnerH}px;">${
     leagueTablePanelHtml(CAREER_PANEL_W - PANEL_PAD * 2, _radarInnerH, statsRow, _pool)}</div>`;
 
+
   // Optional Biography — when set, it replaces the Impact tile (same slot), matching
   // the player quick card's biography behaviour (350-char cap, no scout-status here).
   const bioText = overrides.biography ? String(overrides.biography).slice(0, 315) : '';
+
+  // Either tile draws any of the four. Both are 448 wide and ROW2_PANEL_H tall, so one
+  // renderer covers both and nothing can be right only in the slot it grew up in.
+  const bodyPanelHtml = (id) => {
+    if (id === 'view') {
+      return { title: 'View',
+               body: `<div style="position:relative;flex:1;">${
+                 viewPanelBody(STYLE_PANEL_W - PANEL_PAD * 2,
+                               ROW2_PANEL_H - PANEL_PAD * 2 - 40, viewText)}</div>` };
+    }
+    if (id === 'table') return { title: 'League Table', body: tableHtml };
+    if (id === 'impact') return { title: 'Impact', body: radarHtml };
+    return { title: 'Team Context', body: teamContextHtml(tc, ageVal, agePct, finishPct) };
+  };
+  const leftPanel = bodyPanelHtml(leftMid);
+  // A biography still takes the right tile, as it always has.
+  const rightPanel = bioText
+    ? { title: 'Biography',
+        body: `<div style="font-size:20px;line-height:1.5;font-weight:600;color:#fff;">${bioText}</div>` }
+    : bodyPanelHtml(rightMid);
 
   // The pitch, in the GBE tile's slot and its box. NOTHING else goes in the tile —
   // it carried a FORMATION label and a shape badge, and both said again what the
@@ -942,26 +990,13 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
       </div>
 
       <div style="position:absolute;top:${ROW2_TOP}px;left:984px;width:${STYLE_PANEL_W}px;height:${ROW2_PANEL_H}px;background:${PANEL_BG};border:1px solid ${PANEL_BORDER};border-radius:${PANEL_RADIUS}px;padding:${PANEL_PAD}px;box-sizing:border-box;overflow:hidden;box-shadow:${PANEL_SHADOW};display:flex;flex-direction:column;">
-        ${leftMid === 'view' ? `
-        <div style="font-size:22px;font-weight:700;color:${ACCENT_PINK};margin-bottom:14px;">View</div>
-        <div style="position:relative;flex:1;">${
-          viewPanelBody(STYLE_PANEL_W - PANEL_PAD * 2, ROW2_PANEL_H - PANEL_PAD * 2 - 40, viewText)}</div>
-        ` : `
-        <div style="font-size:22px;font-weight:700;color:${ACCENT_PINK};margin-bottom:14px;">Team Context</div>
-        ${teamContextHtml(tc, ageVal, agePct)}`}
+        <div style="font-size:22px;font-weight:700;color:${ACCENT_PINK};margin-bottom:14px;">${leftPanel.title}</div>
+        ${leftPanel.body}
       </div>
 
-      <div style="position:absolute;top:${ROW2_TOP}px;left:${984 + STYLE_PANEL_W + PANEL_GAP_H}px;width:${CAREER_PANEL_W}px;height:${ROW2_PANEL_H}px;background:${PANEL_BG};border:1px solid ${PANEL_BORDER};border-radius:${PANEL_RADIUS}px;padding:${PANEL_PAD}px;box-sizing:border-box;overflow:hidden;box-shadow:${PANEL_SHADOW};">
-        ${bioText ? `
-        <div style="font-size:22px;font-weight:700;color:${ACCENT_PINK};margin-bottom:14px;">Biography</div>
-        <div style="font-size:20px;line-height:1.5;font-weight:600;color:#fff;">${bioText}</div>
-        ` : rightMid === 'table' ? `
-        <div style="font-size:22px;font-weight:700;color:${ACCENT_PINK};margin-bottom:18px;">League Table</div>
-        ${tableHtml}
-        ` : `
-        <div style="font-size:22px;font-weight:700;color:${ACCENT_PINK};margin-bottom:18px;">Impact</div>
-        ${radarHtml}
-        `}
+      <div style="position:absolute;top:${ROW2_TOP}px;left:${984 + STYLE_PANEL_W + PANEL_GAP_H}px;width:${CAREER_PANEL_W}px;height:${ROW2_PANEL_H}px;background:${PANEL_BG};border:1px solid ${PANEL_BORDER};border-radius:${PANEL_RADIUS}px;padding:${PANEL_PAD}px;box-sizing:border-box;overflow:hidden;box-shadow:${PANEL_SHADOW};display:flex;flex-direction:column;">
+        <div style="font-size:22px;font-weight:700;color:${ACCENT_PINK};margin-bottom:18px;">${rightPanel.title}</div>
+        ${rightPanel.body}
       </div>
 
     </div>`;
@@ -973,7 +1008,7 @@ export async function downloadCoachQuickCardPNG(coach, tenureRows, traits, overr
   // The league table draws a crest per row from a remote URL, and html-to-image can
   // only rasterise what is already a data URL — every other card preloads for exactly
   // this reason. Only done when the table is actually on the card.
-  if (overrides.rightMid === 'table') {
+  if (overrides.rightMid === 'table' || overrides.leftMid === 'table') {
     try {
       const rows = (tenureRows || []).slice()
         .sort((a, b) => (a.season < b.season ? 1 : -1));

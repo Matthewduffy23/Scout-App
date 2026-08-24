@@ -8,7 +8,7 @@ import CoachBuilder from './CoachBuilder';
 import { loadCoaches, deleteCoach, exportCoaches, importCoachesFile } from './coachStorage';
 import { computeCoachTraits } from './coachMetrics';
 import { downloadCoachCardPNG } from './CoachCard';
-import { downloadCoachQuickCardPNG } from './CoachQuickCard';
+import { downloadCoachQuickCardPNG, CQC_BODY_PANELS } from './CoachQuickCard';
 import ManagerPagerModal from './ManagerPager';
 import { useIsMobile } from './utils';
 
@@ -332,27 +332,29 @@ function CoachQuickOverrides({ coach, coachId, overrides, teams, onFieldChange, 
           </select>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <span style={lbl}>Team Context slot</span>
+          <span style={lbl}>Bottom-left panel</span>
           <select
             style={{ fontSize: 11, background: '#080f1c', border: '1px solid #2b1e45', borderRadius: 4, color: '#e2e8f4', padding: '4px 6px', width: 190 }}
             value={overrides.leftMid || 'context'}
             onChange={function(e) { onFieldChange(coachId, 'leftMid', e.target.value === 'context' ? undefined : e.target.value); }}>
-            <option value="context">Team Context (default)</option>
-            <option value="view">View</option>
+            {CQC_BODY_PANELS.map(function(o) {
+              return <option key={o[0]} value={o[0]}>{o[0] === 'context' ? o[1] + ' (default)' : o[1]}</option>;
+            })}
           </select>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <span style={lbl}>Impact slot</span>
+          <span style={lbl}>Bottom-right panel</span>
           <select
             style={{ fontSize: 11, background: '#080f1c', border: '1px solid #2b1e45', borderRadius: 4, color: '#e2e8f4', padding: '4px 6px', width: 190 }}
             value={overrides.rightMid || 'impact'}
             onChange={function(e) { onFieldChange(coachId, 'rightMid', e.target.value === 'impact' ? undefined : e.target.value); }}>
-            <option value="impact">Impact radar (default)</option>
-            <option value="table">League Table</option>
+            {CQC_BODY_PANELS.map(function(o) {
+              return <option key={o[0]} value={o[0]}>{o[0] === 'impact' ? o[1] + ' (default)' : o[1]}</option>;
+            })}
           </select>
         </div>
       </div>
-      {overrides.rightMid === 'table' ? (
+      {overrides.rightMid === 'table' || overrides.leftMid === 'table' ? (
         <div style={{ fontSize: 9, color: '#475569', marginTop: 4 }}>
           Table is drawn for the club, league and season the card is showing — change it with the Season picker above. A Biography still wins the slot.
         </div>
