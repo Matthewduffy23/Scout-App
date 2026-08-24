@@ -284,7 +284,7 @@
 // value; Possible Departures keeps its contract badge and swaps only the inline
 // value on the position line.
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   MONTSERRAT_EMBED_CSS, teamCrest, leagueDisplayName,
   leagueLogo, leagueFlag, photoUrl,
