@@ -29,9 +29,10 @@ export const LEAGUE_STRENGTHS = {
   'Hungary 2.':40.00,'Kazakhstan 2.':16.08,'Kyrgyzstan 1.':16.08,'Malta 2.':16.08,
   'Montenegro 2.':47.84,'Netherlands 3.':27.06,'Norway 3.':40.00,'Romania 2.':49.61,
   'Saudi 2.':35.02,'Ukraine 2.':28.24,'Zambia 1.':46.47,
-  'Sweden 4.':20.00,'Switzerland 3.':20.00,'Ukraine 3.':15.00,'Brazil 4.':30.00,
+  'Sweden 4.':20.00,'Switzerland 4.':20.00,'Ukraine 3.':15.00,'Brazil 4.':30.00,
   'Czech 3.':20.00,'Denmark 4.':20.00,'Germany 5.':25.00,'Germany 6.':20.00,
   'Italy 5.':25.00,'Portugal 4.':25.00,'Serbia 3.':15.00,
+  'Switzerland 3.':35.00,
 };
 
 export const HIDDEN_LEAGUES = new Set([
@@ -44,7 +45,7 @@ export const HIDDEN_LEAGUES = new Set([
 ]);
 
 export const YOUTH_LEAGUES = new Set([
-  'Sweden 4.','Switzerland 3.','Ukraine 3.','Brazil 4.','Czech 3.','Denmark 4.',
+  'Sweden 4.','Switzerland 4.','Ukraine 3.','Brazil 4.','Czech 3.','Denmark 4.',
   'Germany 5.','Germany 6.','Italy 5.','Portugal 4.','Serbia 3.',
   'England 7.','England 8.','England 9.','England 10.',
 ]);
@@ -78,7 +79,7 @@ export const GBE_LEAGUE_BANDS = {
 export const COUNTRY_TO_REGION = {
   'England':'Europe','Spain':'Europe','Germany':'Europe','Italy':'Europe','France':'Europe',
   'Belgium':'Europe','Portugal':'Europe','Netherlands':'Europe','Croatia':'Europe',
-  'Switzerland':'Europe','Norway':'Europe','Sweden':'Europe','Cyprus':'Europe','Czech':'Europe',
+  'Switzerland':'Europe','Norway':'Europe','Sweden':'Europe','Cyprus':'Europe','Czech':'Europe','Turkey':'Europe',
   'Greece':'Europe','Austria':'Europe','Hungary':'Europe','Romania':'Europe','Scotland':'Europe',
   'Slovenia':'Europe','Slovakia':'Europe','Ukraine':'Europe','Bulgaria':'Europe','Serbia':'Europe',
   'Albania':'Europe','Bosnia':'Europe','Kosovo':'Europe','Ireland':'Europe','Finland':'Europe',
@@ -95,7 +96,7 @@ export const COUNTRY_TO_REGION = {
   'Morocco':'Africa','Algeria':'Africa','Egypt':'Africa','Nigeria':'Africa',
   'Tunisia':'Africa','South Africa':'Africa','Zambia':'Africa',
   'Japan':'Asia','Korea':'Asia','Saudi':'Asia','UAE':'Asia','Qatar':'Asia',
-  'Uzbekistan':'Asia','China':'Asia','Turkey':'Asia','Azerbaijan':'Asia','Kyrgyzstan':'Asia',
+  'Uzbekistan':'Asia','China':'Asia','Azerbaijan':'Asia','Kyrgyzstan':'Asia',
   'Australia':'Asia',
 };
 
