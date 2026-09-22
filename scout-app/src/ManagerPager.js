@@ -922,7 +922,7 @@ export function buildManagerPagerElement(coach, tenureRows, traits, opts = {}) {
     primaryFormation = '', secondaryFormation = '',
     showFormation = true, showFormationDots = true, showSecondaryShape = false,
     positionMapUrl = '', mapOpacity = 0.15,
-    careerMode = 'score', finishOverrides = {}, extraFinish = [],
+    careerMode = 'finish', finishOverrides = {}, extraFinish = [],
     teamContext = {},
     slots = {},                   // slot key -> any name in MP_PANELS
     clubsTitle = 'Potential Clubs',
@@ -1205,14 +1205,9 @@ function TeamSeasonPicker({ label, value, teams, onPick, onClear }) {
   const hits = useMemo(() => {
     const t = q.trim();
     if (t.length < 2) return [];
-    const out = [];
-    for (const r of (teams || [])) {
-      if (!r || !r.team) continue;
-      if (!foldIncludes(r.team, t)) continue;
-      out.push(r);
-      if (out.length >= 24) break;
-    }
-    return out.sort((a, b) => (a.season < b.season ? 1 : -1)).slice(0, 10);
+    return (teams || [])
+      .filter(r => r && r.team && foldIncludes(r.team, t))
+      .sort((a, b) => (a.season < b.season ? 1 : -1));
   }, [q, teams]);
 
   if (value) {
@@ -1238,17 +1233,21 @@ function TeamSeasonPicker({ label, value, teams, onPick, onClear }) {
         <input value={q} onChange={e => setQ(e.target.value)}
                placeholder="Search any club…" style={{ ...UI.input, flex: 1 }} />
       </div>
-      {hits.map((r, i) => (
-        <div key={r.team + r.season + i}
-             onClick={() => { onPick(r); setQ(''); }}
-             style={{ display: 'flex', alignItems: 'center', cursor: 'pointer',
-                      padding: '5px 8px', borderBottom: '1px solid #101a2c' }}>
-          <span style={{ flex: 1, minWidth: 0, fontSize: 11, color: '#c8d2e0',
-                         overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
-            {r.team}<span style={{ color: '#64748b' }}> · {r.league} · {shortSeason(r.season)}</span>
-          </span>
+      {hits.length > 0 && (
+        <div style={{ maxHeight: 180, overflowY: 'auto' }}>
+          {hits.map((r, i) => (
+            <div key={r.team + r.season + i}
+                 onClick={() => { onPick(r); setQ(''); }}
+                 style={{ display: 'flex', alignItems: 'center', cursor: 'pointer',
+                          padding: '5px 8px', borderBottom: '1px solid #101a2c' }}>
+              <span style={{ flex: 1, minWidth: 0, fontSize: 11, color: '#c8d2e0',
+                             overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                {r.team}<span style={{ color: '#64748b' }}> · {r.league} · {shortSeason(r.season)}</span>
+              </span>
+            </div>
+          ))}
         </div>
-      ))}
+      )}
     </div>
   );
 }
@@ -1305,7 +1304,7 @@ export default function ManagerPagerModal({
   const [mapMode, setMapMode] = useState('zones');   // zones | raw | heat
   const [mapOpacity, setMapOpacity] = useState(15);
 
-  const [careerMode, setCareerMode] = useState('score');
+  const [careerMode, setCareerMode] = useState('finish');
   // Slot key -> panel name. Every slot offers every panel, so the shape of the card
   // is chosen rather than fixed by the row a panel happens to belong to.
   const [slots, setSlots] = useState(MP_SLOT_DEFAULTS);

@@ -675,7 +675,8 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
   ].map(([l, v]) => [l, v == null ? 0 : v]).sort((a, b) => b[1] - a[1]);
 
   // Career line points (oldest -> newest)
-  const careerMode = overrides.careerMode === 'finish' ? 'finish' : 'score';
+  // Defaults to League Finish — an explicit 'score' override is the only way back to it.
+  const careerMode = overrides.careerMode === 'score' ? 'score' : 'finish';
   // Match each scored season back to its tenure row so league finish can be ranked
   // against that division's peers in `_pool` (falls back to a stored pointsRank).
   const _careerPool = (overrides.allTeams && overrides.allTeams.length) ? overrides.allTeams : tenureRows;

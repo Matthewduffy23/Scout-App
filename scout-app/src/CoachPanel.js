@@ -11,6 +11,7 @@ import { downloadCoachCardPNG } from './CoachCard';
 import { downloadCoachQuickCardPNG, CQC_BODY_PANELS } from './CoachQuickCard';
 import ManagerPagerModal from './ManagerPager';
 import { useIsMobile } from './utils';
+import { foldIncludes } from './TeamReport';
 
 const FIELD_LABELS = [
   ['games',  'Games'],
@@ -96,11 +97,10 @@ function CoachStatOverrides({ coach, coachId, overrides, teams, onFieldChange, o
 function TeamSeasonSearch({ label, valueObj, teams, onPick, onClear }) {
   var sv = useState('');
   var q = sv[0], setQ = sv[1];
-  var ql = q.trim().toLowerCase();
+  var ql = q.trim();
   var results = ql.length >= 2
-    ? teams.filter(function(t) { return String(t.team || '').toLowerCase().indexOf(ql) !== -1; })
+    ? teams.filter(function(t) { return foldIncludes(t.team || '', ql); })
         .sort(function(a, b) { return a.season < b.season ? 1 : -1; })
-        .slice(0, 10)
     : [];
   var lbl = { fontSize: 9, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' };
   var fieldStyle = { width: 190, background: '#080f1c', border: '1px solid #2b1e45', borderRadius: 4, color: '#e2e8f4', fontSize: 11, padding: '4px 6px' };
@@ -308,8 +308,8 @@ function CoachQuickOverrides({ coach, coachId, overrides, teams, onFieldChange, 
           Unattached (shows "Manager (Unattached)")
         </label>
         <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#cbd5e1', cursor: 'pointer' }}>
-          <input type="checkbox" checked={!!overrides.hidePills} onChange={function(e) { onFieldChange(coachId, 'hidePills', e.target.checked || undefined); }} />
-          Hide Score / Potential
+          <input type="checkbox" checked={overrides.hidePills !== false} onChange={function(e) { onFieldChange(coachId, 'hidePills', e.target.checked ? undefined : false); }} />
+          Hide Score / Potential (default)
         </label>
       </div>
       <StatsSeasonPicker coach={coach} teams={teams} value={overrides.statsSeasonKey}
@@ -396,13 +396,13 @@ function CoachQuickOverrides({ coach, coachId, overrides, teams, onFieldChange, 
         <span style={{ fontSize: 9, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Career chart</span>
         <select
           style={{ fontSize: 11, background: '#080f1c', border: '1px solid #2b1e45', borderRadius: 4, color: '#e2e8f4', padding: '4px 6px', width: 240 }}
-          value={overrides.careerMode || 'score'}
-          onChange={function(e) { onFieldChange(coachId, 'careerMode', e.target.value === 'score' ? undefined : e.target.value); }}>
-          <option value="score">Cumulative score (default)</option>
-          <option value="finish">League finish</option>
+          value={overrides.careerMode || 'finish'}
+          onChange={function(e) { onFieldChange(coachId, 'careerMode', e.target.value === 'finish' ? undefined : e.target.value); }}>
+          <option value="finish">League finish (default)</option>
+          <option value="score">Cumulative score</option>
         </select>
       </div>
-      {overrides.careerMode === 'finish' && (
+      {overrides.careerMode !== 'score' && (
         <CareerFinishEditor coach={coach} overrides={overrides} coachId={coachId} onFieldChange={onFieldChange} />
       )}
       <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid #1a1030' }}>
@@ -784,10 +784,13 @@ export default function CoachPanel({ allTeams, allPlayers, onClose }) {
       if (q.tenure && q.tenure.trim()) overrides.tenure = q.tenure.trim();
       if (q.unattached) overrides.unattached = true;
       if (q.statsSeasonKey) overrides.statsSeasonKey = q.statsSeasonKey;
-      if (q.careerMode) overrides.careerMode = q.careerMode;
+      // careerMode/hidePills now default to League Finish / hidden-pills respectively —
+      // an explicit 'score' or `false` override (stored by the editor above) is the
+      // only thing that turns them off, so an absent field must resolve to the new default.
+      overrides.careerMode = q.careerMode === 'score' ? 'score' : 'finish';
       if (q.finishOverrides) overrides.finishOverrides = q.finishOverrides;
       if (q.extraFinish) overrides.extraFinish = q.extraFinish;
-      if (q.hidePills) overrides.showScorePills = false;
+      overrides.showScorePills = (q.hidePills === false);
       if (q.dob) overrides.dob = q.dob;
       if (q.topRight) overrides.topRight = q.topRight;
       if (q.leftMid) overrides.leftMid = q.leftMid;

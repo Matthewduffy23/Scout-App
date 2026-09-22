@@ -9,6 +9,7 @@ import React, { useState, useMemo } from 'react';
 import { useIsMobile } from './utils';
 import { newCoachId, upsertCoach } from './coachStorage';
 import { computeCoachTraits, traitScoreToTen } from './coachMetrics';
+import { foldIncludes } from './TeamReport';
 
 const FORMATIONS = ['4-3-3', '4-4-2', '4-2-3-1', '4-1-4-1', '4-1-3-2', '4-2-2-2', '3-5-2', '3-4-3', '3-4-2-1', '5-4-1', '5-3-2'];
 const TRAIT_KEYS = ['possession', 'pressing', 'passing', 'adaptability', 'youthDevelopment', 'attacking', 'setPieces', 'defensive', 'directness'];
@@ -77,11 +78,9 @@ export default function CoachBuilder({ allTeams = [], existingCoach = null, onCl
   const [tenureSearch, setTenureSearch] = useState('');
   const tenureOptions = useMemo(() => {
     if (!tenureSearch.trim()) return [];
-    const q = tenureSearch.toLowerCase();
     return allTeams
-      .filter(t => t.team.toLowerCase().includes(q))
-      .filter(t => !tenures.some(x => x.team === t.team && x.league === t.league && x.season === t.season))
-      .slice(0, 20);
+      .filter(t => foldIncludes(t.team, tenureSearch))
+      .filter(t => !tenures.some(x => x.team === t.team && x.league === t.league && x.season === t.season));
   }, [tenureSearch, allTeams, tenures]);
 
   const addTenure = (t) => {
