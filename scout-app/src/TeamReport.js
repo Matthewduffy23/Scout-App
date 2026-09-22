@@ -1377,8 +1377,12 @@ export function radarPercentiles(team, allTeams) {
     if (v == null) return [label, 50];
     const vals = pool.map(t => rawMetric(t, group, name)).filter(x => x != null);
     if (vals.length < 2) return [label, 50];
-    const p = (vals.filter(x => x <= v).length / vals.length) * 100;
-    return [label, Math.max(0, Math.min(100, invert ? 100 - p : p))];
+    // Flip the comparison operator for invert, don't complement the result —
+    // 100-p is short by 100/n at both ends (best case lands on 100-100/n, not 100).
+    const p = (invert
+      ? vals.filter(x => x >= v).length
+      : vals.filter(x => x <= v).length) / vals.length * 100;
+    return [label, Math.max(0, Math.min(100, p))];
   });
 }
 
@@ -2312,8 +2316,13 @@ export function weakestMetrics(team, allTeams, n = 4) {
       if (!WEAKNESS_ELIGIBLE.has(name)) continue;
       const vals = pool.map(t => rawMetric(t, g, name)).filter(x => x != null);
       if (vals.length < 2) continue;
-      const p = (vals.filter(x => x <= v).length / vals.length) * 100;
-      out.push([plainMetric(name), WEAKNESS_INVERT.has(name) ? 100 - p : p]);
+      // Flip the comparison operator for invert, don't complement the result —
+      // 100-p is short by 100/n at both ends (best case lands on 100-100/n, not 100).
+      const inv = WEAKNESS_INVERT.has(name);
+      const p = (inv
+        ? vals.filter(x => x >= v).length
+        : vals.filter(x => x <= v).length) / vals.length * 100;
+      out.push([plainMetric(name), p]);
     }
   }
   // PPDA sits in both the Defence and Pressing groups and resolves to the same
