@@ -485,8 +485,12 @@ function _pct(pool, spec, v) {
   if (v == null) return 50;
   const vals = pool.map(r => _raw(r, spec)).filter(x => x != null && Number.isFinite(x));
   if (!vals.length) return 50;
-  const p = (vals.filter(x => x <= v).length / vals.length) * 100;
-  return _clamp(spec[4] ? 100 - p : p);
+  // Flip the comparison operator for invert, don't complement the result —
+  // 100-p is short by 100/n at both ends (best case lands on 100-100/n, not 100).
+  const p = (spec[4]
+    ? vals.filter(x => x >= v).length
+    : vals.filter(x => x <= v).length) / vals.length * 100;
+  return _clamp(p);
 }
 function _decile(pool, spec) {
   const vals = pool.map(r => _raw(r, spec)).filter(x => x != null && Number.isFinite(x)).sort((a,b)=>a-b);
