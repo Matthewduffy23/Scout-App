@@ -750,7 +750,9 @@ export function gbeThresholdBar(label, val, max, w = 220) {
 
 // Season order matches PlayerCard.js's CareerTab — used to derive age-per-season
 // offsets from player.sh (season history) the same way the full career chart does.
-const SEASON_ORDER = ['2018-19','2019-20','2020-21','2021-22','2022-23','2023-24','2024-25','2025-26'];
+// Duplicates build_players.py's SEASON_ORDER (backend source of truth) — keep in sync
+// each season transition, same as the lists in PlayerCard.js/PlayerScoutingCard.js.
+const SEASON_ORDER = ['2018-19','2019-20','2020-21','2021-22','2022-23','2023-24','2024-25','2025-26','2026-27'];
 
 // Season label -> the calendar year it ENDS in. '2024-25' -> 2025, '2025' -> 2025.
 // SEASON_ORDER only lists split-year labels, so a calendar-year league (Brazil,

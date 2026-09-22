@@ -751,7 +751,9 @@ function pitchDiagramSvg(player, manual) {
 /**
  * Build the offscreen DOM node for the card.
  */
-const TREND_SEASON_ORDER = ['2018-19','2019-20','2020-21','2021','2021-22','2022','2022-23','2023','2023-24','2024','2024-25','2025','2025-26','2026'];
+// Duplicates build_players.py's SEASON_ORDER (backend source of truth) — keep in sync
+// each season transition, same as the lists in PlayerCard.js/QuickCard.js.
+const TREND_SEASON_ORDER = ['2018-19','2019-20','2020-21','2021','2021-22','2022','2022-23','2023','2023-24','2024','2024-25','2025','2025-26','2026','2026-27'];
 
 export function buildCardElement(player, manual = {}) {
   // Single source of truth for the SVG-star path: the level-label offsets below must

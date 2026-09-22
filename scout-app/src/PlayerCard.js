@@ -337,7 +337,7 @@ const METRIC_TO_LABEL = {
   CF:{'Crosses per 90':'Crosses','Non-penalty goals per 90':'Goals: Non-Penalty','xG per 90':'xG','xA per 90':'xA','Progressive runs per 90':'Progressive Runs','Shots per 90':'Shots','Touches in box per 90':'Touches in Box','Aerial duels per 90':'Aerial Duels','Aerial duels won, %':'Aerial Duel %','Defensive duels per 90':'Defensive Duels','PAdj Interceptions':'PAdj Interceptions','Dribbles per 90':'Dribbles','Successful dribbles, %':'Dribble %','Passes per 90':'Passes','Accurate passes, %':'Pass %','Passes to penalty area per 90':'Passes to Box','Smart passes per 90':'Smart Passes','Deep completions per 90':'Deep Completions'},
 };
 const UK_LEAGUES = ['England 1.','England 2.','England 3.','Scotland 1.'];
-const SIM_SEASON_ORDER = ['2026','2025-26','2025','2024-25','2024','2023-24','2023','2022-23','2022','2021-22','2021','2020-21','2020','2019-20','2018-19'];
+const SIM_SEASON_ORDER = ['2026-27','2026','2025-26','2025','2024-25','2024','2023-24','2023','2022-23','2022','2021-22','2021','2020-21','2020','2019-20','2018-19'];
 const SIM_MIN_MATCHED = 6; // minimum overlapping metrics required before a candidate counts
 
 function getSimSeasonDetail(player){
@@ -1025,7 +1025,12 @@ function CareerTab({ player, players }) {
 
 export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=false}) {
   const isMobile=useIsMobile();
-  const SEASON_ORDER_ARR=['2025-26','2026','2025','2024-25','2024','2023-24','2023','2022-23','2022','2021-22','2021','2020-21','2020','2019-20','2018-19'];
+  // Duplicates build_players.py's SEASON_ORDER (backend source of truth) — keep in sync
+  // each season transition, same as SIM_SEASON_ORDER below and the lists in
+  // PlayerScoutingCard.js/QuickCard.js. No shared frontend source exists yet because
+  // constants.js's ALL_SEASONS omits the bare calendar-year labels (e.g. '2026') that
+  // calendar leagues use, which these lists need.
+  const SEASON_ORDER_ARR=['2026-27','2026','2025-26','2025','2024-25','2024','2023-24','2023','2022-23','2022','2021-22','2021','2020-21','2020','2019-20','2018-19'];
   // Build selectable options from allSeasonsSummary standard rows, deduped by season+league
   const allStdRows=(()=>{
     const seen=new Set();
