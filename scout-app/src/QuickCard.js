@@ -536,7 +536,7 @@ function truncateText(str, maxChars) {
 // criteria) so QuickCard can say *why* a player is ESC eligible, not just that
 // they are. Falls back gracefully to an empty list if allSeasonsSummary isn't present.
 export function computeEscReasons(player) {
-  const ESC_SEASONS = new Set(['2025-26','2026','2025','2024-25','2024']);
+  const ESC_SEASONS = new Set(['2026-27','2025-26','2026','2025','2024-25','2024']);
   const HOME_NATIONS = new Set(['england','scotland','wales','ireland','northern ireland','republic of ireland']);
   const YOUTH_LEAGUES_GBE = new Set(['Sweden 4.','Switzerland 4.','Ukraine 3.','Brazil 4.','Czech 3.','Denmark 4.','Germany 5.','Germany 6.','Italy 5.','Portugal 4.','Serbia 3.','England 7.','England 8.','England 9.','England 10.']);
   const INTL_LEAGUES_GBE = new Set(['UEFA WC Qualifiers.','UEFA U21 Euros.','UEFA U19 Euros.','Asia WC Qualifiers.','AFCON.','AFCON U20.','AFCON U17.','AFCON Qualifiers.','S.America Qualifiers.','U20 World Cup.','U17 World Cup.','FIFA World Cup.']);

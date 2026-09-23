@@ -245,7 +245,7 @@ export default function ClubTool({players}){
   const [selCard,setSelCard]=useState(null);
   const [tmplLeague,setTmplLeague]=useState('England 2.');
   const [tmplTeam,setTmplTeam]=useState('');
-  const [tmplSeason,setTmplSeason]=useState('2024-25');
+  const [tmplSeason,setTmplSeason]=useState(CURRENT_SEASON);
   const [pos,setPos]=useState('FB');
   const [role,setRole]=useState('');
   const [tmplMode,setTmplMode]=useState('average'); // 'average'|'player'

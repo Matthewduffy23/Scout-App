@@ -1373,8 +1373,9 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
 
             {/* GBE / Visa Points — uses pre-computed fields from pipeline */}
             {(()=>{
-              const POINTS_SEASONS = new Set(['2025-26','2026','2025']);
-              const ESC_SEASONS = new Set(['2025-26','2026','2025','2024-25','2024']);
+              // Must match build_players.py's POINTS_SEASONS / ESC_SEASONS (the source of truth for the gbe* fields).
+              const POINTS_SEASONS = new Set(['2026-27','2025-26','2026','2025']);
+              const ESC_SEASONS = new Set(['2026-27','2025-26','2026','2025','2024-25','2024']);
               const HOME_NATIONS = new Set(['england','scotland','wales','ireland','northern ireland','republic of ireland']);
               const YOUTH_LEAGUES_GBE = new Set(['Sweden 4.','Switzerland 4.','Ukraine 3.','Brazil 4.','Czech 3.','Denmark 4.','Germany 5.','Germany 6.','Italy 5.','Portugal 4.','Serbia 3.','England 7.','England 8.','England 9.','England 10.']);
               const INTL_LEAGUES_GBE = new Set(['UEFA WC Qualifiers.','UEFA U21 Euros.','UEFA U19 Euros.','Asia WC Qualifiers.','AFCON.','AFCON U20.','AFCON U17.','AFCON Qualifiers.','S.America Qualifiers.','U20 World Cup.','U17 World Cup.','FIFA World Cup.']);
@@ -1458,7 +1459,7 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
                     ESC eligible: {escReasons.join(' · ')}
                   </div>}
                   <div style={{fontSize:9,color:'#475569',lineHeight:1.5}}>
-                    T2 (domestic) + T3 (continental mins) + T4 (league finish) + T5 (continental progression) + T6 (league band) · 2025-26/2026/2025 only · 0–9 = Fail · 10–14 = Exceptions Panel · 15+ = Pass
+                    T2 (domestic) + T3 (continental mins) + T4 (league finish) + T5 (continental progression) + T6 (league band) · 2026-27/2026/2025-26/2025 only · 0–9 = Fail · 10–14 = Exceptions Panel · 15+ = Pass
                   </div>
                 </div>
               );
