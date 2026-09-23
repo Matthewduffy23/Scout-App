@@ -4,10 +4,9 @@ import PlayerCard from './PlayerCard';
 import { scoreBandColor, scoreLabel, formatMV, ROLE_KEY_LABELS, ROLES_BY_KEY,
          ALL_LEAGUES, LEAGUE_STRENGTHS, promotionBadge, divColor, PRESET_LEAGUES,
          HIDDEN_LEAGUES, YOUTH_LEAGUES, leagueToRegion, leagueToBand,
-         POSITION_ATTRIBUTES, playerHasAttribute } from './constants';
+         POSITION_ATTRIBUTES, playerHasAttribute, ALL_SEASONS, CURRENT_SEASON } from './constants';
 import { Photo, Crest, useIsMobile } from './utils';
 
-const ALL_SEASONS = ['2025-26','2024-25','2023-24','2022-23','2021-22','2020-21','2019-20','2018-19'];
 
 // Height filter: data is stored in cm, but displayed as feet'inches (matches player card
 // convention). Options generated in whole inches (58"-83" ≈ 4'10"-6'11"), each mapped to
@@ -288,7 +287,7 @@ export default function ClubTool({players}){
   const [xValueMin,setXValueMin]=useState(0);
   const [xValueMax,setXValueMax]=useState(50);
   const [potentialMin,setPotentialMin]=useState(40);
-  const [played2526,setPlayed2526]=useState(false);
+  const [playedCurrent,setPlayedCurrent]=useState(false);
   const [metricFilters,setMetricFilters]=useState([]);
   const [bestSeasonMode,setBestSeasonMode]=useState(false);
   const [ageMin,setAgeMin]=useState(15);
@@ -427,7 +426,7 @@ export default function ClubTool({players}){
       if(minSeas>1&&(p.seasons||1)<minSeas) return false;
       if(minMins>0&&(p.minutesLatest||0)<minMins) return false;
       if(potentialMin>40&&(p.potentialScore||p.careerScore)<potentialMin) return false;
-      if(played2526&&!p.sh?.find(x=>x.s==='2025-26'||x.s==='2026')) return false;
+      if(playedCurrent&&!p.sh?.find(x=>x.s===CURRENT_SEASON||x.s===CURRENT_SEASON.slice(0,4))) return false;
       if(showMvFilter&&p.marketValue>mvMax*1000000) return false;
       if(showContractFilter&&p.contractYear&&p.contractYear>0&&p.contractYear>contractBefore) return false;
       const pls=LEAGUE_STRENGTHS[p.league]||0;
@@ -642,9 +641,9 @@ export default function ClubTool({players}){
           </div>
         )}
         <div style={{display:'flex',flexDirection:'column',gap:6,marginBottom:12}}>
-          <label style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer'}} onClick={()=>setPlayed2526(p=>!p)}>
-            <div style={T.cb(played2526)}>{played2526&&<span style={{color:'#fff',fontSize:8}}>✓</span>}</div>
-            <span style={{fontSize:11,color:played2526?'#e2e8f4':'#94a3b8'}}>Played in 2025-26 only</span>
+          <label style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer'}} onClick={()=>setPlayedCurrent(p=>!p)}>
+            <div style={T.cb(playedCurrent)}>{playedCurrent&&<span style={{color:'#fff',fontSize:8}}>✓</span>}</div>
+            <span style={{fontSize:11,color:playedCurrent?'#e2e8f4':'#94a3b8'}}>Played in {CURRENT_SEASON} only</span>
           </label>
         </div>
         <div style={T.fg}>

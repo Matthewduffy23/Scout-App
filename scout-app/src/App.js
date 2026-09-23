@@ -4,7 +4,7 @@ import PlayerCard from './PlayerCard';
 import ClubTool from './ClubTool';
 import TeamIndex from './TeamIndex';
 import { Photo, Crest, photoUrl, useIsMobile, deliverJson } from './utils';
-import { scoreBandColor, formatMV, formatFoot, ROLE_KEY_LABELS, ROLES_BY_KEY, POSITION_ATTRIBUTES, playerHasAttribute, ALL_LEAGUES, DEFAULT_LEAGUES, HIDDEN_LEAGUES, YOUTH_LEAGUES, PRESET_LEAGUES, COUNTRY_TO_REGION, GBE_LEAGUE_BANDS, leagueToRegion, leagueToBand, scoreLabel, scoreToStars, promotionBadge, ALL_SEASONS, LEAGUE_STRENGTHS, CAREER_POSITION_GROUPS } from './constants';
+import { scoreBandColor, formatMV, formatFoot, ROLE_KEY_LABELS, ROLES_BY_KEY, POSITION_ATTRIBUTES, playerHasAttribute, ALL_LEAGUES, DEFAULT_LEAGUES, HIDDEN_LEAGUES, YOUTH_LEAGUES, PRESET_LEAGUES, COUNTRY_TO_REGION, GBE_LEAGUE_BANDS, leagueToRegion, leagueToBand, scoreLabel, scoreToStars, promotionBadge, ALL_SEASONS, CURRENT_SEASON, LEAGUE_STRENGTHS, CAREER_POSITION_GROUPS } from './constants';
 
 // Re-exported so anything that already imports these from App.js keeps working —
 // but there is now ONE implementation, in utils.js, rather than a second copy here.
@@ -385,7 +385,7 @@ export default function App(){
   const [xValueMax,setXValueMax]=useState(50);
   const [showXValueFilter,setShowXValueFilter]=useState(false);
   const [potentialMin,setPotentialMin]=useState(40);
-  const [played2526,setPlayed2526]=useState(false);
+  const [playedCurrent,setPlayedCurrent]=useState(false);
   const [escOnly,setEscOnly]=useState(false);
   const [gbeMin,setGbeMin]=useState(0);
   const [natFilter,setNatFilter]=useState('');
@@ -533,7 +533,7 @@ export default function App(){
     return all.filter(p=>{
       if(q&&!_norm(p.name).includes(q)&&!_norm(p.team).includes(q)) return false;
       // RecentOnly: skip if no recent data, BUT allow all if a specific season is selected
-      if(recentOnly&&!p.hasRecentData&&seasonFilter==='all'&&!played2526&&!showYouth) return false;
+      if(recentOnly&&!p.hasRecentData&&seasonFilter==='all'&&!playedCurrent&&!showYouth) return false;
       if(minMins>0&&(p.minutesLatest||0)<(showYouth?100:minMins)) return false;
       // Career minimum minutes: total across every season on record, independent of how they're spread.
       // Applies on top of the per-season filter above, never instead of it.
@@ -561,7 +561,7 @@ export default function App(){
       if(ds<minScore) return false;
       if(p.seasons<minSeas) return false;
       if(potentialMin>40&&(p.potentialScore||p.careerScore)<potentialMin) return false;
-      if(played2526&&!p.sh?.find(x=>seasonBucketMatch(x.s,'2025-26'))) return false;
+      if(playedCurrent&&!p.sh?.find(x=>seasonBucketMatch(x.s,CURRENT_SEASON))) return false;
       if(escOnly&&!p.escEligible) return false;
       if(gbeMin>0&&(p.gbeTotal||0)<gbeMin) return false;
       if(natFilter&&!(p.passportCountries||'').toLowerCase().includes(natFilter.toLowerCase())&&!(p.birthCountry||'').toLowerCase().includes(natFilter.toLowerCase())) return false;
@@ -639,7 +639,7 @@ export default function App(){
       }
       return true;
     });
-  },[all,search,pos,leagues,ageMin,ageMax,heightMin,heightMax,foot,minScore,minSeas,showMvFilter,mvMax,showContractFilter,contractBefore,roleFilter,roleScoreMin,seasonFilter,metricFilters,xValueFilter,onlyElite,versatileOnly,getDisplayScore,recentOnly,showXValueFilter,xValueMin,xValueMax,attrFilters,minMins,showCareerMinsFilter,careerMinMins,currentLeagueOnly,played2526,potentialMin,lsMin,lsMax,escOnly,gbeMin,natFilter,softMode,roleFilters,shortlist,showShortlist,notPlayingOnly,domesticOnly,internationalOnly,tierFilters,sideFilter,rk,careerPosFilters,careerPosTokenGroups]);
+  },[all,search,pos,leagues,ageMin,ageMax,heightMin,heightMax,foot,minScore,minSeas,showMvFilter,mvMax,showContractFilter,contractBefore,roleFilter,roleScoreMin,seasonFilter,metricFilters,xValueFilter,onlyElite,versatileOnly,getDisplayScore,recentOnly,showXValueFilter,xValueMin,xValueMax,attrFilters,minMins,showCareerMinsFilter,careerMinMins,currentLeagueOnly,playedCurrent,potentialMin,lsMin,lsMax,escOnly,gbeMin,natFilter,softMode,roleFilters,shortlist,showShortlist,notPlayingOnly,domesticOnly,internationalOnly,tierFilters,sideFilter,rk,careerPosFilters,careerPosTokenGroups]);
 
   const sorted=useMemo(()=>{
     const a=[...filtered];
@@ -672,7 +672,7 @@ export default function App(){
     avgAge:filtered.length?filtered.reduce((s,p)=>s+p.age,0)/filtered.length:0,
   }),[filtered,getDisplayScore]);
 
-  const reset=()=>{setSearch('');setPos('All');setSideFilter('Any');setRoleFilter('');setRoleFilters(new Set());setSoftMode(false);setRoleFilters(new Set());setSoftMode(false);setRoleScoreMin(50);setActivePreset('');setActivePresetLeagues(null);setShowHidden(false);setShowYouth(false);setActiveBands(new Set());setActiveRegions(new Set());setLsMin(0);setLsMax(101);setAgeMin(16);setAgeMax(38);setHeightMin(152);setHeightMax(211);setFoot('Any');setMinScore(40);setMinSeas(1);setShowMvFilter(false);setMvMax(50);setShowContractFilter(false);setContractBefore(2028);setSeasonFilter('all');setScoreMode('complete');setMetricFilters([]);setXValueFilter('');setRawMode(false);setOutlierMode(false);setOnlyElite(false);setVersatileOnly(false);setRecentOnly(true);setShowXValueFilter(false);setXValueMin(0);setXValueMax(50);setAttrFilters(new Set());setMinMins(500);setShowCareerMinsFilter(false);setCareerMinMins(500);setCurrentLeagueOnly(false);setPotentialMin(40);setPlayed2526(false);setEscOnly(false);setGbeMin(0);setNatFilter('');setNotPlayingOnly(false);setDomesticOnly(false);setInternationalOnly(false);setTierFilters(new Set());setShowShortlist(false);setSoftMode(false);setRoleFilters(new Set());setPage(0);};
+  const reset=()=>{setSearch('');setPos('All');setSideFilter('Any');setRoleFilter('');setRoleFilters(new Set());setSoftMode(false);setRoleFilters(new Set());setSoftMode(false);setRoleScoreMin(50);setActivePreset('');setActivePresetLeagues(null);setShowHidden(false);setShowYouth(false);setActiveBands(new Set());setActiveRegions(new Set());setLsMin(0);setLsMax(101);setAgeMin(16);setAgeMax(38);setHeightMin(152);setHeightMax(211);setFoot('Any');setMinScore(40);setMinSeas(1);setShowMvFilter(false);setMvMax(50);setShowContractFilter(false);setContractBefore(2028);setSeasonFilter('all');setScoreMode('complete');setMetricFilters([]);setXValueFilter('');setRawMode(false);setOutlierMode(false);setOnlyElite(false);setVersatileOnly(false);setRecentOnly(true);setShowXValueFilter(false);setXValueMin(0);setXValueMax(50);setAttrFilters(new Set());setMinMins(500);setShowCareerMinsFilter(false);setCareerMinMins(500);setCurrentLeagueOnly(false);setPotentialMin(40);setPlayedCurrent(false);setEscOnly(false);setGbeMin(0);setNatFilter('');setNotPlayingOnly(false);setDomesticOnly(false);setInternationalOnly(false);setTierFilters(new Set());setShowShortlist(false);setSoftMode(false);setRoleFilters(new Set());setPage(0);};
 
   if(loading) return <div style={{...T.app,alignItems:'center',justifyContent:'center'}}><style>{'@keyframes spin{to{transform:rotate(360deg)}}'}</style><div style={{width:24,height:24,border:'2px solid #1e2d45',borderTop:'2px solid #3b7de8',borderRadius:'50%',animation:'spin 0.8s linear infinite'}}/><div style={{color:'#94a3b8',fontSize:11,marginTop:8}}>Loading…</div></div>;
 
@@ -997,9 +997,9 @@ export default function App(){
             <input type="range" style={T.sl} min={40} max={90} step={1} value={potentialMin} onChange={e=>{setPotentialMin(Number(e.target.value));setPage(0);}}/>
           </div>
           <div style={T.fg}>
-            <label style={T.cr} onClick={()=>{setPlayed2526(p=>!p);setPage(0);}}>
-              <div style={T.cb(played2526)}>{played2526&&<span style={{color:'#fff',fontSize:8,lineHeight:1}}>✓</span>}</div>
-              <span style={T.cl(played2526)}>Played in 2025-26 only</span>
+            <label style={T.cr} onClick={()=>{setPlayedCurrent(p=>!p);setPage(0);}}>
+              <div style={T.cb(playedCurrent)}>{playedCurrent&&<span style={{color:'#fff',fontSize:8,lineHeight:1}}>✓</span>}</div>
+              <span style={T.cl(playedCurrent)}>Played in {CURRENT_SEASON} only</span>
             </label>
           </div>
           <div style={T.fg}>
