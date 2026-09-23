@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { scoreBandColor, formatMV, formatFoot, ROLE_KEY_LABELS, divColor, LEAGUE_STRENGTHS, scoreLabel, scoreToStars, starLabel, POSITION_ATTRIBUTES, playerHasAttribute, GBE_LEAGUE_BANDS } from './constants';
+import { scoreBandColor, formatMV, formatFoot, ROLE_KEY_LABELS, divColor, LEAGUE_STRENGTHS, scoreLabel, scoreToStars, starLabel, POSITION_ATTRIBUTES, playerHasAttribute, GBE_LEAGUE_BANDS, CURRENT_SEASON } from './constants';
 
 const APP_ROLES = {
   GK:  ['Shot Stopper GK','Ball Playing GK','Sweeper GK'],
@@ -1406,8 +1406,13 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
               );
               const homeNation = [...HOME_NATIONS].some(n=>birth.includes(n)||passport.includes(n));
 
-              // Find best domestic season for display
-              const domSh = allS.filter(s=>POINTS_SEASONS.has(s.s)&&!INTL_LEAGUES_GBE.has(s.l)&&!CONT_BAND[s.l]&&!CONT_ESC_ONLY.has(s.l)&&!YOUTH_LEAGUES_GBE.has(s.l)).sort((a,b)=>(b.mins||0)-(a.mins||0))[0];
+              // Domestic season the pipeline scored T2 on — mirrors build_players.py's dom_best:
+              // prefer CURRENT_SEASON once the club's top player has 450+ mins there, else most minutes.
+              // Domestic maxMins only exists in builds after the 2026-09-23 GBE rule change; older
+              // data was scored on plain most-minutes, so keep that until the rebuild lands.
+              const domAll = allS.filter(s=>POINTS_SEASONS.has(s.s)&&!INTL_LEAGUES_GBE.has(s.l)&&!CONT_BAND[s.l]&&!CONT_ESC_ONLY.has(s.l)&&!YOUTH_LEAGUES_GBE.has(s.l));
+              const domCur = domAll.some(s=>s.maxMins!=null) ? domAll.filter(s=>s.s===CURRENT_SEASON&&(s.maxMins||0)>=450) : [];
+              const domSh = (domCur.length?domCur:domAll).sort((a,b)=>(b.mins||0)-(a.mins||0))[0];
 
               // Only show if player has some GBE-relevant data
               if(!domSh && !allS.some(s=>CONT_BAND[s.l]||INTL_LEAGUES_GBE.has(s.l))) return null;
