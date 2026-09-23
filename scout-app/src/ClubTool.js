@@ -449,7 +449,7 @@ export default function ClubTool({players}){
       if(showXValueFilter&&p.xValue&&p.xValue<xValueMin*1000000) return false;
       if(showXValueFilter&&xValueMax<50&&p.xValue&&p.xValue>xValueMax*1000000) return false;
       const sdEntries=p.seasonsDetail||{};
-      const sd=sdEntries['2025-26']||sdEntries['2026']||sdEntries['2025']||Object.values(sdEntries)[0]||{};
+      const sd=[CURRENT_SEASON,CURRENT_SEASON.slice(0,4),ALL_SEASONS[1],ALL_SEASONS[1].slice(0,4)].map(s=>sdEntries[s]).find(Boolean)||Object.values(sdEntries)[0]||{};
       for(const mf of metricFilters){
         if(!mf.key) continue;
         let found=null;
