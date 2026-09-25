@@ -58,7 +58,7 @@ function tableScoreLabel({ seasonFilter, scoreMode, rawMode, outlierMode }) {
 // `scoreScale` means the level bands (shading, dashed lines) apply.
 function buildFields(ctx) {
   const f = [
-    { key:'display', group:'Score', label:tableScoreLabel(ctx), get:p=>ctx.getDisplayScore(p), scoreScale:!ctx.rawMode&&!ctx.outlierMode },
+    { key:'display', group:'Score', label:`Table score · ${tableScoreLabel(ctx)}`, get:p=>ctx.getDisplayScore(p), scoreScale:!ctx.rawMode&&!ctx.outlierMode },
     { key:'careerScore', group:'Score', label:'Career score', get:p=>p.careerScore, scoreScale:true },
     { key:'peakScore', group:'Score', label:'Peak score', get:p=>p.peakScore, scoreScale:true },
     { key:'potentialScore', group:'Score', label:'Potential', get:p=>p.potentialScore, scoreScale:true },
@@ -286,7 +286,7 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
     const budget = Math.max(8, Math.min(40, Math.round(pw*ph / (9000*fs*fs))));
     for (const d of visible.slice(0, budget + 1)) {
       if (d === hl || items.length > budget) continue;
-      items.push({ x: xS(d.x), y: yS(d.y), r, px: 9.5*fs, font: f(9.5, 500), text: d.p.name.split(' ').slice(-1)[0] });
+      items.push({ x: xS(d.x), y: yS(d.y), r, px: 9.5*fs, font: f(9.5, 500), text: d.p.name });
     }
   }
   const labels = placeLabels(ctx, items, dots, bounds, taken, fs);
@@ -342,8 +342,8 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
 export default function ScatterChart({ players, getDisplayScore, seasonFilter, scoreMode, rawMode, outlierMode, onSelect, onClose, contextLabel }) {
   const isMobile = useIsMobile();
   const [n, setN] = useState(50);
-  const [xKey, setXKey] = useState('age');
-  const [yKey, setYKey] = useState('display');
+  const [xKey, setXKey] = useState('potentialScore');
+  const [yKey, setYKey] = useState('careerScore');
   const [metricMode, setMetricMode] = useState('val'); // 'val' (per-90 value) | 'pct' (percentile)
   const [colorBy, setColorBy] = useState('position'); // 'position' | 'careerScore' | 'potentialScore' | 'display'
   const [showNames, setShowNames] = useState(true);
@@ -352,6 +352,9 @@ export default function ScatterChart({ players, getDisplayScore, seasonFilter, s
   const [highlightId, setHighlightId] = useState(null);
   const [query, setQuery] = useState('');
   const [busy, setBusy] = useState(false);
+  const [exportTheme, setExportTheme] = useState('dark'); // 'dark' | 'light'
+  const [customTitle, setCustomTitle] = useState('');
+  const [trimLow, setTrimLow] = useState(false);
   const [width, setWidth] = useState(900);
   const wrapRef = useRef(null), canvasRef = useRef(null), layoutRef = useRef(null);
   const H = isMobile ? 400 : 580;
@@ -363,7 +366,7 @@ export default function ScatterChart({ players, getDisplayScore, seasonFilter, s
   const displayIsScore = fields[0].scoreScale;
   const colorOptions = [
     ['position', 'Position'], ['careerScore', 'Career score'], ['potentialScore', 'Potential'],
-    ...(displayIsScore ? [['display', `Table score (${fields[0].label})`]] : []),
+    ...(displayIsScore ? [['display', fields[0].label]] : []),
   ];
   useEffect(() => { if (colorBy === 'display' && !displayIsScore) setColorBy('position'); }, [colorBy, displayIsScore]);
   useEffect(() => { setHidden(new Set()); }, [colorBy]);
@@ -379,7 +382,17 @@ export default function ScatterChart({ players, getDisplayScore, seasonFilter, s
 
   const top = useMemo(() => players.slice(0, Math.max(1, n)), [players, n]);
   const toPoint = useCallback((p, extra) => ({ p, x: xf.get(p), y: yf.get(p), rank: rankById.get(p.id), extra, ...colorOf(p) }), [xf, yf, rankById, colorOf]);
-  const topPts = useMemo(() => top.map(p => toPoint(p, false)).filter(d => Number.isFinite(d.x) && Number.isFinite(d.y)), [top, toPoint]);
+  const allTopPts = useMemo(() => top.map(p => toPoint(p, false)).filter(d => Number.isFinite(d.x) && Number.isFinite(d.y)), [top, toPoint]);
+  // "Hide low outliers": same rule as PlayerCard's squad chart — drop points more
+  // than 2 SD below the mean, checked on each axis (only with 5+ points).
+  const topPts = useMemo(() => {
+    if (!trimLow || allTopPts.length <= 4) return allTopPts;
+    const floor = k => { const v = allTopPts.map(d => d[k]), m = v.reduce((a, b) => a + b, 0) / v.length;
+      return m - 2 * Math.sqrt(v.reduce((a, b) => a + (b - m) ** 2, 0) / v.length); };
+    const fx = floor('x'), fy = floor('y');
+    return allTopPts.filter(d => d.x >= fx && d.y >= fy);
+  }, [allTopPts, trimLow]);
+  const trimmed = allTopPts.length - topPts.length;
   const hlPlayer = useMemo(() => (highlightId == null ? null : players.find(p => p.id === highlightId) || null), [players, highlightId]);
   const pts = useMemo(() => {
     if (!hlPlayer || topPts.some(d => d.p.id === hlPlayer.id)) return topPts;
@@ -397,7 +410,8 @@ export default function ScatterChart({ players, getDisplayScore, seasonFilter, s
   }, [topPts, colorBy]);
 
   const colorLabel = colorOptions.find(o => o[0] === colorBy)?.[1] || 'Position';
-  const title = `${yf.label} vs ${xf.label}`;
+  const autoTitle = `${yf.label} vs ${xf.label}`;
+  const title = customTitle.trim() || autoTitle;
   const subtitle = `Top ${top.length} · ${contextLabel}${colorBy !== 'position' ? ` · colour: ${colorLabel}` : ''}${hlPoint ? ` · highlighted: ${hlPoint.p.name}` : ''}`;
 
   useEffect(() => {
@@ -447,15 +461,13 @@ export default function ScatterChart({ players, getDisplayScore, seasonFilter, s
     setBusy(true);
     try {
       await ensureMontserratEmbedded();
-      const slug = s => s.replace(/[^\w]+/g, '_').replace(/^_|_$/g, '');
-      const base = `scatter_${slug(yf.label)}_vs_${slug(xf.label)}`;
+      const slug = t => t.replace(/[^\w]+/g, '_').replace(/^_|_$/g, '');
+      const base = customTitle.trim() ? slug(customTitle) : `scatter_${slug(yf.label)}_vs_${slug(xf.label)}`;
       const date = new Date().toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
       const footer = `Scout Index · ${date}${(xf.scoreScale || yf.scoreScale) ? ' · shaded zones / dashed lines = Scout Index level bands' : ''}`;
-      for (const theme of ['dark', 'light']) {
-        const off = document.createElement('canvas');
-        drawScatter(off, EXPORT_W, EXPORT_H, 1, true, { pts, xf, yf, hidden, hoverId: null, highlightId, showNames, title, subtitle, footer, legend, theme });
-        await deliverPng(off.toDataURL('image/png'), `${base}_${theme}.png`);
-      }
+      const off = document.createElement('canvas');
+      drawScatter(off, EXPORT_W, EXPORT_H, 1, true, { pts, xf, yf, hidden, hoverId: null, highlightId, showNames, title, subtitle, footer, legend, theme: exportTheme });
+      await deliverPng(off.toDataURL('image/png'), `${base}_${exportTheme}.png`);
     } finally { setBusy(false); }
   };
 
@@ -484,7 +496,7 @@ export default function ScatterChart({ players, getDisplayScore, seasonFilter, s
       {groups.map(g => <optgroup key={g} label={g}>{fields.filter(f => f.group === g).map(f => <option key={f.key} value={f.key}>{f.label}</option>)}</optgroup>)}
     </select>
   );
-  const missing = top.length - topPts.length;
+  const missing = top.length - allTopPts.length;
   const usesMetric = xf.metric || yf.metric;
 
   return (
@@ -509,9 +521,16 @@ export default function ScatterChart({ players, getDisplayScore, seasonFilter, s
           </div>
         )}
         <button style={btn(showNames)} onClick={() => setShowNames(s => !s)}>Names</button>
+        <button style={btn(trimLow)} aria-pressed={trimLow} title="Hide points more than 2 SD below the mean on either axis" onClick={() => setTrimLow(v => !v)}>Hide low outliers</button>
         <div style={{ marginLeft:'auto', display:'flex', gap:6 }}>
           {onClose && <button style={btn(false)} onClick={onClose}>☰ Table</button>}
-          <button style={btn(false)} onClick={download} disabled={!pts.length || busy}>{busy ? 'Exporting…' : '⬇ Download PNG (dark + light)'}</button>
+          <div style={{ display:'flex', gap:0 }}>
+            {['dark', 'light'].map((t, i) => (
+              <button key={t} aria-pressed={exportTheme === t} onClick={() => setExportTheme(t)}
+                style={{ ...btn(exportTheme === t), borderRadius: i ? '0 5px 5px 0' : '5px 0 0 5px' }}>{t === 'dark' ? 'Dark' : 'Light'}</button>
+            ))}
+          </div>
+          <button style={btn(false)} onClick={download} disabled={!pts.length || busy}>{busy ? 'Exporting…' : '⬇ Download PNG'}</button>
         </div>
       </div>
 
@@ -533,11 +552,13 @@ export default function ScatterChart({ players, getDisplayScore, seasonFilter, s
             </div>
           )}
         </div>
+        <input aria-label="Chart title" placeholder={`Title: ${autoTitle}`} value={customTitle} onChange={e => setCustomTitle(e.target.value)}
+          style={{ ...sel, width:isMobile?200:280, padding:'6px 8px', maxWidth:'100%' }}/>
         {hlPlayer && (
           <div style={{ display:'flex', alignItems:'center', gap:8, padding:'4px 6px 4px 10px', borderRadius:14, border:'1px solid #26456f', background:'#0e2040' }}>
             <span style={{ fontSize:11, color:'#dbeafe' }}>
               <b>{hlPlayer.name}</b> · {hlPlayer.team} · #{rankById.get(hlPlayer.id)}
-              {!hlPoint ? ' · no data for these axes' : hlPoint.extra ? ' · outside top ' + top.length : ''}
+              {!hlPoint ? ' · no data for these axes' : !hlPoint.extra ? '' : hlPoint.rank <= top.length ? ' · low outlier, shown because highlighted' : ' · outside top ' + top.length}
             </span>
             <button onClick={() => onSelect(hlPlayer)} style={{ ...btn(false), padding:'3px 8px' }}>Open profile</button>
             <button aria-label="Clear highlight" onClick={() => setHighlightId(null)} style={{ ...btn(false), padding:'3px 8px' }}>✕</button>
@@ -578,7 +599,7 @@ export default function ScatterChart({ players, getDisplayScore, seasonFilter, s
           </button>
         ))}
         <span style={{ fontSize:10, color:'#64748b', marginLeft:'auto' }}>
-          {topPts.length} of top {top.length} plotted{missing > 0 ? ` · ${missing} without data for these axes` : ''}
+          {topPts.length} of top {top.length} plotted{missing > 0 ? ` · ${missing} without data for these axes` : ''}{trimmed > 0 ? ` · ${trimmed} low outlier${trimmed > 1 ? 's' : ''} hidden` : ''}
           {(xf.scoreScale || yf.scoreScale) ? ' · shaded zones = level bands' : ''}
         </span>
       </div>
