@@ -40,13 +40,13 @@ const THEMES = {
 const money = v => v >= 1e6 ? `£${(v/1e6).toFixed(1)}m` : `£${Math.round(v/1e3)}k`;
 const posOrNull = v => (v != null && v > 0 ? v : null);
 // Band lines for THIS CHART ONLY: SCORE_TIERS with the 61 line relabelled
-// "League One" and a new "Championship" line at 63. Display override — SCORE_TIERS
+// "League One–Championship" (57 keeps "League One") and a new "Championship" line at 63. Display override — SCORE_TIERS
 // itself (table, star ratings, PlayerCard, score labels) is untouched, and so are
 // the score-mode dot colours (app-wide SCORE_DOT_STEPS).
 const CHART_TIERS = [
   ...SCORE_TIERS.filter(t => t.min >= 67),
   { min:63, label:'Championship Level', short:'Championship' },
-  { min:61, label:'League One Level', short:'League One' },
+  { min:61, label:'League One–Championship', short:'League One–Championship' },
   ...SCORE_TIERS.filter(t => t.min <= 57),
 ];
 const tierShort = min => SCORE_TIERS.find(t => t.min === min)?.short || String(min);
