@@ -204,6 +204,8 @@ const METRIC_OPTIONS=[
   {label:'Interceptions',key:'PAdj Interceptions'},{label:'Def Duels per 90',key:'Defensive Duels'},
 ];
 
+// Always the latest season with metrics, regardless of the sidebar season filter
+// (deliberate: metric filters show current form). Known limitation, see CLAUDE.md.
 function getMetricPct(player,metricKey){
   const sd=latestSeasonDetail(player);
   if(!sd) return null;
