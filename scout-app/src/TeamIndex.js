@@ -24,9 +24,10 @@ import React, { useState, useEffect, useMemo } from 'react';
 import TeamCard from './TeamCard';
 import CoachPanel from './CoachPanel';
 import TeamReport from './TeamReport';
+import TeamScatter from './TeamScatter';
 import { useIsMobile } from './utils';
 import { LEAGUE_STRENGTHS, ALL_LEAGUES, DEFAULT_LEAGUES, HIDDEN_LEAGUES, YOUTH_LEAGUES,
-         PRESET_LEAGUES, COUNTRY_TO_REGION, GBE_LEAGUE_BANDS, leagueToRegion, leagueToBand } from './constants';
+         PRESET_LEAGUES, COUNTRY_TO_REGION, GBE_LEAGUE_BANDS, leagueToRegion, leagueToBand, teamScoreColor } from './constants';
 
 // teams_final.json's `league` field has no trailing period ('England 1'), but constants.js's
 // LEAGUE_STRENGTHS/ALL_LEAGUES use the player-CSV format with a trailing period ('England 1.').
@@ -137,14 +138,7 @@ function Th({ col, label, sort, onSort }) {
   return <th style={{ ...T.th, ...(a ? T.tha : {}) }} onClick={() => onSort(col)}>{label}{a ? (sort.asc ? ' ↑' : ' ↓') : ''}</th>;
 }
 
-function scoreColor(v) {
-  if (v == null) return '#475569';
-  if (v >= 80) return '#00bf63';
-  if (v >= 65) return '#22c55e';
-  if (v >= 50) return '#fbc701';
-  if (v >= 35) return '#f18c31';
-  return '#ef4444';
-}
+const scoreColor = teamScoreColor; // cut-offs live in constants.js (shared with the team scatter chart)
 
 // Viewport check lives in utils.js so there is exactly one definition of what "mobile"
 // means. A second local copy here drifted out of sync the moment the pointer:coarse
@@ -159,6 +153,7 @@ export default function TeamIndex({ players = [] }) {
   const [selTeam, setSelTeam] = useState(null);
   const [showCoaches, setShowCoaches] = useState(false);
   const [reportTeam, setReportTeam] = useState(null); // Team All-in-One report (TeamReport.js)
+  const [mainView, setMainView] = useState('table'); // 'table' | 'scatter' — results as table or scatter chart
 
   useEffect(() => {
     fetch('/teams_final.json').then(r => r.ok ? r.json() : []).catch(() => [])
@@ -801,6 +796,11 @@ export default function TeamIndex({ players = [] }) {
             );
           })}
         </div>
+        <button onClick={() => { setMainView(v => (v === 'scatter' ? 'table' : 'scatter')); if (isMobile) setFiltersOpen(false); }}
+          style={{ width: '100%', padding: '6px', marginTop: 10, borderRadius: 5, fontSize: 10.5, cursor: 'pointer',
+            border: `1px solid ${mainView === 'scatter' ? '#3b7de8' : '#1e2d45'}`, background: mainView === 'scatter' ? '#0e2040' : 'none', color: mainView === 'scatter' ? '#93c5fd' : '#94a3b8' }}>
+          {mainView === 'scatter' ? '☰ Table view' : 'Scatter chart'}
+        </button>
       </aside>
       )}
       {isMobile && !filtersOpen && (
@@ -828,6 +828,13 @@ export default function TeamIndex({ players = [] }) {
           </div>
         </div>
 
+        {mainView === 'scatter' ? (
+          <TeamScatter teams={sorted} getDisplayScore={getDisplayScore} scoreLabel={scoreMode === 'Overall' && rawMode ? 'Overall (raw)' : scoreMode}
+            styleColors={STYLE_COLORS} getAvgXValue={getAvgXValue} getTotalMV={getTotalMV} getMVPerf={getMVPerf}
+            onSelect={t => setSelTeam({ ...t, crest: teamCrest(t.team), avgXValue: getAvgXValue(t.team, t.league), totalMV: getTotalMV(t.team, t.league), mvPerf: getMVPerf(t.team, t.league) })}
+            onClose={() => setMainView('table')}
+            contextLabel={season === 'latest' ? 'Latest season' : season === 'weighted' ? 'All seasons (weighted)' : season}/>
+        ) : (<>
         <div style={T.tw}>
           {sorted.length === 0
             ? <div style={T.es}><div style={{ fontSize: 26 }}>⚽</div><div style={{ fontSize: 12, color: '#94a3b8' }}>No teams match filters</div></div>
@@ -978,6 +985,7 @@ export default function TeamIndex({ players = [] }) {
           <span style={{ fontSize: 11, color: '#94a3b8' }}>Page {page + 1} of {Math.max(1, Math.ceil(sorted.length / PAGE_SIZE))}</span>
           <button disabled={(page + 1) * PAGE_SIZE >= sorted.length} onClick={() => setPage(p => p + 1)} style={{ padding: isMobile ? '9px 18px' : '4px 10px', borderRadius: 5, border: '1px solid #1e2d45', background: 'transparent', color: (page + 1) * PAGE_SIZE >= sorted.length ? '#475569' : '#e2e8f4', cursor: (page + 1) * PAGE_SIZE >= sorted.length ? 'default' : 'pointer' }}>Next</button>
         </div>
+        </>)}
       </main>
       {selTeam && (
         <TeamCard

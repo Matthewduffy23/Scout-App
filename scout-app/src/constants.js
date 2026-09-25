@@ -257,6 +257,18 @@ export function scoreDotColor(v){
   return s?s.color:SCORE_DOT_LOW;
 }
 
+// Team score colours (Team Index table + team scatter chart). Team scores have no
+// named level bands, only these colour cut-offs.
+export const TEAM_SCORE_STEPS=[
+  {min:80,color:'#00bf63'},{min:65,color:'#22c55e'},{min:50,color:'#fbc701'},{min:35,color:'#f18c31'},
+];
+export const TEAM_SCORE_LOW='#ef4444';
+export function teamScoreColor(v){
+  if(v==null) return '#475569';
+  const s=TEAM_SCORE_STEPS.find(t=>v>=t.min);
+  return s?s.color:TEAM_SCORE_LOW;
+}
+
 // Size of the Canva-bound PNG exports (1920x1080). Used by the scatter chart;
 // the older exports still hardcode the same numbers.
 export const EXPORT_W=1920, EXPORT_H=1080;
