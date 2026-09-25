@@ -24,7 +24,7 @@ const THEMES = {
     leader:'rgba(148,163,184,0.55)', legendText:'#cbd5e1', rule:'#1e293b', footer:'#64748b',
     // Quadrant tints (teal / indigo / slate), stronger on the right-hand (high X) side
     quadTR:'rgba(20,184,166,0.15)', quadBR:'rgba(99,102,241,0.13)', quadTL:'rgba(100,116,139,0.08)',
-    quadText:'rgba(226,232,240,0.62)', split:'rgba(148,163,184,0.55)', diag:'rgba(203,213,225,0.38)',
+    quadText:'rgba(226,232,240,0.62)', split:'rgba(148,163,184,0.55)',
   },
   light: {
     bg:'#ffffff', plot:'#fbfcfe', zone:'30,41,59', zoneBase:0.008, zoneStep:0.018,
@@ -33,14 +33,25 @@ const THEMES = {
     label:'#0f172a', halo:'rgba(255,255,255,0.94)', ring:'rgba(15,23,42,0.6)', ringW:1.1, hl:'#0f172a',
     leader:'rgba(71,85,105,0.6)', legendText:'#1e293b', rule:'#e2e8f0', footer:'#64748b',
     quadTR:'rgba(13,148,136,0.12)', quadBR:'rgba(79,70,229,0.09)', quadTL:'rgba(100,116,139,0.07)',
-    quadText:'rgba(30,41,59,0.62)', split:'rgba(71,85,105,0.50)', diag:'rgba(51,65,85,0.35)',
+    quadText:'rgba(30,41,59,0.62)', split:'rgba(71,85,105,0.50)',
   },
 };
 
 const money = v => v >= 1e6 ? `£${(v/1e6).toFixed(1)}m` : `£${Math.round(v/1e3)}k`;
 const posOrNull = v => (v != null && v > 0 ? v : null);
+// Band lines for THIS CHART ONLY: SCORE_TIERS with League One moved up to 61 and a
+// Championship line added at 63. Display override — SCORE_TIERS itself (table,
+// star ratings, PlayerCard, score labels) is untouched. The 57 line is dropped so
+// League One isn't drawn twice. Dot colours in score mode still use the app-wide
+// SCORE_DOT_STEPS scale.
+const CHART_TIERS = [
+  ...SCORE_TIERS.filter(t => t.min >= 67),
+  { min:63, label:'Championship Level', short:'Championship' },
+  { min:61, label:'League One Level', short:'League One' },
+  ...SCORE_TIERS.filter(t => t.min < 57),
+];
 const tierShort = min => SCORE_TIERS.find(t => t.min === min)?.short || String(min);
-const tierAt = v => SCORE_TIERS.find(t => v >= t.min);
+const tierAt = v => CHART_TIERS.find(t => v >= t.min);
 const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
 // Score-colour legend buckets, one per SCORE_DOT_STEPS cutoff plus "below".
@@ -52,7 +63,7 @@ const SCORE_BUCKETS = [
 // Quadrant mode: which score fields are "current level" and which are "potential".
 const CURRENT_KEYS = new Set(['display', 'careerScore', 'peakScore']);
 const POTENTIAL_KEYS = new Set(['potentialScore', 'potentialCeiling']);
-const TARGET_TIERS = SCORE_TIERS.filter(t => t.min >= 50);
+const TARGET_TIERS = CHART_TIERS.filter(t => t.min >= 50);
 const shortLabel = l => l.replace(/^Table score · /, '');
 const quadOf = (q, d) => q.names[(d.y >= q.ySplit ? 't' : 'b') + (d.x >= q.xSplit ? 'r' : 'l')];
 
@@ -134,8 +145,8 @@ function valueText(v, field) {
 const EXPORT_PAD = { r:70, b:140, l:140 };
 function computeLayout(W, H, forExport, pts, xf, yf, exportTop) {
   const fs = forExport ? W / 800 : 1;
-  // Live: an 20px strip above the plot carries the X-axis band names when X is a score.
-  const pad = forExport ? { ...EXPORT_PAD, t: exportTop } : { t: 12 + (xf.scoreScale ? 20 : 0), r:16, b:46, l:60 };
+  // Live: a strip above the plot carries the X-axis band names (two rows) when X is a score.
+  const pad = forExport ? { ...EXPORT_PAD, t: exportTop } : { t: 12 + (xf.scoreScale ? 32 : 0), r:16, b:46, l:60 };
   const pw = W - pad.l - pad.r, ph = H - pad.t - pad.b;
   const xd = axisDomain(pts.map(d => d.x), xf), yd = axisDomain(pts.map(d => d.y), yf);
   const xS = v => pad.l + ((v - xd.lo) / (xd.hi - xd.lo)) * pw;
@@ -153,7 +164,7 @@ const overlaps = (a, b) => a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b
 // clear of the plot edge, every dot and every label already placed, and a leader
 // may not cross another dot or label. Labels are fed in priority order; a
 // `force` label (the highlighted player) always gets placed.
-function placeLabels(ctx, items, dots, bounds, taken, fs) {
+function placeLabels(ctx, items, dots, bounds, taken, fs, budget = Infinity) {
   const placed = [...taken];
   const DIRS = [[1,0],[-1,0],[0,-1],[0,1],[1,-1],[-1,-1],[1,1],[-1,1]];
   const clear = b => b.x0 >= bounds.x0 && b.x1 <= bounds.x1 && b.y0 >= bounds.y0 && b.y1 <= bounds.y1
@@ -169,7 +180,9 @@ function placeLabels(ctx, items, dots, bounds, taken, fs) {
     return true;
   };
   const out = [];
+  let named = 0;
   for (const it of items) {
+    if (!it.force && named >= budget) continue;
     ctx.font = it.font;
     const w = ctx.measureText(it.text).width + 4, h = it.px * 1.3;
     let choice = null;
@@ -189,6 +202,7 @@ function placeLabels(ctx, items, dots, bounds, taken, fs) {
       choice = { b: { x0, y0, x1: x0 + w, y1: y0 + h }, leader: true };
     }
     if (!choice) continue;
+    if (!it.force) named++;
     placed.push(choice.b);
     if (choice.leader) { // reserve the leader's path so later names can't sit on it
       const b = choice.b, tx = Math.max(b.x0, Math.min(it.x, b.x1)), ty = Math.max(b.y0, Math.min(it.y, b.y1));
@@ -225,11 +239,11 @@ function exportHeader(ctx, W, FONT, title, legend, xIsScore) {
   const legendTop = beside ? 58 : 146;
   const legendBottom = rows.length ? legendTop + (rows.length - 1) * 32 + 12 : 0;
   const ruleY = Math.max(122, legendBottom + 8);
-  return { rows, beside, legendTop, ruleY, right, GAP, plotTop: ruleY + 26 + (xIsScore ? 34 : 0) };
+  return { rows, beside, legendTop, ruleY, right, GAP, plotTop: ruleY + 26 + (xIsScore ? 62 : 0) };
 }
 
 export function drawScatter(canvas, W, H, dpr, forExport, o) {
-  const { pts, xf, yf, hidden, hoverId, highlightId, showNames, title, subtitle, footer, legend, quad: Q, theme: themeName = 'dark' } = o;
+  const { pts, xf, yf, hidden, hoverId, highlightId, showNames, soloLabel, title, subtitle, footer, legend, quad: Q, theme: themeName = 'dark' } = o;
   const T = THEMES[themeName];
   const FONT = forExport ? 'Montserrat, Inter, sans-serif' : 'Inter, sans-serif';
   canvas.width = W*dpr; canvas.height = H*dpr;
@@ -248,7 +262,7 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
   const f = (px, weight = 400) => `${weight} ${px*fs}px ${FONT}`;
   const inX = m => m > xd.lo && m < xd.hi, inY = m => m > yd.lo && m < yd.hi;
   ctx.fillStyle = T.plot; ctx.fillRect(pad.l, pad.t, pw, ph);
-  const taken = []; // boxes name labels must avoid (zone, band, quadrant, diagonal labels)
+  const taken = []; // boxes name labels must avoid (zone, band and quadrant labels)
   const textBox = (x, y, w, h) => ({ x0: x - 2*fs, y0: y - h, x1: x + w + 2*fs, y1: y + 3*fs });
 
   ctx.save(); ctx.beginPath(); ctx.rect(pad.l, pad.t, pw, ph); ctx.clip();
@@ -264,7 +278,7 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
   // ── Single score axis: neutral band zones along it ──────────────────────
   if (shade) {
     const d = shade === 'y' ? yd : xd, S = shade === 'y' ? yS : xS;
-    const cuts = SCORE_TIERS.map(t => t.min).filter(m => m > d.lo && m < d.hi).sort((a, b) => a - b);
+    const cuts = CHART_TIERS.map(t => t.min).filter(m => m > d.lo && m < d.hi).sort((a, b) => a - b);
     const edges = [d.lo, ...cuts, d.hi];
     for (let k = 0; k < edges.length - 1; k++) {
       ctx.fillStyle = `rgba(${T.zone},${(T.zoneBase + k*T.zoneStep).toFixed(3)})`;
@@ -278,35 +292,16 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
   if (!xf.scoreScale) for (const v of ticksOf(xd)) { ctx.beginPath(); ctx.moveTo(xS(v), pad.t); ctx.lineTo(xS(v), pad.t + ph); ctx.stroke(); }
   // ── Dashed band lines on every score axis ────────────────────────────────
   ctx.setLineDash([5*fs, 4*fs]); ctx.strokeStyle = T.band; ctx.lineWidth = forExport ? 2 : 1;
-  for (const t of SCORE_TIERS) {
+  for (const t of CHART_TIERS) {
     if (yf.scoreScale && inY(t.min) && !(quad && t.min === quad.ySplit)) { ctx.beginPath(); ctx.moveTo(pad.l, yS(t.min)); ctx.lineTo(pad.l + pw, yS(t.min)); ctx.stroke(); }
     if (xf.scoreScale && inX(t.min) && !(quad && t.min === quad.xSplit)) { ctx.beginPath(); ctx.moveTo(xS(t.min), pad.t); ctx.lineTo(xS(t.min), pad.t + ph); ctx.stroke(); }
   }
   ctx.setLineDash([]);
-  // ── Quadrant split lines + diagonal reference ───────────────────────────
+  // ── Quadrant split lines ─────────────────────────────────────────────────
   if (quad) {
     ctx.strokeStyle = T.split; ctx.lineWidth = (forExport ? 2 : 1.2);
     if (inX(quad.xSplit)) { ctx.beginPath(); ctx.moveTo(qs.sx, pad.t); ctx.lineTo(qs.sx, pad.t + ph); ctx.stroke(); }
     if (inY(quad.ySplit)) { ctx.beginPath(); ctx.moveTo(pad.l, qs.sy); ctx.lineTo(pad.l + pw, qs.sy); ctx.stroke(); }
-    if (quad.diag) {
-      const a = Math.max(xd.lo, yd.lo), b = Math.min(xd.hi, yd.hi);
-      if (a < b) {
-        const x1 = xS(a), y1 = yS(a), x2 = xS(b), y2 = yS(b);
-        ctx.strokeStyle = T.diag; ctx.lineWidth = forExport ? 2.5 : 1.4; ctx.setLineDash([2*fs, 3*fs]);
-        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); ctx.setLineDash([]);
-        ctx.font = f(8.5, 600);
-        const tw = ctx.measureText(quad.diagLabel).width, ang = Math.atan2(y2 - y1, x2 - x1);
-        const len = Math.hypot(x2 - x1, y2 - y1);
-        if (len > tw + 40*fs) {
-          const t0 = Math.max(0, (len - tw - 16*fs) / len); // near the upper end
-          const lx = x1 + (x2 - x1) * t0, ly = y1 + (y2 - y1) * t0;
-          ctx.save(); ctx.translate(lx, ly); ctx.rotate(ang); ctx.fillStyle = T.quadText; ctx.textAlign = 'left';
-          ctx.fillText(quad.diagLabel, 0, -4*fs); ctx.restore();
-          const ex = lx + Math.cos(ang) * tw, ey = ly + Math.sin(ang) * tw;
-          taken.push({ x0: Math.min(lx, ex) - 4*fs, y0: Math.min(ly, ey) - 14*fs, x1: Math.max(lx, ex) + 4*fs, y1: Math.max(ly, ey) + 2*fs });
-        }
-      }
-    }
   }
   ctx.restore();
 
@@ -316,7 +311,12 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
   const dots = visible.map(d => ({ x: xS(d.x), y: yS(d.y), r: d === hl ? r*1.6 : r }));
   const hitsDot = b => dots.some(o => o.x + o.r > b.x0 && o.x - o.r < b.x1 && o.y + o.r > b.y0 && o.y - o.r < b.y1);
 
-  // ── Quadrant names in the corners (slid along the edge to clear any dot) ──
+  // Quadrant and band names are collected here and drawn AFTER the dots with a
+  // halo, so in the rare case no clear spot exists a dot can't hide the text.
+  const overlays = [];
+  const dotHits = b => dots.filter(o => o.x + o.r > b.x0 && o.x - o.r < b.x1 && o.y + o.r > b.y0 && o.y - o.r < b.y1).length;
+
+  // ── Quadrant names in the corners (slid along the edge, then inwards, to clear dots) ──
   if (quad) {
     ctx.font = f(9.5, 700); ctx.fillStyle = T.quadText;
     const inset = 8*fs, hgt = 11*fs;
@@ -329,52 +329,65 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
     for (const [txt, align, x, y, qw, qh] of corners) {
       const label = txt.toUpperCase(), tw = ctx.measureText(label).width;
       if (qw < tw + 2*inset || qh < hgt + 2*inset) continue; // quadrant too small on screen
-      let best = null;
-      for (let shift = 0; shift <= qw - tw - 2*inset; shift += 12*fs) {
-        const lx = align === 'right' ? x - shift - tw : x + shift;
-        const b = textBox(lx, y, tw, hgt);
-        if (!hitsDot(b)) { best = { lx, b }; break; }
+      const down = y < pad.t + ph/2 ? 1 : -1; // top corners move down, bottom corners up
+      let best = null, fewest = null;
+      for (let lift = 0; lift <= Math.min(qh - hgt - 2*inset, 60*fs) && !best; lift += 12*fs) {
+        const ly = y + down*lift;
+        for (let shift = 0; shift <= qw - tw - 2*inset; shift += 12*fs) {
+          const lx = align === 'right' ? x - shift - tw : x + shift;
+          const b = textBox(lx, ly, tw, hgt), hits = dotHits(b);
+          if (!hits && !taken.some(q => overlaps(b, q))) { best = { lx, ly, b }; break; }
+          if (!fewest || hits < fewest.hits) fewest = { lx, ly, b, hits };
+        }
       }
-      if (!best) best = { lx: align === 'right' ? x - tw : x, b: textBox(align === 'right' ? x - tw : x, y, tw, hgt) };
-      ctx.textAlign = 'left'; ctx.fillText(label, best.lx, y);
+      best = best || fewest;
+      overlays.push({ text: label, x: best.lx, y: best.ly, font: f(9.5, 700), color: T.quadText });
       taken.push(best.b);
     }
   }
-  // ── Band names ───────────────────────────────────────────────────────────
+  // ── Band names: every band line in range is named. A name slides along its
+  //    line to clear dots and other labels; if nowhere is clear it still goes in.
   ctx.font = f(8, 600); ctx.fillStyle = T.zoneText;
+  const slideLabel = (name, y, color) => {
+    const tw = ctx.measureText(name).width;
+    let pick = null;
+    for (let x = pad.l + 8*fs; x + tw <= pad.l + pw - 8*fs; x += 12*fs) {
+      const b = textBox(x, y, tw, 10*fs);
+      if (!taken.some(q => overlaps(b, q)) && !hitsDot(b)) { pick = { x, b }; break; }
+    }
+    if (!pick) pick = { x: pad.l + 8*fs, b: textBox(pad.l + 8*fs, y, tw, 10*fs) };
+    overlays.push({ text: name, x: pick.x, y, font: f(8, 600), color }); taken.push(pick.b);
+  };
   if (shade === 'y') {
-    // zone names inside the plot, top-left of each zone
-    const cuts = SCORE_TIERS.map(t => t.min).filter(inY).sort((a, b) => a - b);
+    // zone names inside the plot, at the top of each zone
+    const cuts = CHART_TIERS.map(t => t.min).filter(inY).sort((a, b) => a - b);
     const edges = [yd.lo, ...cuts, yd.hi];
     for (let k = 0; k < edges.length - 1; k++) {
       const top = yS(edges[k+1]), bot = yS(edges[k]);
-      if (bot - top < 15*fs) continue;
-      const name = (tierAt(edges[k])?.short || 'Development').toUpperCase(), tw = ctx.measureText(name).width;
-      ctx.textAlign = 'left'; ctx.fillText(name, pad.l + 8*fs, top + 12*fs);
-      taken.push(textBox(pad.l + 8*fs, top + 12*fs, tw, 10*fs));
+      if (bot - top < 11*fs) continue; // a zone thinner than the text itself
+      slideLabel((tierAt(edges[k])?.short || 'Development').toUpperCase(), top + 10*fs, T.zoneText);
     }
   } else if (quad) {
-    // Y band names sit just above their line at the left, unless something is already there
-    for (const t of SCORE_TIERS) {
+    // Y band names just above their line (below it if the line is at the very top)
+    for (const t of CHART_TIERS) {
       if (!inY(t.min)) continue;
-      const name = t.short.toUpperCase(), tw = ctx.measureText(name).width, y = yS(t.min) - 4*fs;
-      const b = textBox(pad.l + 8*fs, y, tw, 10*fs);
-      if (b.y0 < pad.t || taken.some(q => overlaps(b, q)) || hitsDot(b)) continue;
-      ctx.fillStyle = t.min === quad.ySplit ? T.quadText : T.zoneText;
-      ctx.textAlign = 'left'; ctx.fillText(name, pad.l + 8*fs, y); taken.push(b);
+      const above = yS(t.min) - 4*fs, y = above - 10*fs < pad.t ? yS(t.min) + 12*fs : above;
+      slideLabel(t.short.toUpperCase(), y, t.min === quad.ySplit ? T.quadText : T.zoneText);
     }
-    ctx.fillStyle = T.zoneText;
   }
   if (xf.scoreScale) {
-    // X band names horizontally in the strip above the plot, centred on each line
-    let lastRight = -Infinity;
-    const marks = SCORE_TIERS.filter(t => inX(t.min)).sort((a, b) => a.min - b.min);
+    // X band names horizontally above the plot, centred on each line; two rows so
+    // close lines (League One 61 / Championship 63) both keep their names.
+    ctx.font = f(8, 600);
+    const rowY = [pad.t - 7*fs, pad.t - 19*fs], lastRight = [-Infinity, -Infinity];
+    const marks = CHART_TIERS.filter(t => inX(t.min)).sort((a, b) => a.min - b.min);
     for (const t of marks) {
       const name = t.short.toUpperCase(), tw = ctx.measureText(name).width, cx = xS(t.min);
       const x0 = Math.max(pad.l, Math.min(cx - tw/2, pad.l + pw - tw));
-      if (x0 < lastRight + 10*fs) continue;
+      const row = x0 >= lastRight[0] + 10*fs ? 0 : x0 >= lastRight[1] + 10*fs ? 1 : -1;
+      if (row < 0) continue;
       ctx.textAlign = 'left'; ctx.fillStyle = t.min === quad?.xSplit ? T.quadText : T.zoneText;
-      ctx.fillText(name, x0, pad.t - 7*fs); lastRight = x0 + tw;
+      ctx.fillText(name, x0, rowY[row]); lastRight[row] = x0 + tw;
     }
     ctx.fillStyle = T.zoneText;
   }
@@ -406,25 +419,36 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
     ctx.strokeStyle = T.ring; ctx.lineWidth = T.ringW*fs; ctx.stroke();
     ctx.globalAlpha = 1;
   };
-  for (let i = visible.length - 1; i >= 0; i--) if (visible[i] !== hl) ringDot(visible[i], r, hl ? 0.25 : 0.95);
+  // Highlight fades everyone else; single-highlight mode instead keeps them solid but unnamed.
+  const solo = !!(hl && soloLabel);
+  for (let i = visible.length - 1; i >= 0; i--) if (visible[i] !== hl) ringDot(visible[i], r, hl && !solo ? 0.25 : 0.95);
+  ctx.lineJoin = 'round'; ctx.textAlign = 'left';
+  for (const ov of overlays) {
+    ctx.font = ov.font;
+    ctx.strokeStyle = T.halo; ctx.lineWidth = 3*fs; ctx.strokeText(ov.text, ov.x, ov.y);
+    ctx.fillStyle = ov.color; ctx.fillText(ov.text, ov.x, ov.y);
+  }
 
   // ── Name labels ──────────────────────────────────────────────────────────
   const bounds = { x0: pad.l + 2, y0: pad.t + 2, x1: pad.l + pw - 2, y1: pad.t + ph - 2 };
   const items = [];
   if (hl) items.push({ x: xS(hl.x), y: yS(hl.y), r: r*1.6, force: true, px: 11*fs, font: f(11, 700),
     text: hl.p.name + (hl.extra ? `  #${hl.rank}` : ''), hl: true });
-  if (showNames) {
-    const budget = Math.max(8, Math.min(40, Math.round(pw*ph / (9000*fs*fs))));
-    for (const d of visible.slice(0, budget + 1)) {
-      if (d === hl || items.length > budget) continue;
+  // Names: walk the list in rank order and keep placing until the budget of
+  // *placed* names is used, so names that can't fit in a cluster don't use up
+  // the allowance and sparse areas still get labelled.
+  const budget = Math.max(12, Math.min(90, Math.round(pw*ph / (4500*fs*fs))));
+  if (showNames && !solo) {
+    for (const d of visible.slice(0, 400)) {
+      if (d === hl) continue;
       items.push({ x: xS(d.x), y: yS(d.y), r, px: 9.5*fs, font: f(9.5, 500), text: d.p.name });
     }
   }
-  const labels = placeLabels(ctx, items, dots, bounds, taken, fs);
+  const labels = placeLabels(ctx, items, dots, bounds, taken, fs, budget);
   L.labels = labels; L.dots = dots; L.bounds = bounds; L.taken = taken;
   ctx.lineJoin = 'round'; ctx.textAlign = 'left';
   for (const lb of labels) {
-    ctx.globalAlpha = lb.hl || !hl ? 1 : 0.35;
+    ctx.globalAlpha = lb.hl || !hl || solo ? 1 : 0.35;
     if (lb.leader) {
       const bx = Math.max(lb.box.x0, Math.min(lb.x, lb.box.x1)), by = Math.max(lb.box.y0, Math.min(lb.y, lb.box.y1));
       const ang = Math.atan2(by - lb.y, bx - lb.x);
@@ -491,6 +515,9 @@ export default function ScatterChart({ players, getDisplayScore, seasonFilter, s
   const [customTitle, setCustomTitle] = useState('');
   const [trimLow, setTrimLow] = useState(false);
   const [targetMin, setTargetMin] = useState(null); // quadrant target level; null = auto
+  const [exportLegend, setExportLegend] = useState(false); // band/position counts in the export header
+  const [soloLabel, setSoloLabel] = useState(false); // single-highlight mode: only the highlighted player is named
+  const [excluded, setExcluded] = useState(() => new Set()); // players removed from the plot by hand
   const [width, setWidth] = useState(900);
   const wrapRef = useRef(null), canvasRef = useRef(null), layoutRef = useRef(null);
   const H = isMobile ? 400 : 580;
@@ -516,7 +543,9 @@ export default function ScatterChart({ players, getDisplayScore, seasonFilter, s
     return Number.isFinite(v) ? { g: scoreBucketKey(v), color: scoreDotColor(v) } : { g: 'none', color: NODATA_COLOR };
   }, [colorBy, getDisplayScore]);
 
-  const top = useMemo(() => players.slice(0, Math.max(1, n)), [players, n]);
+  const sample = useMemo(() => players.slice(0, Math.max(1, n)), [players, n]);
+  const top = useMemo(() => (excluded.size ? sample.filter(p => !excluded.has(p.id)) : sample), [sample, excluded]);
+  const removedHere = sample.length - top.length;
   const toPoint = useCallback((p, extra) => ({ p, x: xf.get(p), y: yf.get(p), rank: rankById.get(p.id), extra, ...colorOf(p) }), [xf, yf, rankById, colorOf]);
   const allTopPts = useMemo(() => top.map(p => toPoint(p, false)).filter(d => Number.isFinite(d.x) && Number.isFinite(d.y)), [top, toPoint]);
   // "Hide low outliers": same rule as PlayerCard's squad chart — drop points more
@@ -542,21 +571,21 @@ export default function ScatterChart({ players, getDisplayScore, seasonFilter, s
     const vals = topPts.map(d => d[cur]).sort((a, b) => a - b), med = vals[Math.floor(vals.length / 2)];
     const autoTier = TARGET_TIERS.reduce((best, t) => Math.abs(t.min - med) < Math.abs(best.min - med) ? t : best, TARGET_TIERS[0]);
     const target = TARGET_TIERS.find(t => t.min === targetMin) || autoTier;
-    const i = SCORE_TIERS.indexOf(target), next = i > 0 ? SCORE_TIERS[i - 1] : target;
+    const i = CHART_TIERS.indexOf(target), next = i > 0 ? CHART_TIERS[i - 1] : target;
     const pair = xPot || yPot, potSplit = pair ? next.min : target.min;
-    const names = xPot ? { tr:'Prime Targets', tl:'Ready Now', br:'High Ceiling', bl:'Low Priority' }
-      : yPot ? { tr:'Prime Targets', tl:'High Ceiling', br:'Ready Now', bl:'Low Priority' }
+    const names = xPot ? { tr:'The Best', tl:'Peaked', br:'High Ceiling', bl:'Mid' }
+      : yPot ? { tr:'The Best', tl:'High Ceiling', br:'Peaked', bl:'Mid' }
       : { tr:'High on both', tl:`High ${shortLabel(yf.label)}`, br:`High ${shortLabel(xf.label)}`, bl:'Below target' };
     return { xSplit: xPot ? potSplit : target.min, ySplit: yPot ? potSplit : target.min, names,
-      diag: pair, diagLabel: 'Potential = current', target, autoTier, next, pair };
+      target, autoTier, next, pair };
   }, [xf, yf, topPts, targetMin]);
   const quadNote = quad ? `quadrants: ${shortLabel(yf.label)} ≥ ${quad.ySplit} · ${shortLabel(xf.label)} ≥ ${quad.xSplit}` : '';
   const hlPlayer = useMemo(() => (highlightId == null ? null : players.find(p => p.id === highlightId) || null), [players, highlightId]);
   const pts = useMemo(() => {
-    if (!hlPlayer || topPts.some(d => d.p.id === hlPlayer.id)) return topPts;
+    if (!hlPlayer || excluded.has(hlPlayer.id) || topPts.some(d => d.p.id === hlPlayer.id)) return topPts;
     const d = toPoint(hlPlayer, true);
     return Number.isFinite(d.x) && Number.isFinite(d.y) ? [...topPts, d] : topPts;
-  }, [topPts, hlPlayer, toPoint]);
+  }, [topPts, hlPlayer, toPoint, excluded]);
   const hlPoint = hlPlayer ? pts.find(d => d.p.id === hlPlayer.id) : null;
 
   const legend = useMemo(() => {
@@ -570,7 +599,7 @@ export default function ScatterChart({ players, getDisplayScore, seasonFilter, s
   const colorLabel = colorOptions.find(o => o[0] === colorBy)?.[1] || 'Position';
   const autoTitle = `${yf.label} vs ${xf.label}`;
   const title = customTitle.trim() || autoTitle;
-  const subtitle = `Top ${top.length} · ${contextLabel}${colorBy !== 'position' ? ` · colour: ${colorLabel}` : ''}${hlPoint ? ` · highlighted: ${hlPoint.p.name}` : ''}`;
+  const subtitle = `${sample.length} Sample · ${contextLabel}${hlPoint ? ` · highlighted: ${hlPoint.p.name}` : ''}`;
 
   useEffect(() => {
     const measure = () => { const w = wrapRef.current?.offsetWidth; if (w) setWidth(w); };
@@ -582,8 +611,8 @@ export default function ScatterChart({ players, getDisplayScore, seasonFilter, s
   useEffect(() => {
     if (!canvasRef.current) return;
     layoutRef.current = drawScatter(canvasRef.current, width, H, window.devicePixelRatio || 1, false,
-      { pts, xf, yf, hidden, hoverId: hover?.d.p.id, highlightId, showNames, quad });
-  }, [pts, xf, yf, hidden, hover, highlightId, showNames, quad, width, H]);
+      { pts, xf, yf, hidden, hoverId: hover?.d.p.id, highlightId, showNames, soloLabel, quad });
+  }, [pts, xf, yf, hidden, hover, highlightId, showNames, soloLabel, quad, width, H]);
 
   useEffect(() => {
     if (highlightId == null) return;
@@ -624,7 +653,7 @@ export default function ScatterChart({ players, getDisplayScore, seasonFilter, s
       const date = new Date().toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
       const footer = `Scout Index · ${date}${quad ? ` · ${quadNote} · dashed lines = Scout Index level bands` : (xf.scoreScale || yf.scoreScale) ? ' · shaded zones / dashed lines = Scout Index level bands' : ''}`;
       const off = document.createElement('canvas');
-      drawScatter(off, EXPORT_W, EXPORT_H, 1, true, { pts, xf, yf, hidden, hoverId: null, highlightId, showNames, title, subtitle, footer, legend, quad, theme: exportTheme });
+      drawScatter(off, EXPORT_W, EXPORT_H, 1, true, { pts, xf, yf, hidden, hoverId: null, highlightId, showNames, soloLabel, title, subtitle, footer, legend: exportLegend ? legend : [], quad, theme: exportTheme });
       await deliverPng(off.toDataURL('image/png'), `${base}_${exportTheme}.png`);
     } finally { setBusy(false); }
   };
@@ -642,7 +671,8 @@ export default function ScatterChart({ players, getDisplayScore, seasonFilter, s
     }
     return out;
   }, [players, query]);
-  const pick = p => { setHighlightId(p.id); setQuery(''); };
+  const pick = p => { setExcluded(prev => { if (!prev.has(p.id)) return prev; const s = new Set(prev); s.delete(p.id); return s; }); setHighlightId(p.id); setQuery(''); };
+  const removedPlayers = useMemo(() => players.filter(p => excluded.has(p.id)), [players, excluded]);
 
   const groups = [...new Set(fields.map(f => f.group))];
   const sel = { background:'#0d1220', border:'1px solid #1e2d45', borderRadius:5, color:'#e2e8f4', padding:'5px 6px', fontSize:11, outline:'none', minWidth:0, maxWidth:isMobile?'100%':230 };
@@ -663,8 +693,8 @@ export default function ScatterChart({ players, getDisplayScore, seasonFilter, s
         <label style={col}><span style={lbl}>Y axis</span>{fieldSelect(yKey, setYKey, 'Y axis')}</label>
         <button title="Swap axes" onClick={swap} style={btn(false)}>⇄</button>
         <label style={col}><span style={lbl}>X axis</span>{fieldSelect(xKey, setXKey, 'X axis')}</label>
-        <label style={col}><span style={lbl}>Top N</span>
-          <input aria-label="Top N" type="number" min={1} max={1000} value={n} onChange={e => setN(Math.max(1, Math.min(1000, Number(e.target.value) || 1)))}
+        <label style={col}><span style={lbl}>Sample</span>
+          <input aria-label="Sample size" type="number" min={1} max={1000} value={n} onChange={e => setN(Math.max(1, Math.min(1000, Number(e.target.value) || 1)))}
             style={{ ...sel, width:70 }}/>
         </label>
         <label style={col}><span style={lbl}>Colour by</span>
@@ -687,6 +717,8 @@ export default function ScatterChart({ players, getDisplayScore, seasonFilter, s
           </div>
         )}
         <button style={btn(showNames)} onClick={() => setShowNames(s => !s)}>Names</button>
+        <button style={btn(soloLabel)} aria-pressed={soloLabel} title="When a player is highlighted, name only them" onClick={() => setSoloLabel(v => !v)}>Single highlight</button>
+        <button style={btn(exportLegend)} aria-pressed={exportLegend} title="Show the colour legend with counts in the downloaded image" onClick={() => setExportLegend(v => !v)}>Legend in export</button>
         <button style={btn(trimLow)} aria-pressed={trimLow} title="Hide points more than 2 SD below the mean on either axis" onClick={() => setTrimLow(v => !v)}>Hide low outliers</button>
         <div style={{ marginLeft:'auto', display:'flex', gap:6 }}>
           {onClose && <button style={btn(false)} onClick={onClose}>☰ Table</button>}
@@ -724,19 +756,31 @@ export default function ScatterChart({ players, getDisplayScore, seasonFilter, s
           <div style={{ display:'flex', alignItems:'center', gap:8, padding:'4px 6px 4px 10px', borderRadius:14, border:'1px solid #26456f', background:'#0e2040' }}>
             <span style={{ fontSize:11, color:'#dbeafe' }}>
               <b>{hlPlayer.name}</b> · {hlPlayer.team} · #{rankById.get(hlPlayer.id)}
-              {!hlPoint ? ' · no data for these axes' : !hlPoint.extra ? '' : hlPoint.rank <= top.length ? ' · low outlier, shown because highlighted' : ' · outside top ' + top.length}
+              {!hlPoint ? ' · no data for these axes' : !hlPoint.extra ? '' : hlPoint.rank <= sample.length ? ' · low outlier, shown because highlighted' : ` · outside the ${sample.length} Sample`}
             </span>
             <button onClick={() => onSelect(hlPlayer)} style={{ ...btn(false), padding:'3px 8px' }}>Open profile</button>
+            <button onClick={() => { setExcluded(prev => new Set(prev).add(hlPlayer.id)); setHighlightId(null); }} style={{ ...btn(false), padding:'3px 8px' }}>Remove from plot</button>
             <button aria-label="Clear highlight" onClick={() => setHighlightId(null)} style={{ ...btn(false), padding:'3px 8px' }}>✕</button>
           </div>
         )}
       </div>
 
+      {removedPlayers.length > 0 && (
+        <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:6, fontSize:10.5, color:'#94a3b8' }}>
+          <span style={lbl}>Removed</span>
+          {removedPlayers.map(p => (
+            <button key={p.id} title="Put back on the plot" onClick={() => setExcluded(prev => { const s = new Set(prev); s.delete(p.id); return s; })}
+              style={{ ...btn(false), padding:'2px 8px' }}>{p.name} ↺</button>
+          ))}
+          <button onClick={() => setExcluded(new Set())} style={{ ...btn(false), padding:'2px 8px' }}>Restore all</button>
+        </div>
+      )}
+
       <div ref={wrapRef} style={{ position:'relative', width:'100%' }} onMouseLeave={() => setHover(null)}>
         <canvas ref={canvasRef} onMouseMove={onMove} onClick={onClick} onDoubleClick={onDoubleClick} style={{ display:'block', borderRadius:6 }}/>
         {!pts.length && (
           <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', color:'#94a3b8', fontSize:12, textAlign:'center', padding:20 }}>
-            {top.length ? `None of the top ${top.length} have data for ${yf.label} and ${xf.label}.` : 'No players match the current filters.'}
+            {top.length ? `None of the ${sample.length} Sample have data for ${yf.label} and ${xf.label}.` : sample.length ? 'Every player in the Sample has been removed.' : 'No players match the current filters.'}
           </div>
         )}
         {hover && (
@@ -766,7 +810,7 @@ export default function ScatterChart({ players, getDisplayScore, seasonFilter, s
           </button>
         ))}
         <span style={{ fontSize:10, color:'#64748b', marginLeft:'auto' }}>
-          {topPts.length} of top {top.length} plotted{missing > 0 ? ` · ${missing} without data for these axes` : ''}{trimmed > 0 ? ` · ${trimmed} low outlier${trimmed > 1 ? 's' : ''} hidden` : ''}
+          {sample.length} Sample · {topPts.length} plotted{removedHere > 0 ? ` · ${removedHere} removed` : ''}{missing > 0 ? ` · ${missing} without data for these axes` : ''}{trimmed > 0 ? ` · ${trimmed} low outlier${trimmed > 1 ? 's' : ''} hidden` : ''}
           {quad ? ` · ${quadNote}` : (xf.scoreScale || yf.scoreScale) ? ' · shaded zones = level bands' : ''}
         </span>
       </div>

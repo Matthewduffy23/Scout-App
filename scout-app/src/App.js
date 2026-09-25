@@ -112,7 +112,6 @@ export function zScoreColor(v){
 
 
 const PAGE = 50;
-const SORT_LABELS={careerScore:'Career',potentialScore:'Potential',peakScore:'Peak',xValue:'xValue',xValueGapPct:'Value Gap',age:'Age',roleScore:'Role'};
 
 // Versatile: 5+ distinct position tokens ever recorded across a player's full
 // season history. Uses seasonsDetailAll (not just seasonsDetail) so hidden/
@@ -1159,7 +1158,7 @@ export default function App(){
           {mainView==='scatter'?(
             <ScatterChart players={sorted} getDisplayScore={getDisplayScore} seasonFilter={seasonFilter} scoreMode={scoreMode}
               rawMode={rawMode} outlierMode={outlierMode} onSelect={setSel} onClose={()=>setMainView('table')}
-              contextLabel={`${pos==='All'?'All positions':pos} · sorted by ${SORT_LABELS[sort.col]||sort.col}${sort.asc?' (asc)':''}${seasonFilter!=='all'?' · '+seasonFilter:''}`}/>
+              contextLabel={`${pos==='All'?'All positions':pos}${seasonFilter!=='all'?' · '+seasonFilter:''}`}/>
           ):(<>
           <div style={isMobile?T.listMobile:T.tw}>
             {sorted.length===0
