@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { scoreBandColor, formatMV, formatFoot, ROLE_KEY_LABELS, divColor, LEAGUE_STRENGTHS, scoreLabel, scoreToStars, starLabel, POSITION_ATTRIBUTES, playerHasAttribute, GBE_LEAGUE_BANDS, CURRENT_SEASON, latestSeasonDetail } from './constants';
+import { scoreBandColor, formatMV, formatFoot, ROLE_KEY_LABELS, divColor, LEAGUE_STRENGTHS, scoreLabel, scoreToStars, starLabel, POSITION_ATTRIBUTES, playerHasAttribute, GBE_LEAGUE_BANDS, CURRENT_SEASON, latestSeasonDetail, POS_COLORS } from './constants';
 
 const APP_ROLES = {
   GK:  ['Shot Stopper GK','Ball Playing GK','Sweeper GK'],
@@ -409,9 +409,6 @@ const LEAGUE_COLORS = [
   '#3b7de8','#f59e0b','#22c55e','#a78bfa','#f97316','#ec4899',
   '#06b6d4','#84cc16','#e11d48','#8b5cf6','#14b8a6','#fb923c',
 ];
-
-// ─── Position group colours for squad scatter ─────────────────────────────────
-const POS_COLORS = { GK:'#f59e0b', CB:'#3b7de8', FB:'#22c55e', CM:'#a78bfa', ATT:'#f97316', CF:'#ec4899' };
 
 function CareerTab({ player, players }) {
   const isMobile=useIsMobile();

@@ -147,6 +147,80 @@ export function latestSeasonDetail(player){
   return Object.values(sd).reverse().find(v=>v&&v.g)||null;
 }
 
+// A split-year season "bucket" (e.g. "2025-26") also matches the literal
+// calendar-year season that's concurrent with it (e.g. "2025"). Calendar
+// leagues (Brazil, Argentina, etc.) store their own literal Wyscout season
+// label in p.sh — "2025", "2026" — never rewritten to split-year format,
+// unlike the season-sliced CSVs the other apps read (that relabeling
+// happens in split_seasons.py, not here — Scout Index deliberately keeps
+// every season's literal label distinct for accurate career history).
+// Year Y is concurrent with split-year bucket "Y-(Y+1)": calendar 2026
+// belongs in the "2026-27" bucket, NOT "2025-26" (already finished by the
+// time 2026 started) — added 2026-08-11, matches the same direction fixed
+// in the pipeline's split_seasons.py the same day.
+export function seasonBucketMatch(literalSeason, bucketLabel){
+  if(literalSeason===bucketLabel) return true;
+  const m=bucketLabel.match(/^(\d{4})-\d{2}$/);
+  return !!(m && literalSeason===m[1]);
+}
+
+// seasonsDetail entry for the sidebar season filter: 'all' -> latest season with
+// metrics; a specific season -> that season's entry, matched through p.sh in the
+// same order getDisplayScore uses (skipping display-only rows), so per-90 metrics
+// and the score describe the same season. null when that season has no metrics
+// (the pipeline builds none under ~400 minutes).
+export function seasonDetailFor(player,season){
+  if(!season||season==='all') return latestSeasonDetail(player);
+  const sd=player.seasonsDetail||{};
+  for(const h of player.sh||[]){
+    if(h.displayOnly||!seasonBucketMatch(h.s,season)) continue;
+    const d=sd[h.s];
+    if(d&&d.g) return d;
+  }
+  return null;
+}
+// [percentile, per-90 value] for one metric in a seasonsDetail entry, or null.
+export function metricFromDetail(sd,key){
+  for(const grp of ['A','D','P']){
+    const found=(sd?.g?.[grp]||[]).find(x=>x[0]===key);
+    if(found) return {pct:found[1],val:parseFloat(found[2])};
+  }
+  return null;
+}
+
+// Per-90 metrics offered by the sidebar metric filters (keys must match the
+// pipeline's seasonsDetail g-group names exactly).
+export const METRIC_OPTIONS=[
+  {label:'xG per 90',key:'xG'},{label:'xA per 90',key:'xA'},
+  {label:'Goals (non-pen)',key:'Goals: Non-Penalty'},{label:'Shots per 90',key:'Shots'},
+  {label:'Touches in Box',key:'Touches in Box'},{label:'Progressive Runs',key:'Progressive Runs'},
+  {label:'Crosses per 90',key:'Crosses'},{label:'Pass % accuracy',key:'Pass %'},
+  {label:'Passes per 90',key:'Passes'},{label:'Prog Passes',key:'Progressive Passes'},
+  {label:'Dribbles per 90',key:'Dribbles'},{label:'Dribble %',key:'Dribble %'},
+  {label:'Key Passes',key:'Key Passes'},{label:'Deep Completions',key:'Deep Completions'},
+  {label:'Def Duel Win %',key:'Defensive Duel %'},{label:'Aerial Win %',key:'Aerial Duel %'},
+  {label:'Interceptions',key:'PAdj Interceptions'},{label:'Def Duels per 90',key:'Defensive Duels'},
+];
+// The rest of the pipeline's per-90 metrics, offered in addition by the scatter chart.
+export const METRIC_OPTIONS_EXTRA=[
+  {label:'Conversion %',key:'Conversion %'},{label:'Shot %',key:'Shot %'},
+  {label:'Header Goals',key:'Header Goals'},{label:'Cross %',key:'Cross %'},
+  {label:'Accelerations',key:'Accelerations'},{label:'Offensive Duels',key:'Offensive Duels'},
+  {label:'Offensive Duel %',key:'Offensive Duel %'},{label:'Aerial Duels',key:'Aerial Duels'},
+  {label:'Shots Blocked',key:'Shots Blocked'},{label:'Forward Passes',key:'Forward Passes'},
+  {label:'Forward Pass %',key:'Forward Pass %'},{label:'Long Passes',key:'Long Passes'},
+  {label:'Long Pass %',key:'Long Pass %'},{label:'Passes to F3rd',key:'Passes to F3rd'},
+  {label:'Passes to F3rd %',key:'Passes to F3rd %'},{label:'Passes to Box',key:'Passes to Box'},
+  {label:'Passes to Box %',key:'Passes to Box %'},{label:'Prog Pass %',key:'Prog Pass %'},
+  {label:'Smart Passes',key:'Smart Passes'},
+  {label:'GK: Save Rate',key:'Save Rate'},{label:'GK: Goals Prevented',key:'Goals Prevented'},
+  {label:'GK: Goals Conceded',key:'Goals Conceded'},{label:'GK: xG Against',key:'xG Against'},
+  {label:'GK: Shots Against',key:'Shots Against'},{label:'GK: Exits',key:'Exits'},
+];
+
+// Position-group colours (roleKey), shared by PlayerCard's squad views and the scatter chart.
+export const POS_COLORS = { GK:'#f59e0b', CB:'#3b7de8', FB:'#22c55e', CM:'#a78bfa', ATT:'#f97316', CF:'#ec4899' };
+
 export function scoreBandColor(s){
   if(s>=81) return '#22c55e';
   if(s>=70) return '#3b82f6';
@@ -154,17 +228,22 @@ export function scoreBandColor(s){
   return '#6b7280';
 }
 
+// Level bands on the 0-100 score scale — the single source for the cutoffs.
+// scoreLabel() reads it; the scatter chart draws its gridlines from it.
+export const SCORE_TIERS=[
+  {min:82,label:'Elite Premier League',short:'Elite PL'},
+  {min:78,label:'Excellent Premier League',short:'Excellent PL'},
+  {min:72,label:'Premier League Level',short:'PL Level'},
+  {min:67,label:'Very Good Championship',short:'V.Good Champ'},
+  {min:61,label:'Championship Level',short:'Championship'},
+  {min:57,label:'League One Level',short:'League One'},
+  {min:54,label:'League Two Level',short:'League Two'},
+  {min:50,label:'National League Level',short:'National League'},
+  {min:44,label:'Non-League',short:'Non-League'},
+];
 export function scoreLabel(score){
-  if(score>=82) return 'Elite Premier League';
-  if(score>=78) return 'Excellent Premier League';
-  if(score>=72) return 'Premier League Level';
-  if(score>=67) return 'Very Good Championship';
-  if(score>=61) return 'Championship Level';
-  if(score>=57) return 'League One Level';
-  if(score>=54) return 'League Two Level';
-  if(score>=50) return 'National League Level';
-  if(score>=44) return 'Non-League';
-  return 'Development';
+  const t=SCORE_TIERS.find(t=>score>=t.min);
+  return t?t.label:'Development';
 }
 export function scoreLabelShort(score){
   if(score>=82) return 'Elite PL';

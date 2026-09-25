@@ -3,8 +3,9 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import PlayerCard from './PlayerCard';
 import ClubTool from './ClubTool';
 import TeamIndex from './TeamIndex';
+import ScatterChart from './ScatterChart';
 import { Photo, Crest, photoUrl, useIsMobile, deliverJson } from './utils';
-import { scoreBandColor, formatMV, formatFoot, ROLE_KEY_LABELS, ROLES_BY_KEY, POSITION_ATTRIBUTES, playerHasAttribute, ALL_LEAGUES, DEFAULT_LEAGUES, HIDDEN_LEAGUES, YOUTH_LEAGUES, PRESET_LEAGUES, COUNTRY_TO_REGION, GBE_LEAGUE_BANDS, leagueToRegion, leagueToBand, scoreLabel, scoreToStars, promotionBadge, ALL_SEASONS, CURRENT_SEASON, latestSeasonDetail, LEAGUE_STRENGTHS, CAREER_POSITION_GROUPS } from './constants';
+import { scoreBandColor, formatMV, formatFoot, ROLE_KEY_LABELS, ROLES_BY_KEY, POSITION_ATTRIBUTES, playerHasAttribute, ALL_LEAGUES, DEFAULT_LEAGUES, HIDDEN_LEAGUES, YOUTH_LEAGUES, PRESET_LEAGUES, COUNTRY_TO_REGION, GBE_LEAGUE_BANDS, leagueToRegion, leagueToBand, scoreLabel, scoreToStars, promotionBadge, ALL_SEASONS, CURRENT_SEASON, seasonBucketMatch, seasonDetailFor, metricFromDetail, METRIC_OPTIONS, LEAGUE_STRENGTHS, CAREER_POSITION_GROUPS } from './constants';
 
 // Re-exported so anything that already imports these from App.js keeps working —
 // but there is now ONE implementation, in utils.js, rather than a second copy here.
@@ -109,24 +110,9 @@ export function zScoreColor(v){
 }
 
 
-// A split-year season "bucket" (e.g. "2025-26") also matches the literal
-// calendar-year season that's concurrent with it (e.g. "2025"). Calendar
-// leagues (Brazil, Argentina, etc.) store their own literal Wyscout season
-// label in p.sh — "2025", "2026" — never rewritten to split-year format,
-// unlike the season-sliced CSVs the other apps read (that relabeling
-// happens in split_seasons.py, not here — Scout Index deliberately keeps
-// every season's literal label distinct for accurate career history).
-// Year Y is concurrent with split-year bucket "Y-(Y+1)": calendar 2026
-// belongs in the "2026-27" bucket, NOT "2025-26" (already finished by the
-// time 2026 started) — added 2026-08-11, matches the same direction fixed
-// in the pipeline's split_seasons.py the same day.
-function seasonBucketMatch(literalSeason, bucketLabel){
-  if(literalSeason===bucketLabel) return true;
-  const m=bucketLabel.match(/^(\d{4})-\d{2}$/);
-  return !!(m && literalSeason===m[1]);
-}
 
 const PAGE = 50;
+const SORT_LABELS={careerScore:'Career',potentialScore:'Potential',peakScore:'Peak',xValue:'xValue',xValueGapPct:'Value Gap',age:'Age',roleScore:'Role'};
 
 // Versatile: 5+ distinct position tokens ever recorded across a player's full
 // season history. Uses seasonsDetailAll (not just seasonsDetail) so hidden/
@@ -192,28 +178,10 @@ export function StarDisplay({score,size=11}){
   return <div style={{display:'flex',alignItems:'center',gap:1.5}}>{[...Array(full)].map((_,i)=><S key={i} fill="full"/>)}{half===1&&<S fill="half"/>}{[...Array(empty)].map((_,i)=><S key={i} fill="empty"/>)}</div>;
 }
 
-const METRIC_OPTIONS=[
-  {label:'xG per 90',key:'xG'},{label:'xA per 90',key:'xA'},
-  {label:'Goals (non-pen)',key:'Goals: Non-Penalty'},{label:'Shots per 90',key:'Shots'},
-  {label:'Touches in Box',key:'Touches in Box'},{label:'Progressive Runs',key:'Progressive Runs'},
-  {label:'Crosses per 90',key:'Crosses'},{label:'Pass % accuracy',key:'Pass %'},
-  {label:'Passes per 90',key:'Passes'},{label:'Prog Passes',key:'Progressive Passes'},
-  {label:'Dribbles per 90',key:'Dribbles'},{label:'Dribble %',key:'Dribble %'},
-  {label:'Key Passes',key:'Key Passes'},{label:'Deep Completions',key:'Deep Completions'},
-  {label:'Def Duel Win %',key:'Defensive Duel %'},{label:'Aerial Win %',key:'Aerial Duel %'},
-  {label:'Interceptions',key:'PAdj Interceptions'},{label:'Def Duels per 90',key:'Defensive Duels'},
-];
-
-// Always the latest season with metrics, regardless of the sidebar season filter
-// (deliberate: metric filters show current form). Known limitation, see CLAUDE.md.
-function getMetricPct(player,metricKey){
-  const sd=latestSeasonDetail(player);
-  if(!sd) return null;
-  for(const grp of ['A','D','P']){
-    const found=(sd.g?.[grp]||[]).find(x=>x[0]===metricKey);
-    if(found) return {pct:found[1],val:found[2]};
-  }
-  return null;
+// Metric filters follow the sidebar season filter ('all' -> latest season with
+// metrics), same season the score column uses. See seasonDetailFor in constants.js.
+function getMetricPct(player,metricKey,season){
+  return metricFromDetail(seasonDetailFor(player,season),metricKey);
 }
 
 // Get score for a specific season from sh array
@@ -441,6 +409,7 @@ export default function App(){
   const [careerMinMins,setCareerMinMins]=useState(500);
   const [currentLeagueOnly,setCurrentLeagueOnly]=useState(false);
   const [activeTab,setActiveTab]=useState('scout'); // 'scout' | 'club' | 'team'
+  const [mainView,setMainView]=useState('table'); // 'table' | 'scatter' — Scout Index results as table or scatter chart
   const [hiddenCols,setHiddenCols]=useState(new Set(['marketValue']));
   const [attrFilters,setAttrFilters]=useState(new Set()); // active attribute keys // hide MV by default, show xValue
   const [showColPicker,setShowColPicker]=useState(false); // default: only show players active 2022-23+
@@ -634,8 +603,8 @@ export default function App(){
       if(xValueFilter==='overvalued'&&!(p.xValueGapPct<-20&&p.marketValue>0)) return false;
       for(const mf of metricFilters){
         if(!mf.key) continue;
-        const m=getMetricPct(p,mf.key);
-        if(!m) continue;
+        const m=getMetricPct(p,mf.key,seasonFilter);
+        if(!m) return false; // no data for this metric in the selected season -> can't meet the filter
         if(m.pct<mf.min||m.pct>mf.max) return false;
       }
       return true;
@@ -1130,7 +1099,13 @@ export default function App(){
             {showContractFilter&&<div style={{marginTop:6}}><span style={{fontSize:9,color:'#94a3b8',display:'block',marginBottom:4}}>Expires before: <strong style={{color:'#60a5fa'}}>{contractBefore}</strong></span><input type="range" style={T.sl} min={2025} max={2030} step={1} value={contractBefore} onChange={e=>{setContractBefore(Number(e.target.value));setPage(0);}}/></div>}
           </div>
 
-          <button style={T.rb} onClick={reset}>Reset all filters</button>
+          <div style={{display:'flex',gap:6}}>
+            <button style={T.rb} onClick={reset}>Reset all filters</button>
+            <button style={{...T.rb,...(mainView==='scatter'?{border:'1px solid #3b7de8',background:'#0e2040',color:'#93c5fd'}:{})}}
+              onClick={()=>{setMainView(v=>v==='scatter'?'table':'scatter');if(isMobile)setFiltersOpen(false);}}>
+              {mainView==='scatter'?'☰ Table view':'Scatter chart'}
+            </button>
+          </div>
         </aside>
         )}
         {isMobile&&!filtersOpen&&(
@@ -1181,6 +1156,11 @@ export default function App(){
             </div>
           )}
 
+          {mainView==='scatter'?(
+            <ScatterChart players={sorted} getDisplayScore={getDisplayScore} seasonFilter={seasonFilter} scoreMode={scoreMode}
+              rawMode={rawMode} outlierMode={outlierMode} onSelect={setSel} onClose={()=>setMainView('table')}
+              contextLabel={`${pos==='All'?'All positions':pos} · sorted by ${SORT_LABELS[sort.col]||sort.col}${sort.asc?' (asc)':''}${seasonFilter!=='all'?' · '+seasonFilter:''}`}/>
+          ):(<>
           <div style={isMobile?T.listMobile:T.tw}>
             {sorted.length===0
               ?<div style={T.es}><div style={{fontSize:26}}>⚽</div><div style={{fontSize:12,color:'#94a3b8'}}>{showYouth?'Youth league players not in current data — will appear after next pipeline rebuild':'No players match filters'}</div></div>
@@ -1321,6 +1301,7 @@ export default function App(){
               {totalPages>12&&<span style={{color:'#64748b',fontSize:9}}>…{totalPages}</span>}
             </div>
           ))}
+          </>)}
         </main>
       </div>)}
 
