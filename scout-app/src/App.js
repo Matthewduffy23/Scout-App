@@ -4,7 +4,7 @@ import PlayerCard from './PlayerCard';
 import ClubTool from './ClubTool';
 import TeamIndex from './TeamIndex';
 import { Photo, Crest, photoUrl, useIsMobile, deliverJson } from './utils';
-import { scoreBandColor, formatMV, formatFoot, ROLE_KEY_LABELS, ROLES_BY_KEY, POSITION_ATTRIBUTES, playerHasAttribute, ALL_LEAGUES, DEFAULT_LEAGUES, HIDDEN_LEAGUES, YOUTH_LEAGUES, PRESET_LEAGUES, COUNTRY_TO_REGION, GBE_LEAGUE_BANDS, leagueToRegion, leagueToBand, scoreLabel, scoreToStars, promotionBadge, ALL_SEASONS, CURRENT_SEASON, LEAGUE_STRENGTHS, CAREER_POSITION_GROUPS } from './constants';
+import { scoreBandColor, formatMV, formatFoot, ROLE_KEY_LABELS, ROLES_BY_KEY, POSITION_ATTRIBUTES, playerHasAttribute, ALL_LEAGUES, DEFAULT_LEAGUES, HIDDEN_LEAGUES, YOUTH_LEAGUES, PRESET_LEAGUES, COUNTRY_TO_REGION, GBE_LEAGUE_BANDS, leagueToRegion, leagueToBand, scoreLabel, scoreToStars, promotionBadge, ALL_SEASONS, CURRENT_SEASON, latestSeasonDetail, LEAGUE_STRENGTHS, CAREER_POSITION_GROUPS } from './constants';
 
 // Re-exported so anything that already imports these from App.js keeps working —
 // but there is now ONE implementation, in utils.js, rather than a second copy here.
@@ -200,14 +200,13 @@ const METRIC_OPTIONS=[
   {label:'Passes per 90',key:'Passes'},{label:'Prog Passes',key:'Progressive Passes'},
   {label:'Dribbles per 90',key:'Dribbles'},{label:'Dribble %',key:'Dribble %'},
   {label:'Key Passes',key:'Key Passes'},{label:'Deep Completions',key:'Deep Completions'},
-  {label:'Def Duel Win %',key:'Def Duel Win %'},{label:'Aerial Win %',key:'Aerial Duel %'},
-  {label:'Interceptions',key:'PAdj Interceptions'},{label:'Def Duels per 90',key:'Def Duels'},
+  {label:'Def Duel Win %',key:'Defensive Duel %'},{label:'Aerial Win %',key:'Aerial Duel %'},
+  {label:'Interceptions',key:'PAdj Interceptions'},{label:'Def Duels per 90',key:'Defensive Duels'},
 ];
 
 function getMetricPct(player,metricKey){
-  const seasons=Object.values(player.seasonsDetail||{});
-  if(!seasons.length) return null;
-  const sd=seasons[0];
+  const sd=latestSeasonDetail(player);
+  if(!sd) return null;
   for(const grp of ['A','D','P']){
     const found=(sd.g?.[grp]||[]).find(x=>x[0]===metricKey);
     if(found) return {pct:found[1],val:found[2]};

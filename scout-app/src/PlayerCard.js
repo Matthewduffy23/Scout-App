@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { scoreBandColor, formatMV, formatFoot, ROLE_KEY_LABELS, divColor, LEAGUE_STRENGTHS, scoreLabel, scoreToStars, starLabel, POSITION_ATTRIBUTES, playerHasAttribute, GBE_LEAGUE_BANDS, CURRENT_SEASON } from './constants';
+import { scoreBandColor, formatMV, formatFoot, ROLE_KEY_LABELS, divColor, LEAGUE_STRENGTHS, scoreLabel, scoreToStars, starLabel, POSITION_ATTRIBUTES, playerHasAttribute, GBE_LEAGUE_BANDS, CURRENT_SEASON, latestSeasonDetail } from './constants';
 
 const APP_ROLES = {
   GK:  ['Shot Stopper GK','Ball Playing GK','Sweeper GK'],
@@ -337,18 +337,11 @@ const METRIC_TO_LABEL = {
   CF:{'Crosses per 90':'Crosses','Non-penalty goals per 90':'Goals: Non-Penalty','xG per 90':'xG','xA per 90':'xA','Progressive runs per 90':'Progressive Runs','Shots per 90':'Shots','Touches in box per 90':'Touches in Box','Aerial duels per 90':'Aerial Duels','Aerial duels won, %':'Aerial Duel %','Defensive duels per 90':'Defensive Duels','PAdj Interceptions':'PAdj Interceptions','Dribbles per 90':'Dribbles','Successful dribbles, %':'Dribble %','Passes per 90':'Passes','Accurate passes, %':'Pass %','Passes to penalty area per 90':'Passes to Box','Smart passes per 90':'Smart Passes','Deep completions per 90':'Deep Completions'},
 };
 const UK_LEAGUES = ['England 1.','England 2.','England 3.','Scotland 1.'];
-const SIM_SEASON_ORDER = ['2026-27','2026','2025-26','2025','2024-25','2024','2023-24','2023','2022-23','2022','2021-22','2021','2020-21','2020','2019-20','2018-19'];
 const SIM_MIN_MATCHED = 6; // minimum overlapping metrics required before a candidate counts
 
-function getSimSeasonDetail(player){
-  // Deterministic latest-season pick — the old version took Object.values(...)[0],
-  // an arbitrary object-key order, not necessarily the current season. That meant
-  // target and candidate could silently be compared on different-vintage seasons.
-  const sd=player.seasonsDetail||{};
-  for(const s of SIM_SEASON_ORDER){ if(sd[s]&&sd[s].g) return sd[s]; }
-  const vals=Object.values(sd).filter(v=>v&&v.g);
-  return vals[0]||null;
-}
+// Deterministic latest-season pick, so target and candidate are compared on the
+// same-vintage season. Shared with the Scout Index metric filters.
+const getSimSeasonDetail = latestSeasonDetail;
 
 function simVector(sd, feats, labelMap){
   const pool=[...(sd.g?.A||[]),...(sd.g?.D||[]),...(sd.g?.P||[])];
@@ -1026,10 +1019,9 @@ function CareerTab({ player, players }) {
 export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=false}) {
   const isMobile=useIsMobile();
   // Duplicates build_players.py's SEASON_ORDER (backend source of truth) — keep in sync
-  // each season transition, same as SIM_SEASON_ORDER below and the lists in
-  // PlayerScoutingCard.js/QuickCard.js. No shared frontend source exists yet because
-  // constants.js's ALL_SEASONS omits the bare calendar-year labels (e.g. '2026') that
-  // calendar leagues use, which these lists need.
+  // each season transition, same as the lists in PlayerScoutingCard.js/QuickCard.js.
+  // (constants.js's SEASON_RECENCY_ORDER now covers calendar-year labels and could
+  // replace these; not migrated yet.)
   const SEASON_ORDER_ARR=['2026-27','2026','2025-26','2025','2024-25','2024','2023-24','2023','2022-23','2022','2021-22','2021','2020-21','2020','2019-20','2018-19'];
   // Build selectable options from allSeasonsSummary standard rows, deduped by season+league
   const allStdRows=(()=>{

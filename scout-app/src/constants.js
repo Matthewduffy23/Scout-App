@@ -135,6 +135,17 @@ export const ROLES_BY_KEY={
 export const ALL_SEASONS=['2026-27','2025-26','2024-25','2023-24','2022-23','2021-22','2020-21','2019-20','2018-19'];
 // Newest split-year season — drives the sidebar "Played in <season> only" toggles.
 export const CURRENT_SEASON=ALL_SEASONS[0];
+// Newest-first order over BOTH season formats: each split-year season, then the
+// calendar year it starts in ('2026-27','2026','2025-26','2025',...). Derived from
+// ALL_SEASONS so it moves forward on its own at a season transition.
+export const SEASON_RECENCY_ORDER=ALL_SEASONS.flatMap(s=>[s,s.slice(0,4)]);
+// Latest seasonsDetail entry that carries metrics (g). seasonsDetail keys are
+// stored oldest-first, so Object.values(...)[0] is the OLDEST season, not the latest.
+export function latestSeasonDetail(player){
+  const sd=player.seasonsDetail||{};
+  for(const s of SEASON_RECENCY_ORDER){ if(sd[s]&&sd[s].g) return sd[s]; }
+  return Object.values(sd).reverse().find(v=>v&&v.g)||null;
+}
 
 export function scoreBandColor(s){
   if(s>=81) return '#22c55e';
