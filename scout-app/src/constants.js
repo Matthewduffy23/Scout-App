@@ -245,6 +245,21 @@ export function scoreLabel(score){
   const t=SCORE_TIERS.find(t=>score>=t.min);
   return t?t.label:'Development';
 }
+// Red -> gold -> green dot colour on the same cutoffs — the scale PlayerCard's
+// squad chart already uses for its dots (kept in sync by hand; PlayerCard keeps its own copy).
+export const SCORE_DOT_STEPS=[
+  {min:82,color:'#22c55e'},{min:78,color:'#4ade80'},{min:72,color:'#86efac'},
+  {min:67,color:'#fde047'},{min:61,color:'#fb923c'},{min:57,color:'#f87171'},
+];
+export const SCORE_DOT_LOW='#ef4444';
+export function scoreDotColor(v){
+  const s=SCORE_DOT_STEPS.find(t=>v>=t.min);
+  return s?s.color:SCORE_DOT_LOW;
+}
+
+// Size of the Canva-bound PNG exports (1920x1080). Used by the scatter chart;
+// the older exports still hardcode the same numbers.
+export const EXPORT_W=1920, EXPORT_H=1080;
 export function scoreLabelShort(score){
   if(score>=82) return 'Elite PL';
   if(score>=78) return 'Excellent PL';
