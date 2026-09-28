@@ -380,7 +380,7 @@ export default function TeamIndex({ players = [] }) {
     const map = {};
     // Computed for EITHER consumer — the sort toggle or the column — since they are
     // independent and either one alone needs the numbers.
-    if (season === 'weighted' || (!mostImproved && !showImprovement)) return map;
+    if (season === 'weighted' || (!mostImproved && !showImprovement && mainView !== 'scatter')) return map;
 
     // Build a lookup of ALL seasons per team (team+country key, same as resolved)
     const byTeam = {};
@@ -439,7 +439,7 @@ export default function TeamIndex({ players = [] }) {
       map[key] = { delta, rawDelta: currVal - prevVal, sameDiv, prevSeason: prev.season, prevLeague: prev.league, prevVal, currVal, fieldUsed: field };
     }
     return map;
-  }, [all, resolved, season, mostImproved, showImprovement, improvedMode]);
+  }, [all, resolved, season, mostImproved, showImprovement, improvedMode, mainView]);
 
   const getImprovement = (t) => {
     const key = t.team + '|' + teamCountry(t.league);
@@ -831,6 +831,7 @@ export default function TeamIndex({ players = [] }) {
         {mainView === 'scatter' ? (
           <TeamScatter teams={sorted} getDisplayScore={getDisplayScore} scoreLabel={scoreMode === 'Overall' && rawMode ? 'Overall (raw)' : scoreMode}
             styleColors={STYLE_COLORS} getAvgXValue={getAvgXValue} getTotalMV={getTotalMV} getMVPerf={getMVPerf}
+            getImprovement={getImprovement} improvedMode={improvedMode} improvementAnchored={improvementAnchored}
             onSelect={t => setSelTeam({ ...t, crest: teamCrest(t.team), avgXValue: getAvgXValue(t.team, t.league), totalMV: getTotalMV(t.team, t.league), mvPerf: getMVPerf(t.team, t.league) })}
             onClose={() => setMainView('table')}
             contextLabel={season === 'latest' ? 'Latest season' : season === 'weighted' ? 'All seasons (weighted)' : season}/>

@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { SCORE_TIERS, POS_COLORS, METRIC_OPTIONS, METRIC_OPTIONS_EXTRA, seasonDetailFor, metricFromDetail,
+import { SCORE_TIERS, POS_COLORS, METRIC_OPTIONS, METRIC_OPTIONS_EXTRA, seasonDetailFor, metricFromDetail, ROLES_BY_KEY, ROLE_KEY_LABELS,
   SCORE_DOT_STEPS, SCORE_DOT_LOW, scoreDotColor, EXPORT_W, EXPORT_H } from './constants';
 import { useIsMobile, deliverPng } from './utils';
 import { ensureMontserratEmbedded } from './CoachCard';
+import { barColor } from './QuickCard';
 
 // Scatter view of the current Scout Index result list: plots the top N of the
 // already filtered + sorted players (App passes `sorted`). Canvas, drawn by one
@@ -26,6 +27,7 @@ const THEMES = {
     quadTR:'rgba(20,184,166,0.15)', quadBR:'rgba(99,102,241,0.13)', quadTL:'rgba(100,116,139,0.08)',
     quadText:'rgba(226,232,240,0.62)', split:'rgba(148,163,184,0.55)',
     muted:'rgba(203,213,225,0.34)', // group mode: everyone outside the group
+    plain:'#cbd5e1', // Plain colour mode
   },
   light: {
     bg:'#ffffff', plot:'#fbfcfe', zone:'30,41,59', zoneBase:0.008, zoneStep:0.018,
@@ -36,6 +38,7 @@ const THEMES = {
     quadTR:'rgba(13,148,136,0.12)', quadBR:'rgba(79,70,229,0.09)', quadTL:'rgba(100,116,139,0.07)',
     quadText:'rgba(30,41,59,0.62)', split:'rgba(71,85,105,0.50)',
     muted:'rgba(148,163,184,0.42)',
+    plain:'#64748b',
   },
 };
 
@@ -72,6 +75,12 @@ const scoreBucketKey = v => { const s = SCORE_DOT_STEPS.find(t => v >= t.min); r
 
 const PLAYER_LOWER_BETTER = new Set(['Goals Conceded', 'xG Against']);
 
+// Is the table's score on the level-band scale? Not in raw/outlier mode, and not a
+// role score (role mode with all seasons): role scores are 0-100 relative to the
+// player's own league, so band lines and score quadrants don't apply to them.
+const tableIsScore = ({ seasonFilter, scoreMode, rawMode, outlierMode }) =>
+  !rawMode && !outlierMode && !(scoreMode !== 'complete' && seasonFilter === 'all');
+
 function tableScoreLabel({ seasonFilter, scoreMode, rawMode, outlierMode }) {
   const season = seasonFilter !== 'all' ? seasonFilter : null;
   if (outlierMode) return scoreMode !== 'complete' ? `Outlier z · ${scoreMode}` : `Outlier z · ${season || 'career'}`;
@@ -84,20 +93,34 @@ function tableScoreLabel({ seasonFilter, scoreMode, rawMode, outlierMode }) {
 // `scoreScale` means the level bands (shading, dashed lines) apply.
 function buildFields(ctx) {
   const f = [
-    { key:'display', group:'Score', label:`Table score · ${tableScoreLabel(ctx)}`, get:p=>ctx.getDisplayScore(p), scoreScale:!ctx.rawMode&&!ctx.outlierMode },
+    { key:'display', group:'Score', label:`Table score · ${tableScoreLabel(ctx)}`, get:p=>ctx.getDisplayScore(p), scoreScale:tableIsScore(ctx) },
     { key:'careerScore', group:'Score', label:'Career score', get:p=>p.careerScore, scoreScale:true },
     { key:'peakScore', group:'Score', label:'Peak score', get:p=>p.peakScore, scoreScale:true },
     { key:'potentialScore', group:'Score', label:'Potential', get:p=>p.potentialScore, scoreScale:true },
     { key:'potentialCeiling', group:'Score', label:'Potential ceiling', get:p=>p.potentialCeiling, scoreScale:true },
-    { key:'xValue', group:'Value', label:'xValue', get:p=>posOrNull(p.xValue), fmt:money },
-    { key:'marketValue', group:'Value', label:'Market value', get:p=>posOrNull(p.marketValue), fmt:money },
-    { key:'xValueGapPct', group:'Value', label:'Value gap %', get:p=>p.xValueGapPct },
-    { key:'age', group:'Profile', label:'Age', get:p=>p.age, words:['Older', 'Younger'] },
-    { key:'height', group:'Profile', label:'Height (cm)', get:p=>posOrNull(p.height) },
-    { key:'minutes', group:'Profile', label:`Minutes (${ctx.seasonFilter==='all'?'latest season':ctx.seasonFilter})`, get:p=>seasonDetailFor(p,ctx.seasonFilter)?.minutes ?? null },
-    { key:'seasons', group:'Profile', label:'Seasons', get:p=>p.seasons },
+    { key:'xValue', group:'Value', neutral:true, label:'xValue', get:p=>posOrNull(p.xValue), fmt:money },
+    { key:'marketValue', group:'Value', neutral:true, label:'Market value', get:p=>posOrNull(p.marketValue), fmt:money },
+    { key:'xValueGapPct', group:'Value', neutral:true, label:'Value gap %', get:p=>p.xValueGapPct },
+    { key:'age', group:'Profile', label:'Age', get:p=>p.age, words:['Older', 'Younger'], neutral:true },
+    { key:'height', group:'Profile', neutral:true, label:'Height (cm)', get:p=>posOrNull(p.height) },
+    { key:'minutes', group:'Profile', neutral:true, label:`Minutes (${ctx.seasonFilter==='all'?'latest season':ctx.seasonFilter})`, get:p=>seasonDetailFor(p,ctx.seasonFilter)?.minutes ?? null },
+    { key:'seasons', group:'Profile', neutral:true, label:'Seasons', get:p=>p.seasons },
     { key:'gbeTotal', group:'Profile', label:'GBE points', get:p=>p.gbeTotal },
   ];
+  // Role scores: only for a single position group (roles from different groups aren't
+  // comparable). They follow the season filter: all seasons = career role score, a
+  // chosen season = that season's role score. No value = without data, never 0.
+  if (ctx.roleKey && ROLES_BY_KEY[ctx.roleKey]) {
+    const grp = `Role scores · ${ROLE_KEY_LABELS[ctx.roleKey]} (relative to own league)`;
+    for (const role of ROLES_BY_KEY[ctx.roleKey]) {
+      f.push({ key:'r:'+role, group:grp, label:role, short:role, get:p => {
+        const v = ctx.seasonFilter === 'all' ? p.roleCareerScores?.[role] : seasonDetailFor(p, ctx.seasonFilter)?.roles?.[role];
+        return Number.isFinite(v) ? v : null;
+      } });
+    }
+  } else {
+    f.push({ key:'r:hint', group:'Role scores', label:'Pick a position group in the sidebar to plot role scores', hint:true, get:() => null });
+  }
   const seasonTag = ctx.seasonFilter === 'all' ? 'latest' : ctx.seasonFilter;
   for (const m of [...METRIC_OPTIONS, ...METRIC_OPTIONS_EXTRA]) {
     f.push({
@@ -148,6 +171,7 @@ function valueText(v, field) {
 
 // Pure layout: scales + padding for a W x H canvas. Shared by drawing and hit-testing.
 const EXPORT_PAD = { r:70, b:140, l:140 };
+const GRAD_W = 260; // width of the gradient bar in the export legend
 function computeLayout(W, H, forExport, pts, xf, yf, exportTop, stripX = xf.scoreScale ? 2 : 0) {
   const fs = forExport ? W / 800 : 1;
   // Live: a strip above the plot carries the X-axis band names (two rows) when X is a score.
@@ -228,7 +252,13 @@ function exportHeader(ctx, W, FONT, title, legend, xIsScore) {
   ctx.font = `700 46px ${FONT}`;
   const titleW = ctx.measureText(title).width;
   ctx.font = `600 21px ${FONT}`;
-  const items = (legend || []).map(it => { const txt = `${it.label}  ${it.count}`; return { it, txt, w: ctx.measureText(txt).width + 26 }; });
+  const items = (legend || []).map(it => {
+    if (it.gradient) {
+      const g = it.gradient, a = `${g.label}  ${g.min}`, b = `${g.max}  ·  median ${g.med}`;
+      return { it, txt: '', a, b, w: ctx.measureText(a).width + 16 + GRAD_W + 16 + ctx.measureText(b).width };
+    }
+    const txt = `${it.label}  ${it.count}`; return { it, txt, w: ctx.measureText(txt).width + 26 };
+  });
   const GAP = 36;
   const rowsFor = maxW => {
     const rows = []; let row = [], rw = 0;
@@ -364,7 +394,8 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
       }
       best = best || fewest;
       overlays.push({ text: label, x: best.lx, y: best.ly, font: f(9.5, 700), color: T.quadText });
-      taken.push(best.b);
+      // extra clearance so a band name can't sit flush against it and read as one phrase
+      taken.push({ ...best.b, x0: best.b.x0 - 10*fs, x1: best.b.x1 + 10*fs });
     }
   }
   // ── Band names: every band line in range is named. A name slides along its
@@ -445,7 +476,7 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
   const ringDot = (d, rad, alpha) => {
     ctx.globalAlpha = alpha;
     ctx.beginPath(); ctx.arc(xS(d.x), yS(d.y), rad, 0, Math.PI*2);
-    ctx.fillStyle = d.muted ? T.muted : d.color; ctx.fill();
+    ctx.fillStyle = d.muted ? T.muted : d.plain ? T.plain : d.color; ctx.fill();
     ctx.strokeStyle = T.ring; ctx.lineWidth = T.ringW*fs; ctx.stroke();
     ctx.globalAlpha = 1;
   };
@@ -523,7 +554,18 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
       const rowW = row.reduce((a, x) => a + x.w, 0) + head.GAP * (row.length - 1);
       let x = head.beside ? head.right - rowW : pad.l;
       const cy = head.legendTop + i*32;
-      for (const { it, txt, w } of row) {
+      for (const { it, txt, a, b, w } of row) {
+        if (it.gradient) {
+          ctx.fillStyle = T.legendText; ctx.fillText(a, x, cy + 7);
+          const bx = x + ctx.measureText(a).width + 16;
+          const grd = ctx.createLinearGradient(bx, 0, bx + GRAD_W, 0);
+          it.gradient.stops.forEach((c, i, arr) => grd.addColorStop(i / (arr.length - 1), c));
+          ctx.fillStyle = grd; ctx.fillRect(bx, cy - 8, GRAD_W, 16);
+          ctx.strokeStyle = T.ring; ctx.lineWidth = 1.5; ctx.strokeRect(bx, cy - 8, GRAD_W, 16);
+          ctx.fillStyle = T.legendText; ctx.fillText(b, bx + GRAD_W + 16, cy + 7);
+          x += w + head.GAP;
+          continue;
+        }
         ctx.beginPath(); ctx.arc(x + 9, cy, 9, 0, Math.PI*2); ctx.fillStyle = it.color; ctx.fill();
         ctx.strokeStyle = T.ring; ctx.lineWidth = T.ringW*1.5; ctx.stroke();
         ctx.fillStyle = T.legendText; ctx.fillText(txt, x + 26, cy + 7);
@@ -573,6 +615,22 @@ export function medianQuadrant(xf, yf, mx, my) {
   return { xSplit: mx, ySplit: my, names, alt, tint, median: true };
 }
 
+// Colour by metric: rank-based (a dot's position within the plotted values, so one
+// extreme value can't wash everyone else out and the median dot is the middle
+// colour). Red -> gold -> green (the app's percentile-bar gradient) with green at
+// the better end; neutral fields (age, height, value...) get a plain blue ramp.
+const NEUTRAL_LO = [191, 219, 254], NEUTRAL_HI = [29, 78, 216];
+const neutralColor = t => `rgb(${NEUTRAL_LO.map((a, i) => Math.round(a + (NEUTRAL_HI[i] - a) * t)).join(',')})`;
+function metricScale(values, f) {
+  const vals = values.filter(Number.isFinite).sort((a, b) => a - b), n = vals.length;
+  if (!n) return null;
+  const bound = (v, le) => { let lo = 0, hi = n; while (lo < hi) { const m = (lo + hi) >> 1; if (le ? vals[m] <= v : vals[m] < v) lo = m + 1; else hi = m; } return lo; };
+  const rank = v => (n < 2 ? 0.5 : ((bound(v, false) + bound(v, true) - 1) / 2) / (n - 1));
+  const colorAt = t => (f.neutral ? neutralColor(t) : barColor(100 * (upIsGood(f) ? t : 1 - t)));
+  return { rank, colorAt, color: v => colorAt(rank(v)), min: vals[0], max: vals[n - 1], med: medianOf(vals), stops: [0, 0.25, 0.5, 0.75, 1].map(colorAt) };
+}
+const PLAIN_SWATCH = '#cbd5e1';
+
 const GROUP_RED = '#ef4444';
 const GROUP_OUT = '#94a3b8';
 const OPS = { le: ['≤', (a, b) => a <= b], eq: ['=', (a, b) => a === b], ge: ['≥', (a, b) => a >= b] };
@@ -611,6 +669,7 @@ export function ScatterView({ items, idOf, nameOf, subOf, tooltipLines, buildFie
   const [yKey, setYKey] = useState(defaultY);
   const [metricMode, setMetricMode] = useState('val'); // 'val' (raw / per-90 value) | 'pct' (percentile)
   const [colorBy, setColorBy] = useState(colorModes[0][0]);
+  const [colorKey, setColorKey] = useState(defaultY); // colour-by-metric field
   const [showNames, setShowNames] = useState(true);
   const [hidden, setHidden] = useState(() => new Set());
   const [hover, setHover] = useState(null); // {d, left, top}
@@ -635,12 +694,22 @@ export function ScatterView({ items, idOf, nameOf, subOf, tooltipLines, buildFie
   const Noun = noun[0].toUpperCase() + noun.slice(1);
 
   const fields = useMemo(() => buildFieldsFor(metricMode), [buildFieldsFor, metricMode]);
-  const xf = fields.find(f => f.key === xKey) || fields[0];
-  const yf = fields.find(f => f.key === yKey) || fields[0];
-  useEffect(() => { if (!colorModes.some(m => m[0] === colorBy)) setColorBy(colorModes[0][0]); }, [colorModes, colorBy]);
+  const real = fields.filter(f => !f.hint);
+  const pickField = (k, dflt) => real.find(f => f.key === k) || real.find(f => f.key === dflt) || real[0];
+  const xf = pickField(xKey, defaultX), yf = pickField(yKey, defaultY), cf = pickField(colorKey, defaultY);
+  // A field can disappear (e.g. role scores when the position group changes, or the
+  // improvement axes in weighted mode): go back to the defaults rather than silently
+  // showing whatever field happens to be first.
+  useEffect(() => {
+    if (!real.some(f => f.key === xKey)) setXKey(defaultX);
+    if (!real.some(f => f.key === yKey)) setYKey(defaultY);
+    if (!real.some(f => f.key === colorKey)) setColorKey(defaultY);
+  }, [fields]); // only when the field list changes
+  const allColorModes = useMemo(() => [...colorModes, ['metric', 'Metric…'], ['plain', 'Plain']], [colorModes]);
+  useEffect(() => { if (!allColorModes.some(m => m[0] === colorBy)) setColorBy(colorModes[0][0]); }, [allColorModes, colorModes, colorBy]);
 
   const groupDef = groups.find(g => g.key === groupKey) || null;
-  useEffect(() => { setHidden(new Set()); }, [colorBy, groupKey]);
+  useEffect(() => { setHidden(new Set()); }, [colorBy, colorKey, groupKey]);
   useEffect(() => { if (groupDef?.kind === 'number' && groupNum == null) setGroupNum(groupDef.def); }, [groupDef, groupNum]);
 
   const rankById = useMemo(() => new Map(items.map((p, i) => [idOf(p), i + 1])), [items, idOf]);
@@ -667,10 +736,14 @@ export function ScatterView({ items, idOf, nameOf, subOf, tooltipLines, buildFie
   }, [groupDef, top]);
   const groupLabel = !groupDef ? '' : groupDef.kind === 'number' ? `${groupDef.label} ${OPS[groupOp][0]} ${groupNum ?? ''}` : (groupChoice ? groupDef.labelOf(groupChoice) : groupDef.label);
 
+  // Colour-by-metric ranks against the Sample (minus removed items).
+  const mScale = useMemo(() => (colorBy === 'metric' ? metricScale(top.map(p => cf.get(p)), cf) : null), [colorBy, top, cf]);
   const colorOf = useCallback(p => {
     if (inGroup) return inGroup(p) ? { g: 'in', color: GROUP_RED } : { g: 'out', color: GROUP_OUT, muted: true };
+    if (colorBy === 'plain') return { g: 'all', color: PLAIN_SWATCH, plain: true };
+    if (colorBy === 'metric') { const v = cf.get(p); return mScale && Number.isFinite(v) ? { g: 'val', color: mScale.color(v) } : { g: 'none', color: NODATA_COLOR }; }
     return colorOfMode(p, colorBy);
-  }, [inGroup, colorOfMode, colorBy]);
+  }, [inGroup, colorOfMode, colorBy, cf, mScale]);
 
   const toPoint = useCallback((p, extra) => ({ p, id: idOf(p), name: nameOf(p), x: xf.get(p), y: yf.get(p), rank: rankById.get(idOf(p)), extra, ...colorOf(p) }),
     [xf, yf, rankById, colorOf, idOf, nameOf]);
@@ -708,12 +781,18 @@ export function ScatterView({ items, idOf, nameOf, subOf, tooltipLines, buildFie
 
   const legend = useMemo(() => {
     const c = {}; topPts.forEach(d => { c[d.g] = (c[d.g] || 0) + 1; });
-    const base = inGroup ? [{ key: 'in', label: groupLabel, color: GROUP_RED }, { key: 'out', label: 'Others', color: GROUP_OUT }] : legendBase(colorBy);
+    const base = inGroup ? [{ key: 'in', label: groupLabel, color: GROUP_RED }, { key: 'out', label: 'Others', color: GROUP_OUT }]
+      : colorBy === 'plain' ? [{ key: 'all', label: 'All', color: PLAIN_SWATCH }]
+      : colorBy === 'metric' ? [
+          ...(mScale ? [{ key: 'val', label: baseName(cf), color: mScale.stops[4],
+            gradient: { label: baseName(cf), stops: mScale.stops, min: valueText(mScale.min, cf), med: valueText(mScale.med, cf), max: valueText(mScale.max, cf) } }] : []),
+          { key: 'none', label: 'No data', color: NODATA_COLOR }]
+      : legendBase(colorBy);
     return base.filter(it => c[it.key]).map(it => ({ ...it, count: c[it.key] }));
-  }, [topPts, colorBy, inGroup, groupLabel, legendBase]);
+  }, [topPts, colorBy, inGroup, groupLabel, legendBase, mScale, cf]);
   const groupCount = inGroup ? topPts.filter(d => d.g === 'in').length : 0;
 
-  const colorLabel = colorModes.find(o => o[0] === colorBy)?.[1] || colorModes[0][1];
+  const colorLabel = colorBy === 'metric' ? `Colour: ${baseName(cf)}` : allColorModes.find(o => o[0] === colorBy)?.[1] || colorModes[0][1];
   const autoTitle = `${yf.label} vs ${xf.label}`;
   const title = customTitle.trim() || autoTitle;
   const subtitle = `${sample.length} Sample · ${contextLabel}${inGroup ? ` · highlighted: ${groupLabel} (${groupCount})` : ''}${hlPoint ? ` · highlighted: ${hlPoint.name}` : ''}`;
@@ -799,11 +878,11 @@ export function ScatterView({ items, idOf, nameOf, subOf, tooltipLines, buildFie
   const col = { display:'flex', flexDirection:'column', gap:3 };
   const fieldSelect = (value, onChange, aria) => (
     <select aria-label={aria} style={sel} value={value} onChange={e => onChange(e.target.value)}>
-      {fieldGroups.map(g => <optgroup key={g} label={g}>{fields.filter(f => f.group === g).map(f => <option key={f.key} value={f.key}>{f.label}</option>)}</optgroup>)}
+      {fieldGroups.map(g => <optgroup key={g} label={g}>{fields.filter(f => f.group === g).map(f => <option key={f.key} value={f.key} disabled={!!f.hint}>{f.label}</option>)}</optgroup>)}
     </select>
   );
   const missing = top.length - allTopPts.length;
-  const usesMetric = xf.metric || yf.metric;
+  const usesMetric = xf.metric || yf.metric || (colorBy === 'metric' && cf.metric);
   const hasNonScore = !xf.scoreScale || !yf.scoreScale;
   const [tip1, tip2] = hover ? tooltipLines(hover.d.p) : [];
 
@@ -819,9 +898,10 @@ export function ScatterView({ items, idOf, nameOf, subOf, tooltipLines, buildFie
         </label>
         <label style={col}><span style={lbl}>Colour by</span>
           <select aria-label="Colour by" style={{ ...sel, opacity: inGroup ? 0.5 : 1 }} value={colorBy} onChange={e => setColorBy(e.target.value)} title={inGroup ? 'Group highlight is overriding colours' : ''}>
-            {colorModes.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+            {allColorModes.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
           </select>
         </label>
+        {colorBy === 'metric' && <label style={col}><span style={lbl}>Colour metric</span>{fieldSelect(colorKey, setColorKey, 'Colour metric')}</label>}
         {groups.length > 0 && (
           <label style={col}><span style={lbl}>Group</span>
             <div style={{ display:'flex', gap:4 }}>
@@ -937,6 +1017,7 @@ export function ScatterView({ items, idOf, nameOf, subOf, tooltipLines, buildFie
             <div style={{ fontSize:10.5, color:'#94a3b8' }}>{tip2} · #{hover.d.rank}</div>
             <div style={{ fontSize:10.5, color:'#e2e8f4', marginTop:4 }}>{yf.label}: <b>{valueText(hover.d.y, yf)}</b></div>
             <div style={{ fontSize:10.5, color:'#e2e8f4' }}>{xf.label}: <b>{valueText(hover.d.x, xf)}</b></div>
+            {colorBy === 'metric' && !inGroup && cf !== xf && cf !== yf && <div style={{ fontSize:10.5, color:'#e2e8f4' }}>{cf.label}: <b>{Number.isFinite(cf.get(hover.d.p)) ? valueText(cf.get(hover.d.p), cf) : 'no data'}</b></div>}
             {quad && <div style={{ fontSize:10.5, color:'#5eead4', marginTop:3, fontWeight:600 }}>{quadOf(quad, hover.d)}</div>}
             <div style={{ fontSize:9.5, color:'#64748b', marginTop:4 }}>Click to highlight · double-click for {noun === 'team' ? 'team card' : 'profile'}</div>
           </div>
@@ -945,7 +1026,18 @@ export function ScatterView({ items, idOf, nameOf, subOf, tooltipLines, buildFie
 
       <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:'6px 12px' }}>
         {(inGroup || colorBy !== colorModes[0][0]) && <span style={{ ...lbl, marginRight:2 }}>{inGroup ? 'Group' : colorLabel}</span>}
-        {legend.map(it => (
+        {legend.map(it => it.gradient ? (
+          <div key={it.key} aria-label="Colour scale" style={{ display:'flex', flexDirection:'column', gap:2 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+              <span style={{ fontSize:11, color:'#cbd5e1' }}>{it.gradient.label}</span>
+              <span style={{ width:180, height:9, borderRadius:3, background:`linear-gradient(to right, ${it.gradient.stops.join(', ')})` }}/>
+              <span style={{ fontSize:11, color:'#64748b' }}>{it.count}</span>
+            </div>
+            <div style={{ display:'flex', justifyContent:'space-between', width:180, marginLeft:'auto', fontSize:9.5, color:'#94a3b8' }}>
+              <span>min {it.gradient.min}</span><span>median {it.gradient.med}</span><span>max {it.gradient.max}</span>
+            </div>
+          </div>
+        ) : (
           <button key={it.key} onClick={() => toggleGroup(it.key)} title={hidden.has(it.key) ? 'Show' : 'Hide'}
             style={{ display:'flex', alignItems:'center', gap:5, background:'none', border:'none', cursor:'pointer', padding:0, opacity:hidden.has(it.key) ? 0.4 : 1 }}>
             <span style={{ width:9, height:9, borderRadius:'50%', background:it.color }}/>
@@ -973,10 +1065,10 @@ const playerLegendBase = mode => (mode === 'position'
   ? [...POS_ORDER, 'Other'].map(g => ({ key: g, label: g, color: POS_COLORS[g] || OTHER_COLOR }))
   : [...SCORE_BUCKETS, { key: 'none', label: 'No data', color: NODATA_COLOR }]);
 
-export default function ScatterChart({ players, getDisplayScore, seasonFilter, scoreMode, rawMode, outlierMode, onSelect, onClose, contextLabel }) {
-  const buildFieldsFor = useCallback(metricMode => buildFields({ getDisplayScore, seasonFilter, scoreMode, rawMode, outlierMode, metricMode }),
-    [getDisplayScore, seasonFilter, scoreMode, rawMode, outlierMode]);
-  const displayIsScore = !rawMode && !outlierMode;
+export default function ScatterChart({ players, getDisplayScore, seasonFilter, scoreMode, rawMode, outlierMode, roleKey, onSelect, onClose, contextLabel }) {
+  const buildFieldsFor = useCallback(metricMode => buildFields({ getDisplayScore, seasonFilter, scoreMode, rawMode, outlierMode, metricMode, roleKey }),
+    [getDisplayScore, seasonFilter, scoreMode, rawMode, outlierMode, roleKey]);
+  const displayIsScore = tableIsScore({ seasonFilter, scoreMode, rawMode, outlierMode });
   const colorModes = useMemo(() => [
     ['position', 'Position'], ['careerScore', 'Career score'], ['potentialScore', 'Potential'],
     ...(displayIsScore ? [['display', `Table score · ${tableScoreLabel({ seasonFilter, scoreMode, rawMode, outlierMode })}`]] : []),

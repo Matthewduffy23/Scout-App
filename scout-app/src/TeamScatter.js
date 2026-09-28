@@ -42,11 +42,11 @@ const teamName = t => t.team;
 const teamSub = t => `${t.league} · ${t.season}`;
 const teamTip = t => [`${t.league} · ${t.season}`, `${t.style || 'No style'}${t.pointsRank ? ` · ${t.pointsRank}/${t.leagueSize || '?'} in league` : ''}`];
 
-export default function TeamScatter({ teams, getDisplayScore, scoreLabel, styleColors, getAvgXValue, getTotalMV, getMVPerf, onSelect, onClose, contextLabel }) {
+export default function TeamScatter({ teams, getDisplayScore, scoreLabel, styleColors, getAvgXValue, getTotalMV, getMVPerf, getImprovement, improvedMode, improvementAnchored, onSelect, onClose, contextLabel }) {
   // Latest lookup functions via a ref, so axis getters stay current without
   // rebuilding every field on each Team Index render.
   const fns = useRef({});
-  fns.current = { getDisplayScore, getAvgXValue, getTotalMV, getMVPerf };
+  fns.current = { getDisplayScore, getAvgXValue, getTotalMV, getMVPerf, getImprovement };
 
   const buildFields = useCallback(mode => {
     const f = [
@@ -64,11 +64,23 @@ export default function TeamScatter({ teams, getDisplayScore, scoreLabel, styleC
       { key: 'luck', group: 'Results (per match)', label: 'Points minus xPts per match', short: 'Pts − xPts', get: t => (t.points != null && t.expectedPoints != null && t.matches > 0 ? (t.points - t.expectedPoints) / t.matches : null) },
       { key: 'winPct', group: 'Results (per match)', label: 'Win %', short: 'Win %', get: t => (t.wins != null && t.matches > 0 ? 100 * t.wins / t.matches : null) },
       { key: 'lossPct', group: 'Results (per match)', label: 'Loss %', short: 'Loss %', lowerBetter: true, get: t => (t.losses != null && t.matches > 0 ? 100 * t.losses / t.matches : null) },
-      { key: 'avgAge', group: 'Squad', label: 'Average age', words: ['Older', 'Younger'], get: t => t.avgAge },
-      { key: 'avgXValue', group: 'Squad', label: 'Average xValue', short: 'Avg xValue', fmt: money, get: t => fns.current.getAvgXValue(t.team, t.league) },
-      { key: 'totalMV', group: 'Squad', label: 'Squad market value', short: 'Squad Value', fmt: money, get: t => fns.current.getTotalMV(t.team, t.league) },
+      { key: 'avgAge', group: 'Squad', label: 'Average age', words: ['Older', 'Younger'], neutral: true, get: t => t.avgAge },
+      { key: 'avgXValue', group: 'Squad', label: 'Average xValue', short: 'Avg xValue', fmt: money, neutral: true, get: t => fns.current.getAvgXValue(t.team, t.league) },
+      { key: 'totalMV', group: 'Squad', label: 'Squad market value', short: 'Squad Value', fmt: money, neutral: true, get: t => fns.current.getTotalMV(t.team, t.league) },
       { key: 'mvPerf', group: 'Squad', label: '£ performance (league places vs squad value)', short: '£ Performance', get: t => fns.current.getMVPerf(t.team, t.league) },
     ];
+    // Improvement: the same numbers as Team Index's Most Improved / Δ column — the
+    // selected season vs that team's previous season on file, on the sidebar's
+    // "Improve by" metric. Hidden in weighted mode (no previous season to a blend);
+    // a team with no previous season is "without data", not 0.
+    if (improvementAnchored) {
+      f.push(
+        { key: 'impDelta', group: 'Improvement (vs previous season)', label: `Improvement Δ · ${improvedMode}`, short: 'Improvement',
+          get: t => { const i = fns.current.getImprovement(t); return i ? i.delta : null; } },
+        { key: 'impRaw', group: 'Improvement (vs previous season)', label: `Improvement Δ unadjusted · ${improvedMode}`, short: 'Unadjusted Δ',
+          get: t => { const i = fns.current.getImprovement(t); return i ? i.rawDelta : null; } },
+      );
+    }
     for (const [group, names] of Object.entries(TEAM_METRICS)) {
       for (const name of names) {
         const lower = TEAM_LOWER_BETTER.has(`${group}:${name}`);
@@ -81,7 +93,7 @@ export default function TeamScatter({ teams, getDisplayScore, scoreLabel, styleC
       }
     }
     return f;
-  }, [scoreLabel]);
+  }, [scoreLabel, improvedMode, improvementAnchored]);
 
   const colorModes = useMemo(() => [['style', 'Style'], ['score', `Score (${scoreLabel})`]], [scoreLabel]);
   const colorOf = useCallback((t, mode) => {

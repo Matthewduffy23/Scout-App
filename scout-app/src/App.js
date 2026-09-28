@@ -1157,7 +1157,7 @@ export default function App(){
 
           {mainView==='scatter'?(
             <ScatterChart players={sorted} getDisplayScore={getDisplayScore} seasonFilter={seasonFilter} scoreMode={scoreMode}
-              rawMode={rawMode} outlierMode={outlierMode} onSelect={setSel} onClose={()=>setMainView('table')}
+              rawMode={rawMode} outlierMode={outlierMode} roleKey={rk} onSelect={setSel} onClose={()=>setMainView('table')}
               contextLabel={`${pos==='All'?'All positions':pos}${seasonFilter!=='all'?' · '+seasonFilter:''}`}/>
           ):(<>
           <div style={isMobile?T.listMobile:T.tw}>
