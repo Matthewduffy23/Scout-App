@@ -5,7 +5,7 @@ import ClubTool from './ClubTool';
 import TeamIndex from './TeamIndex';
 import ScatterChart from './ScatterChart';
 import { Photo, Crest, photoUrl, useIsMobile, deliverJson } from './utils';
-import { scoreBandColor, formatMV, formatFoot, ROLE_KEY_LABELS, ROLES_BY_KEY, POSITION_ATTRIBUTES, playerHasAttribute, ALL_LEAGUES, DEFAULT_LEAGUES, HIDDEN_LEAGUES, YOUTH_LEAGUES, PRESET_LEAGUES, COUNTRY_TO_REGION, GBE_LEAGUE_BANDS, leagueToRegion, leagueToBand, scoreLabel, scoreToStars, promotionBadge, ALL_SEASONS, CURRENT_SEASON, seasonBucketMatch, seasonDetailFor, seasonRowFor, seasonClubFor, leagueSeasonMatch, seasonLeagueFor, metricFromDetail, METRIC_OPTIONS, LEAGUE_STRENGTHS, CAREER_POSITION_GROUPS } from './constants';
+import { scoreBandColor, formatMV, formatFoot, ROLE_KEY_LABELS, ROLES_BY_KEY, POSITION_ATTRIBUTES, playerHasAttribute, ALL_LEAGUES, DEFAULT_LEAGUES, HIDDEN_LEAGUES, YOUTH_LEAGUES, PRESET_LEAGUES, COUNTRY_TO_REGION, GBE_LEAGUE_BANDS, leagueToRegion, leagueToBand, scoreLabel, scoreToStars, promotionBadge, ALL_SEASONS, CURRENT_SEASON, seasonBucketMatch, seasonDetailFor, seasonRowFor, seasonEntryFor, seasonClubFor, leagueSeasonMatch, seasonLeagueFor, metricFromDetail, METRIC_OPTIONS, LEAGUE_STRENGTHS, CAREER_POSITION_GROUPS } from './constants';
 
 // Re-exported so anything that already imports these from App.js keeps working —
 // but there is now ONE implementation, in utils.js, rather than a second copy here.
@@ -503,7 +503,12 @@ export default function App(){
       if(q&&!_norm(p.name).includes(q)&&!_norm(p.team).includes(q)) return false;
       // RecentOnly: skip if no recent data, BUT allow all if a specific season is selected
       if(recentOnly&&!p.hasRecentData&&seasonFilter==='all'&&!playedCurrent&&!showYouth) return false;
-      if(minMins>0&&(p.minutesLatest||0)<(showYouth?100:minMins)) return false;
+      // Min minutes: with a season selected, that season's row (the same row the score,
+      // club and league come from — seasonEntryFor); with All seasons, latest minutes.
+      if(minMins>0){
+        const mins=seasonFilter==='all'?(p.minutesLatest||0):(seasonEntryFor(p,seasonRowFor(p,seasonFilter,leagues))?.minutes||0);
+        if(mins<(showYouth?100:minMins)) return false;
+      }
       // Career minimum minutes: total across every season on record, independent of how they're spread.
       // Applies on top of the per-season filter above, never instead of it.
       if(showCareerMinsFilter&&getCareerMinutes(p)<careerMinMins) return false;
