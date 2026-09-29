@@ -637,11 +637,12 @@ function metricScale(values, f) {
 }
 const PLAIN_SWATCH = '#cbd5e1';
 // Colour by League: the dataviz reference categorical palette (dark steps), with its
-// red slot swapped for brown and its orange for lime, because red means "highlighted"
-// here (orange was only 6.2 OKLab dE from the highlight red; lime is 39.7, and >= 27
-// from every other slot). In a scatter only the first three stay clearly apart in
-// every pair, so they go to the three most common leagues; 9+ fold into "Other leagues".
-const LEAGUE_COLORS = ['#3987e5', '#bef264', '#199e70', '#c98500', '#d55181', '#008300', '#9085e9', '#a0703c'];
+// red slot swapped for brown, its orange for lime and its magenta for purple, because
+// red means "highlighted" here (OKLab dE from the highlight red: orange 6.2 -> lime
+// 39.7; magenta 8.9 -> purple 36.3, >= 20 from every other slot and the Other grey,
+// 6.2:1 on white). In a scatter only the first three stay clearly apart in every
+// pair, so they go to the three most common leagues; 9+ fold into "Other leagues".
+const LEAGUE_COLORS = ['#3987e5', '#bef264', '#199e70', '#c98500', '#8800f8', '#008300', '#9085e9', '#a0703c'];
 const LEAGUE_OTHER = '#94a3b8';
 
 const GROUP_RED = '#ef4444';
