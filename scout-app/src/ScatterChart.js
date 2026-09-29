@@ -281,7 +281,7 @@ function exportHeader(ctx, W, FONT, title, legend, xIsScore) {
 }
 
 export function drawScatter(canvas, W, H, dpr, forExport, o) {
-  const { pts, xf, yf, hidden, hoverId, highlightId, showNames, soloLabel, title, subtitle, footer, legend, quad: Q, median, group, theme: themeName = 'dark' } = o;
+  const { pts, xf, yf, hidden, hoverId, highlightId, showNames, soloLabel, title, subtitle, footer, legend, quad: Q, median, group, highlightStyle = 'full', theme: themeName = 'dark' } = o;
   const T = THEMES[themeName];
   const FONT = forExport ? 'Montserrat, Inter, sans-serif' : 'Inter, sans-serif';
   canvas.width = W*dpr; canvas.height = H*dpr;
@@ -483,8 +483,11 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
   };
   // Highlight fades everyone else; single-highlight mode instead keeps them solid but
   // unnamed. A group highlight already mutes non-members, so no extra fading then.
-  const solo = !!(hl && soloLabel);
-  const fade = hl && !solo && !group ? 0.25 : 0.95;
+  // Red-dot highlight: the chosen dot just turns red — no ring, name or fading.
+  // A group already uses red, so with a group on the full style is used instead.
+  const redDot = !!(hl && highlightStyle === 'dot' && !group);
+  const solo = !!(hl && soloLabel && !redDot);
+  const fade = hl && !solo && !group && !redDot ? 0.25 : 0.95;
   const dotColor = d => (d.muted ? T.muted : d.color);
   for (const pass of group ? [true, false] : [null]) {
     for (let i = visible.length - 1; i >= 0; i--) {
@@ -503,7 +506,7 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
   // ── Name labels ──────────────────────────────────────────────────────────
   const bounds = { x0: pad.l + 2, y0: pad.t + 2, x1: pad.l + pw - 2, y1: pad.t + ph - 2 };
   const items = [];
-  if (hl) items.push({ x: xS(hl.x), y: yS(hl.y), r: r*1.6, force: true, px: 11*fs, font: f(11, 700),
+  if (hl && !redDot) items.push({ x: xS(hl.x), y: yS(hl.y), r: r*1.6, force: true, px: 11*fs, font: f(11, 700),
     text: pname(hl) + (hl.extra ? `  #${hl.rank}` : ''), hl: true });
   // Names: walk the list in rank order and keep placing until the budget of
   // *placed* names is used, so names that can't fit in a cluster don't use up
@@ -511,7 +514,7 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
   const budget = group ? Infinity : Math.max(12, Math.min(90, Math.round(pw*ph / (4500*fs*fs))));
   if (showNames && !solo) {
     for (const d of group ? visible.filter(v => !v.muted) : visible.slice(0, 400)) {
-      if (d === hl) continue;
+      if (d === hl && !redDot) continue;
       items.push({ x: xS(d.x), y: yS(d.y), r, px: 9.5*fs, font: f(9.5, 500), text: pname(d) });
     }
   }
@@ -519,7 +522,7 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
   L.labels = labels; L.dots = dots; L.bounds = bounds; L.taken = taken;
   ctx.lineJoin = 'round'; ctx.textAlign = 'left';
   for (const lb of labels) {
-    ctx.globalAlpha = lb.hl || !hl || solo || group ? 1 : 0.35;
+    ctx.globalAlpha = lb.hl || !hl || solo || group || redDot ? 1 : 0.35;
     if (lb.leader) {
       const bx = Math.max(lb.box.x0, Math.min(lb.x, lb.box.x1)), by = Math.max(lb.box.y0, Math.min(lb.y, lb.box.y1));
       const ang = Math.atan2(by - lb.y, bx - lb.x);
@@ -534,7 +537,9 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
   }
 
   // ── Highlighted player on top ────────────────────────────────────────────
-  if (hl) {
+  if (hl && redDot) {
+    ringDot({ ...hl, muted: false, plain: false, color: GROUP_RED }, r, 1); // same size, just red, drawn on top
+  } else if (hl) {
     ringDot(hl, r*1.6, 1);
     ctx.beginPath(); ctx.arc(xS(hl.x), yS(hl.y), r*1.6 + 3*fs, 0, Math.PI*2);
     ctx.strokeStyle = T.hl; ctx.lineWidth = 2*fs; ctx.stroke();
@@ -631,6 +636,12 @@ function metricScale(values, f) {
   return { rank, colorAt, color: v => colorAt(rank(v)), min: vals[0], max: vals[n - 1], med: medianOf(vals), stops: [0, 0.25, 0.5, 0.75, 1].map(colorAt) };
 }
 const PLAIN_SWATCH = '#cbd5e1';
+// Colour by League: the dataviz reference categorical palette (dark steps), with its
+// red slot swapped for brown because red means "highlighted" here. In a scatter only
+// the first three stay clearly apart in every pair, so they go to the three most
+// common leagues; leagues 9+ fold into "Other leagues".
+const LEAGUE_COLORS = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#008300', '#9085e9', '#a0703c'];
+const LEAGUE_OTHER = '#94a3b8';
 
 const GROUP_RED = '#ef4444';
 const GROUP_OUT = '#94a3b8';
@@ -662,7 +673,7 @@ function playerScoreQuad(xf, yf, topPts, targetMin) {
 // teams). The page-specific parts come in as props: the axis fields, colour modes,
 // tooltip lines, group-highlight conditions, and what a double-click opens.
 export function ScatterView({ items, idOf, nameOf, subOf, tooltipLines, buildFields: buildFieldsFor, defaultX, defaultY,
-  metricLabel = 'Per-90 value', colorModes, colorOf: colorOfMode, legendBase, scoreQuad, targetTiers, groups = [],
+  metricLabel = 'Per-90 value', colorModes, colorOf: colorOfMode, legendBase, scoreQuad, targetTiers, groups = [], leagueOf,
   noun = 'player', openLabel = 'Open profile', onSelect, onClose, contextLabel }) {
   const isMobile = useIsMobile();
   const [n, setN] = useState(50);
@@ -675,6 +686,9 @@ export function ScatterView({ items, idOf, nameOf, subOf, tooltipLines, buildFie
   const [metricMode, setMetricMode] = useState('val'); // 'val' (raw / per-90 value) | 'pct' (percentile)
   const [colorBy, setColorBy] = useState(colorModes[0][0]);
   const [colorKey, setColorKey] = useState(defaultY); // colour-by-metric field
+  const [plainColor, setPlainColor] = useState(null); // Plain mode: null = theme default grey
+  const [highlightStyle, setHighlightStyle] = useState('full'); // 'full' | 'dot'
+  const [quadNames, setQuadNames] = useState({}); // user overrides for the four quadrant labels
   const [showNames, setShowNames] = useState(true);
   const [hidden, setHidden] = useState(() => new Set());
   const [hover, setHover] = useState(null); // {d, left, top}
@@ -710,7 +724,7 @@ export function ScatterView({ items, idOf, nameOf, subOf, tooltipLines, buildFie
     if (!real.some(f => f.key === yKey)) setYKey(defaultY);
     if (!real.some(f => f.key === colorKey)) setColorKey(defaultY);
   }, [fields]); // only when the field list changes
-  const allColorModes = useMemo(() => [...colorModes, ['metric', 'Metric…'], ['plain', 'Plain']], [colorModes]);
+  const allColorModes = useMemo(() => [...colorModes, ...(leagueOf ? [['league', 'League']] : []), ['metric', 'Metric…'], ['plain', 'Plain']], [colorModes, leagueOf]);
   useEffect(() => { if (!allColorModes.some(m => m[0] === colorBy)) setColorBy(colorModes[0][0]); }, [allColorModes, colorModes, colorBy]);
 
   const groupDef = groups.find(g => g.key === groupKey) || null;
@@ -741,14 +755,24 @@ export function ScatterView({ items, idOf, nameOf, subOf, tooltipLines, buildFie
   }, [groupDef, top]);
   const groupLabel = !groupDef ? '' : groupDef.kind === 'number' ? `${groupDef.label} ${OPS[groupOp][0]} ${groupNum ?? ''}` : (groupChoice ? groupDef.labelOf(groupChoice) : groupDef.label);
 
+  // Colour by League: the 8 most common leagues in the Sample get colours (most common
+  // first, ties by name); the rest are "Other leagues".
+  const leagueColor = useMemo(() => {
+    if (colorBy !== 'league' || !leagueOf) return null;
+    const c = new Map();
+    for (const p of top) { const l = leagueOf(p); if (l) c.set(l, (c.get(l) || 0) + 1); }
+    const order = [...c.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(e => e[0]);
+    return new Map(order.slice(0, LEAGUE_COLORS.length).map((l, i) => [l, LEAGUE_COLORS[i]]));
+  }, [colorBy, leagueOf, top]);
   // Colour-by-metric ranks against the Sample (minus removed items).
   const mScale = useMemo(() => (colorBy === 'metric' ? metricScale(top.map(p => cf.get(p)), cf) : null), [colorBy, top, cf]);
   const colorOf = useCallback(p => {
     if (inGroup) return inGroup(p) ? { g: 'in', color: GROUP_RED } : { g: 'out', color: GROUP_OUT, muted: true };
-    if (colorBy === 'plain') return { g: 'all', color: PLAIN_SWATCH, plain: true };
+    if (colorBy === 'plain') return plainColor ? { g: 'all', color: plainColor } : { g: 'all', color: PLAIN_SWATCH, plain: true };
+    if (colorBy === 'league' && leagueColor) { const l = leagueOf(p); return leagueColor.has(l) ? { g: 'L:' + l, color: leagueColor.get(l) } : { g: 'L:other', color: LEAGUE_OTHER }; }
     if (colorBy === 'metric') { const v = cf.get(p); return mScale && Number.isFinite(v) ? { g: 'val', color: mScale.color(v) } : { g: 'none', color: NODATA_COLOR }; }
     return colorOfMode(p, colorBy);
-  }, [inGroup, colorOfMode, colorBy, cf, mScale]);
+  }, [inGroup, colorOfMode, colorBy, cf, mScale, plainColor, leagueColor, leagueOf]);
 
   const toPoint = useCallback((p, extra) => ({ p, id: idOf(p), name: nameOf(p), x: xf.get(p), y: yf.get(p), rank: rankById.get(idOf(p)), extra, ...colorOf(p) }),
     [xf, yf, rankById, colorOf, idOf, nameOf]);
@@ -772,7 +796,16 @@ export function ScatterView({ items, idOf, nameOf, subOf, tooltipLines, buildFie
     return { x: mx, y: my, xText: mx == null ? '' : valueText(mx, xf), yText: my == null ? '' : valueText(my, yf) };
   }, [medianOn, topPts, xf, yf]);
   const sQuad = useMemo(() => (scoreQuad ? scoreQuad(xf, yf, topPts, targetMin) : null), [scoreQuad, xf, yf, topPts, targetMin]);
-  const quad = sQuad || (median && median.x != null && median.y != null ? medianQuadrant(xf, yf, median.x, median.y) : null);
+  const autoQuad = sQuad || (median && median.x != null && median.y != null ? medianQuadrant(xf, yf, median.x, median.y) : null);
+  useEffect(() => { setQuadNames({}); }, [xKey, yKey]);
+  const quad = useMemo(() => {
+    if (!autoQuad) return null;
+    const set = Object.fromEntries(Object.entries(quadNames).filter(([, v]) => v && v.trim()).map(([k, v]) => [k, v.trim()]));
+    if (!Object.keys(set).length) return autoQuad;
+    const alt = { ...(autoQuad.alt || {}) };
+    for (const k of Object.keys(set)) alt[k] = set[k]; // a custom label never swaps to the short fallback
+    return { ...autoQuad, names: { ...autoQuad.names, ...set }, alt };
+  }, [autoQuad, quadNames]);
   const quadNote = sQuad ? `quadrants: ${shortLabel(yf.label)} ≥ ${sQuad.ySplit} · ${shortLabel(xf.label)} ≥ ${sQuad.xSplit}`
     : median ? `median${median.x != null && median.y != null ? 's' : ''}: ${[median.y != null && `${baseName(yf)} ${median.yText}`, median.x != null && `${baseName(xf)} ${median.xText}`].filter(Boolean).join(' · ')}` : '';
 
@@ -787,14 +820,15 @@ export function ScatterView({ items, idOf, nameOf, subOf, tooltipLines, buildFie
   const legend = useMemo(() => {
     const c = {}; topPts.forEach(d => { c[d.g] = (c[d.g] || 0) + 1; });
     const base = inGroup ? [{ key: 'in', label: groupLabel, color: GROUP_RED }, { key: 'out', label: 'Others', color: GROUP_OUT }]
-      : colorBy === 'plain' ? [{ key: 'all', label: 'All', color: PLAIN_SWATCH }]
+      : colorBy === 'plain' ? [{ key: 'all', label: 'All', color: plainColor || PLAIN_SWATCH }]
+      : colorBy === 'league' && leagueColor ? [...[...leagueColor.entries()].map(([l, col]) => ({ key: 'L:' + l, label: l, color: col })), { key: 'L:other', label: 'Other leagues', color: LEAGUE_OTHER }]
       : colorBy === 'metric' ? [
           ...(mScale ? [{ key: 'val', label: baseName(cf), color: mScale.stops[4],
             gradient: { label: baseName(cf), stops: mScale.stops, min: valueText(mScale.min, cf), med: valueText(mScale.med, cf), max: valueText(mScale.max, cf) } }] : []),
           { key: 'none', label: 'No data', color: NODATA_COLOR }]
       : legendBase(colorBy);
     return base.filter(it => c[it.key]).map(it => ({ ...it, count: c[it.key] }));
-  }, [topPts, colorBy, inGroup, groupLabel, legendBase, mScale, cf]);
+  }, [topPts, colorBy, inGroup, groupLabel, legendBase, mScale, cf, plainColor, leagueColor]);
   const groupCount = inGroup ? topPts.filter(d => d.g === 'in').length : 0;
 
   const colorLabel = colorBy === 'metric' ? `Colour: ${baseName(cf)}` : allColorModes.find(o => o[0] === colorBy)?.[1] || colorModes[0][1];
@@ -809,11 +843,11 @@ export function ScatterView({ items, idOf, nameOf, subOf, tooltipLines, buildFie
     return () => window.removeEventListener('resize', measure);
   }, []);
 
-  const drawOpts = { pts, xf, yf, hidden, highlightId, showNames, soloLabel, quad, median, group: !!inGroup };
+  const drawOpts = { pts, xf, yf, hidden, highlightId, showNames, soloLabel, quad, median, group: !!inGroup, highlightStyle };
   useEffect(() => {
     if (!canvasRef.current) return;
     layoutRef.current = drawScatter(canvasRef.current, width, H, window.devicePixelRatio || 1, false, { ...drawOpts, hoverId: hover?.d.id });
-  }, [pts, xf, yf, hidden, hover, highlightId, showNames, soloLabel, quad, median, inGroup, width, H]);
+  }, [pts, xf, yf, hidden, hover, highlightId, showNames, soloLabel, quad, median, inGroup, highlightStyle, width, H]);
 
   useEffect(() => {
     if (highlightId == null) return;
@@ -907,6 +941,15 @@ export function ScatterView({ items, idOf, nameOf, subOf, tooltipLines, buildFie
           </select>
         </label>
         {colorBy === 'metric' && <label style={col}><span style={lbl}>Colour metric</span>{fieldSelect(colorKey, setColorKey, 'Colour metric')}</label>}
+        {colorBy === 'plain' && (
+          <label style={col}><span style={lbl}>Plain colour</span>
+            <div style={{ display:'flex', gap:4, alignItems:'center' }}>
+              <input aria-label="Plain colour" type="color" value={plainColor || PLAIN_SWATCH} onChange={e => setPlainColor(e.target.value)}
+                style={{ width:34, height:26, padding:0, border:'1px solid #1e2d45', borderRadius:5, background:'#0d1220', cursor:'pointer' }}/>
+              {plainColor && <button style={{ ...btn(false), padding:'3px 7px' }} onClick={() => setPlainColor(null)} title="Back to the default grey (whitish in dark, slate in light)">Default</button>}
+            </div>
+          </label>
+        )}
         {groups.length > 0 && (
           <label style={col}><span style={lbl}>Group</span>
             <div style={{ display:'flex', gap:4 }}>
@@ -945,7 +988,16 @@ export function ScatterView({ items, idOf, nameOf, subOf, tooltipLines, buildFie
         )}
         <button style={btn(showNames)} onClick={() => setShowNames(s => !s)}>Names</button>
         {hasNonScore && <button style={btn(medianOn)} aria-pressed={medianOn} title="Median line on each non-score axis; median quadrants when neither axis is a score" onClick={() => setMedianOn(v => !v)}>Median split</button>}
-        <button style={btn(soloLabel)} aria-pressed={soloLabel} title={`When a ${noun} is highlighted, name only them`} onClick={() => setSoloLabel(v => !v)}>Single highlight</button>
+        <div style={{ display:'flex', gap:0 }} title={inGroup ? 'A group is using red — highlights show in the full style' : 'How a highlighted ' + noun + ' is shown'}>
+          {[['full', 'Full'], ['dot', 'Red dot']].map(([k, l], i) => (
+            <button key={k} aria-pressed={highlightStyle === k} onClick={() => setHighlightStyle(k)}
+              style={{ ...btn(highlightStyle === k), borderRadius: i ? '0 5px 5px 0' : '5px 0 0 5px', opacity: inGroup && k === 'dot' ? 0.5 : 1 }}>{l}</button>
+          ))}
+        </div>
+        <button style={{ ...btn(soloLabel && highlightStyle !== 'dot'), opacity: highlightStyle === 'dot' && !inGroup ? 0.4 : 1 }} aria-pressed={soloLabel}
+          disabled={highlightStyle === 'dot' && !inGroup}
+          title={highlightStyle === 'dot' && !inGroup ? 'Red dot highlights have no name, so there is nothing to show alone' : `When a ${noun} is highlighted, name only them`}
+          onClick={() => setSoloLabel(v => !v)}>Single highlight</button>
         <button style={btn(exportLegend)} aria-pressed={exportLegend} title="Show the colour legend with counts in the downloaded image" onClick={() => setExportLegend(v => !v)}>Legend in export</button>
         <button style={btn(trimLow)} aria-pressed={trimLow} title="Hide points more than 2 SD below the mean on either axis" onClick={() => setTrimLow(v => !v)}>Hide low outliers</button>
         <div style={{ marginLeft:'auto', display:'flex', gap:6 }}>
@@ -992,6 +1044,17 @@ export function ScatterView({ items, idOf, nameOf, subOf, tooltipLines, buildFie
           </div>
         )}
       </div>
+
+      {autoQuad && (
+        <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:6 }}>
+          <span style={lbl}>Quadrant labels</span>
+          {[['tl', 'Top-left'], ['tr', 'Top-right'], ['bl', 'Bottom-left'], ['br', 'Bottom-right']].map(([k, l]) => (
+            <input key={k} aria-label={`Quadrant label ${l.toLowerCase()}`} placeholder={`${l}: ${autoQuad.names[k]}`} value={quadNames[k] || ''}
+              onChange={e => setQuadNames(prev => ({ ...prev, [k]: e.target.value }))} style={{ ...sel, width:isMobile?150:190, padding:'4px 7px' }}/>
+          ))}
+          {Object.values(quadNames).some(v => v && v.trim()) && <button style={{ ...btn(false), padding:'3px 8px' }} onClick={() => setQuadNames({})}>Reset labels</button>}
+        </div>
+      )}
 
       {removedItems.length > 0 && (
         <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:6, fontSize:10.5, color:'#94a3b8' }}>
@@ -1079,6 +1142,7 @@ export default function ScatterChart({ players, getDisplayScore, seasonFilter, s
   ], [displayIsScore, seasonFilter, scoreMode, rawMode, outlierMode]);
   // club + league for the selected season (same helper as the table)
   const playerSub = useCallback(p => seasonClubFor(p, seasonFilter, leagues).team, [seasonFilter, leagues]);
+  const playerLeague = useCallback(p => seasonClubFor(p, seasonFilter, leagues).league, [seasonFilter, leagues]);
   const playerTip = useCallback(p => { const c = seasonClubFor(p, seasonFilter, leagues);
     return [`${c.team} · ${c.league}${seasonFilter !== 'all' ? ` (${seasonFilter})` : ''}`, `${p.position} · age ${p.age}`]; }, [seasonFilter, leagues]);
   const colorOf = useCallback((p, mode) => {
@@ -1087,7 +1151,7 @@ export default function ScatterChart({ players, getDisplayScore, seasonFilter, s
     return Number.isFinite(v) ? { g: scoreBucketKey(v), color: scoreDotColor(v) } : { g: 'none', color: NODATA_COLOR };
   }, [getDisplayScore]);
   return (
-    <ScatterView items={players} idOf={playerId} nameOf={playerName} subOf={playerSub} tooltipLines={playerTip}
+    <ScatterView items={players} idOf={playerId} nameOf={playerName} subOf={playerSub} tooltipLines={playerTip} leagueOf={playerLeague}
       buildFields={buildFieldsFor} defaultX="potentialScore" defaultY={seasonFilter !== 'all' ? 'display' : 'careerScore'} metricLabel="Per-90 value"
       colorModes={colorModes} colorOf={colorOf} legendBase={playerLegendBase} scoreQuad={playerScoreQuad} targetTiers={TARGET_TIERS}
       groups={PLAYER_GROUPS} noun="player" openLabel="Open profile" onSelect={onSelect} onClose={onClose} contextLabel={contextLabel}/>

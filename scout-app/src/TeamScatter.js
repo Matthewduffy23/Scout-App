@@ -40,6 +40,7 @@ const TEAM_GROUPS = [
 const teamId = t => `${t.team}|${t.league}|${t.season}`;
 const teamName = t => t.team;
 const teamSub = t => `${t.league} · ${t.season}`;
+const teamLeague = t => t.league;
 const teamTip = t => [`${t.league} · ${t.season}`, `${t.style || 'No style'}${t.pointsRank ? ` · ${t.pointsRank}/${t.leagueSize || '?'} in league` : ''}`];
 
 export default function TeamScatter({ teams, getDisplayScore, scoreLabel, styleColors, getAvgXValue, getTotalMV, getMVPerf, getImprovement, improvedMode, improvementAnchored, onSelect, onClose, contextLabel }) {
@@ -106,7 +107,7 @@ export default function TeamScatter({ teams, getDisplayScore, scoreLabel, styleC
     : [...TEAM_SCORE_BUCKETS, { key: 'none', label: 'No data', color: '#64748b' }]), [styleColors]);
 
   return (
-    <ScatterView items={teams} idOf={teamId} nameOf={teamName} subOf={teamSub} tooltipLines={teamTip}
+    <ScatterView items={teams} idOf={teamId} nameOf={teamName} subOf={teamSub} tooltipLines={teamTip} leagueOf={teamLeague}
       buildFields={buildFields} defaultX="xppm" defaultY="ppm" metricLabel="Raw value"
       colorModes={colorModes} colorOf={colorOf} legendBase={legendBase} scoreQuad={null} targetTiers={null}
       groups={TEAM_GROUPS} noun="team" openLabel="Open team card" onSelect={onSelect} onClose={onClose} contextLabel={contextLabel}/>
