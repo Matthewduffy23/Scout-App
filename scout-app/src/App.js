@@ -5,7 +5,7 @@ import ClubTool from './ClubTool';
 import TeamIndex from './TeamIndex';
 import ScatterChart from './ScatterChart';
 import { Photo, Crest, photoUrl, useIsMobile, deliverJson } from './utils';
-import { scoreBandColor, formatMV, formatFoot, ROLE_KEY_LABELS, ROLES_BY_KEY, POSITION_ATTRIBUTES, playerHasAttribute, ALL_LEAGUES, DEFAULT_LEAGUES, HIDDEN_LEAGUES, YOUTH_LEAGUES, PRESET_LEAGUES, COUNTRY_TO_REGION, GBE_LEAGUE_BANDS, leagueToRegion, leagueToBand, scoreLabel, scoreToStars, promotionBadge, ALL_SEASONS, CURRENT_SEASON, seasonBucketMatch, seasonDetailFor, seasonRowFor, seasonClubFor, metricFromDetail, METRIC_OPTIONS, LEAGUE_STRENGTHS, CAREER_POSITION_GROUPS } from './constants';
+import { scoreBandColor, formatMV, formatFoot, ROLE_KEY_LABELS, ROLES_BY_KEY, POSITION_ATTRIBUTES, playerHasAttribute, ALL_LEAGUES, DEFAULT_LEAGUES, HIDDEN_LEAGUES, YOUTH_LEAGUES, PRESET_LEAGUES, COUNTRY_TO_REGION, GBE_LEAGUE_BANDS, leagueToRegion, leagueToBand, scoreLabel, scoreToStars, promotionBadge, ALL_SEASONS, CURRENT_SEASON, seasonBucketMatch, seasonDetailFor, seasonRowFor, seasonClubFor, leagueSeasonMatch, seasonLeagueFor, metricFromDetail, METRIC_OPTIONS, LEAGUE_STRENGTHS, CAREER_POSITION_GROUPS } from './constants';
 
 // Re-exported so anything that already imports these from App.js keeps working —
 // but there is now ONE implementation, in utils.js, rather than a second copy here.
@@ -507,7 +507,8 @@ export default function App(){
       // Career minimum minutes: total across every season on record, independent of how they're spread.
       // Applies on top of the per-season filter above, never instead of it.
       if(showCareerMinsFilter&&getCareerMinutes(p)<careerMinMins) return false;
-      // Current league only: player must be currently in one of the selected leagues
+      // Current league only: player must ALSO be in one of the selected leagues now.
+      // With a season selected that makes it "in the league then AND now".
       if(currentLeagueOnly&&!leagues.has(p.league)) return false;
       // When specific season selected, player must have data for that season
       if(seasonFilter!=='all'&&!p.sh?.find(x=>seasonBucketMatch(x.s,seasonFilter))) return false;
@@ -519,8 +520,12 @@ export default function App(){
           if(p.side!==sideFilter) return false;
         }
       }
-      if(!leagues.has(p.league)) return false;
-      const pls=LEAGUE_STRENGTHS[p.league]||0;
+      // League filter: with a season selected, "was in a filtered league that season"
+      // (see leagueSeasonMatch); the strength range and "Elite in division only" judge
+      // the same league — the selected season's row's league.
+      if(!leagueSeasonMatch(p,seasonFilter,leagues)) return false;
+      const sl=seasonLeagueFor(p,seasonFilter,leagues);
+      const pls=LEAGUE_STRENGTHS[sl]||0;
       if(pls<lsMin||pls>lsMax) return false;
       if(p.age<ageMin||p.age>ageMax) return false;
       if(p.height&&(p.height<heightMin||p.height>heightMax)) return false;
@@ -575,7 +580,7 @@ export default function App(){
         if(roleScoreMin>0&&rs<roleScoreMin) return false;
         if(!roleScoreMin&&!rs) return false;
       }
-      if(onlyElite&&!promotionBadge(p.careerScore,p.league)) return false;
+      if(onlyElite&&!promotionBadge(p.careerScore,sl)) return false;
       if(versatileOnly&&!isVersatile(p)) return false;
       if(careerPosFilters.size>0){
         const careerToks=getPositionSet(p);
@@ -905,6 +910,14 @@ export default function App(){
                 </label>
               ))}
             </div>
+            {/* With a season selected the league filter means "in these leagues THAT
+                season"; this adds "and still in one of them now". */}
+            {seasonFilter!=='all'&&(
+              <label style={{...T.cr,marginTop:6}} onClick={()=>{setCurrentLeagueOnly(p=>!p);setPage(0);}}>
+                <div style={T.cb(currentLeagueOnly)}>{currentLeagueOnly&&<span style={{color:'#fff',fontSize:8,lineHeight:1}}>✓</span>}</div>
+                <span style={T.cl(currentLeagueOnly)}>Current league only (in these leagues in {seasonFilter} and now)</span>
+              </label>
+            )}
           </div>
 
           <div style={T.dv}/>
@@ -1173,7 +1186,7 @@ export default function App(){
                   const bestRole=bestEntry?bestEntry[0]:'—';
                   const ds=getDisplayScore(p)??(outlierMode?null:p.careerScore);
                   const roleModeScore=scoreMode!=='complete'?(rcs[scoreMode]??null):null;
-                  const promo=promotionBadge(p.careerScore,p.league);
+                  const promo=promotionBadge(p.careerScore,seasonLeagueFor(p,seasonFilter,leagues));
                   const starred=shortlist.includes(p.id);
                   return(
                     <div key={p.id} style={T.card} onClick={()=>setSel(p)}>
@@ -1241,8 +1254,9 @@ export default function App(){
                       const bestRole=bestEntry?bestEntry[0]:'—';
                       const ds=getDisplayScore(p)??(outlierMode?null:p.careerScore);
                       const roleModeScore=scoreMode!=='complete'?(rcs[scoreMode]??null):null;
-                      const promo=promotionBadge(p.careerScore,p.league);
-                      const ls=LEAGUE_STRENGTHS[p.league]||50;
+                      const sLeague=seasonLeagueFor(p,seasonFilter,leagues);
+                      const promo=promotionBadge(p.careerScore,sLeague);
+                      const ls=LEAGUE_STRENGTHS[sLeague]||50;
                       return(
                         <tr key={p.id} className="rh" onClick={()=>setSel(p)}>
                           <td style={{...T.td,textAlign:'center',color:'#64748b',fontSize:10}}>{page*PAGE+i+1}</td>

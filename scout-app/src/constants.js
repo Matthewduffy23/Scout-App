@@ -189,6 +189,20 @@ export function seasonRowsFor(player,season,leagues){
   return (player.sh||[]).map((h,i)=>[h,i]).filter(([h])=>!h.displayOnly&&seasonBucketMatch(h.s,season))
     .sort((a,b)=>rank(a[0])-rank(b[0])||a[1]-b[1]).map(([h])=>h);
 }
+// League filter + season filter together. With a season selected, the league filter
+// means "was in a filtered league DURING that season": the player needs a real row
+// in the season whose league is in the filter (that row is also the one shown).
+// With All seasons it keeps meaning the player's current league.
+export function leagueSeasonMatch(player,season,leagues){
+  if(!season||season==='all') return leagues.has(player.league);
+  return seasonRowsFor(player,season,leagues).some(h=>leagues.has(h.l));
+}
+// The league a player is judged and shown in: the selected season's row's league,
+// or the current league with All seasons.
+export function seasonLeagueFor(player,season,leagues){
+  if(!season||season==='all') return player.league;
+  return seasonRowFor(player,season,leagues)?.l||player.league;
+}
 export function seasonRowFor(player,season,leagues){ return seasonRowsFor(player,season,leagues)[0]||null; }
 // The full season entry (club, per-90s, roles) for one p.sh row. seasonsDetail keeps
 // one entry per season label; seasonsDetailAll keeps one per season AND league.
