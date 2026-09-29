@@ -5,7 +5,7 @@ import ClubTool from './ClubTool';
 import TeamIndex from './TeamIndex';
 import ScatterChart from './ScatterChart';
 import { Photo, Crest, photoUrl, useIsMobile, deliverJson } from './utils';
-import { scoreBandColor, formatMV, formatFoot, ROLE_KEY_LABELS, ROLES_BY_KEY, POSITION_ATTRIBUTES, playerHasAttribute, ALL_LEAGUES, DEFAULT_LEAGUES, HIDDEN_LEAGUES, YOUTH_LEAGUES, PRESET_LEAGUES, COUNTRY_TO_REGION, GBE_LEAGUE_BANDS, leagueToRegion, leagueToBand, scoreLabel, scoreToStars, promotionBadge, ALL_SEASONS, CURRENT_SEASON, seasonBucketMatch, seasonDetailFor, seasonRowFor, metricFromDetail, METRIC_OPTIONS, LEAGUE_STRENGTHS, CAREER_POSITION_GROUPS } from './constants';
+import { scoreBandColor, formatMV, formatFoot, ROLE_KEY_LABELS, ROLES_BY_KEY, POSITION_ATTRIBUTES, playerHasAttribute, ALL_LEAGUES, DEFAULT_LEAGUES, HIDDEN_LEAGUES, YOUTH_LEAGUES, PRESET_LEAGUES, COUNTRY_TO_REGION, GBE_LEAGUE_BANDS, leagueToRegion, leagueToBand, scoreLabel, scoreToStars, promotionBadge, ALL_SEASONS, CURRENT_SEASON, seasonBucketMatch, seasonDetailFor, seasonRowFor, seasonClubFor, metricFromDetail, METRIC_OPTIONS, LEAGUE_STRENGTHS, CAREER_POSITION_GROUPS } from './constants';
 
 // Re-exported so anything that already imports these from App.js keeps working —
 // but there is now ONE implementation, in utils.js, rather than a second copy here.
@@ -1187,8 +1187,9 @@ export default function App(){
                             <span style={{fontWeight:700,fontSize:13.5,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{p.name}</span>
                           </div>
                           <div style={{display:'flex',alignItems:'center',gap:5,marginTop:3}}>
-                            <Crest id={p.teamFotmobId} name={p.team} size={14}/>
-                            <span style={{fontSize:10.5,color:'#64748b',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{p.team} · {p.league}</span>
+                            {(()=>{const c=seasonClubFor(p,seasonFilter,leagues);return(<>
+                            <Crest id={c.current?p.teamFotmobId:null} name={c.team} size={14}/>
+                            <span style={{fontSize:10.5,color:'#64748b',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{c.team} · {c.league}</span></>);})()}
                           </div>
                         </div>
                         <div style={T.cardStat}>
@@ -1253,8 +1254,9 @@ export default function App(){
                               <span style={{fontWeight:600}}>{p.name}</span>
                             </span>
                           </td>
-                          <td style={T.td}><div style={{display:'flex',alignItems:'center',gap:5}}><Crest id={p.teamFotmobId} name={p.team} size={16}/><span style={{...T.tdm,fontSize:11}}>{p.team}</span></div></td>
-                          <td style={{...T.td,...T.tdm,fontSize:11}}>{p.league}</td>
+                          {(()=>{const c=seasonClubFor(p,seasonFilter,leagues);return(<>
+                          <td style={T.td}><div style={{display:'flex',alignItems:'center',gap:5}}><Crest id={c.current?p.teamFotmobId:null} name={c.team} size={16}/><span style={{...T.tdm,fontSize:11}}>{c.team}</span></div></td>
+                          <td style={{...T.td,...T.tdm,fontSize:11}}>{c.league}</td></>);})()}
                           <td style={T.td}>{p.age}</td>
                           <td style={T.td}>{p.foot&&p.foot!=='unknown'&&p.foot!=='nan'?<span style={T.fp(p.foot)}>{formatFoot(p.foot)}</span>:<span style={{color:'#64748b'}}>—</span>}</td>
                           <td style={T.td}><span style={T.rp}>{bestRole}</span></td>

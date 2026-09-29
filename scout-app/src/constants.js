@@ -192,6 +192,16 @@ export function seasonRowsFor(player,season,leagues){
 export function seasonRowFor(player,season,leagues){ return seasonRowsFor(player,season,leagues)[0]||null; }
 // The full season entry (club, per-90s, roles) for one p.sh row. seasonsDetail keeps
 // one entry per season label; seasonsDetailAll keeps one per season AND league.
+// Club and league to SHOW for a player: the selected season's row (see seasonRowsFor),
+// or the current club when all seasons are shown. Same answer in the table and chart.
+export function seasonClubFor(player,season,leagues){
+  if(!season||season==='all') return {team:player.team,league:player.league,current:true};
+  const h=seasonRowFor(player,season,leagues);
+  if(!h) return {team:player.team,league:player.league,current:true};
+  const e=seasonEntryFor(player,h);
+  const team=e?.team||player.team;
+  return {team,league:h.l,current:team===player.team&&h.l===player.league};
+}
 export function seasonEntryFor(player,row){
   if(!row) return null;
   const e=(player.seasonsDetailAll||[]).find(x=>x.season===row.s&&x.league===row.l);

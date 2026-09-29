@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { SCORE_TIERS, POS_COLORS, METRIC_OPTIONS, METRIC_OPTIONS_EXTRA, seasonDetailFor, metricFromDetail, ROLES_BY_KEY, ROLE_KEY_LABELS,
-  SCORE_DOT_STEPS, SCORE_DOT_LOW, scoreDotColor, EXPORT_W, EXPORT_H } from './constants';
+  SCORE_DOT_STEPS, SCORE_DOT_LOW, scoreDotColor, EXPORT_W, EXPORT_H, seasonClubFor } from './constants';
 import { useIsMobile, deliverPng } from './utils';
 import { ensureMontserratEmbedded } from './CoachCard';
 import { barColor } from './QuickCard';
@@ -94,10 +94,11 @@ function tableScoreLabel({ seasonFilter, scoreMode, rawMode, outlierMode }) {
 function buildFields(ctx) {
   const f = [
     { key:'display', group:'Score', label:`Table score · ${tableScoreLabel(ctx)}`, get:p=>ctx.getDisplayScore(p), scoreScale:tableIsScore(ctx) },
-    { key:'careerScore', group:'Score', label:'Career score', get:p=>p.careerScore, scoreScale:true },
-    { key:'peakScore', group:'Score', label:'Peak score', get:p=>p.peakScore, scoreScale:true },
-    { key:'potentialScore', group:'Score', label:'Potential', get:p=>p.potentialScore, scoreScale:true },
-    { key:'potentialCeiling', group:'Score', label:'Potential ceiling', get:p=>p.potentialCeiling, scoreScale:true },
+    // career-wide numbers: labelled as such when a single season is selected
+    { key:'careerScore', group:'Score', label:ctx.seasonFilter === 'all' ? 'Career score' : 'Career score (all seasons)', short:'Career score', get:p=>p.careerScore, scoreScale:true },
+    { key:'peakScore', group:'Score', label:`Peak score${ctx.seasonFilter === 'all' ? '' : ' (career)'}`, short:'Peak score', get:p=>p.peakScore, scoreScale:true },
+    { key:'potentialScore', group:'Score', label:`Potential${ctx.seasonFilter === 'all' ? '' : ' (career)'}`, short:'Potential', get:p=>p.potentialScore, scoreScale:true },
+    { key:'potentialCeiling', group:'Score', label:`Potential ceiling${ctx.seasonFilter === 'all' ? '' : ' (career)'}`, short:'Potential ceiling', get:p=>p.potentialCeiling, scoreScale:true },
     { key:'xValue', group:'Value', neutral:true, label:'xValue', get:p=>posOrNull(p.xValue), fmt:money },
     { key:'marketValue', group:'Value', neutral:true, label:'Market value', get:p=>posOrNull(p.marketValue), fmt:money },
     { key:'xValueGapPct', group:'Value', neutral:true, label:'Value gap %', get:p=>p.xValueGapPct },
@@ -667,6 +668,10 @@ export function ScatterView({ items, idOf, nameOf, subOf, tooltipLines, buildFie
   const [n, setN] = useState(50);
   const [xKey, setXKey] = useState(defaultX);
   const [yKey, setYKey] = useState(defaultY);
+  // If the page's default Y changes (e.g. a season gets selected) and Y is still on the
+  // old default, move with it; a Y the user picked stays.
+  const lastDefaultY = useRef(defaultY);
+  useEffect(() => { if (lastDefaultY.current !== defaultY) { setYKey(k => (k === lastDefaultY.current ? defaultY : k)); lastDefaultY.current = defaultY; } }, [defaultY]);
   const [metricMode, setMetricMode] = useState('val'); // 'val' (raw / per-90 value) | 'pct' (percentile)
   const [colorBy, setColorBy] = useState(colorModes[0][0]);
   const [colorKey, setColorKey] = useState(defaultY); // colour-by-metric field
@@ -1059,8 +1064,7 @@ const PLAYER_GROUPS = [
   { key:'team', label:'Team', kind:'choice', valueOf:p => (p.team ? `${p.team}|${p.league}` : ''),
     labelOf:v => { const [t, l] = v.split('|'); return `${t} (${l})`; } },
 ];
-const playerId = p => p.id, playerName = p => p.name, playerSub = p => p.team;
-const playerTip = p => [`${p.team} · ${p.league}`, `${p.position} · age ${p.age}`];
+const playerId = p => p.id, playerName = p => p.name;
 const playerLegendBase = mode => (mode === 'position'
   ? [...POS_ORDER, 'Other'].map(g => ({ key: g, label: g, color: POS_COLORS[g] || OTHER_COLOR }))
   : [...SCORE_BUCKETS, { key: 'none', label: 'No data', color: NODATA_COLOR }]);
@@ -1073,6 +1077,10 @@ export default function ScatterChart({ players, getDisplayScore, seasonFilter, s
     ['position', 'Position'], ['careerScore', 'Career score'], ['potentialScore', 'Potential'],
     ...(displayIsScore ? [['display', `Table score · ${tableScoreLabel({ seasonFilter, scoreMode, rawMode, outlierMode })}`]] : []),
   ], [displayIsScore, seasonFilter, scoreMode, rawMode, outlierMode]);
+  // club + league for the selected season (same helper as the table)
+  const playerSub = useCallback(p => seasonClubFor(p, seasonFilter, leagues).team, [seasonFilter, leagues]);
+  const playerTip = useCallback(p => { const c = seasonClubFor(p, seasonFilter, leagues);
+    return [`${c.team} · ${c.league}${seasonFilter !== 'all' ? ` (${seasonFilter})` : ''}`, `${p.position} · age ${p.age}`]; }, [seasonFilter, leagues]);
   const colorOf = useCallback((p, mode) => {
     if (mode === 'position') return POS_COLORS[p.roleKey] ? { g: p.roleKey, color: POS_COLORS[p.roleKey] } : { g: 'Other', color: OTHER_COLOR };
     const v = mode === 'display' ? getDisplayScore(p) : p[mode];
@@ -1080,7 +1088,7 @@ export default function ScatterChart({ players, getDisplayScore, seasonFilter, s
   }, [getDisplayScore]);
   return (
     <ScatterView items={players} idOf={playerId} nameOf={playerName} subOf={playerSub} tooltipLines={playerTip}
-      buildFields={buildFieldsFor} defaultX="potentialScore" defaultY="careerScore" metricLabel="Per-90 value"
+      buildFields={buildFieldsFor} defaultX="potentialScore" defaultY={seasonFilter !== 'all' ? 'display' : 'careerScore'} metricLabel="Per-90 value"
       colorModes={colorModes} colorOf={colorOf} legendBase={playerLegendBase} scoreQuad={playerScoreQuad} targetTiers={TARGET_TIERS}
       groups={PLAYER_GROUPS} noun="player" openLabel="Open profile" onSelect={onSelect} onClose={onClose} contextLabel={contextLabel}/>
   );
