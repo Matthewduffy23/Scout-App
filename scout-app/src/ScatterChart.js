@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { SCORE_TIERS, POS_COLORS, METRIC_OPTIONS, METRIC_OPTIONS_EXTRA, seasonDetailFor, metricFromDetail, ROLES_BY_KEY, ROLE_KEY_LABELS,
-  SCORE_DOT_STEPS, SCORE_DOT_LOW, scoreDotColor, EXPORT_W, EXPORT_H, seasonClubFor } from './constants';
+  SCORE_DOT_STEPS, SCORE_DOT_LOW, scoreDotColor, EXPORT_W, EXPORT_H, seasonClubFor, seasonRowFor, ALL_SEASONS } from './constants';
 import { useIsMobile, deliverPng } from './utils';
 import { ensureMontserratEmbedded } from './CoachCard';
 import { barColor } from './QuickCard';
@@ -81,6 +81,15 @@ const PLAYER_LOWER_BETTER = new Set(['Goals Conceded', 'xG Against']);
 const tableIsScore = ({ seasonFilter, scoreMode, rawMode, outlierMode }) =>
   !rawMode && !outlierMode && !(scoreMode !== 'complete' && seasonFilter === 'all');
 
+// The season row a "Season" score reads: the selected season's row (filtered-league
+// preference, same as the table), or with All seasons the newest season that has one.
+function seasonRowForCtx(p, ctx) {
+  if (ctx.seasonFilter !== 'all') return seasonRowFor(p, ctx.seasonFilter, ctx.leagues);
+  for (const b of ALL_SEASONS) { const h = seasonRowFor(p, b, ctx.leagues); if (h) return h; }
+  return null;
+}
+const seasonTagOf = ctx => (ctx.seasonFilter === 'all' ? 'latest season' : ctx.seasonFilter);
+
 function tableScoreLabel({ seasonFilter, scoreMode, rawMode, outlierMode }) {
   const season = seasonFilter !== 'all' ? seasonFilter : null;
   if (outlierMode) return scoreMode !== 'complete' ? `Outlier z · ${scoreMode}` : `Outlier z · ${season || 'career'}`;
@@ -99,6 +108,15 @@ function buildFields(ctx) {
     { key:'peakScore', group:'Score', label:`Peak score${ctx.seasonFilter === 'all' ? '' : ' (career)'}`, short:'Peak score', get:p=>p.peakScore, scoreScale:true },
     { key:'potentialScore', group:'Score', label:`Potential${ctx.seasonFilter === 'all' ? '' : ' (career)'}`, short:'Potential', get:p=>p.potentialScore, scoreScale:true },
     { key:'potentialCeiling', group:'Score', label:`Potential ceiling${ctx.seasonFilter === 'all' ? '' : ' (career)'}`, short:'Potential ceiling', get:p=>p.potentialCeiling, scoreScale:true },
+    // Raw score (unweighted league-relative) and Z-score (50 = league mean, 80 = +2 SD):
+    // not on the level-band scale, so they get the median split. Season variants use
+    // the same season row as the table / per-90s (latest season when All is selected);
+    // career variants are career-wide. No value (e.g. a league pool too small for a z)
+    // = without data.
+    { key:'rawSeason', group:'Score', label:`Raw score · ${seasonTagOf(ctx)}`, short:'Raw score', get:p=>{ const h=seasonRowForCtx(p, ctx); return Number.isFinite(h?.r) ? h.r : null; } },
+    { key:'rawCareer', group:'Score', label:'Raw score (career)', short:'Raw career', get:p=>(Number.isFinite(p.careerRaw) ? p.careerRaw : null) },
+    { key:'zSeason', group:'Score', label:`Z-score · ${seasonTagOf(ctx)}`, short:'Z-score', get:p=>{ const h=seasonRowForCtx(p, ctx); return Number.isFinite(h?.z) ? h.z : null; } },
+    { key:'zCareer', group:'Score', label:'Z-score (career)', short:'Z career', get:p=>(Number.isFinite(p.zScore) ? p.zScore : null) },
     { key:'xValue', group:'Value', neutral:true, label:'xValue', get:p=>posOrNull(p.xValue), fmt:money },
     { key:'marketValue', group:'Value', neutral:true, label:'Market value', get:p=>posOrNull(p.marketValue), fmt:money },
     { key:'xValueGapPct', group:'Value', neutral:true, label:'Value gap %', get:p=>p.xValueGapPct },
