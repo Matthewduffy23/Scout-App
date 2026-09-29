@@ -169,15 +169,35 @@ export function seasonBucketMatch(literalSeason, bucketLabel){
 // same order getDisplayScore uses (skipping display-only rows), so per-90 metrics
 // and the score describe the same season. null when that season has no metrics
 // (the pipeline builds none under ~400 minutes).
-export function seasonDetailFor(player,season){
+export function seasonDetailFor(player,season,leagues){
   if(!season||season==='all') return latestSeasonDetail(player);
-  const sd=player.seasonsDetail||{};
-  for(const h of player.sh||[]){
-    if(h.displayOnly||!seasonBucketMatch(h.s,season)) continue;
-    const d=sd[h.s];
+  for(const h of seasonRowsFor(player,season,leagues)){
+    const d=seasonEntryFor(player,h);
     if(d&&d.g) return d;
   }
   return null;
+}
+// A player's real rows (p.sh) in a season, best first. A player can have several:
+// a calendar-year row counts toward the split-year season (2026 -> 2026-27), and a
+// mid-season move gives two leagues. Display-only rows carry no score and are
+// skipped. Preference: a league in the sidebar filter, the player's current league
+// first, so filtering to England 3 shows the England 3 row — not whichever row
+// happens to be stored first.
+export function seasonRowsFor(player,season,leagues){
+  const inF=h=>!leagues||leagues.has(h.l);
+  const rank=h=>(inF(h)?0:2)+(h.l===player.league?0:1);
+  return (player.sh||[]).map((h,i)=>[h,i]).filter(([h])=>!h.displayOnly&&seasonBucketMatch(h.s,season))
+    .sort((a,b)=>rank(a[0])-rank(b[0])||a[1]-b[1]).map(([h])=>h);
+}
+export function seasonRowFor(player,season,leagues){ return seasonRowsFor(player,season,leagues)[0]||null; }
+// The full season entry (club, per-90s, roles) for one p.sh row. seasonsDetail keeps
+// one entry per season label; seasonsDetailAll keeps one per season AND league.
+export function seasonEntryFor(player,row){
+  if(!row) return null;
+  const e=(player.seasonsDetailAll||[]).find(x=>x.season===row.s&&x.league===row.l);
+  if(e) return e;
+  const d=player.seasonsDetail?.[row.s];
+  return d&&d.league===row.l?d:null;
 }
 // [percentile, per-90 value] for one metric in a seasonsDetail entry, or null.
 export function metricFromDetail(sd,key){

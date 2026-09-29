@@ -103,7 +103,7 @@ function buildFields(ctx) {
     { key:'xValueGapPct', group:'Value', neutral:true, label:'Value gap %', get:p=>p.xValueGapPct },
     { key:'age', group:'Profile', label:'Age', get:p=>p.age, words:['Older', 'Younger'], neutral:true },
     { key:'height', group:'Profile', neutral:true, label:'Height (cm)', get:p=>posOrNull(p.height) },
-    { key:'minutes', group:'Profile', neutral:true, label:`Minutes (${ctx.seasonFilter==='all'?'latest season':ctx.seasonFilter})`, get:p=>seasonDetailFor(p,ctx.seasonFilter)?.minutes ?? null },
+    { key:'minutes', group:'Profile', neutral:true, label:`Minutes (${ctx.seasonFilter==='all'?'latest season':ctx.seasonFilter})`, get:p=>seasonDetailFor(p,ctx.seasonFilter,ctx.leagues)?.minutes ?? null },
     { key:'seasons', group:'Profile', neutral:true, label:'Seasons', get:p=>p.seasons },
     { key:'gbeTotal', group:'Profile', label:'GBE points', get:p=>p.gbeTotal },
   ];
@@ -114,7 +114,7 @@ function buildFields(ctx) {
     const grp = `Role scores · ${ROLE_KEY_LABELS[ctx.roleKey]} (relative to own league)`;
     for (const role of ROLES_BY_KEY[ctx.roleKey]) {
       f.push({ key:'r:'+role, group:grp, label:role, short:role, get:p => {
-        const v = ctx.seasonFilter === 'all' ? p.roleCareerScores?.[role] : seasonDetailFor(p, ctx.seasonFilter)?.roles?.[role];
+        const v = ctx.seasonFilter === 'all' ? p.roleCareerScores?.[role] : seasonDetailFor(p, ctx.seasonFilter, ctx.leagues)?.roles?.[role];
         return Number.isFinite(v) ? v : null;
       } });
     }
@@ -128,7 +128,7 @@ function buildFields(ctx) {
       // GK Goals Conceded / xG Against: lower is better, and their percentiles are already flipped
       ...(PLAYER_LOWER_BETTER.has(m.key) ? { lowerBetter:true, pctInverted:true } : {}),
       label: ctx.metricMode === 'pct' ? `${m.label} (percentile)` : m.label,
-      get: p => { const r = metricFromDetail(seasonDetailFor(p, ctx.seasonFilter), m.key); return r ? (ctx.metricMode === 'pct' ? r.pct : r.val) : null; },
+      get: p => { const r = metricFromDetail(seasonDetailFor(p, ctx.seasonFilter, ctx.leagues), m.key); return r ? (ctx.metricMode === 'pct' ? r.pct : r.val) : null; },
       pctDomain: ctx.metricMode === 'pct',
     });
   }
@@ -1065,9 +1065,9 @@ const playerLegendBase = mode => (mode === 'position'
   ? [...POS_ORDER, 'Other'].map(g => ({ key: g, label: g, color: POS_COLORS[g] || OTHER_COLOR }))
   : [...SCORE_BUCKETS, { key: 'none', label: 'No data', color: NODATA_COLOR }]);
 
-export default function ScatterChart({ players, getDisplayScore, seasonFilter, scoreMode, rawMode, outlierMode, roleKey, onSelect, onClose, contextLabel }) {
-  const buildFieldsFor = useCallback(metricMode => buildFields({ getDisplayScore, seasonFilter, scoreMode, rawMode, outlierMode, metricMode, roleKey }),
-    [getDisplayScore, seasonFilter, scoreMode, rawMode, outlierMode, roleKey]);
+export default function ScatterChart({ players, getDisplayScore, seasonFilter, scoreMode, rawMode, outlierMode, roleKey, leagues, onSelect, onClose, contextLabel }) {
+  const buildFieldsFor = useCallback(metricMode => buildFields({ getDisplayScore, seasonFilter, scoreMode, rawMode, outlierMode, metricMode, roleKey, leagues }),
+    [getDisplayScore, seasonFilter, scoreMode, rawMode, outlierMode, roleKey, leagues]);
   const displayIsScore = tableIsScore({ seasonFilter, scoreMode, rawMode, outlierMode });
   const colorModes = useMemo(() => [
     ['position', 'Position'], ['careerScore', 'Career score'], ['potentialScore', 'Potential'],

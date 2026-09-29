@@ -5,7 +5,7 @@ import ClubTool from './ClubTool';
 import TeamIndex from './TeamIndex';
 import ScatterChart from './ScatterChart';
 import { Photo, Crest, photoUrl, useIsMobile, deliverJson } from './utils';
-import { scoreBandColor, formatMV, formatFoot, ROLE_KEY_LABELS, ROLES_BY_KEY, POSITION_ATTRIBUTES, playerHasAttribute, ALL_LEAGUES, DEFAULT_LEAGUES, HIDDEN_LEAGUES, YOUTH_LEAGUES, PRESET_LEAGUES, COUNTRY_TO_REGION, GBE_LEAGUE_BANDS, leagueToRegion, leagueToBand, scoreLabel, scoreToStars, promotionBadge, ALL_SEASONS, CURRENT_SEASON, seasonBucketMatch, seasonDetailFor, metricFromDetail, METRIC_OPTIONS, LEAGUE_STRENGTHS, CAREER_POSITION_GROUPS } from './constants';
+import { scoreBandColor, formatMV, formatFoot, ROLE_KEY_LABELS, ROLES_BY_KEY, POSITION_ATTRIBUTES, playerHasAttribute, ALL_LEAGUES, DEFAULT_LEAGUES, HIDDEN_LEAGUES, YOUTH_LEAGUES, PRESET_LEAGUES, COUNTRY_TO_REGION, GBE_LEAGUE_BANDS, leagueToRegion, leagueToBand, scoreLabel, scoreToStars, promotionBadge, ALL_SEASONS, CURRENT_SEASON, seasonBucketMatch, seasonDetailFor, seasonRowFor, metricFromDetail, METRIC_OPTIONS, LEAGUE_STRENGTHS, CAREER_POSITION_GROUPS } from './constants';
 
 // Re-exported so anything that already imports these from App.js keeps working —
 // but there is now ONE implementation, in utils.js, rather than a second copy here.
@@ -179,8 +179,8 @@ export function StarDisplay({score,size=11}){
 
 // Metric filters follow the sidebar season filter ('all' -> latest season with
 // metrics), same season the score column uses. See seasonDetailFor in constants.js.
-function getMetricPct(player,metricKey,season){
-  return metricFromDetail(seasonDetailFor(player,season),metricKey);
+function getMetricPct(player,metricKey,season,leagues){
+  return metricFromDetail(seasonDetailFor(player,season,leagues),metricKey);
 }
 
 // Get score for a specific season from sh array
@@ -468,26 +468,26 @@ export default function App(){
       // wasn't part of this build.
       if(scoreMode!=='complete') return (p.zRoles||{})[scoreMode]??null;
       if(seasonFilter!=='all'){
-        const h=p.sh?.find(x=>!x.displayOnly&&seasonBucketMatch(x.s,seasonFilter)); // display-only rows carry no score
+        const h=seasonRowFor(p,seasonFilter,leagues); // the season's row for the filtered league (see constants.js)
         return h?h.z:null;  // per-season z; null if that season's league pool was too small (<8) for a valid z
       }
       return p.zScore??null;
     }
     if(rawMode){
       if(seasonFilter!=='all'){
-        const h=p.sh?.find(x=>!x.displayOnly&&seasonBucketMatch(x.s,seasonFilter)); // display-only rows carry no score
+        const h=seasonRowFor(p,seasonFilter,leagues); // the season's row for the filtered league (see constants.js)
         return h?(h.r??h.sc):null;  // use raw score if available
       }
       // Raw career: use stored careerRaw (true unweighted league-relative score)
       return p.careerRaw??p.careerScore;
     }
     if(seasonFilter!=='all'){
-      const h=p.sh?.find(x=>!x.displayOnly&&seasonBucketMatch(x.s,seasonFilter)); // display-only rows carry no score
+      const h=seasonRowFor(p,seasonFilter,leagues); // the season's row for the filtered league (see constants.js)
       return h?h.sc:null;
     }
     if(scoreMode!=='complete') return (p.roleCareerScores||{})[scoreMode]||null;
     return p.careerScore;
-  },[seasonFilter,scoreMode,rawMode,outlierMode]);
+  },[seasonFilter,scoreMode,rawMode,outlierMode,leagues]);
 
   const addMetricFilter=()=>{if(metricFilters.length<10)setMetricFilters(f=>[...f,{key:'',label:'',min:0,max:100}]);};
 
@@ -602,7 +602,7 @@ export default function App(){
       if(xValueFilter==='overvalued'&&!(p.xValueGapPct<-20&&p.marketValue>0)) return false;
       for(const mf of metricFilters){
         if(!mf.key) continue;
-        const m=getMetricPct(p,mf.key,seasonFilter);
+        const m=getMetricPct(p,mf.key,seasonFilter,leagues);
         if(!m) return false; // no data for this metric in the selected season -> can't meet the filter
         if(m.pct<mf.min||m.pct>mf.max) return false;
       }
@@ -1157,7 +1157,7 @@ export default function App(){
 
           {mainView==='scatter'?(
             <ScatterChart players={sorted} getDisplayScore={getDisplayScore} seasonFilter={seasonFilter} scoreMode={scoreMode}
-              rawMode={rawMode} outlierMode={outlierMode} roleKey={rk} onSelect={setSel} onClose={()=>setMainView('table')}
+              rawMode={rawMode} outlierMode={outlierMode} roleKey={rk} leagues={leagues} onSelect={setSel} onClose={()=>setMainView('table')}
               contextLabel={`${pos==='All'?'All positions':pos}${seasonFilter!=='all'?' · '+seasonFilter:''}`}/>
           ):(<>
           <div style={isMobile?T.listMobile:T.tw}>
