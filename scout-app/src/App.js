@@ -468,21 +468,21 @@ export default function App(){
       // wasn't part of this build.
       if(scoreMode!=='complete') return (p.zRoles||{})[scoreMode]??null;
       if(seasonFilter!=='all'){
-        const h=p.sh?.find(x=>seasonBucketMatch(x.s,seasonFilter));
+        const h=p.sh?.find(x=>!x.displayOnly&&seasonBucketMatch(x.s,seasonFilter)); // display-only rows carry no score
         return h?h.z:null;  // per-season z; null if that season's league pool was too small (<8) for a valid z
       }
       return p.zScore??null;
     }
     if(rawMode){
       if(seasonFilter!=='all'){
-        const h=p.sh?.find(x=>seasonBucketMatch(x.s,seasonFilter));
+        const h=p.sh?.find(x=>!x.displayOnly&&seasonBucketMatch(x.s,seasonFilter)); // display-only rows carry no score
         return h?(h.r??h.sc):null;  // use raw score if available
       }
       // Raw career: use stored careerRaw (true unweighted league-relative score)
       return p.careerRaw??p.careerScore;
     }
     if(seasonFilter!=='all'){
-      const h=p.sh?.find(x=>seasonBucketMatch(x.s,seasonFilter));
+      const h=p.sh?.find(x=>!x.displayOnly&&seasonBucketMatch(x.s,seasonFilter)); // display-only rows carry no score
       return h?h.sc:null;
     }
     if(scoreMode!=='complete') return (p.roleCareerScores||{})[scoreMode]||null;
