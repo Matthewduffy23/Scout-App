@@ -496,10 +496,13 @@ export default function App(){
   // matching is AND across chips and OR within a chip's own tokens.
   const careerPosTokenGroups=useMemo(()=>CAREER_POSITION_GROUPS.filter(g=>careerPosFilters.has(g.label)).map(g=>g.tokens),[careerPosFilters]);
 
-  const filtered=useMemo(()=>{
+  // Min Score is checked LAST so an empty table can say how many players match
+  // everything except it ("N players match but score below Min Score").
+  const filterRes=useMemo(()=>{
     const _norm=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
     const q=_norm(search.trim());
-    return all.filter(p=>{
+    let below=0;
+    const list=all.filter(p=>{
       if(q&&!_norm(p.name).includes(q)&&!_norm(p.team).includes(q)) return false;
       // RecentOnly: skip if no recent data, BUT allow all if a specific season is selected
       if(recentOnly&&!p.hasRecentData&&seasonFilter==='all'&&!playedCurrent&&!showYouth) return false;
@@ -537,7 +540,7 @@ export default function App(){
       if(foot!=='Any'&&p.foot!==foot) return false;
       const ds=getDisplayScore(p);
       if(ds===null) return false; // no data for that season
-      if(ds<minScore) return false;
+      const scoreLow=ds<minScore;
       if(p.seasons<minSeas) return false;
       if(potentialMin>40&&(p.potentialScore||p.careerScore)<potentialMin) return false;
       if(playedCurrent&&!p.sh?.find(x=>seasonBucketMatch(x.s,CURRENT_SEASON))) return false;
@@ -616,9 +619,12 @@ export default function App(){
         if(!m) return false; // no data for this metric in the selected season -> can't meet the filter
         if(m.pct<mf.min||m.pct>mf.max) return false;
       }
+      if(scoreLow){below++;return false;}
       return true;
     });
+    return {list,below};
   },[all,search,pos,leagues,ageMin,ageMax,heightMin,heightMax,foot,minScore,minSeas,showMvFilter,mvMax,showContractFilter,contractBefore,roleFilter,roleScoreMin,seasonFilter,metricFilters,xValueFilter,onlyElite,versatileOnly,getDisplayScore,recentOnly,showXValueFilter,xValueMin,xValueMax,attrFilters,minMins,showCareerMinsFilter,careerMinMins,currentLeagueOnly,playedCurrent,potentialMin,lsMin,lsMax,escOnly,gbeMin,natFilter,softMode,roleFilters,shortlist,showShortlist,notPlayingOnly,domesticOnly,internationalOnly,tierFilters,sideFilter,rk,careerPosFilters,careerPosTokenGroups]);
+  const filtered=filterRes.list, belowMinScore=filterRes.below;
 
   const sorted=useMemo(()=>{
     const a=[...filtered];
@@ -977,7 +983,7 @@ export default function App(){
           </div>
           <div style={T.fg}>
             <span style={T.fl}>Min Score: <strong style={{color:'#60a5fa'}}>{minScore}</strong></span>
-            <input type="range" style={T.sl} min={40} max={85} step={1} value={minScore} onChange={e=>{setMinScore(Number(e.target.value));setPage(0);}}/>
+            <input type="range" style={T.sl} min={0} max={85} step={1} value={minScore} onChange={e=>{setMinScore(Number(e.target.value));setPage(0);}}/>
           </div>
           <div style={T.fg}>
             <span style={T.fl}>Min Potential: <strong style={{color:'#60a5fa'}}>{potentialMin<=40?'Any':potentialMin}</strong></span>
@@ -1180,7 +1186,9 @@ export default function App(){
           ):(<>
           <div style={isMobile?T.listMobile:T.tw}>
             {sorted.length===0
-              ?<div style={T.es}><div style={{fontSize:26}}>⚽</div><div style={{fontSize:12,color:'#94a3b8'}}>{showYouth?'Youth league players not in current data — will appear after next pipeline rebuild':'No players match filters'}</div></div>
+              ?<div style={T.es}><div style={{fontSize:26}}>⚽</div><div style={{fontSize:12,color:'#94a3b8'}}>{showYouth?'Youth league players not in current data — will appear after next pipeline rebuild'
+                :belowMinScore>0?`${belowMinScore.toLocaleString()} player${belowMinScore===1?'':'s'} match but score below Min Score ${minScore} — lower Min Score to see them`
+                :'No players match filters'}</div></div>
               :isMobile?(
                 /* A 17-column table cannot be read on a phone and horizontal scrolling
                    hides exactly the columns that matter, so the rows become cards. Same
