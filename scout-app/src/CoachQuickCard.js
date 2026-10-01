@@ -847,7 +847,7 @@ export function buildCoachQuickCardElement(coach, tenureRows, traits, overrides 
   // A biography still takes the right tile, as it always has.
   const rightPanel = bioText
     ? { title: 'Biography',
-        body: `<div style="font-size:20px;line-height:1.5;font-weight:600;color:#fff;">${bioText}</div>` }
+        body: `<div style="font-size:20px;line-height:1.5;font-weight:600;color:#fff;white-space:pre-line;">${_esc(bioText)}</div>` }
     : bodyPanelHtml(rightMid);
 
   // The pitch, in the GBE tile's slot and its box. NOTHING else goes in the tile —

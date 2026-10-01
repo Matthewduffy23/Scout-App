@@ -35,6 +35,8 @@ const HEADER_COLOR_ROWS = [
 ];
 // Silhouette used everywhere else in the app when a player has no real photo.
 const PHOTO_FALLBACK = '/fallback.png';
+// Biography text for the card HTML: escaped, newlines kept by white-space:pre-line.
+const bioHtml = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 // Pitch position diagram — ported from PlayerScoutingCard.js's pitchDiagramSvg.
 // 13 fixed slots; player's listed positions (in order) get Primary (dark green),
@@ -1388,7 +1390,7 @@ function buildQuickCardElement(player, players, manual = {}) {
       <div style="position:absolute;left:1188px;top:36px;width:2px;height:210px;background:rgba(255,255,255,0.14);"></div>
 
       <!-- INFO BOX -->
-      ${[['Height:', manual.heightOverride || cmToFeet(player.height) || '—'], ['xValue:', manual.valueOverride || (player.xValue > 0 ? formatMV(player.xValue) : '—')], ['Contract:', (player.contractYear && player.contractYear !== 'nan') ? String(player.contractYear) : '—'], ['Agent:', manual.agentOverride || '—']].map(([k,v],i) => `
+      ${[['Height:', manual.heightOverride || cmToFeet(player.height) || '—'], ['xValue:', manual.valueOverride || (player.xValue > 0 ? formatMV(player.xValue) : '—')], ['Contract:', manual.contractOverride || ((player.contractYear && player.contractYear !== 'nan') ? String(player.contractYear) : '—')], ['Agent:', manual.agentOverride || '—']].map(([k,v],i) => `
         <div style="position:absolute;left:1208px;top:${50 + i*48}px;font-size:18px;font-weight:500;color:#9aa3b8;white-space:nowrap;">${k}</div>
         <div style="position:absolute;left:1353px;top:${50 + i*48}px;font-size:18px;font-weight:600;color:#fff;white-space:nowrap;">${truncateText(v, 20)}</div>`).join('')}
 
@@ -1469,7 +1471,7 @@ function buildQuickCardElement(player, players, manual = {}) {
       <!-- BIOGRAPHY panel (optional, only shown when Team Context is halved) -->
       <div style="position:absolute;top:${ROW2_TOP}px;left:${984 + STYLE_PANEL_W + PANEL_GAP_H}px;width:${CAREER_PANEL_W}px;height:${ROW2_PANEL_H}px;background:${PANEL_BG};border:1px solid ${PANEL_BORDER};border-radius:${PANEL_RADIUS}px;padding:${PANEL_PAD}px;box-sizing:border-box;overflow:hidden;box-shadow:${PANEL_SHADOW};">
         <div style="font-size:22px;font-weight:700;color:${ACCENT_PINK};margin-bottom:14px;">Biography</div>
-        ${manual.biography ? `<div style="font-size:20px;line-height:1.5;font-weight:600;color:#fff;">${manual.biography}</div>` : ''}
+        ${manual.biography ? `<div style="font-size:20px;line-height:1.5;font-weight:600;color:#fff;white-space:pre-line;">${bioHtml(manual.biography)}</div>` : ''}
         ${manual.scoutStatus && SCOUT_STATUS_STYLES[manual.scoutStatus] ? `<div style="position:absolute;left:${PANEL_PAD}px;bottom:${PANEL_PAD}px;"><span style="display:inline-block;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;padding:6px 14px;border-radius:6px;background:${SCOUT_STATUS_STYLES[manual.scoutStatus].bg};color:${SCOUT_STATUS_STYLES[manual.scoutStatus].fg};border:1px solid ${SCOUT_STATUS_STYLES[manual.scoutStatus].border};">${manual.scoutStatus}</span></div>` : ''}
       </div>` : ''}
 
@@ -1504,6 +1506,7 @@ export default function QuickCardModal({ player, players, onClose }) {
   const [posLabelOverride, setPosLabelOverride] = useState('');
   const [uploadedPhotoDataUrl, setUploadedPhotoDataUrl] = useState('');
   const [biography, setBiography] = useState('');
+  const [contractOverride, setContractOverride] = useState('');
   const [halfTeamContext, setHalfTeamContext] = useState(false);
   const [showForecast, setShowForecast] = useState(false);
   const [useBestRoleCareer, setUseBestRoleCareer] = useState(false);
@@ -1576,7 +1579,7 @@ export default function QuickCardModal({ player, players, onClose }) {
       const ok = await fetch(real).then(r => r.ok).catch(() => false);
       resolvedPhotoUrl = ok ? real : PHOTO_FALLBACK;
     }
-    const el = buildQuickCardElement(player, players, { resolvedPhotoUrl, footOverride, agentOverride, nameOverride, valueOverride, heightOverride, teamOverride, teamPick, posLabelOverride, uploadedPhotoDataUrl, biography, halfTeamContext, showForecast, scoutStatus, showScorePills, headerColorOverride, showPitchPosition, pitchStyle, heatmapDataUrl, heatOpacity: Number(heatOpacity) / 100, useBestRoleCareer, seasonOverride, headerTextNudge, badgeNudge, escOverride, escReason, positionColors, gbeOv });
+    const el = buildQuickCardElement(player, players, { resolvedPhotoUrl, footOverride, agentOverride, nameOverride, valueOverride, heightOverride, contractOverride, teamOverride, teamPick, posLabelOverride, uploadedPhotoDataUrl, biography, halfTeamContext, showForecast, scoutStatus, showScorePills, headerColorOverride, showPitchPosition, pitchStyle, heatmapDataUrl, heatOpacity: Number(heatOpacity) / 100, useBestRoleCareer, seasonOverride, headerTextNudge, badgeNudge, escOverride, escReason, positionColors, gbeOv });
     try {
       const cardNode = el.querySelector('#qc-card-root') || el;
       const opts = {
@@ -1644,6 +1647,11 @@ export default function QuickCardModal({ player, players, onClose }) {
             <option value="right">Right</option>
             <option value="both">Both</option>
           </select>
+        </div>
+
+        <div style={{marginBottom:12}}>
+          <label style={qcLabelStyle}>Contract</label>
+          <input aria-label="Contract" style={qcInputStyle} value={contractOverride} onChange={e=>setContractOverride(e.target.value)} placeholder={(player.contractYear && player.contractYear !== 'nan') ? String(player.contractYear) : '—'} />
         </div>
 
         <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12,textAlign:'left'}}>
