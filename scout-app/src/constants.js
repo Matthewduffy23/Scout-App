@@ -141,10 +141,12 @@ export const CURRENT_SEASON=ALL_SEASONS[0];
 export const SEASON_RECENCY_ORDER=ALL_SEASONS.flatMap(s=>[s,s.slice(0,4)]);
 // Latest seasonsDetail entry that carries metrics (g). seasonsDetail keys are
 // stored oldest-first, so Object.values(...)[0] is the OLDEST season, not the latest.
+// Has per-90 metrics. Display-only seasons carry g:{} — truthy, but nothing in it.
+export const hasMetrics = d => !!(d && d.g && Object.values(d.g).some(a => a && a.length));
 export function latestSeasonDetail(player){
   const sd=player.seasonsDetail||{};
-  for(const s of SEASON_RECENCY_ORDER){ if(sd[s]&&sd[s].g) return sd[s]; }
-  return Object.values(sd).reverse().find(v=>v&&v.g)||null;
+  for(const s of SEASON_RECENCY_ORDER){ if(hasMetrics(sd[s])) return sd[s]; }
+  return Object.values(sd).reverse().find(hasMetrics)||null;
 }
 
 // A split-year season "bucket" (e.g. "2025-26") also matches the literal
@@ -173,7 +175,7 @@ export function seasonDetailFor(player,season,leagues){
   if(!season||season==='all') return latestSeasonDetail(player);
   for(const h of seasonRowsFor(player,season,leagues)){
     const d=seasonEntryFor(player,h);
-    if(d&&d.g) return d;
+    if(hasMetrics(d)) return d;
   }
   return null;
 }
