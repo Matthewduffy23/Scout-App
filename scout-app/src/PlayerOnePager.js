@@ -1,4 +1,4 @@
-import { scoreBandColor, scoreLabel, scoreToStars, ROLE_KEY_LABELS, formatMV, formatFoot, LEAGUE_STRENGTHS, metricLabel } from './constants';
+import { scoreBandColor, scoreLabel, scoreToStars, ROLE_KEY_LABELS, formatMV, formatFoot, LEAGUE_STRENGTHS, metricLabel, latestSeasonDetail } from './constants';
 
 // Player photo naming lives in photoName.js — a character-for-character port of
 // download_photos.py's safe_filename(), the function that actually names the files
@@ -108,14 +108,30 @@ function formBars() {
 }
 
 export function generateOnePager(player) {
-  const sd = Object.values(player.seasonsDetail||{})[0]||{};
+  // Latest season with metrics — the player card's rule. seasonsDetail[0] was the OLDEST
+  // season (often a display-only youth row with no metrics, so the bars came out empty).
+  const sd = latestSeasonDetail(player)||{};
   const rcs = player.roleCareerScores||{};
   const sortedRoles = Object.entries(rcs).filter(([,v])=>Number.isFinite(v)).sort((a,b)=>b[1]-a[1]).slice(0,3);
   const topRole = sortedRoles[0]?.[0]||'—';
   const ls = LEAGUE_STRENGTHS[player.league]||50;
   const groups = sd.g||{};
   const allSeasons = player.allSeasonsSummary||[];
-  const latestSeason = allSeasons[0]||{};
+  // Stats row for the same season + league as the bars.
+  const latestSeason = allSeasons.find(r=>r.s===sd.season&&r.l===sd.league)
+    || allSeasons.find(r=>r.s===sd.season) || allSeasons[0] || {};
+  // xG / xA season totals: the pipeline's figure for the latest row, else per-90 x mins/90
+  // from the bars — same derivation as the Quick Card and Scouting Card.
+  const per90 = (k) => { const r=(groups.A||[]).find(x=>x[0]===k); return r&&Number.isFinite(Number(r[2]))?Number(r[2]):null; };
+  const seasonTotal = (pipeline, k) => {
+    if (latestSeason===allSeasons[0] && Number.isFinite(pipeline)) return pipeline;
+    const v = per90(k), mins = Number(latestSeason.mins);
+    return v!=null && Number.isFinite(mins) && mins>0 ? v*mins/90 : null;
+  };
+  const xgTotal = seasonTotal(player.xgSeason, 'xG');
+  const xaTotal = seasonTotal(player.xaSeason, 'xA');
+  // Av. Rat: the score-derived match rating the Scouting Card shows under "Av Rat".
+  const avRating = Number.isFinite(sd.score) ? ((sd.score-40)/54*7.5+1).toFixed(1) : '—';
   const photo = photoUrl(player.name, player.team);
   const crest = player.teamFotmobId?`${CREST_BASE}${player.teamFotmobId}.png`:'';
   const careerLabel = scoreLabel(player.careerScore);
@@ -240,7 +256,7 @@ export function generateOnePager(player) {
         <div style="font-size:10px;font-weight:800;color:#ec4899;letter-spacing:.1em;text-transform:uppercase;margin-bottom:6px">Season Stats</div>
         <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
           ${crest?`<img src="${crest}" onerror="this.style.display='none'" crossorigin="anonymous" style="width:20px;height:20px;object-fit:contain"/>`:''} 
-          <span style="font-size:11px;color:#d1d5db">${player.league}</span>
+          <span style="font-size:11px;color:#d1d5db">${sd.league||player.league}${sd.season?` · ${sd.season}`:''}</span>
         </div>
         <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;text-align:center;margin-bottom:8px">
           ${['Apps','Gls','Asts','xG','xA','Mins','Av. Rat'].map(h=>
@@ -250,10 +266,10 @@ export function generateOnePager(player) {
             latestSeason.m||'—',
             latestSeason.g||'0',
             latestSeason.a||'0',
-            Number.isFinite(sd.score)?((sd.score-40)/54*7.5+1).toFixed(1):'—',
-            '—',
+            fmtNum(xgTotal,1),
+            fmtNum(xaTotal,1),
             Number.isFinite(Number(latestSeason.mins))&&latestSeason.mins!==''&&latestSeason.mins!=null?Number(latestSeason.mins).toLocaleString():'—',
-            `<span contenteditable="true" style="color:#6b7280">—</span>`
+            `<span contenteditable="true">${avRating}</span>`
           ].map(v=>`<div style="font-size:12px;font-weight:700;color:#e2e8f4">${v}</div>`).join('')}
         </div>
       </div>
