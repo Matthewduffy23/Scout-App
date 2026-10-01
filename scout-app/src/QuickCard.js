@@ -21,10 +21,20 @@ const POSITION_HEADER_COLORS = {
   GK: '#ef4444', CB: '#f97316', FB: '#fbc701', CM: '#14532d', ATT: '#22c55e', CF: '#3b82f6',
 };
 // Quick manual override — a plain color name instead of the position default.
+// Row 1 is the original set; row 2 was added 2026-10-01 (picked to stay distinct
+// after the header darkens them to ~28% brightness). The picker draws from this map.
 const OVERRIDE_HEADER_COLORS = {
   Red: '#ef4444', Green: '#22c55e', Yellow: '#fbc701', White: '#e5e7eb', Black: '#0a0a0a', Blue: '#3b82f6',
   Purple: '#1800ad', Orange: '#ff914d', Pink: '#ff66c4',
+  Navy: '#1e40af', Sky: '#38bdf8', Maroon: '#7f1d1d', Teal: '#14b8a6', Olive: '#808000', Grey: '#94a3b8',
+  Brown: '#92400e', Violet: '#8b5cf6', Magenta: '#d946ef',
 };
+const HEADER_COLOR_ROWS = [
+  ['Red','Green','Yellow','White','Black','Blue','Purple','Orange','Pink'],
+  ['Navy','Sky','Maroon','Teal','Olive','Grey','Brown','Violet','Magenta'],
+];
+// Silhouette used everywhere else in the app when a player has no real photo.
+const PHOTO_FALLBACK = '/fallback.png';
 
 // Pitch position diagram — ported from PlayerScoutingCard.js's pitchDiagramSvg.
 // 13 fixed slots; player's listed positions (in order) get Primary (dark green),
@@ -1129,8 +1139,10 @@ function buildQuickCardElement(player, players, manual = {}) {
   const hdrTextNudge = _hdrNudge(Number.isFinite(hdrTextPx) && hdrTextPx !== 0
     ? hdrTextPx : (manual.shiftTeamText ? 20 : 0));
   const badgeNudge = _hdrNudge(manual.badgeNudge);
-  const photo = manual.uploadedPhotoDataUrl || photoUrl(player.name, player.team);
+  // uploaded > checked real photo / silhouette (resolved before download) > real photo URL
+  const photo = manual.uploadedPhotoDataUrl || manual.resolvedPhotoUrl || photoUrl(player.name, player.team);
   const groups = sd.g || {};
+  const cardFoot = manual.footOverride || player.foot; // Foot editor ('left'|'right'|'both') or the data
   // Team Context follows whatever season+club is selected at the top, exactly as
   // PlayerPager does: the selected season row's stored teamContext wins, and the
   // player's current-club context is only the fallback for rows the pipeline
@@ -1338,7 +1350,7 @@ function buildQuickCardElement(player, players, manual = {}) {
       <div style="position:absolute;left:248px;top:24px;width:560px;font-size:53.2px;font-weight:700;line-height:1.05;letter-spacing:-0.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${manual.nameOverride || player.name}</div>
       <div style="position:absolute;left:248px;top:90px;display:flex;align-items:center;">
         <span style="font-size:26.6px;font-weight:600;color:#fff;white-space:nowrap;">${manual.posLabelOverride || POSITION_LABELS[rawPosToken] || rawPosToken}</span>
-        ${(player.foot && player.foot !== 'unknown' && player.foot !== 'nan') ? `<span style="font-size:21.3px;color:#c0c0c0;white-space:nowrap;margin-left:30px;">${formatFoot(player.foot)}</span>` : ''}
+        ${(cardFoot && cardFoot !== 'unknown' && cardFoot !== 'nan') ? `<span style="font-size:21.3px;color:#c0c0c0;white-space:nowrap;margin-left:30px;">${formatFoot(cardFoot)}</span>` : ''}
       </div>
       <div style="position:absolute;left:248px;top:148px;display:flex;align-items:center;gap:10px;">
         ${countryToIso2(player.birthCountry) ? `<div style="width:36px;height:22px;flex-shrink:0;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(player.birthCountry)}.png');border-radius:2px;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15);"></div>` : ''}
@@ -1481,6 +1493,7 @@ export default function QuickCardModal({ player, players, onClose }) {
   const [nameOverride, setNameOverride] = useState('');
   const [valueOverride, setValueOverride] = useState('');
   const [heightOverride, setHeightOverride] = useState('');
+  const [footOverride, setFootOverride] = useState(''); // '' = from data; 'left' | 'right' | 'both'
   const [teamOverride, setTeamOverride] = useState('');
   // Search-picked display club — { team, league, fotmobId } — swaps club name,
   // badge, league name and league flag on the card while stats stay from the
@@ -1555,7 +1568,15 @@ export default function QuickCardModal({ player, players, onClose }) {
   const handleDownload = async () => {
     setDownloading(true);
     const { toPng } = await import('html-to-image');
-    const el = buildQuickCardElement(player, players, { agentOverride, nameOverride, valueOverride, heightOverride, teamOverride, teamPick, posLabelOverride, uploadedPhotoDataUrl, biography, halfTeamContext, showForecast, scoutStatus, showScorePills, headerColorOverride, showPitchPosition, pitchStyle, heatmapDataUrl, heatOpacity: Number(heatOpacity) / 100, useBestRoleCareer, seasonOverride, headerTextNudge, badgeNudge, escOverride, escReason, positionColors, gbeOv });
+    // Never a blank photo: check the real photo loads (the same fetch html-to-image
+    // will make); if it doesn't, use the app's silhouette.
+    let resolvedPhotoUrl = '';
+    if (!uploadedPhotoDataUrl) {
+      const real = photoUrl(player.name, player.team);
+      const ok = await fetch(real).then(r => r.ok).catch(() => false);
+      resolvedPhotoUrl = ok ? real : PHOTO_FALLBACK;
+    }
+    const el = buildQuickCardElement(player, players, { resolvedPhotoUrl, footOverride, agentOverride, nameOverride, valueOverride, heightOverride, teamOverride, teamPick, posLabelOverride, uploadedPhotoDataUrl, biography, halfTeamContext, showForecast, scoutStatus, showScorePills, headerColorOverride, showPitchPosition, pitchStyle, heatmapDataUrl, heatOpacity: Number(heatOpacity) / 100, useBestRoleCareer, seasonOverride, headerTextNudge, badgeNudge, escOverride, escReason, positionColors, gbeOv });
     try {
       const cardNode = el.querySelector('#qc-card-root') || el;
       const opts = {
@@ -1615,6 +1636,16 @@ export default function QuickCardModal({ player, players, onClose }) {
           <input style={qcInputStyle} value={heightOverride} onChange={e=>setHeightOverride(e.target.value)} placeholder={cmToFeet(player.height) || '—'} />
         </div>
 
+        <div style={{marginBottom:12}}>
+          <label style={qcLabelStyle}>Foot</label>
+          <select aria-label="Foot" style={qcInputStyle} value={footOverride} onChange={e=>setFootOverride(e.target.value)}>
+            <option value="">Default ({formatFoot(player.foot)})</option>
+            <option value="left">Left</option>
+            <option value="right">Right</option>
+            <option value="both">Both</option>
+          </select>
+        </div>
+
         <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12,textAlign:'left'}}>
           <input type="checkbox" id="qc-half-tc" checked={halfTeamContext} onChange={e=>setHalfTeamContext(e.target.checked)} style={{cursor:'pointer'}} />
           <label htmlFor="qc-half-tc" style={{fontSize:11.5,color:'#cbd5e1',cursor:'pointer'}}>Team Context half-width (aligned with Style)</label>
@@ -1656,20 +1687,21 @@ export default function QuickCardModal({ player, players, onClose }) {
 
         <div style={{marginBottom:12}}>
           <label style={qcLabelStyle}>Header Color (default: by position)</label>
-          <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-            {['Red','Green','Yellow','White','Black','Blue','Purple','Orange','Pink'].map(name => {
-              const swatch = {Red:'#ef4444',Green:'#22c55e',Yellow:'#fbc701',White:'#e5e7eb',Black:'#0a0a0a',Blue:'#3b82f6',Purple:'#1800ad',Orange:'#ff914d',Pink:'#ff66c4'}[name];
-              const active = headerColorOverride === name;
-              return (
-                <button key={name} type="button" title={name}
-                  onClick={() => setHeaderColorOverride(active ? '' : name)}
-                  style={{
-                    width: 26, height: 26, borderRadius: 6, cursor: 'pointer', background: swatch,
-                    border: active ? '2px solid #fff' : '1px solid rgba(255,255,255,0.2)',
-                  }} />
-              );
-            })}
-          </div>
+          {HEADER_COLOR_ROWS.map((row, ri) => (
+            <div key={ri} style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:ri?6:0}}>
+              {row.map(name => {
+                const active = headerColorOverride === name;
+                return (
+                  <button key={name} type="button" title={name} aria-label={`Header colour ${name}`}
+                    onClick={() => setHeaderColorOverride(active ? '' : name)}
+                    style={{
+                      width: 26, height: 26, borderRadius: 6, cursor: 'pointer', background: OVERRIDE_HEADER_COLORS[name],
+                      border: active ? '2px solid #fff' : '1px solid rgba(255,255,255,0.2)',
+                    }} />
+                );
+              })}
+            </div>
+          ))}
         </div>
 
         <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12,textAlign:'left'}}>
