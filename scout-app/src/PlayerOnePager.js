@@ -18,6 +18,13 @@ function starsHtml(score, size=16) {
   return Array(full).fill(s(true)).join('')+(half?s(true):'')+Array(empty).fill(s(false)).join('');
 }
 
+// Number for display, or a fallback when it's missing / not a number — a null score
+// must print as '—', never throw and leave the report button doing nothing.
+const fmtNum = (v, dp, empty = '—') => {
+  const n = typeof v === 'number' ? v : (v == null || v === '' ? NaN : Number(v));
+  return Number.isFinite(n) ? n.toFixed(dp) : empty;
+};
+
 function barHtml(label, pct, val) {
   const v = Math.round(pct||0);
   const color = v>=80?'#22c55e':v>=60?'#84cc16':v>=40?'#eab308':v>=20?'#f97316':'#ef4444';
@@ -30,7 +37,7 @@ function barHtml(label, pct, val) {
         <div style="position:absolute;left:50%;top:-1px;width:1px;height:8px;background:#374151"></div>
       </div>
       <div style="width:24px;font-size:9px;font-weight:800;color:${color};text-align:right;flex-shrink:0">${v}</div>
-      <div style="width:32px;font-size:8px;color:#6b7280;text-align:right;flex-shrink:0">${val!=null?Number(val).toFixed(2):''}</div>
+      <div style="width:32px;font-size:8px;color:#6b7280;text-align:right;flex-shrink:0">${fmtNum(val,2,'')}</div>
     </div>`;
 }
 
@@ -103,7 +110,7 @@ function formBars() {
 export function generateOnePager(player) {
   const sd = Object.values(player.seasonsDetail||{})[0]||{};
   const rcs = player.roleCareerScores||{};
-  const sortedRoles = Object.entries(rcs).sort((a,b)=>b[1]-a[1]).slice(0,3);
+  const sortedRoles = Object.entries(rcs).filter(([,v])=>Number.isFinite(v)).sort((a,b)=>b[1]-a[1]).slice(0,3);
   const topRole = sortedRoles[0]?.[0]||'—';
   const ls = LEAGUE_STRENGTHS[player.league]||50;
   const groups = sd.g||{};
@@ -117,7 +124,7 @@ export function generateOnePager(player) {
   const buildGroupBars = (grpKey) => (groups[grpKey]||[]).map(([label,pct,val])=>barHtml(metricLabel(label),pct,val)).join('');
 
   const roleRowsHtml = sortedRoles.map(([role,score])=>{
-    const pct = Math.round(score);
+    const pct = fmtNum(score,0);
     const color = scoreBandColor(score);
     return `
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
@@ -243,9 +250,9 @@ export function generateOnePager(player) {
             latestSeason.m||'—',
             latestSeason.g||'0',
             latestSeason.a||'0',
-            sd.score?((sd.score-40)/54*7.5+1).toFixed(1):'—',
+            Number.isFinite(sd.score)?((sd.score-40)/54*7.5+1).toFixed(1):'—',
             '—',
-            latestSeason.mins?.toLocaleString()||'—',
+            Number.isFinite(Number(latestSeason.mins))&&latestSeason.mins!==''&&latestSeason.mins!=null?Number(latestSeason.mins).toLocaleString():'—',
             `<span contenteditable="true" style="color:#6b7280">—</span>`
           ].map(v=>`<div style="font-size:12px;font-weight:700;color:#e2e8f4">${v}</div>`).join('')}
         </div>
@@ -335,7 +342,8 @@ export function generateOnePager(player) {
       <div>
         <div style="font-size:9px;font-weight:700;color:#9ca3af;letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px">Performance Trend</div>
         ${(()=>{
-          const sh = (player.sh||[]).slice(-4);
+          // display-only rows carry no score (sc null) — the trend plots scored seasons only
+          const sh = (player.sh||[]).filter(h=>!h.displayOnly&&Number.isFinite(h.sc)).slice(-4);
           if(sh.length<2) return '<div style="color:#6b7280;font-size:10px">Insufficient data</div>';
           const scores = sh.map(h=>h.sc);
           const min = Math.min(...scores)-5;
@@ -350,8 +358,8 @@ export function generateOnePager(player) {
             const x = pad + (i/(scores.length-1))*(W-pad*2);
             const y = H - pad - ((s-min)/(max-min))*(H-pad*2);
             return `<circle cx="${x}" cy="${y}" r="4" fill="#0d1220" stroke="#22c55e" stroke-width="2"/>
-                    <text x="${x}" y="${y-7}" text-anchor="middle" font-size="9" fill="#e2e8f4" font-weight="700">${s.toFixed(0)}</text>
-                    <text x="${x}" y="${H}" text-anchor="middle" font-size="7" fill="#6b7280">${sh[i].s.slice(2)}</text>`;
+                    <text x="${x}" y="${y-7}" text-anchor="middle" font-size="9" fill="#e2e8f4" font-weight="700">${fmtNum(s,0)}</text>
+                    <text x="${x}" y="${H}" text-anchor="middle" font-size="7" fill="#6b7280">${String(sh[i].s||'').slice(2)}</text>`;
           }).join('');
           return `<svg viewBox="0 0 ${W} ${H+8}" style="width:100%;overflow:visible">
             <polyline points="${pts.join(' ')}" fill="none" stroke="#22c55e" stroke-width="2.5" stroke-linejoin="round"/>
@@ -401,7 +409,9 @@ export function generateOnePager(player) {
 }
 
 export function openOnePager(player) {
-  const html = generateOnePager(player);
+  let html;
+  try { html = generateOnePager(player); }
+  catch (e) { console.error(e); alert('Could not generate the report — check the browser console for details.'); return; }
   const win = window.open('', '_blank', 'width=1200,height=800');
   if(!win) { alert('Please allow popups to generate the report.'); return; }
   win.document.write(html);
