@@ -4,7 +4,7 @@ import PlayerCard from './PlayerCard';
 import { scoreBandColor, scoreLabel, formatMV, ROLE_KEY_LABELS, ROLES_BY_KEY,
          ALL_LEAGUES, LEAGUE_STRENGTHS, promotionBadge, divColor, PRESET_LEAGUES,
          HIDDEN_LEAGUES, YOUTH_LEAGUES, leagueToRegion, leagueToBand,
-         POSITION_ATTRIBUTES, playerHasAttribute, ALL_SEASONS, CURRENT_SEASON } from './constants';
+         POSITION_ATTRIBUTES, playerHasAttribute, ALL_SEASONS, CURRENT_SEASON, METRIC_OPTIONS } from './constants';
 import { Photo, Crest, useIsMobile } from './utils';
 
 
@@ -19,17 +19,6 @@ const HEIGHT_OPTIONS = Array.from({length: 83-58+1}, (_, i) => {
   return { cm: Math.round(totalInches * 2.54), label: `${feet}'${inches}"` };
 });
 
-const METRIC_OPTIONS=[
-  {label:'xG per 90',key:'xG'},{label:'xA per 90',key:'xA'},
-  {label:'Goals (non-pen)',key:'Goals: Non-Penalty'},{label:'Shots per 90',key:'Shots'},
-  {label:'Touches in Box',key:'Touches in Box'},{label:'Progressive Runs',key:'Progressive Runs'},
-  {label:'Crosses per 90',key:'Crosses'},{label:'Pass % accuracy',key:'Pass %'},
-  {label:'Passes per 90',key:'Passes'},{label:'Prog Passes',key:'Progressive Passes'},
-  {label:'Dribbles per 90',key:'Dribbles'},{label:'Dribble %',key:'Dribble %'},
-  {label:'Key Passes',key:'Key Passes'},{label:'Deep Completions',key:'Deep Completions'},
-  {label:'Def Duel Win %',key:'Defensive Duel %'},{label:'Aerial Win %',key:'Aerial Duel %'},
-  {label:'Interceptions',key:'PAdj Interceptions'},{label:'Def Duels per 90',key:'Defensive Duels'},
-];
 
 function MetricFilterRow({filter,onChange,onRemove}){
   return(

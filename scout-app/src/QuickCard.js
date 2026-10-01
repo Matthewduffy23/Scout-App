@@ -1,6 +1,6 @@
 // QuickCard v69 - Heat-style pitch option (Player Pager pitch + heatmap upload); Team Context follows selected season.
 import React, { useState, useMemo } from 'react';
-import { scoreLabel, formatFoot, formatMV, GBE_LEAGUE_BANDS } from './constants';
+import { scoreLabel, formatFoot, formatMV, GBE_LEAGUE_BANDS, METRIC_DISPLAY } from './constants';
 import { useIsMobile, deliverPng } from './utils';
 
 // Player photo naming lives in photoName.js — a character-for-character port of
@@ -407,7 +407,7 @@ export const METRIC_LABEL_MAP = {
   'Successful dribbles, %':'Dribbling Success %',
   'Forward passes per 90':'Forward Passes','Forward passes':'Forward Passes',
   'Accurate forward passes, %':'Forward Passing %',
-  'Key passes per 90':'Key passes','Key passes':'Key passes',
+  'Key passes per 90':'Key Passes','Key passes':'Key Passes',
   'Long passes per 90':'Long Passes','Long passes':'Long Passes',
   'Accurate long passes, %':'Long Passing %',
   'Passes per 90':'Passes','Passes':'Passes',
@@ -415,10 +415,11 @@ export const METRIC_LABEL_MAP = {
   'Passes to final third per 90':'Passes to Final 3rd','Passes to final third':'Passes to Final 3rd',
   'Accurate passes to final third, %':'Passes to Final 3rd %',
   'Passes to penalty area per 90':'Passes to Penalty Area','Passes to penalty area':'Passes to Penalty Area',
-  'Accurate passes to penalty area, %':'Pass to Penalty Area %',
+  'Accurate passes to penalty area, %':'Passes to Penalty Area %',
   'Progressive passes per 90':'Progressive Passes','Progressive passes':'Progressive Passes',
   'Accurate progressive passes, %':'Progressive Passing %',
   'Smart passes per 90':'Smart Passes','Smart passes':'Smart Passes',
+  ...METRIC_DISPLAY,
 };
 export const POSITION_LABELS = {
   'GK':'Goalkeeper (GK)',

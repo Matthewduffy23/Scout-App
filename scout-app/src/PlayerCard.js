@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { scoreBandColor, formatMV, formatFoot, ROLE_KEY_LABELS, divColor, LEAGUE_STRENGTHS, scoreLabel, scoreToStars, starLabel, POSITION_ATTRIBUTES, playerHasAttribute, GBE_LEAGUE_BANDS, CURRENT_SEASON, latestSeasonDetail, POS_COLORS } from './constants';
+import { scoreBandColor, formatMV, formatFoot, ROLE_KEY_LABELS, divColor, LEAGUE_STRENGTHS, scoreLabel, scoreToStars, starLabel, POSITION_ATTRIBUTES, playerHasAttribute, GBE_LEAGUE_BANDS, CURRENT_SEASON, latestSeasonDetail, POS_COLORS, metricLabel } from './constants';
 
 const APP_ROLES = {
   GK:  ['Shot Stopper GK','Ball Playing GK','Sweeper GK'],
@@ -1270,7 +1270,7 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
                   </div>
                 </div>
                 <div style={{display:'flex',flexDirection:'column',gap:5}}>
-                  {(groups[grpTab]||[]).map(([label,pct,val])=>(<Bar key={label} label={label} pct={pct} val={val}/>))}
+                  {(groups[grpTab]||[]).map(([label,pct,val])=>(<Bar key={label} label={metricLabel(label)} pct={pct} val={val}/>))}
                 </div>
                 <div style={{marginTop:6,fontSize:9.5,color:'#334155'}}>Midline = league average (50th pct) · Right value = raw per 90</div>
               </div>

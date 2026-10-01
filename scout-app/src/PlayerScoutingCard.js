@@ -3,7 +3,7 @@
 // Rebuilt against a pixel-accurate 1920x1080 export of the real Canva design.
 // Uses html2canvas to screenshot an offscreen DOM node and trigger a PNG download.
 
-import { scoreBandColor, scoreLabel, scoreToStars, ROLE_KEY_LABELS, formatMV, formatFoot, LEAGUE_STRENGTHS } from './constants';
+import { scoreBandColor, scoreLabel, scoreToStars, ROLE_KEY_LABELS, formatMV, formatFoot, LEAGUE_STRENGTHS, METRIC_DISPLAY } from './constants';
 import { deliverPng, isTouchDevice } from './utils';
 
 // Player photo naming lives in photoName.js — a character-for-character port of
@@ -681,7 +681,7 @@ const METRIC_LABEL_MAP = {
   'Successful dribbles, %': 'Dribbling Success %',
   'Forward passes per 90': 'Forward Passes',
   'Accurate forward passes, %': 'Forward Passing %',
-  'Key passes per 90': 'Key passes',
+  'Key passes per 90': 'Key Passes',
   'Long passes per 90': 'Long Passes',
   'Accurate long passes, %': 'Long Passing %',
   'Passes per 90': 'Passes',
@@ -689,10 +689,11 @@ const METRIC_LABEL_MAP = {
   'Passes to final third per 90': 'Passes to Final 3rd',
   'Accurate passes to final third, %': 'Passes to Final 3rd %',
   'Passes to penalty area per 90': 'Passes to Penalty Area',
-  'Accurate passes to penalty area, %': 'Pass to Penalty Area %',
-  'Progressive passes per 90': 'Progessive Passes',
-  'Accurate progressive passes, %': 'Progessive Passing %',
+  'Accurate passes to penalty area, %': 'Passes to Penalty Area %',
+  'Progressive passes per 90': 'Progressive Passes',
+  'Accurate progressive passes, %': 'Progressive Passing %',
   'Smart passes per 90': 'Smart Passes',
+  ...METRIC_DISPLAY,
 };
 
 // ── Role display name overrides for scouting card ───────────────────────

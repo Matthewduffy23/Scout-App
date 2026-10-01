@@ -234,28 +234,40 @@ export function metricFromDetail(sd,key){
 
 // Per-90 metrics offered by the sidebar metric filters (keys must match the
 // pipeline's seasonsDetail g-group names exactly).
+// Display wording for per-90 metric keys, matching the Streamlit apps. Keys are the
+// data's lookup keys and never change; only what's shown does.
+export const METRIC_DISPLAY = {
+  'xA':'Expected Assists','Touches in Box':'Touches in Opposition Box',
+  'Pass %':'Passing %','Forward Pass %':'Forward Passing %','Long Pass %':'Long Passing %',
+  'Prog Pass %':'Progressive Passing %','Shot %':'Shooting Accuracy %','Cross %':'Crossing Accuracy %',
+  'Dribble %':'Dribbling Success %','Conversion %':'Conversion Rate %',
+  'Aerial Duel %':'Aerial Duel Success %','Defensive Duel %':'Defensive Duel Success %',
+  'Offensive Duel %':'Offensive Duel Success %',
+  'Passes to F3rd':'Passes to Final 3rd','Passes to F3rd %':'Passes to Final 3rd %',
+  'Passes to Box':'Passes to Penalty Area','Passes to Box %':'Passes to Penalty Area %',
+};
+export const metricLabel = k => METRIC_DISPLAY[k] || k;
 export const METRIC_OPTIONS=[
-  {label:'xG per 90',key:'xG'},{label:'xA per 90',key:'xA'},
-  {label:'Goals (non-pen)',key:'Goals: Non-Penalty'},{label:'Shots per 90',key:'Shots'},
-  {label:'Touches in Box',key:'Touches in Box'},{label:'Progressive Runs',key:'Progressive Runs'},
-  {label:'Crosses per 90',key:'Crosses'},{label:'Pass % accuracy',key:'Pass %'},
-  {label:'Passes per 90',key:'Passes'},{label:'Prog Passes',key:'Progressive Passes'},
-  {label:'Dribbles per 90',key:'Dribbles'},{label:'Dribble %',key:'Dribble %'},
+  {label:'xG',key:'xG'},{label:'Expected Assists',key:'xA'},
+  {label:'Goals: Non-Penalty',key:'Goals: Non-Penalty'},{label:'Shots',key:'Shots'},
+  {label:'Touches in Opposition Box',key:'Touches in Box'},{label:'Progressive Runs',key:'Progressive Runs'},
+  {label:'Crosses',key:'Crosses'},{label:'Passing %',key:'Pass %'},
+  {label:'Passes',key:'Passes'},{label:'Progressive Passes',key:'Progressive Passes'},
+  {label:'Dribbles',key:'Dribbles'},{label:'Dribbling Success %',key:'Dribble %'},
   {label:'Key Passes',key:'Key Passes'},{label:'Deep Completions',key:'Deep Completions'},
-  {label:'Def Duel Win %',key:'Defensive Duel %'},{label:'Aerial Win %',key:'Aerial Duel %'},
-  {label:'Interceptions',key:'PAdj Interceptions'},{label:'Def Duels per 90',key:'Defensive Duels'},
+  {label:'Defensive Duel Success %',key:'Defensive Duel %'},{label:'Aerial Duel Success %',key:'Aerial Duel %'},
+  {label:'Interceptions',key:'PAdj Interceptions'},{label:'Defensive Duels',key:'Defensive Duels'},
 ];
-// The rest of the pipeline's per-90 metrics, offered in addition by the scatter chart.
 export const METRIC_OPTIONS_EXTRA=[
-  {label:'Conversion %',key:'Conversion %'},{label:'Shot %',key:'Shot %'},
-  {label:'Header Goals',key:'Header Goals'},{label:'Cross %',key:'Cross %'},
+  {label:'Conversion Rate %',key:'Conversion %'},{label:'Shooting Accuracy %',key:'Shot %'},
+  {label:'Header Goals',key:'Header Goals'},{label:'Crossing Accuracy %',key:'Cross %'},
   {label:'Accelerations',key:'Accelerations'},{label:'Offensive Duels',key:'Offensive Duels'},
-  {label:'Offensive Duel %',key:'Offensive Duel %'},{label:'Aerial Duels',key:'Aerial Duels'},
+  {label:'Offensive Duel Success %',key:'Offensive Duel %'},{label:'Aerial Duels',key:'Aerial Duels'},
   {label:'Shots Blocked',key:'Shots Blocked'},{label:'Forward Passes',key:'Forward Passes'},
-  {label:'Forward Pass %',key:'Forward Pass %'},{label:'Long Passes',key:'Long Passes'},
-  {label:'Long Pass %',key:'Long Pass %'},{label:'Passes to F3rd',key:'Passes to F3rd'},
-  {label:'Passes to F3rd %',key:'Passes to F3rd %'},{label:'Passes to Box',key:'Passes to Box'},
-  {label:'Passes to Box %',key:'Passes to Box %'},{label:'Prog Pass %',key:'Prog Pass %'},
+  {label:'Forward Passing %',key:'Forward Pass %'},{label:'Long Passes',key:'Long Passes'},
+  {label:'Long Passing %',key:'Long Pass %'},{label:'Passes to Final 3rd',key:'Passes to F3rd'},
+  {label:'Passes to Final 3rd %',key:'Passes to F3rd %'},{label:'Passes to Penalty Area',key:'Passes to Box'},
+  {label:'Passes to Penalty Area %',key:'Passes to Box %'},{label:'Progressive Passing %',key:'Prog Pass %'},
   {label:'Smart Passes',key:'Smart Passes'},
   {label:'GK: Save Rate',key:'Save Rate'},{label:'GK: Goals Prevented',key:'Goals Prevented'},
   {label:'GK: Goals Conceded',key:'Goals Conceded'},{label:'GK: xG Against',key:'xG Against'},

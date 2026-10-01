@@ -1,4 +1,4 @@
-import { scoreBandColor, scoreLabel, scoreToStars, ROLE_KEY_LABELS, formatMV, formatFoot, LEAGUE_STRENGTHS } from './constants';
+import { scoreBandColor, scoreLabel, scoreToStars, ROLE_KEY_LABELS, formatMV, formatFoot, LEAGUE_STRENGTHS, metricLabel } from './constants';
 
 // Player photo naming lives in photoName.js — a character-for-character port of
 // download_photos.py's safe_filename(), the function that actually names the files
@@ -114,7 +114,7 @@ export function generateOnePager(player) {
   const careerLabel = scoreLabel(player.careerScore);
   const potLabel = scoreLabel(player.potentialScore||player.careerScore);
 
-  const buildGroupBars = (grpKey) => (groups[grpKey]||[]).map(([label,pct,val])=>barHtml(label,pct,val)).join('');
+  const buildGroupBars = (grpKey) => (groups[grpKey]||[]).map(([label,pct,val])=>barHtml(metricLabel(label),pct,val)).join('');
 
   const roleRowsHtml = sortedRoles.map(([role,score])=>{
     const pct = Math.round(score);
