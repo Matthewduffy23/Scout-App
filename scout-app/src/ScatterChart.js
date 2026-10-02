@@ -533,13 +533,16 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
   const items = [];
   if (!redDot) for (const h of hls) items.push({ x: xS(h.x), y: yS(h.y), r: r*1.6, force: true, px: 11*fs, font: f(11, 700),
     text: pname(h) + (h.extra ? `  #${h.rank}` : ''), hl: true });
+  // Red dot keeps the normal name style, but a highlighted name is placed first, so
+  // nearby names make way for it rather than it being the one dropped.
+  else if (showNames) for (const h of hls) items.push({ x: xS(h.x), y: yS(h.y), r, force: true, px: 9.5*fs, font: f(9.5, 500), text: pname(h) });
   // Names: walk the list in rank order and keep placing until the budget of
   // *placed* names is used, so names that can't fit in a cluster don't use up
   // the allowance and sparse areas still get labelled.
   const budget = group ? Infinity : Math.max(12, Math.min(90, Math.round(pw*ph / (4500*fs*fs))));
   if (showNames && !solo) {
     for (const d of group ? visible.filter(v => !v.muted) : visible.slice(0, 400)) {
-      if (isHl(d) && !redDot) continue;
+      if (isHl(d)) continue;
       items.push({ x: xS(d.x), y: yS(d.y), r, px: 9.5*fs, font: f(9.5, 500), text: pname(d) });
     }
   }

@@ -801,7 +801,7 @@ export function scoreLeagueTier(score) {
   return { key: 'BNL', name: 'Below National League' };
 }
 
-export function careerTrajectorySvg(player, w = 420, h = 284, showForecast = false, posKey = 'CF', useBestRole = false) {
+export function careerTrajectorySvg(player, w = 420, h = 284, showForecast = false, posKey = 'CF', useBestRole = false, scatterBands = false) {
   const currentAge = Number(player.age) || 25;
 
   const byS = {};
@@ -883,7 +883,13 @@ export function careerTrajectorySvg(player, w = 420, h = 284, showForecast = fal
   // NOTE: assumed "L2" for the fifth band (League Two) since that's the tier
   // constants.js actually defines between League One and National League —
   // flag if "Ligue 1" was meant literally, that's a different scale entirely.
-  const LEAGUE_BANDS = CAREER_LEAGUE_BANDS;
+  // Quick Card (scatterBands): lines match the scatter chart — the 61 line is "L1-CH"
+  // and Championship sits at 63. Display only; CAREER_LEAGUE_BANDS / scoreLeagueTier
+  // are unchanged, so the Pager's graph keeps matching its level badge.
+  const LEAGUE_BANDS = !scatterBands ? CAREER_LEAGUE_BANDS : [
+    ...CAREER_LEAGUE_BANDS.filter(([, v]) => v > 63), ['Champ', 63], ['L1-CH', 61],
+    ...CAREER_LEAGUE_BANDS.filter(([, v]) => v < 61),
+  ];
   // Quality-tier bands — used INSTEAD of LEAGUE_BANDS when in best-role mode.
   // Role scores aren't calibrated against league-tier thresholds the same way
   // cumulative career scores are, so PL/Champ/L1 labels would be a category
@@ -1181,6 +1187,10 @@ function buildQuickCardElement(player, players, manual = {}) {
   const xgSeason = player.xgSeason != null ? player.xgSeason : per90ToSeason(findRawA('xg'));
   const xaSeason = player.xaSeason != null ? player.xaSeason : per90ToSeason(findRawA('xa', 'expected assists'));
   const fmt1 = (v) => (v == null ? '—' : v.toFixed(1));
+  // Season tag on the stats line: the season of the row the figures come from, shown
+  // only when it isn't the player's latest season ("2023-24" -> "23-24", "2024" stays).
+  const statsSeasonTag = statsRow.s && allSummary[0] && statsRow.s !== allSummary[0].s
+    ? (/^\d{4}-\d{2}$/.test(statsRow.s) ? statsRow.s.slice(2) : statsRow.s) : '';
 
   const rawPosToken = (player.position || '').split(',')[0].trim();
   const posKey = TOKEN_TO_POS_KEY[rawPosToken] || player.roleKey || 'CF';
@@ -1325,7 +1335,7 @@ function buildQuickCardElement(player, players, manual = {}) {
   const STYLE_HEADER_H = 40;
   const ROLES_ROW_H = 46;
   const rolesSvgHeight = PLACEHOLDER_ROLES.length * ROLES_ROW_H + 8;
-  const careerChartHtml = careerTrajectorySvg(player, CAREER_PANEL_W - PANEL_PAD * 2, rolesSvgHeight, !!manual.showForecast, posKey, !!manual.useBestRoleCareer);
+  const careerChartHtml = careerTrajectorySvg(player, CAREER_PANEL_W - PANEL_PAD * 2, rolesSvgHeight, !!manual.showForecast, posKey, !!manual.useBestRoleCareer, true);
 
   const ROW1_PANEL_H = PANEL_PAD * 2 + STYLE_HEADER_H + rolesSvgHeight;
   const ROW2_TOP = STYLE_TOP + ROW1_PANEL_H + PANEL_GAP_V;
@@ -1376,6 +1386,7 @@ function buildQuickCardElement(player, players, manual = {}) {
             <span style="font-size:27.9px;font-weight:700;color:#fff;">${val}</span>
             <span style="font-size:16px;font-weight:500;color:#9aa3b8;text-transform:uppercase;letter-spacing:.04em;">${lab}</span>
           </div>`).join('')}
+        ${statsSeasonTag ? `<span style="font-size:20px;font-weight:500;color:#9aa3b8;margin-left:-14px;">(${statsSeasonTag})</span>` : ''}
       </div>
 
   <!-- CREST / TEAM / LEAGUE -->
