@@ -298,8 +298,11 @@ function exportHeader(ctx, W, FONT, title, legend, xIsScore) {
   return { rows, beside, legendTop, ruleY, right, GAP, plotTop: ruleY + 26 + [0, 34, 62][xIsScore ? Number(xIsScore) : 0] };
 }
 
+// Most items that can be highlighted at once (every highlighted name is drawn).
+export const HL_MAX = 10;
+
 export function drawScatter(canvas, W, H, dpr, forExport, o) {
-  const { pts, xf, yf, hidden, hoverId, highlightId, showNames, soloLabel, title, subtitle, footer, legend, quad: Q, median, group, highlightStyle = 'full', theme: themeName = 'dark' } = o;
+  const { pts, xf, yf, hidden, hoverId, highlightIds = [], showNames, soloLabel, title, subtitle, footer, legend, quad: Q, median, group, highlightStyle = 'full', theme: themeName = 'dark' } = o;
   const T = THEMES[themeName];
   const FONT = forExport ? 'Montserrat, Inter, sans-serif' : 'Inter, sans-serif';
   canvas.width = W*dpr; canvas.height = H*dpr;
@@ -374,9 +377,13 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
   ctx.restore();
 
   const r = (pts.length > 200 ? 4 : 5.5) * fs;
-  const hl = highlightId != null ? pts.find(d => pid(d) === highlightId) : null;
-  const visible = pts.filter(d => d === hl || !hidden.has(d.g));
-  const dots = visible.map(d => ({ x: xS(d.x), y: yS(d.y), r: d === hl ? r*1.6 : r }));
+  // Highlighted items (several can be picked), in the order they were picked.
+  const hlSet = new Set(highlightIds);
+  const hls = highlightIds.map(id => pts.find(d => pid(d) === id)).filter(Boolean);
+  const isHl = d => hlSet.has(pid(d));
+  const hl = hls.length > 0;
+  const visible = pts.filter(d => isHl(d) || !hidden.has(d.g));
+  const dots = visible.map(d => ({ x: xS(d.x), y: yS(d.y), r: isHl(d) ? r*1.6 : r }));
   const hitsDot = b => dots.some(o => o.x + o.r > b.x0 && o.x - o.r < b.x1 && o.y + o.r > b.y0 && o.y - o.r < b.y1);
 
   // Quadrant and band names are collected here and drawn AFTER the dots with a
@@ -501,7 +508,7 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
   };
   // Highlight fades everyone else; single-highlight mode instead keeps them solid but
   // unnamed. A group highlight already mutes non-members, so no extra fading then.
-  // Red-dot highlight: the chosen dot just turns red — no ring, name or fading.
+  // Red-dot highlight: the chosen dots just turn red — no ring, name or fading.
   // A group already uses red, so with a group on the full style is used instead.
   const redDot = !!(hl && highlightStyle === 'dot' && !group);
   const solo = !!(hl && soloLabel && !redDot);
@@ -510,7 +517,7 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
   for (const pass of group ? [true, false] : [null]) {
     for (let i = visible.length - 1; i >= 0; i--) {
       const d = visible[i];
-      if (d === hl || (pass !== null && !!d.muted !== pass)) continue;
+      if (isHl(d) || (pass !== null && !!d.muted !== pass)) continue;
       ringDot({ ...d, color: dotColor(d) }, r, d.muted ? 1 : fade);
     }
   }
@@ -524,15 +531,15 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
   // ── Name labels ──────────────────────────────────────────────────────────
   const bounds = { x0: pad.l + 2, y0: pad.t + 2, x1: pad.l + pw - 2, y1: pad.t + ph - 2 };
   const items = [];
-  if (hl && !redDot) items.push({ x: xS(hl.x), y: yS(hl.y), r: r*1.6, force: true, px: 11*fs, font: f(11, 700),
-    text: pname(hl) + (hl.extra ? `  #${hl.rank}` : ''), hl: true });
+  if (!redDot) for (const h of hls) items.push({ x: xS(h.x), y: yS(h.y), r: r*1.6, force: true, px: 11*fs, font: f(11, 700),
+    text: pname(h) + (h.extra ? `  #${h.rank}` : ''), hl: true });
   // Names: walk the list in rank order and keep placing until the budget of
   // *placed* names is used, so names that can't fit in a cluster don't use up
   // the allowance and sparse areas still get labelled.
   const budget = group ? Infinity : Math.max(12, Math.min(90, Math.round(pw*ph / (4500*fs*fs))));
   if (showNames && !solo) {
     for (const d of group ? visible.filter(v => !v.muted) : visible.slice(0, 400)) {
-      if (d === hl && !redDot) continue;
+      if (isHl(d) && !redDot) continue;
       items.push({ x: xS(d.x), y: yS(d.y), r, px: 9.5*fs, font: f(9.5, 500), text: pname(d) });
     }
   }
@@ -554,15 +561,14 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
     ctx.globalAlpha = 1;
   }
 
-  // ── Highlighted player on top ────────────────────────────────────────────
-  if (hl && redDot) {
-    ringDot({ ...hl, muted: false, plain: false, color: GROUP_RED }, r, 1); // same size, just red, drawn on top
-  } else if (hl) {
-    ringDot(hl, r*1.6, 1);
-    ctx.beginPath(); ctx.arc(xS(hl.x), yS(hl.y), r*1.6 + 3*fs, 0, Math.PI*2);
+  // ── Highlighted players on top ───────────────────────────────────────────
+  for (const h of hls) {
+    if (redDot) { ringDot({ ...h, muted: false, plain: false, color: GROUP_RED }, r, 1); continue; } // same size, just red
+    ringDot(h, r*1.6, 1);
+    ctx.beginPath(); ctx.arc(xS(h.x), yS(h.y), r*1.6 + 3*fs, 0, Math.PI*2);
     ctx.strokeStyle = T.hl; ctx.lineWidth = 2*fs; ctx.stroke();
   }
-  const hv = hoverId != null && hoverId !== highlightId && visible.find(d => pid(d) === hoverId);
+  const hv = hoverId != null && !hlSet.has(hoverId) && visible.find(d => pid(d) === hoverId);
   if (hv) {
     ctx.beginPath(); ctx.arc(xS(hv.x), yS(hv.y), r + 2.5*fs, 0, Math.PI*2);
     ctx.strokeStyle = T.hl; ctx.lineWidth = 1.5*fs; ctx.stroke();
@@ -712,7 +718,8 @@ export function ScatterView({ items, idOf, nameOf, subOf, tooltipLines, buildFie
   const [showNames, setShowNames] = useState(true);
   const [hidden, setHidden] = useState(() => new Set());
   const [hover, setHover] = useState(null); // {d, left, top}
-  const [highlightId, setHighlightId] = useState(null);
+  // Highlighted items, in pick order (up to HL_MAX). Plain click / search: see below.
+  const [highlightIds, setHighlightIds] = useState([]);
   const [query, setQuery] = useState('');
   const [busy, setBusy] = useState(false);
   const [exportTheme, setExportTheme] = useState('dark'); // 'dark' | 'light'
@@ -752,7 +759,10 @@ export function ScatterView({ items, idOf, nameOf, subOf, tooltipLines, buildFie
   useEffect(() => { if (groupDef?.kind === 'number' && groupNum == null) setGroupNum(groupDef.def); }, [groupDef, groupNum]);
 
   const rankById = useMemo(() => new Map(items.map((p, i) => [idOf(p), i + 1])), [items, idOf]);
-  useEffect(() => { if (highlightId != null && !rankById.has(highlightId)) setHighlightId(null); }, [rankById, highlightId]);
+  useEffect(() => { if (highlightIds.some(id => !rankById.has(id))) setHighlightIds(ids => ids.filter(id => rankById.has(id))); }, [rankById, highlightIds]);
+  const addHighlight = id => setHighlightIds(ids => (ids.includes(id) || ids.length >= HL_MAX ? ids : [...ids, id]));
+  const toggleHighlight = id => setHighlightIds(ids => (ids.includes(id) ? ids.filter(x => x !== id) : ids.length >= HL_MAX ? ids : [...ids, id]));
+  const unhighlight = id => setHighlightIds(ids => ids.filter(x => x !== id));
 
   const sample = useMemo(() => items.slice(0, Math.max(1, n)), [items, n]);
   const top = useMemo(() => (excluded.size ? sample.filter(p => !excluded.has(idOf(p))) : sample), [sample, excluded, idOf]);
@@ -829,13 +839,20 @@ export function ScatterView({ items, idOf, nameOf, subOf, tooltipLines, buildFie
   const quadNote = sQuad ? `quadrants: ${shortLabel(yf.label)} ≥ ${sQuad.ySplit} · ${shortLabel(xf.label)} ≥ ${sQuad.xSplit}`
     : median ? `median${median.x != null && median.y != null ? 's' : ''}: ${[median.y != null && `${baseName(yf)} ${median.yText}`, median.x != null && `${baseName(xf)} ${median.xText}`].filter(Boolean).join(' · ')}` : '';
 
-  const hlItem = useMemo(() => (highlightId == null ? null : items.find(p => idOf(p) === highlightId) || null), [items, highlightId, idOf]);
+  const hlItems = useMemo(() => highlightIds.map(id => items.find(p => idOf(p) === id)).filter(Boolean), [items, highlightIds, idOf]);
+  // A highlighted item outside the plotted set (outside the Sample, or a trimmed low
+  // outlier) is added as an extra point so it still shows.
   const pts = useMemo(() => {
-    if (!hlItem || excluded.has(idOf(hlItem)) || topPts.some(d => d.id === idOf(hlItem))) return topPts;
-    const d = toPoint(hlItem, true);
-    return Number.isFinite(d.x) && Number.isFinite(d.y) ? [...topPts, d] : topPts;
-  }, [topPts, hlItem, toPoint, excluded, idOf]);
-  const hlPoint = hlItem ? pts.find(d => d.id === idOf(hlItem)) : null;
+    const extra = [];
+    for (const it of hlItems) {
+      if (excluded.has(idOf(it)) || topPts.some(d => d.id === idOf(it))) continue;
+      const d = toPoint(it, true);
+      if (Number.isFinite(d.x) && Number.isFinite(d.y)) extra.push(d);
+    }
+    return extra.length ? [...topPts, ...extra] : topPts;
+  }, [topPts, hlItems, toPoint, excluded, idOf]);
+  const hlPointOf = it => pts.find(d => d.id === idOf(it)) || null;
+  const hlNames = hlItems.filter(it => hlPointOf(it)).map(nameOf);
 
   const legend = useMemo(() => {
     const c = {}; topPts.forEach(d => { c[d.g] = (c[d.g] || 0) + 1; });
@@ -854,7 +871,7 @@ export function ScatterView({ items, idOf, nameOf, subOf, tooltipLines, buildFie
   const colorLabel = colorBy === 'metric' ? `Colour: ${baseName(cf)}` : allColorModes.find(o => o[0] === colorBy)?.[1] || colorModes[0][1];
   const autoTitle = `${yf.label} vs ${xf.label}`;
   const title = customTitle.trim() || autoTitle;
-  const subtitle = `${sample.length} Sample · ${contextLabel}${inGroup ? ` · highlighted: ${groupLabel} (${groupCount})` : ''}${hlPoint ? ` · highlighted: ${hlPoint.name}` : ''}`;
+  const subtitle = `${sample.length} Sample · ${contextLabel}${inGroup ? ` · highlighted: ${groupLabel} (${groupCount})` : ''}${hlNames.length ? ` · highlighted: ${hlNames.length > 4 ? `${hlNames.slice(0, 4).join(', ')} +${hlNames.length - 4} more` : hlNames.join(', ')}` : ''}`;
 
   useEffect(() => {
     const measure = () => { const w = wrapRef.current?.offsetWidth; if (w) setWidth(w); };
@@ -863,18 +880,18 @@ export function ScatterView({ items, idOf, nameOf, subOf, tooltipLines, buildFie
     return () => window.removeEventListener('resize', measure);
   }, []);
 
-  const drawOpts = { pts, xf, yf, hidden, highlightId, showNames, soloLabel, quad, median, group: !!inGroup, highlightStyle };
+  const drawOpts = { pts, xf, yf, hidden, highlightIds, showNames, soloLabel, quad, median, group: !!inGroup, highlightStyle };
   useEffect(() => {
     if (!canvasRef.current) return;
     layoutRef.current = drawScatter(canvasRef.current, width, H, window.devicePixelRatio || 1, false, { ...drawOpts, hoverId: hover?.d.id });
-  }, [pts, xf, yf, hidden, hover, highlightId, showNames, soloLabel, quad, median, inGroup, highlightStyle, width, H]);
+  }, [pts, xf, yf, hidden, hover, highlightIds, showNames, soloLabel, quad, median, inGroup, highlightStyle, width, H]);
 
   useEffect(() => {
-    if (highlightId == null) return;
-    const onKey = e => { if (e.key === 'Escape') setHighlightId(null); };
+    if (!highlightIds.length) return;
+    const onKey = e => { if (e.key === 'Escape') setHighlightIds([]); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [highlightId]);
+  }, [highlightIds]);
 
   const hitTest = useCallback(e => {
     const L = layoutRef.current, c = canvasRef.current;
@@ -883,20 +900,25 @@ export function ScatterView({ items, idOf, nameOf, subOf, tooltipLines, buildFie
     const mx = e.clientX - rect.left, my = e.clientY - rect.top;
     let best = null, bestD = 12 * 12; // hit target larger than the dot
     for (const d of pts) {
-      if (hidden.has(d.g) && d.id !== highlightId) continue;
+      if (hidden.has(d.g) && !highlightIds.includes(d.id)) continue;
       const dx = L.xS(d.x) - mx, dy = L.yS(d.y) - my, dd = dx*dx + dy*dy;
       if (dd <= bestD) { bestD = dd; best = d; }
     }
     return best ? { d: best, left: L.xS(best.x), top: L.yS(best.y) } : null;
-  }, [pts, hidden, highlightId]);
+  }, [pts, hidden, highlightIds]);
 
   const onMove = e => {
     const h = hitTest(e);
     if ((h?.d.id ?? null) !== (hover?.d.id ?? null)) setHover(h);
     e.currentTarget.style.cursor = h ? 'pointer' : 'default';
   };
-  // Single click highlights (background click clears); double click opens the card.
-  const onClick = e => { const h = hitTest(e); setHighlightId(h ? h.d.id : null); };
+  // Click highlights just that item; Shift/Ctrl/Cmd-click adds or removes it from the
+  // set; a background click clears. Double click opens the card.
+  const onClick = e => {
+    const h = hitTest(e);
+    if (h && (e.shiftKey || e.ctrlKey || e.metaKey)) toggleHighlight(h.d.id);
+    else setHighlightIds(h ? [h.d.id] : []);
+  };
   const onDoubleClick = e => { const h = hitTest(e); if (h) onSelect(h.d.p); };
 
   const download = async () => {
@@ -927,7 +949,7 @@ export function ScatterView({ items, idOf, nameOf, subOf, tooltipLines, buildFie
     }
     return out;
   }, [items, query, nameOf]);
-  const pick = p => { setExcluded(prev => { if (!prev.has(idOf(p))) return prev; const s = new Set(prev); s.delete(idOf(p)); return s; }); setHighlightId(idOf(p)); setQuery(''); };
+  const pick = p => { setExcluded(prev => { if (!prev.has(idOf(p))) return prev; const s = new Set(prev); s.delete(idOf(p)); return s; }); addHighlight(idOf(p)); setQuery(''); };
   const removedItems = useMemo(() => items.filter(p => excluded.has(idOf(p))), [items, excluded, idOf]);
 
   const fieldGroups = [...new Set(fields.map(f => f.group))];
@@ -1052,17 +1074,21 @@ export function ScatterView({ items, idOf, nameOf, subOf, tooltipLines, buildFie
         </div>
         <input aria-label="Chart title" placeholder={`Title: ${autoTitle}`} value={customTitle} onChange={e => setCustomTitle(e.target.value)}
           style={{ ...sel, width:isMobile?200:280, padding:'6px 8px', maxWidth:'100%' }}/>
-        {hlItem && (
-          <div style={{ display:'flex', alignItems:'center', gap:8, padding:'4px 6px 4px 10px', borderRadius:14, border:'1px solid #26456f', background:'#0e2040' }}>
+        {hlItems.map(it => { const hp = hlPointOf(it); return (
+          <div key={idOf(it)} data-hl-chip={idOf(it)} style={{ display:'flex', alignItems:'center', gap:8, padding:'4px 6px 4px 10px', borderRadius:14, border:'1px solid #26456f', background:'#0e2040' }}>
             <span style={{ fontSize:11, color:'#dbeafe' }}>
-              <b>{nameOf(hlItem)}</b> · {subOf(hlItem)} · #{rankById.get(idOf(hlItem))}
-              {!hlPoint ? ' · no data for these axes' : !hlPoint.extra ? '' : hlPoint.rank <= sample.length ? ' · low outlier, shown because highlighted' : ` · outside the ${sample.length} Sample`}
+              <b>{nameOf(it)}</b> · {subOf(it)} · #{rankById.get(idOf(it))}
+              {!hp ? ' · no data for these axes' : !hp.extra ? '' : hp.rank <= sample.length ? ' · low outlier, shown because highlighted' : ` · outside the ${sample.length} Sample`}
             </span>
-            <button onClick={() => onSelect(hlItem)} style={{ ...btn(false), padding:'3px 8px' }}>{openLabel}</button>
-            <button onClick={() => { setExcluded(prev => new Set(prev).add(idOf(hlItem))); setHighlightId(null); }} style={{ ...btn(false), padding:'3px 8px' }}>Remove from plot</button>
-            <button aria-label="Clear highlight" onClick={() => setHighlightId(null)} style={{ ...btn(false), padding:'3px 8px' }}>✕</button>
+            <button onClick={() => onSelect(it)} style={{ ...btn(false), padding:'3px 8px' }}>{openLabel}</button>
+            <button onClick={() => { setExcluded(prev => new Set(prev).add(idOf(it))); unhighlight(idOf(it)); }} style={{ ...btn(false), padding:'3px 8px' }}>Remove from plot</button>
+            <button aria-label="Clear highlight" onClick={() => unhighlight(idOf(it))} style={{ ...btn(false), padding:'3px 8px' }}>✕</button>
           </div>
+        ); })}
+        {hlItems.length >= 2 && (
+          <button aria-label="Clear all highlights" onClick={() => setHighlightIds([])} style={{ ...btn(false), padding:'4px 10px' }}>Clear all ({hlItems.length})</button>
         )}
+        {hlItems.length > 0 && <span style={{ fontSize:10, color:'#64748b' }}>{hlItems.length >= HL_MAX ? `max ${HL_MAX} — remove one to add another` : `Shift-click to add more (max ${HL_MAX})`}</span>}
       </div>
 
       {autoQuad && (
@@ -1107,7 +1133,7 @@ export function ScatterView({ items, idOf, nameOf, subOf, tooltipLines, buildFie
             <div style={{ fontSize:10.5, color:'#e2e8f4' }}>{xf.label}: <b>{valueText(hover.d.x, xf)}</b></div>
             {colorBy === 'metric' && !inGroup && cf !== xf && cf !== yf && <div style={{ fontSize:10.5, color:'#e2e8f4' }}>{cf.label}: <b>{Number.isFinite(cf.get(hover.d.p)) ? valueText(cf.get(hover.d.p), cf) : 'no data'}</b></div>}
             {quad && <div style={{ fontSize:10.5, color:'#5eead4', marginTop:3, fontWeight:600 }}>{quadOf(quad, hover.d)}</div>}
-            <div style={{ fontSize:9.5, color:'#64748b', marginTop:4 }}>Click to highlight · double-click for {noun === 'team' ? 'team card' : 'profile'}</div>
+            <div style={{ fontSize:9.5, color:'#64748b', marginTop:4 }}>Click to highlight · Shift-click to add · double-click for {noun === 'team' ? 'team card' : 'profile'}</div>
           </div>
         )}
       </div>
@@ -1142,9 +1168,11 @@ export function ScatterView({ items, idOf, nameOf, subOf, tooltipLines, buildFie
 }
 
 // ── Player chart (Scout Index) ───────────────────────────────────────────────
-const PLAYER_GROUPS = [
+// Team = the club the chart shows for the selected season (seasonClubFor), not the
+// player's current club — they differ for a quarter to half of players in a season view.
+export const playerGroups = clubOf => [
   { key:'age', label:'Age', kind:'number', get:p => p.age, def:21 },
-  { key:'team', label:'Team', kind:'choice', valueOf:p => (p.team ? `${p.team}|${p.league}` : ''),
+  { key:'team', label:'Team', kind:'choice', valueOf:p => { const c = clubOf(p) || {}; return c.team ? `${c.team}|${c.league}` : ''; },
     labelOf:v => { const [t, l] = v.split('|'); return `${t} (${l})`; } },
 ];
 const playerId = p => p.id, playerName = p => p.name;
@@ -1163,6 +1191,7 @@ export default function ScatterChart({ players, getDisplayScore, seasonFilter, s
   // club + league for the selected season (same helper as the table)
   const playerSub = useCallback(p => seasonClubFor(p, seasonFilter, leagues).team, [seasonFilter, leagues]);
   const playerLeague = useCallback(p => seasonClubFor(p, seasonFilter, leagues).league, [seasonFilter, leagues]);
+  const groups = useMemo(() => playerGroups(p => seasonClubFor(p, seasonFilter, leagues)), [seasonFilter, leagues]);
   const playerTip = useCallback(p => { const c = seasonClubFor(p, seasonFilter, leagues);
     return [`${c.team} · ${c.league}${seasonFilter !== 'all' ? ` (${seasonFilter})` : ''}`, `${p.position} · age ${p.age}`]; }, [seasonFilter, leagues]);
   const colorOf = useCallback((p, mode) => {
@@ -1174,6 +1203,6 @@ export default function ScatterChart({ players, getDisplayScore, seasonFilter, s
     <ScatterView items={players} idOf={playerId} nameOf={playerName} subOf={playerSub} tooltipLines={playerTip} leagueOf={playerLeague}
       buildFields={buildFieldsFor} defaultX="potentialScore" defaultY={seasonFilter !== 'all' ? 'display' : 'careerScore'} metricLabel="Per-90 value"
       colorModes={colorModes} colorOf={colorOf} legendBase={playerLegendBase} scoreQuad={playerScoreQuad} targetTiers={TARGET_TIERS}
-      groups={PLAYER_GROUPS} noun="player" openLabel="Open profile" onSelect={onSelect} onClose={onClose} contextLabel={contextLabel}/>
+      groups={groups} noun="player" openLabel="Open profile" onSelect={onSelect} onClose={onClose} contextLabel={contextLabel}/>
   );
 }
