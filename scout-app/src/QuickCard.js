@@ -1,6 +1,6 @@
 // QuickCard v69 - Heat-style pitch option (Player Pager pitch + heatmap upload); Team Context follows selected season.
 import React, { useState, useMemo } from 'react';
-import { scoreLabel, formatFoot, formatMV, GBE_LEAGUE_BANDS, METRIC_DISPLAY } from './constants';
+import { scoreLabel, formatFoot, formatMV, GBE_LEAGUE_BANDS, METRIC_DISPLAY, seasonXgXa } from './constants';
 import { useIsMobile, deliverPng } from './utils';
 
 // Player photo naming lives in photoName.js — a character-for-character port of
@@ -1078,7 +1078,7 @@ export function teamRangeBarHtml(player, posKey, w = 560) {
   return metricBars || `<div style="font-size:13px;color:#5e6678;">No team data available.</div>`;
 }
 
-function buildQuickCardElement(player, players, manual = {}) {
+export function quickCardSeason(player, manual = {}) {
   const seasonsDetailObj = player.seasonsDetail || {};
   const seasonsDetailAllArr = player.seasonsDetailAll || [];
   const allSummary = player.allSeasonsSummary || [];
@@ -1105,8 +1105,6 @@ function buildQuickCardElement(player, players, manual = {}) {
     ? seasonsDetailAllArr.find(r => r.season === chosenSeasonKey && r.league === chosenLeagueKey)
     : seasonsDetailAllArr.find(r => r.season === chosenSeasonKey);
   const sd = sdAllMatch || seasonsDetailObj[chosenSeasonKey] || Object.values(seasonsDetailObj)[0] || {};
-  const sdTeamFull = sd.team || player.team; // untruncated — needed for exact crest/map matching
-  const sdTeam = truncateText(sdTeamFull, 16); // truncated — for display only
   const sdLeague = sd.league || player.league;
   // allSeasonsSummary[0] is NOT guaranteed to be the same season+club as `sd` above —
   // for loan players with two entries sharing a season string (e.g. parent club U21s
@@ -1116,6 +1114,15 @@ function buildQuickCardElement(player, players, manual = {}) {
     || allSummary.find(row => row.s === chosenSeasonKey)
     || allSummary[0]
     || {};
+  return { seasonsDetailObj, seasonsDetailAllArr, allSummary, chosenSeasonKey, chosenLeagueKey, sd, sdLeague, statsRow };
+}
+
+export function buildQuickCardElement(player, players, manual = {}) {
+  // Season / club / stats-row choice: quickCardSeason (exported so the choice can be
+  // checked for every player without building cards).
+  const { seasonsDetailObj, seasonsDetailAllArr, allSummary, chosenSeasonKey, chosenLeagueKey, sd, sdLeague, statsRow } = quickCardSeason(player, manual);
+  const sdTeamFull = sd.team || player.team; // untruncated — needed for exact crest/map matching
+  const sdTeam = truncateText(sdTeamFull, 16); // truncated — for display only
   // Resolve crest: use player.teamFotmobId only when sd resolved to the player's
   // CURRENT team; for a different club (e.g. two-club season, January transfer),
   // look up that club's own FotMob ID via TEAM_FOTMOB_MAP instead — otherwise the
@@ -1174,18 +1181,9 @@ function buildQuickCardElement(player, players, manual = {}) {
     return out;
   })();
 
-  // xG/xA aren't stored as season totals — bar-chart group A carries the per-90
-  // raw value (e.g. ['xG', pct, 0.42]). Season total = per90 × (mins/90). Same
-  // derivation as PlayerScoutingCard.js so the numbers match across cards.
-  const minsNum = statsRow.mins || sd.mins || 0;
-  const findRawA = (...labels) => {
-    const arr = groups.A || [];
-    const hit = arr.find(r => labels.includes(String(r[0]).toLowerCase().trim()));
-    return hit && typeof hit[2] === 'number' ? hit[2] : null;
-  };
-  const per90ToSeason = (v) => (v != null && minsNum) ? (v * minsNum / 90) : null;
-  const xgSeason = player.xgSeason != null ? player.xgSeason : per90ToSeason(findRawA('xg'));
-  const xaSeason = player.xaSeason != null ? player.xaSeason : per90ToSeason(findRawA('xa', 'expected assists'));
+  // xG/xA season totals (seasonXgXa, shared with the Scouting Card). Pipeline totals only for the pipeline's own row (current club + season); any other
+  // row — an earlier season, or the other club in a two-club season — per-90 x mins.
+  const { xg: xgSeason, xa: xaSeason } = seasonXgXa(player, statsRow, sd);
   const fmt1 = (v) => (v == null ? '—' : v.toFixed(1));
   // Season tag on the stats line: the season of the row the figures come from, shown
   // only when it isn't the player's latest season ("2023-24" -> "23-24", "2024" stays).
@@ -1373,7 +1371,10 @@ function buildQuickCardElement(player, players, manual = {}) {
       </div>
 
       <!-- APPS / GOALS / xG / ASSISTS / xA / MINS row (replaces nav links) -->
-      <div style="position:absolute;left:248px;top:227px;display:flex;align-items:baseline;gap:32px;">
+      <!-- nowrap + no shrinking: if the row is ever measured narrower than its content
+           (html-to-image copies the live width), the season tag used to break at its
+           hyphen onto a second line. Now the row just runs on; there's ~900px spare. -->
+      <div style="position:absolute;left:248px;top:227px;display:flex;align-items:baseline;gap:32px;white-space:nowrap;">
         ${[
           ['Apps', statsRow.m != null ? String(statsRow.m) : '—'],
           ['Goals', statsRow.g != null ? String(statsRow.g) : '—'],
@@ -1382,11 +1383,11 @@ function buildQuickCardElement(player, players, manual = {}) {
           ...(isGK ? [] : [['xA', fmt1(xaSeason)]]),
           ['Mins', statsRow.mins ? statsRow.mins.toLocaleString() : '—'],
         ].map(([lab,val]) => `
-          <div style="display:flex;align-items:baseline;gap:6px;">
+          <div style="display:flex;align-items:baseline;gap:6px;flex-shrink:0;">
             <span style="font-size:27.9px;font-weight:700;color:#fff;">${val}</span>
             <span style="font-size:16px;font-weight:500;color:#9aa3b8;text-transform:uppercase;letter-spacing:.04em;">${lab}</span>
           </div>`).join('')}
-        ${statsSeasonTag ? `<span style="font-size:20px;font-weight:500;color:#9aa3b8;margin-left:-14px;">(${statsSeasonTag})</span>` : ''}
+        ${statsSeasonTag ? `<span style="font-size:20px;font-weight:500;color:#9aa3b8;margin-left:-14px;flex-shrink:0;">(${statsSeasonTag})</span>` : ''}
       </div>
 
   <!-- CREST / TEAM / LEAGUE -->

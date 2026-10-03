@@ -3,7 +3,7 @@
 // Rebuilt against a pixel-accurate 1920x1080 export of the real Canva design.
 // Uses html2canvas to screenshot an offscreen DOM node and trigger a PNG download.
 
-import { scoreBandColor, scoreLabel, scoreToStars, ROLE_KEY_LABELS, formatMV, formatFoot, LEAGUE_STRENGTHS, METRIC_DISPLAY } from './constants';
+import { scoreBandColor, scoreLabel, scoreToStars, ROLE_KEY_LABELS, formatMV, formatFoot, LEAGUE_STRENGTHS, METRIC_DISPLAY, seasonXgXa } from './constants';
 import { deliverPng, isTouchDevice } from './utils';
 
 // Player photo naming lives in photoName.js — a character-for-character port of
@@ -756,6 +756,26 @@ function pitchDiagramSvg(player, manual) {
 // each season transition, same as the lists in PlayerCard.js/QuickCard.js.
 const TREND_SEASON_ORDER = ['2018-19','2019-20','2020-21','2021','2021-22','2022','2022-23','2023','2023-24','2024','2024-25','2025','2025-26','2026','2026-27'];
 
+export function scoutingCardSeason(player, manual = {}) {
+  const seasonsDetailObj = player.seasonsDetail || {};
+  const allSeasons = player.allSeasonsSummary || [];
+  const latestSeason = allSeasons[0] || {};
+  const chosenSeasonKey = manual.selectedSeasonKey
+    || latestSeason.s
+    || Object.keys(seasonsDetailObj).sort().reverse()[0];
+  const defaultLeagueForSeason = (allSeasons.find(s => s.s === chosenSeasonKey) || {}).l;
+  const targetLeague = manual.selectedLeague || defaultLeagueForSeason;
+  const seasonsDetailAllArr = player.seasonsDetailAll || [];
+  const sdAllMatch = targetLeague
+    ? seasonsDetailAllArr.find(r => r.season === chosenSeasonKey && r.league === targetLeague)
+    : seasonsDetailAllArr.find(r => r.season === chosenSeasonKey);
+  const sd = sdAllMatch || seasonsDetailObj[chosenSeasonKey] || Object.values(seasonsDetailObj)[0] || {};
+  const selectedSummaryRow = allSeasons.find(s => s.s === chosenSeasonKey && s.l === targetLeague) || null;
+  // For stats row, use the selected summary row if available, otherwise fall back to latestSeason
+  const statsRow = selectedSummaryRow || latestSeason;
+  return { seasonsDetailObj, allSeasons, latestSeason, chosenSeasonKey, targetLeague, seasonsDetailAllArr, sd, selectedSummaryRow, statsRow };
+}
+
 export function buildCardElement(player, manual = {}) {
   // Single source of truth for the SVG-star path: the level-label offsets below must
   // move in lockstep with the stars or the text lands on top of them.
@@ -766,14 +786,12 @@ export function buildCardElement(player, manual = {}) {
   // Marmoush's 2023-24 Frankfurt bar-chart stats while the header correctly showed
   // Man City). Pick explicitly using the most recent season key from allSeasonsSummary,
   // falling back to sorting seasonsDetail's own keys descending if that's unavailable.
-  const seasonsDetailObj = player.seasonsDetail || {};
-  const allSeasons = player.allSeasonsSummary || [];
-  const latestSeason = allSeasons[0] || {};
+  // Season / club / stats-row choice lives in scoutingCardSeason (exported so the
+  // choice can be checked for every player without building cards).
+  const { seasonsDetailObj, allSeasons, latestSeason, chosenSeasonKey, targetLeague, seasonsDetailAllArr, sd, selectedSummaryRow, statsRow } = scoutingCardSeason(player, manual);
   // manual.selectedSeasonKey: season string (e.g. "2025-26") chosen by user in modal
   // manual.selectedLeague: league string to pair with it (for mid-season transfers)
-  const chosenSeasonKey = manual.selectedSeasonKey
-    || latestSeason.s
-    || Object.keys(seasonsDetailObj).sort().reverse()[0];
+
   // Default league for chosenSeasonKey when the user hasn't explicitly picked a club.
   // This MUST match whichever club statsRow (mins/apps/gls/asts below) resolves to,
   // or a two-club season silently shows one club's bars/xG next to a different
@@ -782,8 +800,6 @@ export function buildCardElement(player, manual = {}) {
   // so this divergence can never surface for them). allSeasonsSummary is built with
   // the higher-league-band entry first per season, so its first row for this
   // season is the deterministic default club — used as the shared anchor below.
-  const defaultLeagueForSeason = (allSeasons.find(s => s.s === chosenSeasonKey) || {}).l;
-  const targetLeague = manual.selectedLeague || defaultLeagueForSeason;
   // seasonsDetail[season] can only ever hold ONE club's data per season — duplicate
   // JSON keys for a player with two entries in the same season (e.g. a January
   // transfer) collapse to whichever was written last. Previously, selecting a
@@ -796,15 +812,10 @@ export function buildCardElement(player, manual = {}) {
   // stats always match the club actually shown — whether explicitly selected or
   // defaulted. Falls back to the old singular lookup for data built before the
   // field existed.
-  const seasonsDetailAllArr = player.seasonsDetailAll || [];
-  const sdAllMatch = targetLeague
-    ? seasonsDetailAllArr.find(r => r.season === chosenSeasonKey && r.league === targetLeague)
-    : seasonsDetailAllArr.find(r => r.season === chosenSeasonKey);
-  const sd = sdAllMatch || seasonsDetailObj[chosenSeasonKey] || Object.values(seasonsDetailObj)[0] || {};
+
   // Matching allSeasonsSummary row for the resolved season+league — used for
   // team/league display AND as statsRow below, so sd/groups and mins/apps/gls/asts
   // always describe the SAME club, never two different ones for a multi-club season.
-  const selectedSummaryRow = allSeasons.find(s => s.s === chosenSeasonKey && s.l === targetLeague) || null;
   const sdTeam = selectedSummaryRow ? selectedSummaryRow.team : (sd.team || player.team);
   const sdLeague = selectedSummaryRow ? selectedSummaryRow.l : (sd.league || player.league);
   // Resolve crest: use player.teamFotmobId for current team, else look up TEAM_FOTMOB_MAP
@@ -874,12 +885,14 @@ export function buildCardElement(player, manual = {}) {
   // season totals are per90 × (mins / 90) — this reproduces the Canva numbers
   // (Adu: 0.38/90 × 1320min ≈ 5.6 → 5.8 shown). Falls back to '—' if unavailable.
   // For stats row, use the selected summary row if available, otherwise fall back to latestSeason
-  const statsRow = selectedSummaryRow || latestSeason;
   const minsNum = statsRow.mins || sd.mins || 0;
   const findRawA = (...labels) => {
     const arr = groups.A || [];
     const hit = arr.find(r => labels.includes(String(r[0]).toLowerCase().trim()));
-    return hit && typeof hit[2] === 'number' ? hit[2] : null;
+    // values are stored as strings ("0.42") — parse; the old number-only check made
+    // every lookup null, so GK Save% / GA always printed '—'
+    const v = hit ? Number(hit[2]) : NaN;
+    return Number.isFinite(v) ? v : null;
   };
   const per90ToSeason = (v) => (v != null && minsNum) ? (v * minsNum / 90) : null;
   // Use direct season totals from CSV if available, fall back to per-90 derivation.
@@ -889,9 +902,9 @@ export function buildCardElement(player, manual = {}) {
   // Only trust them when we're actually viewing that default/latest view; otherwise
   // always derive from the correctly season-resolved groups data (via sd/statsRow),
   // which already tracks tab switching correctly.
-  const viewingDefaultLatest = !manual.selectedSeasonKey && !manual.selectedLeague;
-  const xgSeason = (viewingDefaultLatest && player.xgSeason != null) ? player.xgSeason : per90ToSeason(findRawA('xg', 'xg per 90'));
-  const xaSeason = (viewingDefaultLatest && player.xaSeason != null) ? player.xaSeason : per90ToSeason(findRawA('xa', 'xa per 90', 'expected assists'));
+  // "Default view" wasn't enough: in a two-club season the default row can be the
+  // OTHER club. The pipeline totals are used only when the row shown is their row.
+  const { xg: xgSeason, xa: xaSeason } = seasonXgXa(player, statsRow, sd);
   // GK-specific: Save Rate is a % value stored directly (not per-90), Goals Conceded is per-90
   const gkSaveRate = findRawA('save rate');
   const gkGoalsConceded = per90ToSeason(findRawA('goals conceded'));

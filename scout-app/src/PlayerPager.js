@@ -34,7 +34,7 @@ import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   MONTSERRAT_EMBED_CSS, leagueDisplayName, leagueLogo, leagueFlag, teamCrest,
 } from './cardAssets';
-import { formatMV, formatFoot } from './constants';
+import { formatMV, formatFoot, seasonXgXa } from './constants';
 import { useIsMobile, deliverPng, photoUrl } from './utils';
 import {
   scoreWheel, headerInk, preloadImages, fitNameSize, pillHtml,
@@ -171,7 +171,7 @@ function headerGradient(spec) {
 // actually chosen. sd and statsRow are both anchored off the SAME resolved
 // league, or the bars and the Apps/Goals row would describe different clubs.
 // ───────────────────────────────────────────────────────────────────────────
-function resolveSeason(player, seasonOverride) {
+export function resolveSeason(player, seasonOverride) {
   const sdObj = player.seasonsDetail || {};
   const sdAll = player.seasonsDetailAll || [];
   const allSummary = player.allSeasonsSummary || [];
@@ -1075,17 +1075,9 @@ function headerHtml(player, ctx, opts) {
   const flag = leagueFlag(hdrLeague);
   const natFlag = personFlagUrl(player);
 
-  // xG/xA are stored per 90 in bar-chart group A, not as season totals. Same
-  // derivation as QuickCard and PlayerScoutingCard, so all three agree.
-  const mins = statsRow.mins || sd.mins || 0;
-  const rawA = (...labels) => {
-    const hit = (sd.g && sd.g.A ? sd.g.A : [])
-      .find(r => labels.includes(String(r[0]).toLowerCase().trim()));
-    return hit && typeof hit[2] === 'number' ? hit[2] : null;
-  };
-  const per90ToSeason = (v) => (v != null && mins ? (v * mins) / 90 : null);
-  const xg = player.xgSeason != null ? player.xgSeason : per90ToSeason(rawA('xg'));
-  const xa = player.xaSeason != null ? player.xaSeason : per90ToSeason(rawA('xa', 'expected assists'));
+  // xG/xA season totals: same rule as the Quick Card and Scouting Card (seasonXgXa) —
+  // pipeline totals only for the pipeline's own row, else per-90 x mins, else '—'.
+  const { xg, xa } = seasonXgXa(player, statsRow, sd);
 
   const cells = [
     ['APPS', statsRow.m != null ? String(statsRow.m) : '—'],

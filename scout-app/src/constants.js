@@ -143,6 +143,27 @@ export const SEASON_RECENCY_ORDER=ALL_SEASONS.flatMap(s=>[s,s.slice(0,4)]);
 // stored oldest-first, so Object.values(...)[0] is the OLDEST season, not the latest.
 // Has per-90 metrics. Display-only seasons carry g:{} — truthy, but nothing in it.
 export const hasMetrics = d => !!(d && d.g && Object.values(d.g).some(a => a && a.length));
+// xG / xA season totals for the stats row a card shows (an allSeasonsSummary row) and
+// that row's seasonsDetail entry. The pipeline's xgSeason/xaSeason are the totals of
+// ONE row — the player's current club, league and season — so they're used only for
+// that row. Any other row: per-90 x mins/90 from that row's own metrics; null when
+// the season has none (display-only seasons) or the detail isn't for that row.
+export function seasonXgXa(player, row, sd){
+  const out = { xg: null, xa: null };
+  if (!row) return out;
+  const own = row.s === player.season && row.l === player.league && row.team === player.team;
+  const match = sd && sd.season === row.s && sd.league === row.l;
+  const mins = Number(row.mins != null ? row.mins : match ? sd.minutes : null);
+  const per90 = (...keys) => {
+    if (!match) return null;
+    const hit = ((sd.g && sd.g.A) || []).find(r => keys.includes(String(r[0]).toLowerCase().trim()));
+    const v = hit ? Number(hit[2]) : NaN;
+    return Number.isFinite(v) && Number.isFinite(mins) && mins > 0 ? v * mins / 90 : null;
+  };
+  out.xg = own && Number.isFinite(player.xgSeason) ? player.xgSeason : per90('xg', 'xg per 90');
+  out.xa = own && Number.isFinite(player.xaSeason) ? player.xaSeason : per90('xa', 'xa per 90', 'expected assists');
+  return out;
+}
 export function latestSeasonDetail(player){
   const sd=player.seasonsDetail||{};
   for(const s of SEASON_RECENCY_ORDER){ if(hasMetrics(sd[s])) return sd[s]; }
