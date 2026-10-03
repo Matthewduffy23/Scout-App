@@ -317,13 +317,34 @@ const TREND_ROLES = {
   ...APP_ROLES,
   CF: ['Goal Threat CF','Link Up CF'],
 };
-const TOKEN_TO_POS_KEY = {
-  GK:'GK', CB:'CB', LCB:'CB', RCB:'CB',
-  LB:'FB', RB:'FB', LWB:'FB', RWB:'FB',
-  DMF:'CM', LDMF:'CM', RDMF:'CM', LCMF:'CM', RCMF:'CM',
-  AMF:'ATT', LAMF:'ATT', LW:'ATT', LWF:'ATT', RAMF:'ATT', RW:'ATT', RWF:'ATT',
-  CF:'CF',
+// Which position group a set of role scores belongs to (most of its roles), or null.
+const roleGroupOf = (roles) => {
+  const n = {};
+  for (const r of Object.keys(roles || {})) for (const [g, list] of Object.entries(APP_ROLES)) if (list.includes(r)) n[g] = (n[g] || 0) + 1;
+  const best = Object.entries(n).sort((a, b) => b[1] - a[1])[0];
+  return best ? best[0] : null;
 };
+// The player's career role group: roleKey (always matches roleCareerScores in the data).
+const careerRoleGroup = (player) => (APP_ROLES[player.roleKey] ? player.roleKey : roleGroupOf(player.roleCareerScores));
+
+// Best Role for the season shown: the group comes from the ROLES (that season's own
+// scores; a display-only season with none falls back to the career group) — never from
+// the first position token, which disagrees with the role scores for ~4,000 players
+// (e.g. RCB listed first, FB role scores) and left the panel empty. Season scores first,
+// career scores of the same group fill any gaps.
+export function scoutingCardRoles(player, sd) {
+  const rcs = player.roleCareerScores || {};
+  const seasonRoles = (sd && sd.roles) || {};
+  const group = roleGroupOf(seasonRoles) || careerRoleGroup(player);
+  const validRoles = (group && APP_ROLES[group]) || [];
+  const roleSource = { ...rcs, ...seasonRoles };
+  const sortedRoles = Object.entries(roleSource)
+    .filter(([role, score]) => (validRoles.length === 0 || validRoles.includes(role)) && (role !== 'Goal Threat CM' || Number(score) >= 70))
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3);
+  return { group, sortedRoles };
+}
+
 
 // ── Country name (as found in birthCountry field) → ISO 3166-1 alpha-2 code, for flagcdn ──
 const POSITION_LABELS = {
@@ -824,19 +845,9 @@ export function buildCardElement(player, manual = {}) {
     ? player.teamFotmobId
     : (TEAM_FOTMOB_MAP[sdTeam] || TEAM_FOTMOB_MAP[_normTeam(sdTeam)] || '');
   const rcs = player.roleCareerScores || {};
-  const rawPosToken = (player.position || '').split(',')[0].trim();
-  const posKey = TOKEN_TO_POS_KEY[rawPosToken] || player.roleKey;
-  const validRoles = (posKey && APP_ROLES[posKey]) || [];
-  // Merge per-season role scores with career scores — prefer season score per role,
-  // but fall back to career score for any role missing from the season slice.
-  // (Previously: if seasonRoles had ANY entry, the whole career map was discarded,
-  // which hid valid 70+ roles that just weren't tracked in the latest season slice.)
-  const seasonRoles = sd.roles || {};
-  const roleSource = { ...rcs, ...seasonRoles };
-  const sortedRoles = Object.entries(roleSource)
-    .filter(([role, score]) => (validRoles.length === 0 || validRoles.includes(role)) && (role !== 'Goal Threat CM' || Number(score) >= 70))
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 3);
+  // Best Role: see scoutingCardRoles (group from the role scores, not the position token).
+  const { sortedRoles } = scoutingCardRoles(player, sd);
+  const careerGroup = careerRoleGroup(player);
   const groups = sd.g || {};
   const isGK = (player.position || '').split(',')[0].trim() === 'GK' || (player.roleKey || '').startsWith('GK');
   const photo = manual.playerPhotoUrl || photoUrl(player.name, player.team);
@@ -845,7 +856,10 @@ export function buildCardElement(player, manual = {}) {
   // Performance trend: standard league seasons only, 400+ mins, deduplicated per season
   // Uses best valid role score from seasonsDetail[s].roles for that season (unweighted)
   // Falls back to h.sc if no role scores exist for that season
-  const trendValidRoles = (posKey && TREND_ROLES[posKey]) || [];
+  // Each season's best role is taken within THAT season's own role group (a player who
+  // moved position is scored in the roles he played); the top-role label uses the career group.
+  const trendRolesFor = group => (group && TREND_ROLES[group]) || [];
+  const trendValidRoles = trendRolesFor(careerGroup);
   const standardSeasons = (player.allSeasonsSummary || [])
     .filter(s => s.type === 'standard' && (s.mins || 0) >= 400);
   const bestStandardBySeason = {};
@@ -868,8 +882,9 @@ export function buildCardElement(player, manual = {}) {
     const sdEntry = seasonsDetailAllArr.find(r => r.season === sk && r.league === skLeague)
       || (player.seasonsDetail || {})[sk] || {};
     const seasonRoles = sdEntry.roles || {};
+    const seasonValid = trendRolesFor(roleGroupOf(seasonRoles) || careerGroup);
     const bestRoleScore = Object.entries(seasonRoles)
-      .filter(([role]) => trendValidRoles.length === 0 || trendValidRoles.includes(role))
+      .filter(([role]) => seasonValid.length === 0 || seasonValid.includes(role))
       .sort((a, b) => b[1] - a[1])[0]?.[1] || null;
     // Fall back to h.sc if no role scores
     const score = bestRoleScore != null ? Math.round(bestRoleScore) : (shBySeason[sk] ? Math.round(shBySeason[sk].sc) : null);
