@@ -813,7 +813,16 @@ export function scoutingCardSeason(player, manual = {}) {
   const chosenSeasonKey = manual.selectedSeasonKey
     || latestSeason.s
     || Object.keys(seasonsDetailObj).sort().reverse()[0];
-  const defaultLeagueForSeason = (allSeasons.find(s => s.s === chosenSeasonKey) || {}).l;
+  // Default club for chosenSeasonKey when none was picked ("Auto", or a season passed
+  // without a league): the app-wide row rule — seasonRowsFor, the row the table, scatter,
+  // xG/xA and the Performance Trend use (player's current league first, then stored
+  // order). Seasons with no scored row (display-only) use the same preference on the
+  // summary rows. (allSeasonsSummary is NOT sorted by league band within a season — it
+  // keeps the source CSV's order — so its first row was an arbitrary club.)
+  const seasonSummary = allSeasons.filter(s => s.s === chosenSeasonKey);
+  const appRow = seasonRowsFor(player, chosenSeasonKey).find(h => h.s === chosenSeasonKey && seasonSummary.some(s => s.l === h.l));
+  const defaultLeagueForSeason = appRow ? appRow.l
+    : ((seasonSummary.find(s => s.l === player.league) || seasonSummary[0] || {}).l);
   const targetLeague = manual.selectedLeague || defaultLeagueForSeason;
   const seasonsDetailAllArr = player.seasonsDetailAll || [];
   const sdAllMatch = targetLeague
@@ -842,14 +851,9 @@ export function buildCardElement(player, manual = {}) {
   // manual.selectedSeasonKey: season string (e.g. "2025-26") chosen by user in modal
   // manual.selectedLeague: league string to pair with it (for mid-season transfers)
 
-  // Default league for chosenSeasonKey when the user hasn't explicitly picked a club.
-  // This MUST match whichever club statsRow (mins/apps/gls/asts below) resolves to,
-  // or a two-club season silently shows one club's bars/xG next to a different
-  // club's mins/apps — the actual bug behind "xG/xA broken for two-input players,
-  // fine for one-club players" (single-club seasons have only one possible match,
-  // so this divergence can never surface for them). allSeasonsSummary is built with
-  // the higher-league-band entry first per season, so its first row for this
-  // season is the deterministic default club — used as the shared anchor below.
+  // Default club for a season with no club picked: scoutingCardSeason (app-wide row
+  // rule). sd (bars, roles) and statsRow (mins/apps/gls/asts) both resolve to that ONE
+  // club, so a two-club season never mixes one club's bars/xG with another's mins/apps.
   // seasonsDetail[season] can only ever hold ONE club's data per season — duplicate
   // JSON keys for a player with two entries in the same season (e.g. a January
   // transfer) collapse to whichever was written last. Previously, selecting a
