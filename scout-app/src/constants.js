@@ -239,6 +239,17 @@ export function seasonClubFor(player,season,leagues){
   const team=e?.team||player.team;
   return {team,league:h.l,current:team===player.team&&h.l===player.league};
 }
+// Default club (league) for a season when none was picked — the app-wide row rule
+// (seasonRowsFor: the player's current league first, then stored order), restricted to
+// leagues the season actually has a summary row for. A season with no scored row
+// (display-only) applies the same preference to its summary rows. Used by the Scouting
+// Card, Quick Card and Pager so all cards — and the table, scatter and Trend — agree.
+export function defaultSeasonLeague(player,season){
+  const S=(player.allSeasonsSummary||[]).filter(r=>r.s===season);
+  const h=seasonRowsFor(player,season).find(x=>x.s===season&&S.some(r=>r.l===x.l));
+  if(h) return h.l;
+  return (S.find(r=>r.l===player.league)||S[0]||{}).l||null;
+}
 export function seasonEntryFor(player,row){
   if(!row) return null;
   const e=(player.seasonsDetailAll||[]).find(x=>x.season===row.s&&x.league===row.l);

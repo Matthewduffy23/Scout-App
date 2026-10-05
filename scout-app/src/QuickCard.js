@@ -1,6 +1,6 @@
 // QuickCard v69 - Heat-style pitch option (Player Pager pitch + heatmap upload); Team Context follows selected season.
 import React, { useState, useMemo } from 'react';
-import { scoreLabel, formatFoot, formatMV, GBE_LEAGUE_BANDS, METRIC_DISPLAY, seasonXgXa } from './constants';
+import { scoreLabel, formatFoot, formatMV, GBE_LEAGUE_BANDS, METRIC_DISPLAY, seasonXgXa, defaultSeasonLeague } from './constants';
 import { useIsMobile, deliverPng } from './utils';
 
 // Player photo naming lives in photoName.js — a character-for-character port of
@@ -1093,7 +1093,8 @@ export function quickCardSeason(player, manual = {}) {
   const chosenSeasonKey = (seasonOverrideValid ? ovSeason : null)
     || (allSummary[0] && allSummary[0].s)
     || Object.keys(seasonsDetailObj).sort().reverse()[0];
-  const chosenLeagueKey = seasonOverrideValid ? (ovLeague || null) : null;
+  // No club picked (Default, or a season without a league): the app-wide default club.
+  const chosenLeagueKey = (seasonOverrideValid ? (ovLeague || null) : null) || defaultSeasonLeague(player, chosenSeasonKey);
   // seasonsDetail[season] can only ever hold ONE club's data per season — duplicate
   // JSON keys for a player with two entries in the same season (e.g. a January
   // transfer) collapse to whichever was written last, which can silently show the

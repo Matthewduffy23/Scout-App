@@ -34,7 +34,7 @@ import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   MONTSERRAT_EMBED_CSS, leagueDisplayName, leagueLogo, leagueFlag, teamCrest,
 } from './cardAssets';
-import { formatMV, formatFoot, seasonXgXa } from './constants';
+import { formatMV, formatFoot, seasonXgXa, defaultSeasonLeague } from './constants';
 import { useIsMobile, deliverPng, photoUrl } from './utils';
 import {
   scoreWheel, headerInk, preloadImages, fitNameSize, pillHtml,
@@ -182,7 +182,8 @@ export function resolveSeason(player, seasonOverride) {
   const seasonKey = (valid ? ovSeason : null)
     || (allSummary[0] && allSummary[0].s)
     || Object.keys(sdObj).sort().reverse()[0];
-  const leagueKey = valid ? (ovLeague || null) : null;
+  // No club picked: the app-wide default club (same as the Scouting Card and Quick Card).
+  const leagueKey = (valid ? (ovLeague || null) : null) || defaultSeasonLeague(player, seasonKey);
 
   const sdAllMatch = leagueKey
     ? sdAll.find(r => r.season === seasonKey && r.league === leagueKey)

@@ -142,7 +142,7 @@ export default function ScoutingCardModal({ player, onClose }) {
               {(()=>{
                 const seen=new Set();
                 return (player.allSeasonsSummary || [])
-                  .filter(s => s.type === 'standard' || !s.type)
+                  .filter(s => s.type === 'standard' || s.type === 'hidden' || !s.type) // league seasons, as the Performance Trend
                   .filter(s => { const k=`${s.s}||${s.l}`; if(seen.has(k)) return false; seen.add(k); return true; })
                 .map((s, i) => (
                   <option key={`${s.s}-${s.l}-${i}`} value={`${s.s}||${s.l}`}>

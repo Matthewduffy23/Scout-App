@@ -3,7 +3,7 @@
 // Rebuilt against a pixel-accurate 1920x1080 export of the real Canva design.
 // Uses html2canvas to screenshot an offscreen DOM node and trigger a PNG download.
 
-import { scoreBandColor, scoreLabel, scoreToStars, ROLE_KEY_LABELS, formatMV, formatFoot, LEAGUE_STRENGTHS, METRIC_DISPLAY, seasonXgXa, seasonRowsFor, seasonEntryFor } from './constants';
+import { scoreBandColor, scoreLabel, scoreToStars, ROLE_KEY_LABELS, formatMV, formatFoot, LEAGUE_STRENGTHS, METRIC_DISPLAY, seasonXgXa, seasonRowsFor, seasonEntryFor, defaultSeasonLeague } from './constants';
 import { deliverPng, isTouchDevice } from './utils';
 
 // Player photo naming lives in photoName.js — a character-for-character port of
@@ -819,10 +819,7 @@ export function scoutingCardSeason(player, manual = {}) {
   // order). Seasons with no scored row (display-only) use the same preference on the
   // summary rows. (allSeasonsSummary is NOT sorted by league band within a season — it
   // keeps the source CSV's order — so its first row was an arbitrary club.)
-  const seasonSummary = allSeasons.filter(s => s.s === chosenSeasonKey);
-  const appRow = seasonRowsFor(player, chosenSeasonKey).find(h => h.s === chosenSeasonKey && seasonSummary.some(s => s.l === h.l));
-  const defaultLeagueForSeason = appRow ? appRow.l
-    : ((seasonSummary.find(s => s.l === player.league) || seasonSummary[0] || {}).l);
+  const defaultLeagueForSeason = defaultSeasonLeague(player, chosenSeasonKey);
   const targetLeague = manual.selectedLeague || defaultLeagueForSeason;
   const seasonsDetailAllArr = player.seasonsDetailAll || [];
   const sdAllMatch = targetLeague
