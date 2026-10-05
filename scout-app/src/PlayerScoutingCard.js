@@ -3,7 +3,7 @@
 // Rebuilt against a pixel-accurate 1920x1080 export of the real Canva design.
 // Uses html2canvas to screenshot an offscreen DOM node and trigger a PNG download.
 
-import { scoreBandColor, scoreLabel, scoreToStars, ROLE_KEY_LABELS, formatMV, formatFoot, LEAGUE_STRENGTHS, METRIC_DISPLAY, seasonXgXa } from './constants';
+import { scoreBandColor, scoreLabel, scoreToStars, ROLE_KEY_LABELS, formatMV, formatFoot, LEAGUE_STRENGTHS, METRIC_DISPLAY, seasonXgXa, seasonRowsFor, seasonEntryFor } from './constants';
 import { deliverPng, isTouchDevice } from './utils';
 
 // Player photo naming lives in photoName.js — a character-for-character port of
@@ -345,6 +345,34 @@ export function scoutingCardRoles(player, sd) {
   return { group, sortedRoles };
 }
 
+// Performance Trend points (latest 3 seasons, oldest first). A season qualifies with a
+// standard OR hidden league row of 400+ mins (youth / continental / international
+// rows are out). With two qualifying rows in one season, the row is the one the rest
+// of the app shows (seasonRowsFor: current league first, then stored order) — not a
+// rule of this chart's own. Score: best role in that season's own role group, else the
+// row's season score.
+export function scoutingCardTrend(player) {
+  const S = player.allSeasonsSummary || [];
+  const qualifies = h => { const r = S.find(x => x.s === h.s && x.l === h.l); return !!r && (r.type === 'standard' || r.type === 'hidden') && (r.mins || 0) >= 400; };
+  const careerGroup = careerRoleGroup(player);
+  const rows = [];
+  for (const season of [...new Set((player.sh || []).map(h => h.s))]) {
+    const h = seasonRowsFor(player, season).find(x => x.s === season && qualifies(x));
+    if (h) rows.push(h);
+  }
+  return rows
+    .sort((a, b) => TREND_SEASON_ORDER.indexOf(a.s) - TREND_SEASON_ORDER.indexOf(b.s))
+    .slice(-3)
+    .map(h => {
+      const roles = (seasonEntryFor(player, h) || {}).roles || {};
+      const valid = (TREND_ROLES[roleGroupOf(roles) || careerGroup]) || [];
+      const best = Object.entries(roles).filter(([r]) => valid.length === 0 || valid.includes(r)).sort((a, b) => b[1] - a[1])[0];
+      const score = best ? Math.round(best[1]) : (h.sc != null ? Math.round(h.sc) : null);
+      return score != null ? { season: h.s, league: h.l, score } : null;
+    })
+    .filter(Boolean);
+}
+
 
 // ── Country name (as found in birthCountry field) → ISO 3166-1 alpha-2 code, for flagcdn ──
 const POSITION_LABELS = {
@@ -614,11 +642,12 @@ function rolePill(roleName, score, width = 320) {
 }
 
 function trendSvg(trendData) {
-  if (!trendData || trendData.length < 2) return '';
+  if (!trendData || !trendData.length) return '';
   const W = 338, H = 130;
   const scores = trendData.map(d => d.score);
   const mn = Math.min(...scores) - 8, mx = Math.max(...scores) + 8;
-  const tx = i => 30 + i * (W - 60) / (trendData.length - 1);
+  // one season: a single pill centred on the chart, no line
+  const tx = i => (trendData.length === 1 ? W / 2 : 30 + i * (W - 60) / (trendData.length - 1));
   const ty = s => 22 + (mx - s) / (mx - mn || 1) * (H - 56);
   const pts = trendData.map((d, i) => `${tx(i)},${ty(d.score)}`).join(' ');
   const dots = trendData.map((d, i) => {
@@ -629,7 +658,7 @@ function trendSvg(trendData) {
       <text x="${x}" y="${H-2}" text-anchor="middle" fill="#c0c0c0" font-size="13" font-weight="700" font-family="Montserrat, sans-serif">${d.season.replace(/^20/, '')}</text>`;
   }).join('');
   return `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
-    <polyline points="${pts}" fill="none" stroke="${TREND_CYAN}" stroke-width="2"/>${dots}
+    ${trendData.length > 1 ? `<polyline points="${pts}" fill="none" stroke="${TREND_CYAN}" stroke-width="2"/>` : ''}${dots}
   </svg>`;
 }
 
@@ -853,43 +882,9 @@ export function buildCardElement(player, manual = {}) {
   const photo = manual.playerPhotoUrl || photoUrl(player.name, player.team);
   const crest = crestId ? `${CREST_BASE}${crestId}.png` : '';
 
-  // Performance trend: standard league seasons only, 400+ mins, deduplicated per season
-  // Uses best valid role score from seasonsDetail[s].roles for that season (unweighted)
-  // Falls back to h.sc if no role scores exist for that season
-  // Each season's best role is taken within THAT season's own role group (a player who
-  // moved position is scored in the roles he played); the top-role label uses the career group.
-  const trendRolesFor = group => (group && TREND_ROLES[group]) || [];
-  const trendValidRoles = trendRolesFor(careerGroup);
-  const standardSeasons = (player.allSeasonsSummary || [])
-    .filter(s => s.type === 'standard' && (s.mins || 0) >= 400);
-  const bestStandardBySeason = {};
-  standardSeasons.forEach(s => {
-    if (!bestStandardBySeason[s.s] || s.mins > bestStandardBySeason[s.s].mins) {
-      bestStandardBySeason[s.s] = s;
-    }
-  });
-  const trendSeasonKeys = Object.keys(bestStandardBySeason)
-    .sort((a, b) => TREND_SEASON_ORDER.indexOf(a) - TREND_SEASON_ORDER.indexOf(b))
-    .slice(-3);
-  const shBySeason = {};
-  (player.sh || []).forEach(h => { if (h.sc != null) shBySeason[h.s] = h; });
-  const trendData = trendSeasonKeys.map(sk => {
-    // Get per-season role scores from seasonsDetail — must match the SAME club
-    // bestStandardBySeason picked (by minutes) for this season, not just the
-    // season string, since seasonsDetail[season] can only hold one club's data
-    // and may silently be a different club for a player with two entries here.
-    const skLeague = bestStandardBySeason[sk] && bestStandardBySeason[sk].l;
-    const sdEntry = seasonsDetailAllArr.find(r => r.season === sk && r.league === skLeague)
-      || (player.seasonsDetail || {})[sk] || {};
-    const seasonRoles = sdEntry.roles || {};
-    const seasonValid = trendRolesFor(roleGroupOf(seasonRoles) || careerGroup);
-    const bestRoleScore = Object.entries(seasonRoles)
-      .filter(([role]) => seasonValid.length === 0 || seasonValid.includes(role))
-      .sort((a, b) => b[1] - a[1])[0]?.[1] || null;
-    // Fall back to h.sc if no role scores
-    const score = bestRoleScore != null ? Math.round(bestRoleScore) : (shBySeason[sk] ? Math.round(shBySeason[sk].sc) : null);
-    return score != null ? { season: sk, score } : null;
-  }).filter(Boolean);
+  // Performance trend: see scoutingCardTrend.
+  const trendData = scoutingCardTrend(player);
+  const trendValidRoles = (careerGroup && TREND_ROLES[careerGroup]) || [];
   const trendTopRole = Object.entries(rcs)
     .filter(([role]) => trendValidRoles.length === 0 || trendValidRoles.includes(role))
     .sort((a, b) => b[1] - a[1])[0]?.[0] || null;
@@ -1046,10 +1041,11 @@ export function buildCardElement(player, manual = {}) {
       <!-- DIVIDER 1 -->
       <div style="position:absolute;top:468px;left:1546px;width:349px;height:2px;background:rgba(192,192,192,.35);"></div>
 
-      ${trendData.length >= 2 ? `
-      <!-- PERFORMANCE TREND -->
+      <!-- PERFORMANCE TREND (one season = a single centred pill; none = a note) -->
       <div style="position:absolute;top:482px;left:1520px;width:400px;text-align:center;font-size:27.9px;font-weight:700;color:#d9d9d9;">PERFORMANCE TREND</div>
-      <div style="position:absolute;top:524px;left:1520px;width:400px;display:flex;justify-content:center;">${trendSvg(trendData)}</div>` : ''}
+      ${trendData.length
+        ? `<div style="position:absolute;top:524px;left:1520px;width:400px;display:flex;justify-content:center;">${trendSvg(trendData)}</div>`
+        : `<div data-trend-empty="1" style="position:absolute;top:560px;left:1520px;width:400px;text-align:center;font-size:20px;font-weight:600;color:#9ca3af;">No qualifying seasons<div style="font-size:15px;font-weight:500;color:#6b7280;margin-top:6px;">league seasons with 400+ mins</div></div>`}
 
       <!-- DIVIDER 2 -->
       <div style="position:absolute;top:680px;left:1546px;width:349px;height:2px;background:rgba(192,192,192,.35);"></div>
