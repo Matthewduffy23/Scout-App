@@ -1,6 +1,6 @@
 // QuickCard v69 - Heat-style pitch option (Player Pager pitch + heatmap upload); Team Context follows selected season.
 import React, { useState, useMemo } from 'react';
-import { scoreLabel, formatFoot, formatMV, GBE_LEAGUE_BANDS, METRIC_DISPLAY, seasonXgXa, defaultSeasonLeague } from './constants';
+import { scoreLabel, formatFoot, formatMV, GBE_LEAGUE_BANDS, METRIC_DISPLAY, seasonXgXa, defaultSeasonLeague, seasonDetailExact } from './constants';
 import { useIsMobile, deliverPng } from './utils';
 
 // Player photo naming lives in photoName.js — a character-for-character port of
@@ -1088,8 +1088,11 @@ export function quickCardSeason(player, manual = {}) {
   // club selected, not just "whichever season string matches first". Falls back to
   // a plain season string for backwards compatibility if no "||" is present.
   const [ovSeason, ovLeague] = manual.seasonOverride ? manual.seasonOverride.split('||') : [null, null];
+  // A picked season is honoured whenever the player has a row for it — including seasons
+  // with only cup / international rows (no detail): those show their own stats with no
+  // bars instead of silently switching to the latest season.
   const seasonOverrideValid = ovSeason
-    && (seasonsDetailObj[ovSeason] !== undefined || seasonsDetailAllArr.some(r => r.season === ovSeason));
+    && (allSummary.some(r => r.s === ovSeason) || seasonsDetailObj[ovSeason] !== undefined || seasonsDetailAllArr.some(r => r.season === ovSeason));
   const chosenSeasonKey = (seasonOverrideValid ? ovSeason : null)
     || (allSummary[0] && allSummary[0].s)
     || Object.keys(seasonsDetailObj).sort().reverse()[0];
@@ -1100,13 +1103,11 @@ export function quickCardSeason(player, manual = {}) {
   // transfer) collapse to whichever was written last, which can silently show the
   // wrong club's stats or leave the card blank. seasonsDetailAll preserves every
   // season+club row undeduped; when a specific club was chosen via the season
-  // override dropdown, match on season+league exactly. Otherwise fall back to the
-  // first (deterministic higher-league-band) entry for that season as the default.
-  const sdAllMatch = chosenLeagueKey
-    ? seasonsDetailAllArr.find(r => r.season === chosenSeasonKey && r.league === chosenLeagueKey)
-    : seasonsDetailAllArr.find(r => r.season === chosenSeasonKey);
-  const sd = sdAllMatch || seasonsDetailObj[chosenSeasonKey] || Object.values(seasonsDetailObj)[0] || {};
-  const sdLeague = sd.league || player.league;
+  // override dropdown or the app-wide default club, match on season+league exactly; no
+  // detail for that season + club (cup-only season) = no bars — never another season's
+  // (the old Object.values(...)[0] fallback returned the OLDEST season's).
+  const sd = seasonDetailExact(player, chosenSeasonKey, chosenLeagueKey) || {};
+  const sdLeague = sd.league || chosenLeagueKey || player.league;
   // allSeasonsSummary[0] is NOT guaranteed to be the same season+club as `sd` above —
   // for loan players with two entries sharing a season string (e.g. parent club U21s
   // and the loan club), index 0 can silently pick the wrong one while sd correctly
@@ -1122,7 +1123,9 @@ export function buildQuickCardElement(player, players, manual = {}) {
   // Season / club / stats-row choice: quickCardSeason (exported so the choice can be
   // checked for every player without building cards).
   const { seasonsDetailObj, seasonsDetailAllArr, allSummary, chosenSeasonKey, chosenLeagueKey, sd, sdLeague, statsRow } = quickCardSeason(player, manual);
-  const sdTeamFull = sd.team || player.team; // untruncated — needed for exact crest/map matching
+  // club of the row shown: a picked season with no detail (cup-only) still names ITS club,
+  // not the player's current one. Untruncated — needed for exact crest/map matching.
+  const sdTeamFull = sd.team || (statsRow.team && statsRow.team !== 'nan' ? statsRow.team : '') || player.team;
   const sdTeam = truncateText(sdTeamFull, 16); // truncated — for display only
   // Resolve crest: use player.teamFotmobId only when sd resolved to the player's
   // CURRENT team; for a different club (e.g. two-club season, January transfer),
@@ -1445,6 +1448,7 @@ export function buildQuickCardElement(player, players, manual = {}) {
         ${groups.A && groups.A.length ? `<div style="font-size:24px;font-weight:800;color:#f3f5f7;margin:${EXTRA_GAP}px 0 6px;">${isGK ? 'Goalkeeping' : 'Attacking'}</div>${buildGroupBars('A')}` : ''}
         ${groups.D && groups.D.length ? `<div style="font-size:24px;font-weight:800;color:#f3f5f7;margin:${8+EXTRA_GAP}px 0 6px;">Defensive</div>${buildGroupBars('D')}` : ''}
         ${groups.P && groups.P.length ? `<div style="font-size:24px;font-weight:800;color:#f3f5f7;margin:${8+EXTRA_GAP}px 0 6px;">Possession</div>${buildGroupBars('P')}` : ''}
+        ${!(groups.A && groups.A.length) && !(groups.D && groups.D.length) && !(groups.P && groups.P.length) ? `<div data-no-metrics="1" style="margin-top:160px;text-align:center;font-size:24px;font-weight:600;color:#9aa3b8;">No percentile data for this season<div style="font-size:17px;font-weight:500;color:#5e6678;margin-top:8px;">${Object.keys(sd).length ? 'too few league minutes for percentiles' : 'cup / international minutes only'}</div></div>` : ''}
         <div style="display:flex;align-items:center;margin-top:${6+EXTRA_GAP}px;">
           <div style="width:188px;flex-shrink:0;"></div>
           <div style="flex:1;position:relative;height:26px;">

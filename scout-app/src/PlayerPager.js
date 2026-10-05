@@ -34,7 +34,7 @@ import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   MONTSERRAT_EMBED_CSS, leagueDisplayName, leagueLogo, leagueFlag, teamCrest,
 } from './cardAssets';
-import { formatMV, formatFoot, seasonXgXa, defaultSeasonLeague } from './constants';
+import { formatMV, formatFoot, seasonXgXa, defaultSeasonLeague, seasonDetailExact } from './constants';
 import { useIsMobile, deliverPng, photoUrl } from './utils';
 import {
   scoreWheel, headerInk, preloadImages, fitNameSize, pillHtml,
@@ -177,24 +177,25 @@ export function resolveSeason(player, seasonOverride) {
   const allSummary = player.allSeasonsSummary || [];
 
   const [ovSeason, ovLeague] = seasonOverride ? seasonOverride.split('||') : [null, null];
+  // Honour a picked season whenever the player has a row for it (cup-only seasons
+  // included: own stats, no bars) — never silently switch to the latest season.
   const valid = ovSeason
-    && (sdObj[ovSeason] !== undefined || sdAll.some(r => r.season === ovSeason));
+    && (allSummary.some(r => r.s === ovSeason) || sdObj[ovSeason] !== undefined || sdAll.some(r => r.season === ovSeason));
   const seasonKey = (valid ? ovSeason : null)
     || (allSummary[0] && allSummary[0].s)
     || Object.keys(sdObj).sort().reverse()[0];
   // No club picked: the app-wide default club (same as the Scouting Card and Quick Card).
   const leagueKey = (valid ? (ovLeague || null) : null) || defaultSeasonLeague(player, seasonKey);
 
-  const sdAllMatch = leagueKey
-    ? sdAll.find(r => r.season === seasonKey && r.league === leagueKey)
-    : sdAll.find(r => r.season === seasonKey);
-  const sd = sdAllMatch || sdObj[seasonKey] || Object.values(sdObj)[0] || {};
-  const league = sd.league || player.league;
+  // exactly that season + club's detail, or none (no bars) — never another season's
+  const sd = seasonDetailExact(player, seasonKey, leagueKey) || {};
+  const league = sd.league || leagueKey || player.league;
   const statsRow = allSummary.find(r => r.s === seasonKey && r.l === league)
     || allSummary.find(r => r.s === seasonKey)
     || allSummary[0]
     || {};
-  return { sd, statsRow, seasonKey, league, team: sd.team || player.team };
+  // club of the row shown (a cup-only pick still names its own club, not the current one)
+  return { sd, statsRow, seasonKey, league, team: sd.team || (statsRow.team && statsRow.team !== 'nan' ? statsRow.team : '') || player.team };
 }
 
 // ─── GBE ───────────────────────────────────────────────────────────────────

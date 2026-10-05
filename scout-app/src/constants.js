@@ -250,6 +250,15 @@ export function defaultSeasonLeague(player,season){
   if(h) return h.l;
   return (S.find(r=>r.l===player.league)||S[0]||{}).l||null;
 }
+// seasonsDetail entry for exactly this season + league, or null. Never another season's
+// or club's entry: a season that only has cup / international rows has no detail, and
+// a card then shows that season's stats with no bars rather than borrowing older ones.
+export function seasonDetailExact(player,season,league){
+  const e=(player.seasonsDetailAll||[]).find(x=>x.season===season&&x.league===league);
+  if(e) return e;
+  const d=player.seasonsDetail?.[season];
+  return d&&(!league||d.league===league)?d:null;
+}
 export function seasonEntryFor(player,row){
   if(!row) return null;
   const e=(player.seasonsDetailAll||[]).find(x=>x.season===row.s&&x.league===row.l);

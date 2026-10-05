@@ -3,7 +3,7 @@
 // Rebuilt against a pixel-accurate 1920x1080 export of the real Canva design.
 // Uses html2canvas to screenshot an offscreen DOM node and trigger a PNG download.
 
-import { scoreBandColor, scoreLabel, scoreToStars, ROLE_KEY_LABELS, formatMV, formatFoot, LEAGUE_STRENGTHS, METRIC_DISPLAY, seasonXgXa, seasonRowsFor, seasonEntryFor, defaultSeasonLeague } from './constants';
+import { scoreBandColor, scoreLabel, scoreToStars, ROLE_KEY_LABELS, formatMV, formatFoot, LEAGUE_STRENGTHS, METRIC_DISPLAY, seasonXgXa, seasonRowsFor, seasonEntryFor, defaultSeasonLeague, seasonDetailExact } from './constants';
 import { deliverPng, isTouchDevice } from './utils';
 
 // Player photo naming lives in photoName.js — a character-for-character port of
@@ -105,7 +105,6 @@ const LEAGUE_LOGOS = {
   'Northern Ireland 1.':'https://raw.githubusercontent.com/Matthewduffy23/scouting-photos/main/league_logos/129.png',
   'Norway 1.':'https://raw.githubusercontent.com/Matthewduffy23/scouting-photos/main/league_logos/59.png',
   'Norway 2.':'https://raw.githubusercontent.com/Matthewduffy23/scouting-photos/main/league_logos/203.png',
-  'Norway 3.':'https://raw.githubusercontent.com/Matthewduffy23/scouting-photos/main/league_logos/59.png',
   'Panama 1.':'https://raw.githubusercontent.com/Matthewduffy23/scouting-photos/main/league_logos/9039.png',
   'Paraguay 1.':'https://raw.githubusercontent.com/Matthewduffy23/scouting-photos/main/league_logos/199.png',
   'Peru 1.':'https://raw.githubusercontent.com/Matthewduffy23/scouting-photos/main/league_logos/131.png',
@@ -249,7 +248,6 @@ const LEAGUE_DISPLAY_NAMES = {
   'Northern Ireland 1.':'NIFL Premiership',
   'Norway 1.':'Eliteserien',
   'Norway 2.':'OBOS-ligaen',
-  'Norway 3.':'U19 Eliteserien',
   'Panama 1.':'Liga Panamena de Futbol',
   'Paraguay 1.':'Primera Division',
   'Peru 1.':'Liga 1',
@@ -822,10 +820,9 @@ export function scoutingCardSeason(player, manual = {}) {
   const defaultLeagueForSeason = defaultSeasonLeague(player, chosenSeasonKey);
   const targetLeague = manual.selectedLeague || defaultLeagueForSeason;
   const seasonsDetailAllArr = player.seasonsDetailAll || [];
-  const sdAllMatch = targetLeague
-    ? seasonsDetailAllArr.find(r => r.season === chosenSeasonKey && r.league === targetLeague)
-    : seasonsDetailAllArr.find(r => r.season === chosenSeasonKey);
-  const sd = sdAllMatch || seasonsDetailObj[chosenSeasonKey] || Object.values(seasonsDetailObj)[0] || {};
+  // Exactly the chosen season + club's detail, else none (no bars) — never the oldest
+  // season's, which the old Object.values(...)[0] fallback returned.
+  const sd = seasonDetailExact(player, chosenSeasonKey, targetLeague) || {};
   const selectedSummaryRow = allSeasons.find(s => s.s === chosenSeasonKey && s.l === targetLeague) || null;
   // For stats row, use the selected summary row if available, otherwise fall back to latestSeason
   const statsRow = selectedSummaryRow || latestSeason;
