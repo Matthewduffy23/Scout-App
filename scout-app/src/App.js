@@ -319,10 +319,13 @@ export default function App(){
   const [lsMax,setLsMax]=useState(101);
 
   // Derive the active leagues set from all filter states
+  // Show Hidden / Show Youth only REVEAL those leagues as normal checkboxes; what's
+  // active is exactly what's ticked. A category that isn't shown is never active, so
+  // nothing invisible filters the table (e.g. "All" with Youth off has no youth leagues).
   const leagues=useMemo(()=>{
-    if(showYouth) return new Set(YOUTH_LEAGUES);
+    const visible=l=>(showHidden||!HIDDEN_LEAGUES.has(l))&&(showYouth||!YOUTH_LEAGUES.has(l));
     let base;
-    if(activePresetLeagues!==null) return new Set(activePresetLeagues);
+    if(activePresetLeagues!==null) return new Set([...activePresetLeagues].filter(visible));
     if(activeBands.size>0||activeRegions.size>0){
       base=new Set(ALL_LEAGUES.filter(l=>{
         const bandOk = activeBands.size===0 || activeBands.has(leagueToBand(l));
@@ -332,9 +335,11 @@ export default function App(){
     } else {
       base=new Set(DEFAULT_LEAGUES);
     }
-    if(showHidden)[...HIDDEN_LEAGUES].forEach(l=>base.add(l));
-    return base;
+    return new Set([...base].filter(visible));
   },[activePresetLeagues,activeBands,activeRegions,showHidden,showYouth]);
+  // Youth searches keep their relaxed defaults (min minutes 100, no "recent data only")
+  // whenever any youth league is ticked.
+  const youthActive=useMemo(()=>[...leagues].some(l=>YOUTH_LEAGUES.has(l)),[leagues]);
   const [ageMin,setAgeMin]=useState(16);
   const [ageMax,setAgeMax]=useState(38);
   const [heightMin,setHeightMin]=useState(152); // 5'0"
@@ -505,12 +510,12 @@ export default function App(){
     const list=all.filter(p=>{
       if(q&&!_norm(p.name).includes(q)&&!_norm(p.team).includes(q)) return false;
       // RecentOnly: skip if no recent data, BUT allow all if a specific season is selected
-      if(recentOnly&&!p.hasRecentData&&seasonFilter==='all'&&!playedCurrent&&!showYouth) return false;
+      if(recentOnly&&!p.hasRecentData&&seasonFilter==='all'&&!playedCurrent&&!youthActive) return false;
       // Min minutes: with a season selected, that season's row (the same row the score,
       // club and league come from — seasonEntryFor); with All seasons, latest minutes.
       if(minMins>0){
         const mins=seasonFilter==='all'?(p.minutesLatest||0):(seasonEntryFor(p,seasonRowFor(p,seasonFilter,leagues))?.minutes||0);
-        if(mins<(showYouth?100:minMins)) return false;
+        if(mins<(youthActive?100:minMins)) return false;
       }
       // Career minimum minutes: total across every season on record, independent of how they're spread.
       // Applies on top of the per-season filter above, never instead of it.
@@ -876,23 +881,17 @@ export default function App(){
             </div>
             {/* Hidden / Youth toggles */}
             <div style={{display:'flex',gap:8,marginBottom:6}}>
-              <label style={{display:'flex',alignItems:'center',gap:5,cursor:'pointer'}} onClick={()=>{
-                const next=!showHidden;
-                setShowHidden(next);
-                // Snapshot current leagues and add/remove hidden ones
-                const current=new Set(leagues);
-                if(next)[...HIDDEN_LEAGUES].forEach(l=>current.add(l));
-                else[...HIDDEN_LEAGUES].forEach(l=>current.delete(l));
-                setActivePresetLeagues([...current]);
-                setActiveBands(new Set());setActiveRegions(new Set());setPage(0);
-              }}>
-                <div style={T.cb(showHidden)}>{showHidden&&<span style={{color:'#fff',fontSize:8}}>✓</span>}</div>
-                <span style={{fontSize:9.5,color:showHidden?'#e2e8f4':'#94a3b8'}}>Show Hidden</span>
-              </label>
-              <label style={{display:'flex',alignItems:'center',gap:5,cursor:'pointer'}} onClick={()=>{setShowYouth(p=>!p);setPage(0);}}>
-                <div style={T.cb(showYouth)}>{showYouth&&<span style={{color:'#fff',fontSize:8}}>✓</span>}</div>
-                <span style={{fontSize:9.5,color:showYouth?'#e2e8f4':'#94a3b8'}}>Show Youth</span>
-              </label>
+              {[['Show Hidden',showHidden,setShowHidden,HIDDEN_LEAGUES],['Show Youth',showYouth,setShowYouth,YOUTH_LEAGUES]].map(([label,on,setOn,cat])=>(
+                <label key={label} style={{display:'flex',alignItems:'center',gap:5,cursor:'pointer'}} onClick={()=>{
+                  // reveal only: the category's leagues appear UNticked; switching it off unticks them
+                  setOn(!on);
+                  setActivePresetLeagues([...leagues].filter(l=>!cat.has(l)));
+                  setActiveBands(new Set());setActiveRegions(new Set());setActivePreset('');setPage(0);
+                }}>
+                  <div style={T.cb(on)}>{on&&<span style={{color:'#fff',fontSize:8}}>✓</span>}</div>
+                  <span style={{fontSize:9.5,color:on?'#e2e8f4':'#94a3b8'}}>{label}</span>
+                </label>
+              ))}
             </div>
             {/* League Strength Range */}
             <div style={{marginBottom:8}}>
@@ -910,16 +909,43 @@ export default function App(){
               </div>
             </div>
             <div style={{...T.cg,maxHeight:200,overflowY:'auto'}}>
-              {[...ALL_LEAGUES].filter(lg=>showHidden||!HIDDEN_LEAGUES.has(lg)).filter(lg=>showYouth||!YOUTH_LEAGUES.has(lg)).sort((a,b)=>a.localeCompare(b)).map(lg=>(
-                <label key={lg} style={T.cr} onClick={()=>{
+              {(()=>{
+                const toggle=lg=>{
                   const current=new Set(leagues);
                   current.has(lg)?current.delete(lg):current.add(lg);
                   setActivePresetLeagues([...current]);
                   setActiveBands(new Set());setActiveRegions(new Set());setActivePreset('');setPage(0);
-                }}>                  <div style={T.cb(leagues.has(lg))}>{leagues.has(lg)&&<span style={{color:'#fff',fontSize:8,lineHeight:1}}>✓</span>}</div>
-                  <span style={T.cl(leagues.has(lg))}>{lg}</span>
-                </label>
-              ))}
+                };
+                const setGroup=(cat,on)=>{
+                  const current=new Set(leagues);
+                  [...cat].forEach(l=>on?current.add(l):current.delete(l));
+                  setActivePresetLeagues([...current]);
+                  setActiveBands(new Set());setActiveRegions(new Set());setActivePreset('');setPage(0);
+                };
+                const row=lg=>(
+                  <label key={lg} style={T.cr} onClick={()=>toggle(lg)}>
+                    <div style={T.cb(leagues.has(lg))}>{leagues.has(lg)&&<span style={{color:'#fff',fontSize:8,lineHeight:1}}>✓</span>}</div>
+                    <span style={T.cl(leagues.has(lg))}>{lg}</span>
+                  </label>
+                );
+                const group=(title,cat)=>(
+                  <div key={title} data-league-group={title} style={{marginTop:6,paddingTop:5,borderTop:'1px solid #1e2d45'}}>
+                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:3}}>
+                      <span style={{fontSize:9,fontWeight:700,color:'#64748b',textTransform:'uppercase',letterSpacing:'0.06em'}}>{title}</span>
+                      <span style={{display:'flex',gap:4}}>
+                        <button onClick={()=>setGroup(cat,true)} style={{fontSize:8.5,padding:'1px 5px',borderRadius:3,border:'1px solid #1e2d45',background:'transparent',color:'#94a3b8',cursor:'pointer'}}>All</button>
+                        <button onClick={()=>setGroup(cat,false)} style={{fontSize:8.5,padding:'1px 5px',borderRadius:3,border:'1px solid #1e2d45',background:'transparent',color:'#94a3b8',cursor:'pointer'}}>None</button>
+                      </span>
+                    </div>
+                    {[...cat].sort((a,b)=>a.localeCompare(b)).map(row)}
+                  </div>
+                );
+                return <>
+                  {[...ALL_LEAGUES].filter(lg=>!HIDDEN_LEAGUES.has(lg)&&!YOUTH_LEAGUES.has(lg)).sort((a,b)=>a.localeCompare(b)).map(row)}
+                  {showHidden&&group('Hidden',HIDDEN_LEAGUES)}
+                  {showYouth&&group('Youth',YOUTH_LEAGUES)}
+                </>;
+              })()}
             </div>
             {/* With a season selected the league filter means "in these leagues THAT
                 season"; this adds "and still in one of them now". */}
@@ -1186,7 +1212,7 @@ export default function App(){
           ):(<>
           <div style={isMobile?T.listMobile:T.tw}>
             {sorted.length===0
-              ?<div style={T.es}><div style={{fontSize:26}}>⚽</div><div style={{fontSize:12,color:'#94a3b8'}}>{showYouth?'Youth league players not in current data — will appear after next pipeline rebuild'
+              ?<div style={T.es}><div style={{fontSize:26}}>⚽</div><div style={{fontSize:12,color:'#94a3b8'}}>{youthActive?'Youth league players not in current data — will appear after next pipeline rebuild'
                 :belowMinScore>0?`${belowMinScore.toLocaleString()} player${belowMinScore===1?'':'s'} match but score below Min Score ${minScore} — lower Min Score to see them`
                 :'No players match filters'}</div></div>
               :isMobile?(

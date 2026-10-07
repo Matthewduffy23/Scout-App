@@ -208,7 +208,6 @@ export default function TeamIndex({ players = [] }) {
   const [activeRegions, setActiveRegions] = useState(new Set());
   const [leagues, setLeagues] = useState(new Set(DEFAULT_LEAGUES));
   const [showHidden, setShowHidden] = useState(false);
-  const [showYouth, setShowYouth] = useState(false);
   const [lsMin, setLsMin] = useState(0);
   const [lsMax, setLsMax] = useState(101);
 
@@ -459,7 +458,7 @@ export default function TeamIndex({ players = [] }) {
       const dotLeague = toDotLeague(t.league);
       if (!leagues.has(dotLeague)) return false;
       if (!showHidden && HIDDEN_LEAGUES.has(dotLeague)) return false;
-      if (!showYouth && YOUTH_LEAGUES.has(dotLeague)) return false;
+      if (YOUTH_LEAGUES.has(dotLeague)) return false; // no youth team data exists
       if (activeBands.size > 0 && !activeBands.has(leagueToBand(dotLeague))) return false;
       if (activeRegions.size > 0 && !activeRegions.has(leagueToRegion(dotLeague))) return false;
       const ls = LEAGUE_STRENGTHS[dotLeague] || 0;
@@ -493,7 +492,7 @@ export default function TeamIndex({ players = [] }) {
       }
       return true;
     });
-  }, [resolved, search, leagues, showHidden, showYouth, activeBands, activeRegions, lsMin, lsMax, scoreMode, rawMode, minScore, styleFilters, minStyleScore, attrFilters, metricFilters, mostImproved, season, sameDivOnly, improvementMap, minMVPerf, mvPerfByTeam]);
+  }, [resolved, search, leagues, showHidden, activeBands, activeRegions, lsMin, lsMax, scoreMode, rawMode, minScore, styleFilters, minStyleScore, attrFilters, metricFilters, mostImproved, season, sameDivOnly, improvementMap, minMVPerf, mvPerfByTeam]);
 
   const sorted = useMemo(() => {
     const arr = [...filtered];
@@ -733,12 +732,8 @@ export default function TeamIndex({ players = [] }) {
             <div style={T.cb(showHidden)}>{showHidden && <span style={{ color: '#fff', fontSize: 8 }}>✓</span>}</div>
             <span style={T.cl(showHidden)}>Show Hidden</span>
           </label>
-          <label style={T.cr} onClick={() => setShowYouth(p => !p)}>
-            <div style={T.cb(showYouth)}>{showYouth && <span style={{ color: '#fff', fontSize: 8 }}>✓</span>}</div>
-            <span style={T.cl(showYouth)}>Show Youth</span>
-          </label>
           <div style={{ maxHeight: 200, overflowY: 'auto', border: '1px solid #1e2d45', borderRadius: 5, padding: 6, marginTop: 6 }}>
-            {[...ALL_LEAGUES].filter(l => showHidden || !HIDDEN_LEAGUES.has(l)).filter(l => showYouth || !YOUTH_LEAGUES.has(l)).sort((a, b) => a.localeCompare(b)).map(l => (
+            {[...ALL_LEAGUES].filter(l => showHidden || !HIDDEN_LEAGUES.has(l)).filter(l => !YOUTH_LEAGUES.has(l)).sort((a, b) => a.localeCompare(b)).map(l => (
               <label key={l} style={{ ...T.cr, marginBottom: 2 }} onClick={() => { setLeagues(prev => { const n = new Set(prev); n.has(l) ? n.delete(l) : n.add(l); return n; }); setPage(0); }}>
                 <div style={T.cb(leagues.has(l))}>{leagues.has(l) && <span style={{ color: '#fff', fontSize: 7 }}>✓</span>}</div>
                 <span style={{ ...T.cl(leagues.has(l)), fontSize: 10 }}>{l}</span>

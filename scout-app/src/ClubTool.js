@@ -3,7 +3,7 @@ import React, { useState, useMemo } from 'react';
 import PlayerCard from './PlayerCard';
 import { scoreBandColor, scoreLabel, formatMV, ROLE_KEY_LABELS, ROLES_BY_KEY,
          ALL_LEAGUES, LEAGUE_STRENGTHS, promotionBadge, divColor, PRESET_LEAGUES,
-         HIDDEN_LEAGUES, YOUTH_LEAGUES, leagueToRegion, leagueToBand,
+         leagueToRegion, leagueToBand,
          POSITION_ATTRIBUTES, playerHasAttribute, ALL_SEASONS, CURRENT_SEASON, METRIC_OPTIONS } from './constants';
 import { Photo, Crest, useIsMobile } from './utils';
 
@@ -247,11 +247,8 @@ export default function ClubTool({players}){
   const [activePreset,setActivePreset]=useState('');
   const [activeBands,setActiveBands]=useState(new Set());
   const [activeRegions,setActiveRegions]=useState(new Set());
-  const [showHidden,setShowHidden]=useState(false);
-  const [showYouth,setShowYouth]=useState(false);
   const [smartFilter,setSmartFilter]=useState(true);
   const searchLeagues=useMemo(()=>{
-    if(showYouth) return new Set(YOUTH_LEAGUES);
     let base;
     if(activePreset&&PRESET_LEAGUES[activePreset]) base=new Set(PRESET_LEAGUES[activePreset]);
     else if(activeBands.size>0||activeRegions.size>0){
@@ -261,9 +258,8 @@ export default function ClubTool({players}){
         return bandOk&&regionOk;
       }));
     } else base=new Set(ALL_LEAGUES);
-    if(showHidden)[...HIDDEN_LEAGUES].forEach(l=>base.add(l));
     return base;
-  },[activePreset,activeBands,activeRegions,showHidden,showYouth]);
+  },[activePreset,activeBands,activeRegions]);
   const [tmplMetrics,setTmplMetrics]=useState([]);
   const [tmplInfo,setTmplInfo]=useState(null);
   const [results,setResults]=useState([]);
