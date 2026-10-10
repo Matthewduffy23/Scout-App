@@ -1206,7 +1206,7 @@ export default function App(){
           )}
 
           {mainView==='scatter'?(
-            <ScatterChart players={sorted} getDisplayScore={getDisplayScore} seasonFilter={seasonFilter} scoreMode={scoreMode}
+            <ScatterChart players={sorted} allPlayers={all} getDisplayScore={getDisplayScore} seasonFilter={seasonFilter} scoreMode={scoreMode}
               rawMode={rawMode} outlierMode={outlierMode} roleKey={rk} leagues={leagues} onSelect={setSel} onClose={()=>setMainView('table')}
               contextLabel={`${pos==='All'?'All positions':pos}${seasonFilter!=='all'?' · '+seasonFilter:''}`}/>
           ):(<>

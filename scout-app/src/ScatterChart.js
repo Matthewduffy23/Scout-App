@@ -532,7 +532,7 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
   const bounds = { x0: pad.l + 2, y0: pad.t + 2, x1: pad.l + pw - 2, y1: pad.t + ph - 2 };
   const items = [];
   if (!redDot) for (const h of hls) items.push({ x: xS(h.x), y: yS(h.y), r: r*1.6, force: true, px: 11*fs, font: f(11, 700),
-    text: pname(h) + (h.extra ? `  #${h.rank}` : ''), hl: true });
+    text: pname(h) + (h.extra && h.rank != null ? `  #${h.rank}` : ''), hl: true });
   // Red dot keeps the normal name style, but a highlighted name is placed first, so
   // nearby names make way for it rather than it being the one dropped.
   else if (showNames) for (const h of hls) items.push({ x: xS(h.x), y: yS(h.y), r, force: true, px: 9.5*fs, font: f(9.5, 500), text: pname(h) });
@@ -543,7 +543,10 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
   if (showNames && !solo) {
     for (const d of group ? visible.filter(v => !v.muted) : visible.slice(0, 400)) {
       if (isHl(d)) continue;
-      items.push({ x: xS(d.x), y: yS(d.y), r, px: 9.5*fs, font: f(9.5, 500), text: pname(d) });
+      // In group mode every member is a small, known set (one squad) — force a
+      // guaranteed placement (even overlapping) rather than silently dropping
+      // the label when no clear spot is found, same as the hls force items below.
+      items.push({ x: xS(d.x), y: yS(d.y), r, px: 9.5*fs, font: f(9.5, 500), text: pname(d), force: !!group });
     }
   }
   const labels = placeLabels(ctx, items, dots, bounds, taken, fs, budget);
@@ -565,11 +568,17 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
   }
 
   // ── Highlighted players on top ───────────────────────────────────────────
+  // A forced-in player (added despite failing the app's filters) gets a dashed
+  // outer ring on top of whichever highlight style is active, so they read as
+  // "not really part of this cohort" rather than a normal qualifying point.
+  const forcedRing = h => { ctx.setLineDash([3*fs, 3*fs]); ctx.strokeStyle = FORCED_RING; ctx.lineWidth = 1.6*fs;
+    ctx.beginPath(); ctx.arc(xS(h.x), yS(h.y), r*1.6 + 5.5*fs, 0, Math.PI*2); ctx.stroke(); ctx.setLineDash([]); };
   for (const h of hls) {
-    if (redDot) { ringDot({ ...h, muted: false, plain: false, color: GROUP_RED }, r, 1); continue; } // same size, just red
+    if (redDot) { ringDot({ ...h, muted: false, plain: false, color: GROUP_RED }, r, 1); if (h.forced) forcedRing(h); continue; } // same size, just red
     ringDot(h, r*1.6, 1);
     ctx.beginPath(); ctx.arc(xS(h.x), yS(h.y), r*1.6 + 3*fs, 0, Math.PI*2);
     ctx.strokeStyle = T.hl; ctx.lineWidth = 2*fs; ctx.stroke();
+    if (h.forced) forcedRing(h);
   }
   const hv = hoverId != null && !hlSet.has(hoverId) && visible.find(d => pid(d) === hoverId);
   if (hv) {
@@ -674,6 +683,7 @@ const LEAGUE_OTHER = '#94a3b8';
 
 const GROUP_RED = '#ef4444';
 const GROUP_OUT = '#94a3b8';
+const FORCED_RING = '#f0a637'; // dashed outer ring: added despite failing the app's filters
 const OPS = { le: ['≤', (a, b) => a <= b], eq: ['=', (a, b) => a === b], ge: ['≥', (a, b) => a >= b] };
 
 // ── Player score quadrants (both axes scores) ────────────────────────────────
@@ -701,9 +711,13 @@ function playerScoreQuad(xf, yf, topPts, targetMin) {
 // Everything interactive about the scatter chart, for any kind of item (players,
 // teams). The page-specific parts come in as props: the axis fields, colour modes,
 // tooltip lines, group-highlight conditions, and what a double-click opens.
-export function ScatterView({ items, idOf, nameOf, subOf, tooltipLines, buildFields: buildFieldsFor, defaultX, defaultY,
+export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLines, buildFields: buildFieldsFor, defaultX, defaultY,
   metricLabel = 'Per-90 value', colorModes, colorOf: colorOfMode, legendBase, scoreQuad, targetTiers, groups = [], leagueOf,
   noun = 'player', openLabel = 'Open profile', onSelect, onClose, contextLabel }) {
+  // searchPool: an unfiltered roster to search for the "ignores filters" add — falls
+  // back to items (no override) when the caller doesn't have one (e.g. Team Index).
+  const pool = searchPool && searchPool.length ? searchPool : items;
+  const hasOverridePool = pool !== items;
   const isMobile = useIsMobile();
   const [n, setN] = useState(50);
   const [xKey, setXKey] = useState(defaultX);
@@ -723,7 +737,12 @@ export function ScatterView({ items, idOf, nameOf, subOf, tooltipLines, buildFie
   const [hover, setHover] = useState(null); // {d, left, top}
   // Highlighted items, in pick order (up to HL_MAX). Plain click / search: see below.
   const [highlightIds, setHighlightIds] = useState([]);
+  // Ids added via the "ignores filters" search — exempt from the rankById-pruning
+  // effect below, and drawn with a dashed ring since they're not part of the real
+  // filtered cohort.
+  const [forcedIds, setForcedIds] = useState(() => new Set());
   const [query, setQuery] = useState('');
+  const [forceQuery, setForceQuery] = useState('');
   const [busy, setBusy] = useState(false);
   const [exportTheme, setExportTheme] = useState('dark'); // 'dark' | 'light'
   const [customTitle, setCustomTitle] = useState('');
@@ -762,10 +781,24 @@ export function ScatterView({ items, idOf, nameOf, subOf, tooltipLines, buildFie
   useEffect(() => { if (groupDef?.kind === 'number' && groupNum == null) setGroupNum(groupDef.def); }, [groupDef, groupNum]);
 
   const rankById = useMemo(() => new Map(items.map((p, i) => [idOf(p), i + 1])), [items, idOf]);
-  useEffect(() => { if (highlightIds.some(id => !rankById.has(id))) setHighlightIds(ids => ids.filter(id => rankById.has(id))); }, [rankById, highlightIds]);
+  // A forced-in id (added despite filters) is exempt from this prune — it was never
+  // going to be in rankById, that's the point.
+  useEffect(() => { if (highlightIds.some(id => !rankById.has(id) && !forcedIds.has(id))) setHighlightIds(ids => ids.filter(id => rankById.has(id) || forcedIds.has(id))); }, [rankById, highlightIds, forcedIds]);
+  // Keep forcedIds trimmed to whatever's still highlighted, so unhighlighting,
+  // Clear all, Escape and HL_MAX eviction all clean it up without each needing
+  // its own forcedIds update.
+  useEffect(() => { setForcedIds(prev => { const next = new Set([...prev].filter(id => highlightIds.includes(id))); return next.size === prev.size ? prev : next; }); }, [highlightIds]);
   const addHighlight = id => setHighlightIds(ids => (ids.includes(id) || ids.length >= HL_MAX ? ids : [...ids, id]));
   const toggleHighlight = id => setHighlightIds(ids => (ids.includes(id) ? ids.filter(x => x !== id) : ids.length >= HL_MAX ? ids : [...ids, id]));
   const unhighlight = id => setHighlightIds(ids => ids.filter(x => x !== id));
+  // Add despite filters: searched from `pool` (the unfiltered roster), not `items`.
+  const pickForce = p => {
+    const id = idOf(p);
+    setForcedIds(prev => (prev.has(id) ? prev : new Set(prev).add(id)));
+    setExcluded(prev => { if (!prev.has(id)) return prev; const s = new Set(prev); s.delete(id); return s; });
+    addHighlight(id);
+    setForceQuery('');
+  };
 
   const sample = useMemo(() => items.slice(0, Math.max(1, n)), [items, n]);
   const top = useMemo(() => (excluded.size ? sample.filter(p => !excluded.has(idOf(p))) : sample), [sample, excluded, idOf]);
@@ -842,18 +875,22 @@ export function ScatterView({ items, idOf, nameOf, subOf, tooltipLines, buildFie
   const quadNote = sQuad ? `quadrants: ${shortLabel(yf.label)} ≥ ${sQuad.ySplit} · ${shortLabel(xf.label)} ≥ ${sQuad.xSplit}`
     : median ? `median${median.x != null && median.y != null ? 's' : ''}: ${[median.y != null && `${baseName(yf)} ${median.yText}`, median.x != null && `${baseName(xf)} ${median.xText}`].filter(Boolean).join(' · ')}` : '';
 
-  const hlItems = useMemo(() => highlightIds.map(id => items.find(p => idOf(p) === id)).filter(Boolean), [items, highlightIds, idOf]);
-  // A highlighted item outside the plotted set (outside the Sample, or a trimmed low
-  // outlier) is added as an extra point so it still shows.
+  // Resolve each highlighted id against `items` first; a forced-in id that `items`
+  // doesn't have (it failed the app's filters) falls back to the search pool.
+  const hlItems = useMemo(() => highlightIds.map(id => items.find(p => idOf(p) === id) || (forcedIds.has(id) ? pool.find(p => idOf(p) === id) : null)).filter(Boolean),
+    [items, highlightIds, idOf, forcedIds, pool]);
+  // A highlighted item outside the plotted set (outside the Sample, a trimmed low
+  // outlier, or forced in despite failing the app's filters) is added as an extra
+  // point so it still shows.
   const pts = useMemo(() => {
     const extra = [];
     for (const it of hlItems) {
       if (excluded.has(idOf(it)) || topPts.some(d => d.id === idOf(it))) continue;
       const d = toPoint(it, true);
-      if (Number.isFinite(d.x) && Number.isFinite(d.y)) extra.push(d);
+      if (Number.isFinite(d.x) && Number.isFinite(d.y)) extra.push({ ...d, forced: forcedIds.has(idOf(it)) });
     }
     return extra.length ? [...topPts, ...extra] : topPts;
-  }, [topPts, hlItems, toPoint, excluded, idOf]);
+  }, [topPts, hlItems, toPoint, excluded, idOf, forcedIds]);
   const hlPointOf = it => pts.find(d => d.id === idOf(it)) || null;
   const hlNames = hlItems.filter(it => hlPointOf(it)).map(nameOf);
 
@@ -953,6 +990,19 @@ export function ScatterView({ items, idOf, nameOf, subOf, tooltipLines, buildFie
     return out;
   }, [items, query, nameOf]);
   const pick = p => { setExcluded(prev => { if (!prev.has(idOf(p))) return prev; const s = new Set(prev); s.delete(idOf(p)); return s; }); addHighlight(idOf(p)); setQuery(''); };
+  // Same search, but against the unfiltered pool — finds a player the app's own
+  // filters (minutes, age, position, ...) would otherwise hide entirely.
+  const matchesForce = useMemo(() => {
+    if (!hasOverridePool) return [];
+    const q = norm(forceQuery.trim());
+    if (q.length < 2) return [];
+    const out = [];
+    for (let i = 0; i < pool.length && out.length < 8; i++) {
+      const p = pool[i];
+      if (norm(nameOf(p)).includes(q)) out.push({ p, inFilters: rankById.has(idOf(p)) });
+    }
+    return out;
+  }, [pool, forceQuery, nameOf, hasOverridePool, rankById, idOf]);
   const removedItems = useMemo(() => items.filter(p => excluded.has(idOf(p))), [items, excluded, idOf]);
 
   const fieldGroups = [...new Set(fields.map(f => f.group))];
@@ -1075,13 +1125,32 @@ export function ScatterView({ items, idOf, nameOf, subOf, tooltipLines, buildFie
             </div>
           )}
         </div>
+        {hasOverridePool && (
+          <div style={{ position:'relative' }} title="Search the full roster, ignoring every current filter (minutes, age, position, ...)">
+            <input aria-label={`Add ${noun} despite filters`} placeholder={`Add a ${noun} despite filters…`} value={forceQuery} onChange={e => setForceQuery(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && matchesForce[0]) pickForce(matchesForce[0].p); }}
+              style={{ ...sel, width:isMobile?200:240, padding:'6px 8px', borderStyle:'dashed', borderColor:'#f0a637' }}/>
+            {matchesForce.length > 0 && (
+              <div role="listbox" style={{ position:'absolute', top:'100%', left:0, marginTop:3, width:320, background:'#0d1220', border:'1px solid #f0a637', borderRadius:6, zIndex:20, boxShadow:'0 6px 20px rgba(0,0,0,.5)' }}>
+                {matchesForce.map(({ p, inFilters }) => (
+                  <button key={idOf(p)} role="option" aria-selected={false} onClick={() => pickForce(p)}
+                    style={{ display:'flex', width:'100%', gap:8, alignItems:'baseline', padding:'6px 10px', background:'none', border:'none', borderBottom:'1px solid #111c2e', cursor:'pointer', textAlign:'left' }}>
+                    <span style={{ fontSize:11.5, color:'#e2e8f4', fontWeight:600 }}>{nameOf(p)}</span>
+                    <span style={{ fontSize:10, color:'#64748b', flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{subOf(p)}</span>
+                    {!inFilters && <span style={{ fontSize:9.5, color:'#f0a637' }}>outside filters</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         <input aria-label="Chart title" placeholder={`Title: ${autoTitle}`} value={customTitle} onChange={e => setCustomTitle(e.target.value)}
           style={{ ...sel, width:isMobile?200:280, padding:'6px 8px', maxWidth:'100%' }}/>
-        {hlItems.map(it => { const hp = hlPointOf(it); return (
-          <div key={idOf(it)} data-hl-chip={idOf(it)} style={{ display:'flex', alignItems:'center', gap:8, padding:'4px 6px 4px 10px', borderRadius:14, border:'1px solid #26456f', background:'#0e2040' }}>
+        {hlItems.map(it => { const hp = hlPointOf(it); const forced = forcedIds.has(idOf(it)); return (
+          <div key={idOf(it)} data-hl-chip={idOf(it)} style={{ display:'flex', alignItems:'center', gap:8, padding:'4px 6px 4px 10px', borderRadius:14, border:`1px ${forced ? 'dashed #f0a637' : 'solid #26456f'}`, background:'#0e2040' }}>
             <span style={{ fontSize:11, color:'#dbeafe' }}>
-              <b>{nameOf(it)}</b> · {subOf(it)} · #{rankById.get(idOf(it))}
-              {!hp ? ' · no data for these axes' : !hp.extra ? '' : hp.rank <= sample.length ? ' · low outlier, shown because highlighted' : ` · outside the ${sample.length} Sample`}
+              <b>{nameOf(it)}</b> · {subOf(it)} · #{rankById.get(idOf(it)) ?? '—'}
+              {forced ? ' · added despite filters' : !hp ? ' · no data for these axes' : !hp.extra ? '' : hp.rank != null && hp.rank <= sample.length ? ' · low outlier, shown because highlighted' : ` · outside the ${sample.length} Sample`}
             </span>
             <button onClick={() => onSelect(it)} style={{ ...btn(false), padding:'3px 8px' }}>{openLabel}</button>
             <button onClick={() => { setExcluded(prev => new Set(prev).add(idOf(it))); unhighlight(idOf(it)); }} style={{ ...btn(false), padding:'3px 8px' }}>Remove from plot</button>
@@ -1131,7 +1200,7 @@ export function ScatterView({ items, idOf, nameOf, subOf, tooltipLines, buildFie
               <span style={{ fontSize:12, fontWeight:700, color:'#f8fafc' }}>{hover.d.name}</span>
             </div>
             <div style={{ fontSize:10.5, color:'#94a3b8', marginTop:2 }}>{tip1}</div>
-            <div style={{ fontSize:10.5, color:'#94a3b8' }}>{tip2} · #{hover.d.rank}</div>
+            <div style={{ fontSize:10.5, color:'#94a3b8' }}>{tip2}{hover.d.rank != null ? ` · #${hover.d.rank}` : hover.d.forced ? ' · added despite filters' : ''}</div>
             <div style={{ fontSize:10.5, color:'#e2e8f4', marginTop:4 }}>{yf.label}: <b>{valueText(hover.d.y, yf)}</b></div>
             <div style={{ fontSize:10.5, color:'#e2e8f4' }}>{xf.label}: <b>{valueText(hover.d.x, xf)}</b></div>
             {colorBy === 'metric' && !inGroup && cf !== xf && cf !== yf && <div style={{ fontSize:10.5, color:'#e2e8f4' }}>{cf.label}: <b>{Number.isFinite(cf.get(hover.d.p)) ? valueText(cf.get(hover.d.p), cf) : 'no data'}</b></div>}
@@ -1183,7 +1252,7 @@ const playerLegendBase = mode => (mode === 'position'
   ? [...POS_ORDER, 'Other'].map(g => ({ key: g, label: g, color: POS_COLORS[g] || OTHER_COLOR }))
   : [...SCORE_BUCKETS, { key: 'none', label: 'No data', color: NODATA_COLOR }]);
 
-export default function ScatterChart({ players, getDisplayScore, seasonFilter, scoreMode, rawMode, outlierMode, roleKey, leagues, onSelect, onClose, contextLabel }) {
+export default function ScatterChart({ players, allPlayers, getDisplayScore, seasonFilter, scoreMode, rawMode, outlierMode, roleKey, leagues, onSelect, onClose, contextLabel }) {
   const buildFieldsFor = useCallback(metricMode => buildFields({ getDisplayScore, seasonFilter, scoreMode, rawMode, outlierMode, metricMode, roleKey, leagues }),
     [getDisplayScore, seasonFilter, scoreMode, rawMode, outlierMode, roleKey, leagues]);
   const displayIsScore = tableIsScore({ seasonFilter, scoreMode, rawMode, outlierMode });
@@ -1203,7 +1272,7 @@ export default function ScatterChart({ players, getDisplayScore, seasonFilter, s
     return Number.isFinite(v) ? { g: scoreBucketKey(v), color: scoreDotColor(v) } : { g: 'none', color: NODATA_COLOR };
   }, [getDisplayScore]);
   return (
-    <ScatterView items={players} idOf={playerId} nameOf={playerName} subOf={playerSub} tooltipLines={playerTip} leagueOf={playerLeague}
+    <ScatterView items={players} searchPool={allPlayers} idOf={playerId} nameOf={playerName} subOf={playerSub} tooltipLines={playerTip} leagueOf={playerLeague}
       buildFields={buildFieldsFor} defaultX="potentialScore" defaultY={seasonFilter !== 'all' ? 'display' : 'careerScore'} metricLabel="Per-90 value"
       colorModes={colorModes} colorOf={colorOf} legendBase={playerLegendBase} scoreQuad={playerScoreQuad} targetTiers={TARGET_TIERS}
       groups={groups} noun="player" openLabel="Open profile" onSelect={onSelect} onClose={onClose} contextLabel={contextLabel}/>
