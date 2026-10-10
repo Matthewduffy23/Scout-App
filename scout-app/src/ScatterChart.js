@@ -302,7 +302,7 @@ function exportHeader(ctx, W, FONT, title, legend, xIsScore) {
 export const HL_MAX = 10;
 
 export function drawScatter(canvas, W, H, dpr, forExport, o) {
-  const { pts, xf, yf, hidden, hoverId, highlightIds = [], showNames, soloLabel, title, subtitle, footer, legend, quad: Q, median, group, highlightStyle = 'full', theme: themeName = 'dark' } = o;
+  const { pts, xf, yf, hidden, hoverId, highlightIds = [], showNames, soloLabel, title, subtitle, footer, legend, quad: Q, median, group, groupFullLabels, highlightStyle = 'full', theme: themeName = 'dark' } = o;
   const T = THEMES[themeName];
   const FONT = forExport ? 'Montserrat, Inter, sans-serif' : 'Inter, sans-serif';
   canvas.width = W*dpr; canvas.height = H*dpr;
@@ -541,12 +541,28 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
   // the allowance and sparse areas still get labelled.
   const budget = group ? Infinity : Math.max(12, Math.min(90, Math.round(pw*ph / (4500*fs*fs))));
   if (showNames && !solo) {
-    for (const d of group ? visible.filter(v => !v.muted) : visible.slice(0, 400)) {
-      if (isHl(d)) continue;
-      // In group mode every member is a small, known set (one squad) — force a
-      // guaranteed placement (even overlapping) rather than silently dropping
-      // the label when no clear spot is found, same as the hls force items below.
-      items.push({ x: xS(d.x), y: yS(d.y), r, px: 9.5*fs, font: f(9.5, 500), text: pname(d), force: !!group });
+    if (group) {
+      // Group members first — they get first claim on clear spots (pushed
+      // before everyone else) and a guaranteed placement even when none is
+      // clear, same as the hls force items below (small, known set: one squad).
+      for (const d of visible) {
+        if (isHl(d) || d.muted) continue;
+        items.push({ x: xS(d.x), y: yS(d.y), r, px: 9.5*fs, font: f(9.5, 500), text: pname(d), force: true });
+      }
+      // Optional full-sample labeling: everyone else too, pushed AFTER the
+      // group so group labels never get bumped for them — these are NOT
+      // forced, so they can be dropped/repositioned around a group label.
+      if (groupFullLabels) {
+        for (const d of visible) {
+          if (isHl(d) || !d.muted) continue;
+          items.push({ x: xS(d.x), y: yS(d.y), r, px: 9.5*fs, font: f(9.5, 500), text: pname(d) });
+        }
+      }
+    } else {
+      for (const d of visible.slice(0, 400)) {
+        if (isHl(d)) continue;
+        items.push({ x: xS(d.x), y: yS(d.y), r, px: 9.5*fs, font: f(9.5, 500), text: pname(d) });
+      }
     }
   }
   const labels = placeLabels(ctx, items, dots, bounds, taken, fs, budget);
@@ -729,6 +745,9 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
   const [highlightStyle, setHighlightStyle] = useState('full'); // 'full' | 'dot'
   const [quadNames, setQuadNames] = useState({}); // user overrides for the four quadrant labels
   const [showNames, setShowNames] = useState(true);
+  // Group mode only: also label every non-group player, not just the group.
+  // Off by default — group labels always keep placement priority over these.
+  const [groupFullLabels, setGroupFullLabels] = useState(false);
   const [hidden, setHidden] = useState(() => new Set());
   const [hover, setHover] = useState(null); // {d, left, top}
   // Highlighted items, in pick order (up to HL_MAX). Plain click / search: see below.
@@ -916,11 +935,11 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
     return () => window.removeEventListener('resize', measure);
   }, []);
 
-  const drawOpts = { pts, xf, yf, hidden, highlightIds, showNames, soloLabel, quad, median, group: !!inGroup, highlightStyle };
+  const drawOpts = { pts, xf, yf, hidden, highlightIds, showNames, soloLabel, quad, median, group: !!inGroup, groupFullLabels, highlightStyle };
   useEffect(() => {
     if (!canvasRef.current) return;
     layoutRef.current = drawScatter(canvasRef.current, width, H, window.devicePixelRatio || 1, false, { ...drawOpts, hoverId: hover?.d.id });
-  }, [pts, xf, yf, hidden, hover, highlightIds, showNames, soloLabel, quad, median, inGroup, highlightStyle, width, H]);
+  }, [pts, xf, yf, hidden, hover, highlightIds, showNames, soloLabel, quad, median, inGroup, groupFullLabels, highlightStyle, width, H]);
 
   useEffect(() => {
     if (!highlightIds.length) return;
@@ -1078,6 +1097,9 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
           </div>
         )}
         <button style={btn(showNames)} onClick={() => setShowNames(s => !s)}>Names</button>
+        {inGroup && <button style={{ ...btn(groupFullLabels), opacity: showNames ? 1 : 0.5 }} aria-pressed={groupFullLabels} disabled={!showNames}
+          title={`Label every ${noun} on the plot, not just ${groupLabel || 'the group'} — group names always keep their spot over these`}
+          onClick={() => setGroupFullLabels(v => !v)}>Label everyone</button>}
         {hasNonScore && <button style={btn(medianOn)} aria-pressed={medianOn} title="Median line on each non-score axis; median quadrants when neither axis is a score" onClick={() => setMedianOn(v => !v)}>Median split</button>}
         <div style={{ display:'flex', gap:0 }} title={inGroup ? 'A group is using red — highlights show in the full style' : 'How a highlighted ' + noun + ' is shown'}>
           {[['full', 'Full'], ['dot', 'Red dot']].map(([k, l], i) => (
