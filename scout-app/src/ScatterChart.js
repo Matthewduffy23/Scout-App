@@ -568,17 +568,14 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
   }
 
   // ── Highlighted players on top ───────────────────────────────────────────
-  // A forced-in player (added despite failing the app's filters) gets a dashed
-  // outer ring on top of whichever highlight style is active, so they read as
-  // "not really part of this cohort" rather than a normal qualifying point.
-  const forcedRing = h => { ctx.setLineDash([3*fs, 3*fs]); ctx.strokeStyle = FORCED_RING; ctx.lineWidth = 1.6*fs;
-    ctx.beginPath(); ctx.arc(xS(h.x), yS(h.y), r*1.6 + 5.5*fs, 0, Math.PI*2); ctx.stroke(); ctx.setLineDash([]); };
+  // A forced-in player (added despite failing the app's filters) draws exactly
+  // like any other highlighted/group point — no visual marker on the dot itself;
+  // "added despite filters" only shows in the tooltip and the highlight chip.
   for (const h of hls) {
-    if (redDot) { ringDot({ ...h, muted: false, plain: false, color: GROUP_RED }, r, 1); if (h.forced) forcedRing(h); continue; } // same size, just red
+    if (redDot) { ringDot({ ...h, muted: false, plain: false, color: GROUP_RED }, r, 1); continue; } // same size, just red
     ringDot(h, r*1.6, 1);
     ctx.beginPath(); ctx.arc(xS(h.x), yS(h.y), r*1.6 + 3*fs, 0, Math.PI*2);
     ctx.strokeStyle = T.hl; ctx.lineWidth = 2*fs; ctx.stroke();
-    if (h.forced) forcedRing(h);
   }
   const hv = hoverId != null && !hlSet.has(hoverId) && visible.find(d => pid(d) === hoverId);
   if (hv) {
@@ -683,7 +680,6 @@ const LEAGUE_OTHER = '#94a3b8';
 
 const GROUP_RED = '#ef4444';
 const GROUP_OUT = '#94a3b8';
-const FORCED_RING = '#f0a637'; // dashed outer ring: added despite failing the app's filters
 const OPS = { le: ['≤', (a, b) => a <= b], eq: ['=', (a, b) => a === b], ge: ['≥', (a, b) => a >= b] };
 
 // ── Player score quadrants (both axes scores) ────────────────────────────────
