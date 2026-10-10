@@ -848,12 +848,15 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
   // Colour-by-metric ranks against the Sample (minus removed items).
   const mScale = useMemo(() => (colorBy === 'metric' ? metricScale(top.map(p => cf.get(p)), cf) : null), [colorBy, top, cf]);
   const colorOf = useCallback(p => {
-    if (inGroup) return inGroup(p) ? { g: 'in', color: GROUP_RED } : { g: 'out', color: GROUP_OUT, muted: true };
+    // A forced-in player (added despite filters) always reads as a group member —
+    // the point of that search is to compare them against the group, not to test
+    // whether they actually belong to it.
+    if (inGroup) return (inGroup(p) || forcedIds.has(idOf(p))) ? { g: 'in', color: GROUP_RED } : { g: 'out', color: GROUP_OUT, muted: true };
     if (colorBy === 'plain') return plainColor ? { g: 'all', color: plainColor } : { g: 'all', color: PLAIN_SWATCH, plain: true };
     if (colorBy === 'league' && leagueColor) { const l = leagueOf(p); return leagueColor.has(l) ? { g: 'L:' + l, color: leagueColor.get(l) } : { g: 'L:other', color: LEAGUE_OTHER }; }
     if (colorBy === 'metric') { const v = cf.get(p); return mScale && Number.isFinite(v) ? { g: 'val', color: mScale.color(v) } : { g: 'none', color: NODATA_COLOR }; }
     return colorOfMode(p, colorBy);
-  }, [inGroup, colorOfMode, colorBy, cf, mScale, plainColor, leagueColor, leagueOf]);
+  }, [inGroup, colorOfMode, colorBy, cf, mScale, plainColor, leagueColor, leagueOf, forcedIds, idOf]);
 
   const toPoint = useCallback((p, extra) => ({ p, id: idOf(p), name: nameOf(p), x: xf.get(p), y: yf.get(p), rank: rankById.get(idOf(p)), extra, ...colorOf(p) }),
     [xf, yf, rankById, colorOf, idOf, nameOf]);
@@ -902,9 +905,13 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
     for (const it of hlItems) {
       if (excluded.has(idOf(it)) || topPts.some(d => d.id === idOf(it))) continue;
       const d = toPoint(it, true);
-      if (Number.isFinite(d.x) && Number.isFinite(d.y)) extra.push({ ...d, forced: forcedIds.has(idOf(it)) });
+      if (Number.isFinite(d.x) && Number.isFinite(d.y)) extra.push(d);
     }
-    return extra.length ? [...topPts, ...extra] : topPts;
+    const all = extra.length ? [...topPts, ...extra] : topPts;
+    // Tag `forced` on every point regardless of whether it came from the Sample
+    // or had to be added as an extra — a forced-in player who happens to also
+    // pass the app's filters still gets the "added despite filters" note.
+    return forcedIds.size ? all.map(d => forcedIds.has(d.id) ? { ...d, forced: true } : d) : all;
   }, [topPts, hlItems, toPoint, excluded, idOf, forcedIds]);
   const hlPointOf = it => pts.find(d => d.id === idOf(it)) || null;
   const hlNames = hlItems.filter(it => hlPointOf(it)).map(nameOf);
