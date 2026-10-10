@@ -111,16 +111,43 @@ export default function CustomScatter() {
     load(pasteText, 'Pasted CSV');
   }, [pasteText, load]);
 
-  const clear = useCallback(() => { setParsed(null); setFileName(''); setError(''); setPasteText(''); }, []);
+  // Per-column overrides — relabelling and inverting only ever touch these,
+  // never parsed.items or the column's own key, so data/column matching is
+  // untouched.
+  const [labelOverrides, setLabelOverrides] = useState({}); // {colKey: displayLabel}
+  const [invertCols, setInvertCols] = useState(() => new Set()); // colKeys plotted mirrored
+  const [showColumnEditor, setShowColumnEditor] = useState(false);
+
+  const clear = useCallback(() => {
+    setParsed(null); setFileName(''); setError(''); setPasteText('');
+    setLabelOverrides({}); setInvertCols(new Set()); setShowColumnEditor(false);
+  }, []);
+
+  const renameCol = useCallback((key, value) => setLabelOverrides(prev => ({ ...prev, [key]: value })), []);
+  const toggleInvert = useCallback(key => setInvertCols(prev => { const s = new Set(prev); s.has(key) ? s.delete(key) : s.add(key); return s; }), []);
 
   const buildFields = useCallback(() => {
     if (!parsed) return [];
-    return parsed.numericCols.map(c => ({
-      key: c.key, group: 'CSV columns', label: c.key, short: c.key, neutral: true,
-      get: p => p[c.key],
-      ...(c.isPercent ? { fmt: v => `${v.toFixed(2)}%` } : {}),
-    }));
-  }, [parsed]);
+    return parsed.numericCols.map(c => {
+      const label = labelOverrides[c.key]?.trim() || c.key;
+      const inverted = invertCols.has(c.key);
+      // Inverting mirrors the plotted value (so "better" sits up/right), but
+      // fmt always converts back to the true value for ticks/tooltips/medians
+      // — the axis never shows the mirrored number, only the real one.
+      const toTrue = v => (inverted ? -v : v);
+      const needsFmt = c.isPercent || inverted;
+      return {
+        key: c.key, group: 'CSV columns', label, short: label, neutral: true,
+        get: p => { const v = p[c.key]; return v == null ? null : (inverted ? -v : v); },
+        // Tells the engine's median/quadrant label wording that "up on this
+        // axis" is the mirrored value, not the real one — otherwise an
+        // inverted axis gets an auto-generated "High X" label sitting on top
+        // of the lowest real values.
+        ...(inverted ? { invertedDirection: true, lowerBetter: true } : {}),
+        ...(needsFmt ? { fmt: v => { const real = toTrue(v); return c.isPercent ? `${real.toFixed(2)}%` : (Number.isInteger(real) ? String(real) : real.toFixed(2)); } } : {}),
+      };
+    });
+  }, [parsed, labelOverrides, invertCols]);
 
   const [defaultX, defaultY] = useMemo(() => {
     if (!parsed) return [null, null];
@@ -158,8 +185,25 @@ export default function CustomScatter() {
       <div style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 16px', borderBottom:'1px solid #1e2d45' }}>
         <span style={{ fontSize:11.5, color:'#e2e8f4', fontWeight:600 }}>Custom Scatter</span>
         <span style={{ fontSize:10.5, color:'#64748b' }}>{fileName} · {parsed.rowCount} rows · {parsed.numericCols.length} numeric columns</span>
+        <button style={{ ...btn, ...(showColumnEditor ? { borderColor:'#3b7de8', color:'#93c5fd' } : {}) }} onClick={() => setShowColumnEditor(v => !v)}>✎ Edit columns</button>
         <button style={{ ...btn, marginLeft:'auto' }} onClick={clear}>⬆ Upload a different file</button>
       </div>
+      {showColumnEditor && (
+        <div style={{ display:'flex', flexDirection:'column', gap:6, padding:'10px 16px', borderBottom:'1px solid #1e2d45', background:'#0a0f1a' }}>
+          <span style={{ fontSize:10, color:'#64748b' }}>Rename a column's axis/legend label, or invert it so a lower-is-better metric (e.g. goals conceded) plots with "better" up/right. The underlying data and column matching never change.</span>
+          {parsed.numericCols.map(c => (
+            <div key={c.key} style={{ display:'flex', alignItems:'center', gap:10 }}>
+              <span style={{ fontSize:10.5, color:'#94a3b8', width:160, flexShrink:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }} title={c.key}>{c.key}</span>
+              <input aria-label={`Rename ${c.key}`} placeholder={`Rename: ${c.key}`} value={labelOverrides[c.key] || ''} onChange={e => renameCol(c.key, e.target.value)}
+                style={{ ...sel, width:220, padding:'4px 7px' }}/>
+              <label style={{ display:'flex', alignItems:'center', gap:5, fontSize:10.5, color:'#94a3b8', cursor:'pointer' }}>
+                <input type="checkbox" checked={invertCols.has(c.key)} onChange={() => toggleInvert(c.key)}/>
+                Invert (lower = better)
+              </label>
+            </div>
+          ))}
+        </div>
+      )}
       <ScatterView
         items={parsed.items} idOf={customId} nameOf={customName} subOf={customSub} tooltipLines={customTip}
         buildFields={buildFields} defaultX={defaultX} defaultY={defaultY} metricLabel="Value"

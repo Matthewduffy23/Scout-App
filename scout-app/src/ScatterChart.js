@@ -642,8 +642,9 @@ const medianOf = arr => {
 const baseName = f => f.short || shortLabel(f.label).replace(/ \(percentile\)$/, '');
 // Does "up" on this axis mean MORE of the real quantity? Not for a lower-is-better
 // metric shown as a percentile: the pipeline already flipped those (high pct = fewer
-// goals against), so up = less.
-const upIsMore = f => !(f.pctDomain && f.pctInverted);
+// goals against), so up = less. Also not for a field whose own get() plots a mirrored
+// value (Custom Scatter's per-axis invert) — same idea, general-purpose flag.
+const upIsMore = f => !(f.pctDomain && f.pctInverted) && !f.invertedDirection;
 // Is "up" the better side of this axis?
 const upIsGood = f => (upIsMore(f) ? !f.lowerBetter : !!f.lowerBetter);
 // Plain-English phrase for one side of an axis, describing the real quantity.
