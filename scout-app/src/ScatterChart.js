@@ -589,6 +589,7 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
   // "added despite filters" only shows in the tooltip and the highlight chip.
   for (const h of hls) {
     if (redDot) { ringDot({ ...h, muted: false, plain: false, color: GROUP_RED }, r, 1); continue; } // same size, just red
+    if (group) { ringDot({ ...h, muted: false, plain: false, color: dotColor(h) }, r, 1); continue; } // same size, no selection ring
     ringDot(h, r*1.6, 1);
     ctx.beginPath(); ctx.arc(xS(h.x), yS(h.y), r*1.6 + 3*fs, 0, Math.PI*2);
     ctx.strokeStyle = T.hl; ctx.lineWidth = 2*fs; ctx.stroke();
