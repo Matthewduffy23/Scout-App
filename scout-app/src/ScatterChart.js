@@ -725,13 +725,13 @@ function playerScoreQuad(xf, yf, topPts, targetMin) {
 // tooltip lines, group-highlight conditions, and what a double-click opens.
 export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLines, buildFields: buildFieldsFor, defaultX, defaultY,
   metricLabel = 'Per-90 value', colorModes, colorOf: colorOfMode, legendBase, scoreQuad, targetTiers, groups = [], leagueOf,
-  noun = 'player', openLabel = 'Open profile', onSelect, onClose, contextLabel }) {
+  noun = 'player', openLabel = 'Open profile', onSelect, onClose, contextLabel, defaultMedianOn = true, defaultSample = 50 }) {
   // searchPool: an unfiltered roster to search for the "ignores filters" add — falls
   // back to items (no override) when the caller doesn't have one (e.g. Team Index).
   const pool = searchPool && searchPool.length ? searchPool : items;
   const hasOverridePool = pool !== items;
   const isMobile = useIsMobile();
-  const [n, setN] = useState(50);
+  const [n, setN] = useState(defaultSample);
   const [xKey, setXKey] = useState(defaultX);
   const [yKey, setYKey] = useState(defaultY);
   // If the page's default Y changes (e.g. a season gets selected) and Y is still on the
@@ -739,7 +739,7 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
   const lastDefaultY = useRef(defaultY);
   useEffect(() => { if (lastDefaultY.current !== defaultY) { setYKey(k => (k === lastDefaultY.current ? defaultY : k)); lastDefaultY.current = defaultY; } }, [defaultY]);
   const [metricMode, setMetricMode] = useState('val'); // 'val' (raw / per-90 value) | 'pct' (percentile)
-  const [colorBy, setColorBy] = useState(colorModes[0][0]);
+  const [colorBy, setColorBy] = useState(colorModes[0]?.[0] ?? 'plain');
   const [colorKey, setColorKey] = useState(defaultY); // colour-by-metric field
   const [plainColor, setPlainColor] = useState(null); // Plain mode: null = theme default grey
   const [highlightStyle, setHighlightStyle] = useState('full'); // 'full' | 'dot'
@@ -766,7 +766,7 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
   const [exportLegend, setExportLegend] = useState(false); // band/position counts in the export header
   const [soloLabel, setSoloLabel] = useState(false); // single-highlight mode: only the highlighted item is named
   const [excluded, setExcluded] = useState(() => new Set()); // items removed from the plot by hand
-  const [medianOn, setMedianOn] = useState(true); // median lines + median quadrants on non-score axes
+  const [medianOn, setMedianOn] = useState(defaultMedianOn); // median lines + median quadrants on non-score axes
   const [groupKey, setGroupKey] = useState('off'); // group highlight: 'off' | a groups[].key
   const [groupOp, setGroupOp] = useState('le');
   const [groupNum, setGroupNum] = useState(null);
@@ -788,8 +788,15 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
     if (!real.some(f => f.key === yKey)) setYKey(defaultY);
     if (!real.some(f => f.key === colorKey)) setColorKey(defaultY);
   }, [fields]); // only when the field list changes
-  const allColorModes = useMemo(() => [...colorModes, ...(leagueOf ? [['league', 'League']] : []), ['metric', 'Metric…'], ['plain', 'Plain']], [colorModes, leagueOf]);
-  useEffect(() => { if (!allColorModes.some(m => m[0] === colorBy)) setColorBy(colorModes[0][0]); }, [allColorModes, colorModes, colorBy]);
+  // De-duplicated by key: 'metric' and 'plain' are always offered, so a caller
+  // whose own colorModes already includes one of those keys (or passes none at
+  // all) can't produce a repeated <option> / duplicate React key.
+  const allColorModes = useMemo(() => {
+    const combined = [...colorModes, ...(leagueOf ? [['league', 'League']] : []), ['metric', 'Metric…'], ['plain', 'Plain']];
+    const seen = new Set();
+    return combined.filter(([k]) => (seen.has(k) ? false : (seen.add(k), true)));
+  }, [colorModes, leagueOf]);
+  useEffect(() => { if (!allColorModes.some(m => m[0] === colorBy)) setColorBy(colorModes[0]?.[0] ?? 'plain'); }, [allColorModes, colorModes, colorBy]);
 
   const groupDef = groups.find(g => g.key === groupKey) || null;
   useEffect(() => { setHidden(new Set()); }, [colorBy, colorKey, groupKey]);
@@ -930,7 +937,7 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
   }, [topPts, colorBy, inGroup, groupLabel, legendBase, mScale, cf, plainColor, leagueColor]);
   const groupCount = inGroup ? topPts.filter(d => d.g === 'in').length : 0;
 
-  const colorLabel = colorBy === 'metric' ? `Colour: ${baseName(cf)}` : allColorModes.find(o => o[0] === colorBy)?.[1] || colorModes[0][1];
+  const colorLabel = colorBy === 'metric' ? `Colour: ${baseName(cf)}` : allColorModes.find(o => o[0] === colorBy)?.[1] || colorModes[0]?.[1] || '';
   const autoTitle = `${yf.label} vs ${xf.label}`;
   const title = customTitle.trim() || autoTitle;
   const subtitle = `${sample.length} Sample · ${contextLabel}${inGroup ? ` · highlighted: ${groupLabel} (${groupCount})` : ''}${hlNames.length ? ` · highlighted: ${hlNames.length > 4 ? `${hlNames.slice(0, 4).join(', ')} +${hlNames.length - 4} more` : hlNames.join(', ')}` : ''}`;
@@ -981,7 +988,7 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
     if (h && (e.shiftKey || e.ctrlKey || e.metaKey)) toggleHighlight(h.d.id);
     else setHighlightIds(h ? [h.d.id] : []);
   };
-  const onDoubleClick = e => { const h = hitTest(e); if (h) onSelect(h.d.p); };
+  const onDoubleClick = e => { const h = hitTest(e); if (h && onSelect) onSelect(h.d.p); };
 
   const download = async () => {
     setBusy(true);
@@ -1177,7 +1184,7 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
               <b>{nameOf(it)}</b> · {subOf(it)} · #{rankById.get(idOf(it)) ?? '—'}
               {forced ? ' · added despite filters' : !hp ? ' · no data for these axes' : !hp.extra ? '' : hp.rank != null && hp.rank <= sample.length ? ' · low outlier, shown because highlighted' : ` · outside the ${sample.length} Sample`}
             </span>
-            <button onClick={() => onSelect(it)} style={{ ...btn(false), padding:'3px 8px' }}>{openLabel}</button>
+            {onSelect && <button onClick={() => onSelect(it)} style={{ ...btn(false), padding:'3px 8px' }}>{openLabel}</button>}
             <button onClick={() => { setExcluded(prev => new Set(prev).add(idOf(it))); unhighlight(idOf(it)); }} style={{ ...btn(false), padding:'3px 8px' }}>Remove from plot</button>
             <button aria-label="Clear highlight" onClick={() => unhighlight(idOf(it))} style={{ ...btn(false), padding:'3px 8px' }}>✕</button>
           </div>
@@ -1230,13 +1237,13 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
             <div style={{ fontSize:10.5, color:'#e2e8f4' }}>{xf.label}: <b>{valueText(hover.d.x, xf)}</b></div>
             {colorBy === 'metric' && !inGroup && cf !== xf && cf !== yf && <div style={{ fontSize:10.5, color:'#e2e8f4' }}>{cf.label}: <b>{Number.isFinite(cf.get(hover.d.p)) ? valueText(cf.get(hover.d.p), cf) : 'no data'}</b></div>}
             {quad && <div style={{ fontSize:10.5, color:'#5eead4', marginTop:3, fontWeight:600 }}>{quadOf(quad, hover.d)}</div>}
-            <div style={{ fontSize:9.5, color:'#64748b', marginTop:4 }}>Click to highlight · Shift-click to add · double-click for {noun === 'team' ? 'team card' : 'profile'}</div>
+            <div style={{ fontSize:9.5, color:'#64748b', marginTop:4 }}>Click to highlight · Shift-click to add{onSelect ? ` · double-click for ${noun === 'team' ? 'team card' : 'profile'}` : ''}</div>
           </div>
         )}
       </div>
 
       <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:'6px 12px' }}>
-        {(inGroup || colorBy !== colorModes[0][0]) && <span style={{ ...lbl, marginRight:2 }}>{inGroup ? 'Group' : colorLabel}</span>}
+        {(inGroup || colorBy !== colorModes[0]?.[0]) && <span style={{ ...lbl, marginRight:2 }}>{inGroup ? 'Group' : colorLabel}</span>}
         {legend.map(it => it.gradient ? (
           <div key={it.key} aria-label="Colour scale" style={{ display:'flex', flexDirection:'column', gap:2 }}>
             <div style={{ display:'flex', alignItems:'center', gap:6 }}>

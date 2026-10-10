@@ -3,6 +3,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import PlayerCard from './PlayerCard';
 import ClubTool from './ClubTool';
 import TeamIndex from './TeamIndex';
+import CustomScatter from './CustomScatter';
 import ScatterChart from './ScatterChart';
 import { Photo, Crest, photoUrl, useIsMobile, deliverJson } from './utils';
 import { scoreBandColor, formatMV, formatFoot, ROLE_KEY_LABELS, ROLES_BY_KEY, POSITION_ATTRIBUTES, playerHasAttribute, ALL_LEAGUES, DEFAULT_LEAGUES, HIDDEN_LEAGUES, YOUTH_LEAGUES, PRESET_LEAGUES, COUNTRY_TO_REGION, GBE_LEAGUE_BANDS, leagueToRegion, leagueToBand, scoreLabel, scoreToStars, promotionBadge, ALL_SEASONS, CURRENT_SEASON, seasonBucketMatch, seasonDetailFor, seasonRowFor, seasonEntryFor, seasonClubFor, leagueSeasonMatch, seasonLeagueFor, metricFromDetail, METRIC_OPTIONS, LEAGUE_STRENGTHS, CAREER_POSITION_GROUPS } from './constants';
@@ -412,7 +413,7 @@ export default function App(){
   const [showCareerMinsFilter,setShowCareerMinsFilter]=useState(false); // off by default — while off, career minutes are never consulted and behaviour is exactly as before
   const [careerMinMins,setCareerMinMins]=useState(500);
   const [currentLeagueOnly,setCurrentLeagueOnly]=useState(false);
-  const [activeTab,setActiveTab]=useState('scout'); // 'scout' | 'club' | 'team'
+  const [activeTab,setActiveTab]=useState('scout'); // 'scout' | 'club' | 'team' | 'custom'
   const [mainView,setMainView]=useState('table'); // 'table' | 'scatter' — Scout Index results as table or scatter chart
   const [hiddenCols,setHiddenCols]=useState(new Set(['marketValue']));
   const [attrFilters,setAttrFilters]=useState(new Set()); // active attribute keys // hide MV by default, show xValue
@@ -680,13 +681,14 @@ export default function App(){
           <button onClick={()=>setActiveTab('scout')} style={{padding:isMobile?'7px 12px':'4px 10px',borderRadius:5,...(isMobile?{flexShrink:0}:{}),border:`1px solid ${activeTab==='scout'?'#3b7de8':'transparent'}`,background:activeTab==='scout'?'#0e2040':'transparent',color:activeTab==='scout'?'#60a5fa':'#94a3b8',fontSize:isMobile?11:10,fontWeight:600,cursor:'pointer',...(isMobile?{whiteSpace:'nowrap'}:{})}}>Scout Index</button>
           <button onClick={()=>setActiveTab('club')} style={{padding:isMobile?'7px 12px':'4px 10px',borderRadius:5,...(isMobile?{flexShrink:0}:{}),border:`1px solid ${activeTab==='club'?'#3b7de8':'transparent'}`,background:activeTab==='club'?'#0e2040':'transparent',color:activeTab==='club'?'#60a5fa':'#94a3b8',fontSize:isMobile?11:10,fontWeight:600,cursor:'pointer',...(isMobile?{whiteSpace:'nowrap'}:{})}}>Club Tool</button>
           <button onClick={()=>setActiveTab('team')} style={{padding:isMobile?'7px 12px':'4px 10px',borderRadius:5,...(isMobile?{flexShrink:0}:{}),border:`1px solid ${activeTab==='team'?'#3b7de8':'transparent'}`,background:activeTab==='team'?'#0e2040':'transparent',color:activeTab==='team'?'#60a5fa':'#94a3b8',fontSize:isMobile?11:10,fontWeight:600,cursor:'pointer',...(isMobile?{whiteSpace:'nowrap'}:{})}}>Team Index</button>
+          <button onClick={()=>setActiveTab('custom')} style={{padding:isMobile?'7px 12px':'4px 10px',borderRadius:5,...(isMobile?{flexShrink:0}:{}),border:`1px solid ${activeTab==='custom'?'#3b7de8':'transparent'}`,background:activeTab==='custom'?'#0e2040':'transparent',color:activeTab==='custom'?'#60a5fa':'#94a3b8',fontSize:isMobile?11:10,fontWeight:600,cursor:'pointer',...(isMobile?{whiteSpace:'nowrap'}:{})}}>Custom Scatter</button>
         </div>
         {rawMode&&<div style={{padding:'2px 8px',borderRadius:4,background:'#1e3a5f',color:'#60a5fa',fontSize:10,fontWeight:700,...(isMobile?{flexShrink:0,whiteSpace:'nowrap'}:{})}}>{isMobile?'RAW':'RAW MODE — no league weighting'}</div>}
         {outlierMode&&<div style={{padding:'2px 8px',borderRadius:4,background:'#3b1e5f',color:'#c084fc',fontSize:10,fontWeight:700,...(isMobile?{flexShrink:0,whiteSpace:'nowrap'}:{})}}>{isMobile?'OUTLIER':'OUTLIER SEARCH — z-score within league'}</div>}
         {!isMobile&&<div style={{marginLeft:'auto',fontSize:9,color:'#94a3b8',background:'#0d1220',border:'1px solid #1e2d45',borderRadius:4,padding:'2px 6px'}}>{all.length.toLocaleString()} players</div>}
       </div>
 
-      {activeTab==='team'?<TeamIndex players={all}/>:activeTab==='club'?<ClubTool players={all}/>:(<div style={T.layout}>
+      {activeTab==='team'?<TeamIndex players={all}/>:activeTab==='club'?<ClubTool players={all}/>:activeTab==='custom'?<CustomScatter/>:(<div style={T.layout}>
         {/* Mobile: the drawer is only mounted while open, so its inputs can't steal
             focus or be tab-reachable behind the scrim. Desktop mounts as before. */}
         {isMobile&&filtersOpen&&<div style={T.scrim} onClick={()=>setFiltersOpen(false)}/>}
