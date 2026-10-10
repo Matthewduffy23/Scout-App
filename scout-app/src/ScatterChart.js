@@ -129,11 +129,16 @@ function buildFields(ctx) {
   // Role scores: only for a single position group (roles from different groups aren't
   // comparable). They follow the season filter: all seasons = career role score, a
   // chosen season = that season's role score. No value = without data, never 0.
+  // A forced-in player (added despite failing filters) ignores the season filter
+  // entirely and always reads their own latest season with that role scored —
+  // so they show up without the user having to switch the season just for them,
+  // and never read as a (possibly much lower) multi-season average.
   if (ctx.roleKey && ROLES_BY_KEY[ctx.roleKey]) {
     const grp = `Role scores · ${ROLE_KEY_LABELS[ctx.roleKey]} (relative to own league)`;
     for (const role of ROLES_BY_KEY[ctx.roleKey]) {
-      f.push({ key:'r:'+role, group:grp, label:role, short:role, get:p => {
-        const v = ctx.seasonFilter === 'all' ? p.roleCareerScores?.[role] : seasonDetailFor(p, ctx.seasonFilter, ctx.leagues)?.roles?.[role];
+      f.push({ key:'r:'+role, group:grp, label:role, short:role, get:(p, forced) => {
+        const v = forced ? seasonDetailFor(p, 'all', ctx.leagues)?.roles?.[role]
+          : ctx.seasonFilter === 'all' ? p.roleCareerScores?.[role] : seasonDetailFor(p, ctx.seasonFilter, ctx.leagues)?.roles?.[role];
         return Number.isFinite(v) ? v : null;
       } });
     }
@@ -867,8 +872,10 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
     return colorOfMode(p, colorBy);
   }, [inGroup, colorOfMode, colorBy, cf, mScale, plainColor, leagueColor, leagueOf, forcedIds, idOf]);
 
-  const toPoint = useCallback((p, extra) => ({ p, id: idOf(p), name: nameOf(p), x: xf.get(p), y: yf.get(p), rank: rankById.get(idOf(p)), extra, ...colorOf(p) }),
-    [xf, yf, rankById, colorOf, idOf, nameOf]);
+  const toPoint = useCallback((p, extra) => {
+    const forced = forcedIds.has(idOf(p));
+    return { p, id: idOf(p), name: nameOf(p), x: xf.get(p, forced), y: yf.get(p, forced), rank: rankById.get(idOf(p)), extra, ...colorOf(p) };
+  }, [xf, yf, rankById, colorOf, idOf, nameOf, forcedIds]);
   const allTopPts = useMemo(() => top.map(p => toPoint(p, false)).filter(d => Number.isFinite(d.x) && Number.isFinite(d.y)), [top, toPoint]);
   // "Hide low outliers": same rule as PlayerCard's squad chart — drop points more
   // than 2 SD below the mean, checked on each axis (only with 5+ points).
