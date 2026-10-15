@@ -431,6 +431,58 @@ export function formatFoot(f){
   if(!f||f==='unknown'||f==='nan') return '—';
   return f.charAt(0).toUpperCase()+f.slice(1);
 }
+// Football-trigram country codes (ENG, ESP, GER…), not ISO3 — covers every
+// country that appears in LEAGUE_STRENGTHS' domestic "Country N." keys.
+export const COUNTRY_CODE3 = {
+  'Albania':'ALB','Algeria':'ALG','Andorra':'AND','Argentina':'ARG','Armenia':'ARM',
+  'Australia':'AUS','Austria':'AUT','Azerbaijan':'AZE','Belgium':'BEL','Bolivia':'BOL',
+  'Bosnia':'BIH','Brazil':'BRA','Bulgaria':'BUL','Canada':'CAN','Chile':'CHI',
+  'China':'CHN','Colombia':'COL','Costa Rica':'CRC','Croatia':'CRO','Cyprus':'CYP',
+  'Czech':'CZE','Denmark':'DEN','Ecuador':'ECU','Egypt':'EGY','England':'ENG',
+  'Estonia':'EST','Faroe Islands':'FRO','Finland':'FIN','France':'FRA','Georgia':'GEO',
+  'Germany':'GER','Greece':'GRE','Hungary':'HUN','Iceland':'ISL','Ireland':'IRL',
+  'Israel':'ISR','Italy':'ITA','Japan':'JPN','Kazakhstan':'KAZ','Korea':'KOR',
+  'Kosovo':'KVX','Kyrgyzstan':'KGZ','Latvia':'LVA','Lithuania':'LTU','Malta':'MLT',
+  'Mexico':'MEX','Moldova':'MDA','Montenegro':'MNE','Morocco':'MAR','Netherlands':'NED',
+  'Nigeria':'NGA','North Macedonia':'MKD','Northern Ireland':'NIR','Norway':'NOR',
+  'Panama':'PAN','Paraguay':'PAR','Peru':'PER','Poland':'POL','Portugal':'POR',
+  'Qatar':'QAT','Romania':'ROU','Russia':'RUS','Saudi':'KSA','Scotland':'SCO',
+  'Serbia':'SRB','Slovakia':'SVK','Slovenia':'SVN','South Africa':'RSA','Spain':'ESP',
+  'Sweden':'SWE','Switzerland':'SUI','Tunisia':'TUN','Turkey':'TUR','UAE':'UAE',
+  'USA':'USA','Ukraine':'UKR','Uruguay':'URU','Uzbekistan':'UZB','Venezuela':'VEN',
+  'Wales':'WAL','Zambia':'ZAM',
+};
+// Continental / international competitions never carry a tier number, so they
+// can't go through the "Country N." parse below — named explicitly instead.
+const COMP_CODE3 = {
+  'Champions League.':'UCL','Champions League Qualifiers.':'UCLQ',
+  'Europa League.':'UEL','Europa League Qualifiers.':'UELQ',
+  'Conference League.':'UECL','Conference League Qualifiers.':'UECLQ',
+  'Copa Libertadores.':'LIB','Club World Cup.':'CWC',
+  'Asia Champions League.':'ACL','Africa Champions League.':'CAFCL','CAF Champions League.':'CAFCL',
+  'UEFA Youth League.':'UEFAY','U20 Copa.':'U20C',
+  'UEFA WC Qualifiers.':'UEFAQ','UEFA U21 Euros.':'U21E','UEFA U19 Euros.':'U19E',
+  'Asia WC Qualifiers.':'ASIAQ','AFCON.':'AFCON','AFCON U20.':'AFCU20','AFCON U17.':'AFCU17',
+  'AFCON Qualifiers.':'AFCONQ','S.America Qualifiers.':'CONMQ',
+  'U20 World Cup.':'U20WC','U17 World Cup.':'U17WC','FIFA World Cup.':'FIFAWC',
+};
+// Short league code for the QuickCard season/context tag: "England 3." -> "ENG3".
+// Falls back to a named continental/youth comp code, then to generic initials
+// built from the competition's own words so an unmapped league still gets
+// something readable rather than a blank tag.
+export function leagueShortCode(league){
+  if(!league) return '';
+  const s = String(league).trim();
+  const m = s.match(/^(.*?)\s+(\d+)\.?\s*$/);
+  if(m){
+    const code = COUNTRY_CODE3[m[1].trim()];
+    if(code) return `${code}${m[2]}`;
+  }
+  if(COMP_CODE3[s]) return COMP_CODE3[s];
+  const clean = s.replace(/\.+$/,'').trim();
+  const initials = clean.split(/\s+/).map(w => w.replace(/[^A-Za-z0-9]/g,'').slice(0,3)).join('').toUpperCase();
+  return initials.slice(0,6);
+}
 export function divColor(v){
   const n=Math.max(0,Math.min(100,v||0));
   if(n>=80) return '#22c55e';

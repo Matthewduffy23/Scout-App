@@ -1,6 +1,6 @@
 // QuickCard v69 - Heat-style pitch option (Player Pager pitch + heatmap upload); Team Context follows selected season.
 import React, { useState, useMemo } from 'react';
-import { scoreLabel, formatFoot, formatMV, GBE_LEAGUE_BANDS, METRIC_DISPLAY, seasonXgXa, defaultSeasonLeague, seasonDetailExact } from './constants';
+import { scoreLabel, formatFoot, formatMV, GBE_LEAGUE_BANDS, METRIC_DISPLAY, seasonXgXa, defaultSeasonLeague, seasonDetailExact, leagueShortCode } from './constants';
 import { useIsMobile, deliverPng } from './utils';
 
 // Player photo naming lives in photoName.js — a character-for-character port of
@@ -1193,9 +1193,20 @@ export function buildQuickCardElement(player, players, manual = {}) {
   // only when it isn't the player's latest season ("2023-24" -> "23-24", "2024" stays).
   const statsSeasonTag = statsRow.s && allSummary[0] && statsRow.s !== allSummary[0].s
     ? (/^\d{4}-\d{2}$/.test(statsRow.s) ? statsRow.s.slice(2) : statsRow.s) : '';
+  // Same abbreviation, but always present (not just when it differs from the
+  // latest season) — feeds the optional season/comparison/league context tag,
+  // which replaces the auto "(xx-xx)" tag above rather than duplicating it.
+  const statsSeasonFull = statsRow.s
+    ? (/^\d{4}-\d{2}$/.test(statsRow.s) ? statsRow.s.slice(2) : statsRow.s) : '';
 
   const rawPosToken = (player.position || '').split(',')[0].trim();
   const posKey = TOKEN_TO_POS_KEY[rawPosToken] || player.roleKey || 'CF';
+  // "25-26 | VS ATT | ENG3" — season of the stats row, the percentile comparison
+  // group (same posKey the role bars/team-context panel already compare against),
+  // and the stats row's own league (sdLeague, not hdrLeague — a team-identity
+  // override shouldn't relabel which league these particular numbers came from).
+  const seasonContextTag = [statsSeasonFull, `VS ${posKey}`, leagueShortCode(sdLeague)]
+    .filter(Boolean).join(' | ');
   const headerAccent = (manual.headerColorOverride && OVERRIDE_HEADER_COLORS[manual.headerColorOverride])
     || POSITION_HEADER_COLORS[posKey]
     || null;
@@ -1391,7 +1402,9 @@ export function buildQuickCardElement(player, players, manual = {}) {
             <span style="font-size:27.9px;font-weight:700;color:#fff;">${val}</span>
             <span style="font-size:16px;font-weight:500;color:#9aa3b8;text-transform:uppercase;letter-spacing:.04em;">${lab}</span>
           </div>`).join('')}
-        ${statsSeasonTag ? `<span style="font-size:20px;font-weight:500;color:#9aa3b8;margin-left:-14px;flex-shrink:0;">(${statsSeasonTag})</span>` : ''}
+        ${manual.showSeasonContext
+          ? (seasonContextTag ? `<span style="font-size:16px;font-weight:500;color:#9aa3b8;text-transform:uppercase;letter-spacing:.04em;flex-shrink:0;">${seasonContextTag}</span>` : '')
+          : (statsSeasonTag ? `<span style="font-size:20px;font-weight:500;color:#9aa3b8;margin-left:-14px;flex-shrink:0;">(${statsSeasonTag})</span>` : '')}
       </div>
 
   <!-- CREST / TEAM / LEAGUE -->
@@ -1514,6 +1527,7 @@ export default function QuickCardModal({ player, players, onClose }) {
   const [valueOverride, setValueOverride] = useState('');
   const [heightOverride, setHeightOverride] = useState('');
   const [footOverride, setFootOverride] = useState(''); // '' = from data; 'left' | 'right' | 'both'
+  const [showSeasonContext, setShowSeasonContext] = useState(false); // off by default
   const [teamOverride, setTeamOverride] = useState('');
   // Search-picked display club — { team, league, fotmobId } — swaps club name,
   // badge, league name and league flag on the card while stats stay from the
@@ -1597,7 +1611,7 @@ export default function QuickCardModal({ player, players, onClose }) {
       const ok = await fetch(real).then(r => r.ok).catch(() => false);
       resolvedPhotoUrl = ok ? real : PHOTO_FALLBACK;
     }
-    const el = buildQuickCardElement(player, players, { resolvedPhotoUrl, footOverride, agentOverride, nameOverride, valueOverride, heightOverride, contractOverride, teamOverride, teamPick, posLabelOverride, uploadedPhotoDataUrl, biography, halfTeamContext, showForecast, scoutStatus, showScorePills, headerColorOverride, showPitchPosition, pitchStyle, heatmapDataUrl, heatOpacity: Number(heatOpacity) / 100, useBestRoleCareer, seasonOverride, headerTextNudge, badgeNudge, escOverride, escReason, positionColors, gbeOv });
+    const el = buildQuickCardElement(player, players, { resolvedPhotoUrl, footOverride, agentOverride, nameOverride, valueOverride, heightOverride, contractOverride, teamOverride, teamPick, posLabelOverride, uploadedPhotoDataUrl, biography, halfTeamContext, showForecast, scoutStatus, showScorePills, headerColorOverride, showPitchPosition, pitchStyle, heatmapDataUrl, heatOpacity: Number(heatOpacity) / 100, useBestRoleCareer, seasonOverride, headerTextNudge, badgeNudge, escOverride, escReason, positionColors, gbeOv, showSeasonContext });
     try {
       const cardNode = el.querySelector('#qc-card-root') || el;
       const opts = {
@@ -1675,6 +1689,11 @@ export default function QuickCardModal({ player, players, onClose }) {
         <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12,textAlign:'left'}}>
           <input type="checkbox" id="qc-half-tc" checked={halfTeamContext} onChange={e=>setHalfTeamContext(e.target.checked)} style={{cursor:'pointer'}} />
           <label htmlFor="qc-half-tc" style={{fontSize:11.5,color:'#cbd5e1',cursor:'pointer'}}>Team Context half-width (aligned with Style)</label>
+        </div>
+
+        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12,textAlign:'left'}}>
+          <input type="checkbox" id="qc-season-context" checked={showSeasonContext} onChange={e=>setShowSeasonContext(e.target.checked)} style={{cursor:'pointer'}} />
+          <label htmlFor="qc-season-context" style={{fontSize:11.5,color:'#cbd5e1',cursor:'pointer'}}>Show season / comparison / league (replaces the auto season tag)</label>
         </div>
 
         <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12,textAlign:'left'}}>
