@@ -529,10 +529,15 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
   // Highlight fades everyone else; single-highlight mode instead keeps them solid but
   // unnamed. A group highlight already mutes non-members, so no extra fading then.
   // Red-dot highlight: the chosen dots just turn red — no ring, name or fading.
-  // A group already uses red, so with a group on the full style is used instead.
+  // Label-only: the chosen dots keep their normal colour/size (whatever the
+  // active colour mode gives them) and just get a force-placed name, drawn on
+  // top — no fading of everyone else either, since nothing about them changed.
+  // A group already behaves this way for its own members, so with a group on,
+  // the full style is used instead (same precedent as red-dot below).
   const redDot = !!(hl && highlightStyle === 'dot' && !group);
+  const labelOnly = !!(hl && highlightStyle === 'label' && !group);
   const solo = !!(hl && soloLabel && !redDot);
-  const fade = hl && !solo && !group && !redDot ? 0.25 : 0.95;
+  const fade = hl && !solo && !group && !redDot && !labelOnly ? 0.25 : 0.95;
   const dotColor = d => (d.muted ? T.muted : d.color);
   for (const pass of group ? [true, false] : [null]) {
     for (let i = visible.length - 1; i >= 0; i--) {
@@ -551,7 +556,8 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
   // ── Name labels ──────────────────────────────────────────────────────────
   const bounds = { x0: pad.l + 2, y0: pad.t + 2, x1: pad.l + pw - 2, y1: pad.t + ph - 2 };
   const items = [];
-  if (!redDot) for (const h of hls) items.push({ x: xS(h.x), y: yS(h.y), r: r*1.6, force: true, px: 11*fs, font: f(11, 700),
+  if (labelOnly) for (const h of hls) items.push({ x: xS(h.x), y: yS(h.y), r, force: true, px: 9.5*fs, font: f(9.5, 500), text: pname(h) });
+  else if (!redDot) for (const h of hls) items.push({ x: xS(h.x), y: yS(h.y), r: r*1.6, force: true, px: 11*fs, font: f(11, 700),
     text: pname(h) + (h.extra && h.rank != null ? `  #${h.rank}` : ''), hl: true });
   // Red dot keeps the normal name style, but a highlighted name is placed first, so
   // nearby names make way for it rather than it being the one dropped.
@@ -589,7 +595,7 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
   L.labels = labels; L.dots = dots; L.bounds = bounds; L.taken = taken;
   ctx.lineJoin = 'round'; ctx.textAlign = 'left';
   for (const lb of labels) {
-    ctx.globalAlpha = lb.hl || !hl || solo || group || redDot ? 1 : 0.35;
+    ctx.globalAlpha = lb.hl || !hl || solo || group || redDot || labelOnly ? 1 : 0.35;
     if (lb.leader) {
       const bx = Math.max(lb.box.x0, Math.min(lb.x, lb.box.x1)), by = Math.max(lb.box.y0, Math.min(lb.y, lb.box.y1));
       const ang = Math.atan2(by - lb.y, bx - lb.x);
@@ -609,7 +615,7 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
   // "added despite filters" only shows in the tooltip and the highlight chip.
   for (const h of hls) {
     if (redDot) { ringDot({ ...h, muted: false, plain: false, color: GROUP_RED }, r, 1); continue; } // same size, just red
-    if (group) { ringDot({ ...h, muted: false, plain: false, color: dotColor(h) }, r, 1); continue; } // same size, no selection ring
+    if (group || labelOnly) { ringDot({ ...h, muted: false, plain: false, color: dotColor(h) }, r, 1); continue; } // same size, normal colour, no selection ring
     ringDot(h, r*1.6, 1);
     ctx.beginPath(); ctx.arc(xS(h.x), yS(h.y), r*1.6 + 3*fs, 0, Math.PI*2);
     ctx.strokeStyle = T.hl; ctx.lineWidth = 2*fs; ctx.stroke();
@@ -1155,10 +1161,10 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
           title={`Label every ${noun} on the plot, not just ${groupLabel || 'the group'} — group names always keep their spot over these`}
           onClick={() => setGroupFullLabels(v => !v)}>Label everyone</button>}
         {hasNonScore && <button style={btn(medianOn)} aria-pressed={medianOn} title="Median line on each non-score axis; median quadrants when neither axis is a score" onClick={() => setMedianOn(v => !v)}>Median split</button>}
-        <div style={{ display:'flex', gap:0 }} title={inGroup ? 'A group is using red — highlights show in the full style' : 'How a highlighted ' + noun + ' is shown'}>
-          {[['full', 'Full'], ['dot', 'Red dot']].map(([k, l], i) => (
+        <div style={{ display:'flex', gap:0 }} title={inGroup ? 'A group is using its own style — highlights show in the full style' : 'How a highlighted ' + noun + ' is shown'}>
+          {[['full', 'Full'], ['dot', 'Red dot'], ['label', 'Label only']].map(([k, l], i, arr) => (
             <button key={k} aria-pressed={highlightStyle === k} onClick={() => setHighlightStyle(k)}
-              style={{ ...btn(highlightStyle === k), borderRadius: i ? '0 5px 5px 0' : '5px 0 0 5px', opacity: inGroup && k === 'dot' ? 0.5 : 1 }}>{l}</button>
+              style={{ ...btn(highlightStyle === k), borderRadius: i === 0 ? '5px 0 0 5px' : i === arr.length - 1 ? '0 5px 5px 0' : 0, opacity: inGroup && k !== 'full' ? 0.5 : 1 }}>{l}</button>
           ))}
         </div>
         <button style={{ ...btn(soloLabel && highlightStyle !== 'dot'), opacity: highlightStyle === 'dot' && !inGroup ? 0.4 : 1 }} aria-pressed={soloLabel}
@@ -1324,6 +1330,7 @@ const playerId = p => p.id, playerName = p => p.name;
 const CM_ARCHETYPE_LEGEND = [
   ...CM_TYPE_KEYS.map(k => ({ key: k, label: k, color: ARCHETYPE_COLORS[k] })),
   ...CM_KEPT_HYBRIDS.map(label => ({ key: label, label, color: ARCHETYPE_COLORS[label] })),
+  { key: 'Generalist', label: 'Generalist', color: ARCHETYPE_COLORS['Generalist'] },
   { key: 'No clear profile', label: 'No clear profile', color: ARCHETYPE_COLORS['No clear profile'] },
 ];
 const playerLegendBase = mode => (mode === 'position'

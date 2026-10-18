@@ -5,11 +5,11 @@
 // qcRoleCareerScores), so no pipeline rebuild is needed to ship or tune this.
 //
 // Two independent pieces:
-//   1. The 8 "types" — recency-weighted career blends, same method as the
+//   1. The 7 "types" — recency-weighted career blends, same method as the
 //      hexagon (weighted average of per-metric percentiles-within-League+
 //      Season+CM, decayed exp(-0.45*seasons_back) across seasons). Pool-
 //      independent: a function of the player's own data only. Drives the
-//      dominant/hybrid archetype classification and the colour mode.
+//      dominant/hybrid/generalist archetype classification and the colour mode.
 //   2. Possession Score / Defensive Score (Feature Q's own formulas,
 //      verbatim from Scouting-Hub/pages/03_Central_Midfielders.py) — latest
 //      qualifying season's raw per-90 values, ranked within WHATEVER POOL
@@ -19,15 +19,18 @@
 
 const DECAY = 0.45;
 
-// ---- 8 archetype "types" ----
+// ---- 7 archetype "types" ----
+// Tempo-Setter was removed entirely (2026-10-18) — it never carried enough
+// of its own signal once DLP's generic-passing metrics were stripped out
+// (11.71% -> 10.29% overlap at launch was still too high to justify a
+// separate type), and in practice it ate up ~12% of the pool as a
+// catch-all. Players who were Tempo-Setter now fall through to whatever
+// they actually are: their next-best type, a hybrid, Generalist, or No
+// clear profile.
 // DLP (refined): hexagon DLP (Deep Playmaker CM) minus the two generic-
-// passing metrics ('Passes per 90', 'Accurate passes, %') that made it
-// overlap heavily with Tempo-Setter. Everything else is unchanged.
+// passing metrics ('Passes per 90', 'Accurate passes, %'). Everything else
+// is unchanged.
 const DLP_W = { 'Forward Passes': 2, 'Progressive Passes': 3, 'Passes to F3rd': 2.5, 'Forward Pass %': 1.5, 'Long Pass %': 1 };
-// Tempo-Setter (new): passing security, no progression. No "accurate short/
-// medium passes %" column exists in the source Wyscout export (checked),
-// so its weight is folded into the three metrics that do exist.
-const TEMPO_W = { Passes: 3, 'Pass %': 3, 'Forward Pass %': 2 };
 // Anchor (refined): duel VOLUME dropped entirely (the thing that made it
 // overlap with Ball-Winner); 'Aerial duels won %' also dropped — not part
 // of the archetype spec's ingredient list (hexagon-only).
@@ -82,14 +85,13 @@ function careerBlend(p, weights, seasons) {
   return den > 0 ? num / den : null;
 }
 
-// The 8 archetype type scores (0-100), career-blended. Returns null if the
+// The 7 archetype type scores (0-100), career-blended. Returns null if the
 // player has no qualifying CM season data at all.
 export function cmTypeScores(p) {
   const seasons = orderedQualifyingSeasons(p);
   if (!seasons.length) return null;
   const qc = p.qcRoleCareerScores || {};
   const dlp = careerBlend(p, DLP_W, seasons);
-  const tempo = careerBlend(p, TEMPO_W, seasons);
   const anchor = careerBlend(p, ANCHOR_W, seasons);
   const ballWinner = careerBlend(p, BALL_WINNER_W, seasons);
   const playmaker = qc['Playmaker'] ?? null;
@@ -98,7 +100,7 @@ export function cmTypeScores(p) {
   const amHex = qc['Attacking Midfielder'] ?? null;
   const boxCrasher = qc['Box-Crasher'] ?? null;
   const attackingMid = (amHex != null || boxCrasher != null) ? Math.max(amHex ?? -Infinity, boxCrasher ?? -Infinity) : null;
-  const types = { DLP: dlp, 'Tempo-Setter': tempo, Playmaker: playmaker, 'Ball-Winner': ballWinner, Anchor: anchor, 'Attacking Midfielder': attackingMid, 'Ball Carrier': ballCarrier, 'Box-to-Box': boxToBox };
+  const types = { DLP: dlp, Playmaker: playmaker, 'Ball-Winner': ballWinner, Anchor: anchor, 'Attacking Midfielder': attackingMid, 'Ball Carrier': ballCarrier, 'Box-to-Box': boxToBox };
   if (Object.values(types).every(v => v == null)) return null;
   return types;
 }
@@ -112,19 +114,26 @@ export const HYBRID_CANDIDATES = {
   'Attacking Midfielder+Playmaker': { label: 'Creative Box Threat', kept: true }, // 4.13% — kept
   'Ball Carrier+Attacking Midfielder': { label: 'Dynamic 10', kept: false },       // 0.00%
   'Ball Carrier+Playmaker': { label: 'Progressive Creator', kept: false },        // 2.10%
-  'Ball-Winner+Tempo-Setter': { label: 'Holding Midfielder', kept: false },       // 1.30%
   'Anchor+DLP': { label: 'Regista', kept: false },                                // 2.19%
   'Ball-Winner+Ball Carrier': { label: 'Ball-Winning Carrier', kept: false },      // 0.00%
 };
 const pairKey = (a, b) => [a, b].sort().join('+');
 
 // Display order: passing family, defending family, then the three standalone types.
-export const CM_TYPE_KEYS = ['DLP', 'Tempo-Setter', 'Playmaker', 'Ball-Winner', 'Anchor', 'Attacking Midfielder', 'Ball Carrier', 'Box-to-Box'];
+export const CM_TYPE_KEYS = ['DLP', 'Playmaker', 'Ball-Winner', 'Anchor', 'Attacking Midfielder', 'Ball Carrier', 'Box-to-Box'];
 export const CM_KEPT_HYBRIDS = Object.values(HYBRID_CANDIDATES).filter(c => c.kept).map(c => c.label);
 
+// Generalist: not dominant at anything (no type >=70), not a kept hybrid,
+// but solid across several types at once — >=GENERALIST_MIN_TYPES of the 7
+// types at >=GENERALIST_THRESHOLD. See zz_cm_archetype.test.js for counts at
+// the alternative thresholds considered (3-of-7 >=55, 4-of-7 >=50, 4-of-7
+// >=60) before settling on 4-of-7 >=55.
+export const GENERALIST_MIN_TYPES = 4;
+export const GENERALIST_THRESHOLD = 55;
+
 export const ARCHETYPE_COLORS = {
-  // Passing family — 3 shades of blue
-  DLP: '#60a5fa', 'Tempo-Setter': '#3b82f6', Playmaker: '#1d4ed8',
+  // Passing family — 2 shades of blue
+  DLP: '#60a5fa', Playmaker: '#1d4ed8',
   // Defending family — 2 shades of red
   'Ball-Winner': '#f87171', Anchor: '#dc2626',
   'Attacking Midfielder': '#f97316', // orange
@@ -133,10 +142,12 @@ export const ARCHETYPE_COLORS = {
   // Kept hybrids — their own distinct colours
   'Complete Playmaker': '#14b8a6',
   'Creative Box Threat': '#ec4899',
+  // Neutral, outside every family (sand/gold) — no outline, normal size
+  Generalist: '#ca8a04',
   'No clear profile': '#64748b',      // grey, smaller dot (handled by draw code)
 };
 
-// { kind: 'dominant'|'hybrid'|'none', key, label, color }
+// { kind: 'dominant'|'hybrid'|'generalist'|'none', key, label, color }
 export function classifyCmArchetype(types) {
   if (!types) return null;
   const entries = Object.entries(types).filter(([, v]) => v != null).sort((a, b) => b[1] - a[1]);
@@ -148,6 +159,9 @@ export function classifyCmArchetype(types) {
     if (cand && cand.kept) return { kind: 'hybrid', key: cand.label, label: cand.label, color: ARCHETYPE_COLORS[cand.label] };
   }
   if (s1 >= 70) return { kind: 'dominant', key: n1, label: n1, color: ARCHETYPE_COLORS[n1] };
+  if (entries.filter(([, v]) => v >= GENERALIST_THRESHOLD).length >= GENERALIST_MIN_TYPES) {
+    return { kind: 'generalist', key: 'Generalist', label: 'Generalist', color: ARCHETYPE_COLORS['Generalist'] };
+  }
   return { kind: 'none', key: 'No clear profile', label: 'No clear profile', color: ARCHETYPE_COLORS['No clear profile'] };
 }
 
