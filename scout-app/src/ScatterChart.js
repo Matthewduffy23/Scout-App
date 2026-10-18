@@ -4,6 +4,7 @@ import { SCORE_TIERS, POS_COLORS, METRIC_OPTIONS, METRIC_OPTIONS_EXTRA, seasonDe
 import { useIsMobile, deliverPng } from './utils';
 import { ensureMontserratEmbedded } from './CoachCard';
 import { barColor } from './QuickCard';
+import { cmTypeScores, classifyCmArchetype, computeCmPoolScores, ARCHETYPE_COLORS, CM_TYPE_KEYS, CM_KEPT_HYBRIDS } from './cmArchetype';
 
 // Scatter view of the current Scout Index result list: plots the top N of the
 // already filtered + sorted players (App passes `sorted`). Canvas, drawn by one
@@ -126,6 +127,14 @@ function buildFields(ctx) {
     { key:'seasons', group:'Profile', neutral:true, label:'Seasons', get:p=>p.seasons },
     { key:'gbeTotal', group:'Profile', label:'GBE points', get:p=>p.gbeTotal },
   ];
+  // CM archetype axes (Feature Q formulas, ranked within the current filtered
+  // pool — see cmArchetype.js). Deliberately not scoreScale: these are 0-100
+  // relative-to-pool percentiles, not level-band scores, so they get the
+  // custom 50/50 quadrant in playerScoreQuad() below instead of band lines.
+  if (ctx.roleKey === 'CM') {
+    f.push({ key:'possessionScore', group:'CM Archetype', label:'Possession Score', short:'Possession', get:p=>ctx.cmPoolScores?.get(p.id)?.possessionScore ?? null });
+    f.push({ key:'defensiveScore', group:'CM Archetype', label:'Defensive Score', short:'Defensive', get:p=>ctx.cmPoolScores?.get(p.id)?.defensiveScore ?? null });
+  }
   // Role scores: only for a single position group (roles from different groups aren't
   // comparable). They follow the season filter: all seasons = career role score, a
   // chosen season = that season's role score. No value = without data, never 0.
@@ -504,11 +513,17 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
   ctx.fillText(yf.label, 0, 0); ctx.restore();
 
   // ── Dots ─────────────────────────────────────────────────────────────────
+  // d.kind (CM Archetype colour mode only — undefined everywhere else, so this
+  // is a no-op for every other point): 'none' draws smaller ("No clear
+  // profile"), 'hybrid' gets a thin white outline instead of the normal ring.
   const ringDot = (d, rad, alpha) => {
+    const rr = d.kind === 'none' ? rad * 0.7 : rad;
     ctx.globalAlpha = alpha;
-    ctx.beginPath(); ctx.arc(xS(d.x), yS(d.y), rad, 0, Math.PI*2);
+    ctx.beginPath(); ctx.arc(xS(d.x), yS(d.y), rr, 0, Math.PI*2);
     ctx.fillStyle = d.muted ? T.muted : d.plain ? T.plain : d.color; ctx.fill();
-    ctx.strokeStyle = T.ring; ctx.lineWidth = T.ringW*fs; ctx.stroke();
+    ctx.strokeStyle = d.kind === 'hybrid' ? '#ffffff' : T.ring;
+    ctx.lineWidth = (d.kind === 'hybrid' ? 1.5 : T.ringW) * fs;
+    ctx.stroke();
     ctx.globalAlpha = 1;
   };
   // Highlight fades everyone else; single-highlight mode instead keeps them solid but
@@ -711,6 +726,18 @@ const OPS = { le: ['≤', (a, b) => a <= b], eq: ['=', (a, b) => a === b], ge: [
 // quadrant permanently empty). Auto target = the band cutoff closest to the median
 // current score on the plot.
 function playerScoreQuad(xf, yf, topPts, targetMin) {
+  // CM Possession Score vs Defensive Score: fixed 50/50 split, Feature Q's own
+  // four names — independent of scoreScale/CHART_TIERS banding, which don't
+  // apply to a pool-relative percentile pair.
+  const xPoss = xf.key === 'possessionScore', xDef = xf.key === 'defensiveScore';
+  const yPoss = yf.key === 'possessionScore', yDef = yf.key === 'defensiveScore';
+  if ((xPoss && yDef) || (xDef && yPoss)) {
+    if (!topPts.length) return null;
+    const names = xPoss
+      ? { tr:'All Action', tl:'Defensive', br:'Playmaker', bl:'Limited' }
+      : { tr:'All Action', tl:'Playmaker', br:'Defensive', bl:'Limited' };
+    return { xSplit:50, ySplit:50, names, alt:names, tint:{ tr:'best', br:'x', tl:'y', bl:null } };
+  }
   if (!xf.scoreScale || !yf.scoreScale || !topPts.length) return null;
   const xPot = POTENTIAL_KEYS.has(xf.key) && CURRENT_KEYS.has(yf.key);
   const yPot = POTENTIAL_KEYS.has(yf.key) && CURRENT_KEYS.has(xf.key);
@@ -888,14 +915,18 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
   }, [allTopPts, trimLow]);
   const trimmed = allTopPts.length - topPts.length;
 
+  // Computed before median so a custom scoreQuad (e.g. CM Possession vs
+  // Defensive — fixed 50/50 split, not scoreScale) can suppress the median
+  // lines too, the same way the built-in current/potential quadrant already
+  // does via the scoreScale check below.
+  const sQuad = useMemo(() => (scoreQuad ? scoreQuad(xf, yf, topPts, targetMin) : null), [scoreQuad, xf, yf, topPts, targetMin]);
   // Medians of the PLOTTED items, on each non-score axis — of whatever the axis
   // shows (raw value or percentile).
   const median = useMemo(() => {
-    if (!medianOn || !topPts.length || (xf.scoreScale && yf.scoreScale)) return null;
+    if (!medianOn || !topPts.length || (xf.scoreScale && yf.scoreScale) || sQuad) return null;
     const mx = xf.scoreScale ? null : medianOf(topPts.map(d => d.x)), my = yf.scoreScale ? null : medianOf(topPts.map(d => d.y));
     return { x: mx, y: my, xText: mx == null ? '' : valueText(mx, xf), yText: my == null ? '' : valueText(my, yf) };
-  }, [medianOn, topPts, xf, yf]);
-  const sQuad = useMemo(() => (scoreQuad ? scoreQuad(xf, yf, topPts, targetMin) : null), [scoreQuad, xf, yf, topPts, targetMin]);
+  }, [medianOn, topPts, xf, yf, sQuad]);
   const autoQuad = sQuad || (median && median.x != null && median.y != null ? medianQuadrant(xf, yf, median.x, median.y) : null);
   useEffect(() => { setQuadNames({}); }, [xKey, yKey]);
   const quad = useMemo(() => {
@@ -1056,7 +1087,7 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
   const missing = top.length - allTopPts.length;
   const usesMetric = xf.metric || yf.metric || (colorBy === 'metric' && cf.metric);
   const hasNonScore = !xf.scoreScale || !yf.scoreScale;
-  const [tip1, tip2] = hover ? tooltipLines(hover.d.p) : [];
+  const [tip1, tip2, tip3] = hover ? tooltipLines(hover.d.p) : [];
 
   return (
     <div style={{ flex:1, overflow:'auto', padding:isMobile?'10px 12px 80px':'12px 16px', display:'flex', flexDirection:'column', gap:10 }}>
@@ -1105,7 +1136,7 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
             </div>
           </label>
         )}
-        {sQuad && targetTiers && (
+        {sQuad && sQuad.autoTier && targetTiers && (
           <label style={col}><span style={lbl}>Target level</span>
             <select aria-label="Target level" style={sel} value={targetMin ?? ''} onChange={e => setTargetMin(e.target.value === '' ? null : Number(e.target.value))}>
               <option value="">Auto ({sQuad.autoTier.short} {sQuad.autoTier.min})</option>
@@ -1246,6 +1277,7 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
             <div style={{ fontSize:10.5, color:'#e2e8f4' }}>{xf.label}: <b>{valueText(hover.d.x, xf)}</b></div>
             {colorBy === 'metric' && !inGroup && cf !== xf && cf !== yf && <div style={{ fontSize:10.5, color:'#e2e8f4' }}>{cf.label}: <b>{Number.isFinite(cf.get(hover.d.p)) ? valueText(cf.get(hover.d.p), cf) : 'no data'}</b></div>}
             {quad && <div style={{ fontSize:10.5, color:'#5eead4', marginTop:3, fontWeight:600 }}>{quadOf(quad, hover.d)}</div>}
+            {tip3 && <div style={{ fontSize:10.5, color:'#fbbf24', marginTop:3 }}>{tip3}</div>}
             <div style={{ fontSize:9.5, color:'#64748b', marginTop:4 }}>Click to highlight · Shift-click to add{onSelect ? ` · double-click for ${noun === 'team' ? 'team card' : 'profile'}` : ''}</div>
           </div>
         )}
@@ -1289,29 +1321,64 @@ export const playerGroups = clubOf => [
     labelOf:v => { const [t, l] = v.split('|'); return `${t} (${l})`; } },
 ];
 const playerId = p => p.id, playerName = p => p.name;
+const CM_ARCHETYPE_LEGEND = [
+  ...CM_TYPE_KEYS.map(k => ({ key: k, label: k, color: ARCHETYPE_COLORS[k] })),
+  ...CM_KEPT_HYBRIDS.map(label => ({ key: label, label, color: ARCHETYPE_COLORS[label] })),
+  { key: 'No clear profile', label: 'No clear profile', color: ARCHETYPE_COLORS['No clear profile'] },
+];
 const playerLegendBase = mode => (mode === 'position'
   ? [...POS_ORDER, 'Other'].map(g => ({ key: g, label: g, color: POS_COLORS[g] || OTHER_COLOR }))
+  : mode === 'archetype' ? CM_ARCHETYPE_LEGEND
   : [...SCORE_BUCKETS, { key: 'none', label: 'No data', color: NODATA_COLOR }]);
+const fmtType = v => Number.isFinite(v) ? Math.round(v) : '—';
 
 export default function ScatterChart({ players, allPlayers, getDisplayScore, seasonFilter, scoreMode, rawMode, outlierMode, roleKey, leagues, onSelect, onClose, contextLabel }) {
-  const buildFieldsFor = useCallback(metricMode => buildFields({ getDisplayScore, seasonFilter, scoreMode, rawMode, outlierMode, metricMode, roleKey, leagues }),
-    [getDisplayScore, seasonFilter, scoreMode, rawMode, outlierMode, roleKey, leagues]);
+  const isCM = roleKey === 'CM';
+  // CM archetype data for the current filtered pool — recomputed only when
+  // that pool or the position-group filter changes. Possession/Defensive
+  // Score are pool-relative (Feature Q's own convention), so they live here;
+  // the 8 types are pool-independent (a pure function of each player's own
+  // data) but are still computed per-pool for simplicity/locality.
+  const cmPoolScores = useMemo(() => (isCM ? computeCmPoolScores(players) : null), [isCM, players]);
+  const cmArchetypeMap = useMemo(() => {
+    if (!isCM) return null;
+    const m = new Map();
+    for (const p of players) { const types = cmTypeScores(p); m.set(p.id, { types, arch: classifyCmArchetype(types) }); }
+    return m;
+  }, [isCM, players]);
+  const buildFieldsFor = useCallback(metricMode => buildFields({ getDisplayScore, seasonFilter, scoreMode, rawMode, outlierMode, metricMode, roleKey, leagues, cmPoolScores }),
+    [getDisplayScore, seasonFilter, scoreMode, rawMode, outlierMode, roleKey, leagues, cmPoolScores]);
   const displayIsScore = tableIsScore({ seasonFilter, scoreMode, rawMode, outlierMode });
   const colorModes = useMemo(() => [
     ['position', 'Position'], ['careerScore', 'Career score'], ['potentialScore', 'Potential'],
     ...(displayIsScore ? [['display', `Table score · ${tableScoreLabel({ seasonFilter, scoreMode, rawMode, outlierMode })}`]] : []),
-  ], [displayIsScore, seasonFilter, scoreMode, rawMode, outlierMode]);
+    ...(isCM ? [['archetype', 'Archetype']] : []),
+  ], [displayIsScore, seasonFilter, scoreMode, rawMode, outlierMode, isCM]);
   // club + league for the selected season (same helper as the table)
   const playerSub = useCallback(p => seasonClubFor(p, seasonFilter, leagues).team, [seasonFilter, leagues]);
   const playerLeague = useCallback(p => seasonClubFor(p, seasonFilter, leagues).league, [seasonFilter, leagues]);
   const groups = useMemo(() => playerGroups(p => seasonClubFor(p, seasonFilter, leagues)), [seasonFilter, leagues]);
-  const playerTip = useCallback(p => { const c = seasonClubFor(p, seasonFilter, leagues);
-    return [`${c.team} · ${c.league}${seasonFilter !== 'all' ? ` (${seasonFilter})` : ''}`, `${p.position} · age ${p.age}`]; }, [seasonFilter, leagues]);
+  const playerTip = useCallback(p => {
+    const c = seasonClubFor(p, seasonFilter, leagues);
+    const lines = [`${c.team} · ${c.league}${seasonFilter !== 'all' ? ` (${seasonFilter})` : ''}`, `${p.position} · age ${p.age}`];
+    const rec = cmArchetypeMap?.get(p.id);
+    if (rec && rec.arch) {
+      const top2 = Object.entries(rec.types || {}).filter(([, v]) => v != null).sort((a, b) => b[1] - a[1]).slice(0, 2);
+      const top2Txt = top2.map(([k, v]) => `${k} ${fmtType(v)}`).join(', ');
+      lines.push(`Archetype: ${rec.arch.label}${top2Txt ? ` (${top2Txt})` : ''}`);
+    }
+    return lines;
+  }, [seasonFilter, leagues, cmArchetypeMap]);
   const colorOf = useCallback((p, mode) => {
     if (mode === 'position') return POS_COLORS[p.roleKey] ? { g: p.roleKey, color: POS_COLORS[p.roleKey] } : { g: 'Other', color: OTHER_COLOR };
+    if (mode === 'archetype') {
+      const rec = cmArchetypeMap?.get(p.id);
+      if (!rec || !rec.arch) return { g: 'none', color: NODATA_COLOR };
+      return { g: rec.arch.key, color: rec.arch.color, kind: rec.arch.kind };
+    }
     const v = mode === 'display' ? getDisplayScore(p) : p[mode];
     return Number.isFinite(v) ? { g: scoreBucketKey(v), color: scoreDotColor(v) } : { g: 'none', color: NODATA_COLOR };
-  }, [getDisplayScore]);
+  }, [getDisplayScore, cmArchetypeMap]);
   return (
     <ScatterView items={players} searchPool={allPlayers} idOf={playerId} nameOf={playerName} subOf={playerSub} tooltipLines={playerTip} leagueOf={playerLeague}
       buildFields={buildFieldsFor} defaultX="potentialScore" defaultY={seasonFilter !== 'all' ? 'display' : 'careerScore'} metricLabel="Per-90 value"
