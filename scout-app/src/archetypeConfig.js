@@ -32,20 +32,21 @@
 // Detailed: every archetype in a position gets its own colour from
 // DETAILED_SWATCHES below — a fixed full-colour-wheel palette (2026-10-20),
 // not constrained to stay near the archetype's Simple family hue. Complete
-// = white, Generalist = light grey, No clear profile = grey — reserved
+// = white, Generalist = warm taupe, No clear profile = grey — reserved
 // across every position, never reassigned to an archetype.
 //
 // Simple: every archetype collapses into one of five colour "families"
 // (red/blue/orange/green/purple) with the SAME hue meaning in every
 // position (red=defending, blue=passing/creating, orange=goal threat/
 // attacking, green=carrying/running, purple=aerial/physical), plus White=
-// Complete, light grey=Generalist, grey=No clear profile (Generalist now
-// shares the same light grey in both modes — see GENERALIST_COLOR). Each
-// position's `simple.family` map says which family every surviving
-// archetype belongs to; `simple.labels` gives that position's own word for
-// each family used (e.g. CM's red family is labelled "Defensive").
+// Complete, warm taupe=Generalist, grey=No clear profile (Generalist
+// shares the same taupe in both modes — see GENERALIST_COLOR, chosen so it
+// reads clearly against white/grey/yellow/orange). Each position's
+// `simple.family` map says which family every surviving archetype belongs
+// to; `simple.labels` gives that position's own word for each family used
+// (e.g. CM's red family is labelled "Defensive").
 export const COMPLETE_COLOR = '#f8fafc';   // white — most eye-catching, every position
-export const GENERALIST_COLOR = '#cbd5e1'; // light grey — every position, both modes (2026-10-20: replaced the gold)
+export const GENERALIST_COLOR = '#b08d6a'; // warm taupe — every position, both modes (2026-10-20: the light grey was too close to white/Complete)
 export const NONE_COLOR = '#64748b';       // grey, every position, both modes
 
 export const FAMILY_COLOR = {

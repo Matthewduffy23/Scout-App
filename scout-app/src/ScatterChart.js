@@ -281,12 +281,15 @@ function placeLabels(ctx, items, dots, bounds, taken, fs, budget = Infinity) {
 }
 
 // Export header: title + subtitle on the left, legend right-aligned beside the
-// title (wrapping onto extra rows). If a long title leaves no room, the legend
-// drops to its own rows under the subtitle. Returns where the plot can start.
-function exportHeader(ctx, W, FONT, title, legend, xIsScore, showCounts = true) {
+// title (wrapping onto extra rows). If a long title OR subtitle leaves no
+// room, the legend drops to its own rows under the subtitle. Returns where
+// the plot can start.
+function exportHeader(ctx, W, FONT, title, subtitle, legend, xIsScore, showCounts = true) {
   const right = W - EXPORT_PAD.r, L0 = EXPORT_PAD.l;
   ctx.font = `700 46px ${FONT}`;
   const titleW = ctx.measureText(title).width;
+  ctx.font = `500 24px ${FONT}`;
+  const subtitleW = ctx.measureText(subtitle || '').width;
   ctx.font = `600 21px ${FONT}`;
   const items = (legend || []).map(it => {
     if (it.gradient) {
@@ -305,7 +308,7 @@ function exportHeader(ctx, W, FONT, title, legend, xIsScore, showCounts = true) 
     if (row.length) rows.push(row);
     return rows;
   };
-  const avail = right - (L0 + titleW + 80);
+  const avail = right - (L0 + Math.max(titleW, subtitleW) + 80);
   let rows = avail > 0 ? rowsFor(avail) : [];
   const beside = avail > 260 && items.every(x => x.w <= avail) && rows.length <= 3;
   if (!beside) rows = rowsFor(right - L0);
@@ -332,7 +335,7 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
   if (!pts.length) return null;
 
   const stripX = xf.scoreScale ? 2 : median && median.x != null ? 1 : 0; // rows of labels above the plot
-  const head = forExport ? exportHeader(ctx, W, FONT, title, legend, stripX, showCounts) : null;
+  const head = forExport ? exportHeader(ctx, W, FONT, title, subtitle, legend, stripX, showCounts) : null;
   const L = computeLayout(W, H, forExport, pts, xf, yf, head && head.plotTop, stripX);
   const { fs, pad, pw, ph, xd, yd, xS, yS, shade } = L;
   const quad = Q || null; // score quadrants (both axes scores) or median quadrants (neither is)
@@ -812,6 +815,21 @@ function playerScoreQuad(xf, yf, topPts, targetMin, roleKey) {
   return { xSplit: xPot ? potSplit : target.min, ySplit: yPot ? potSplit : target.min, names, target, autoTier, next, pair };
 }
 
+// Plural form of the position-group part of contextLabel, for the players
+// scatter's short default subtitle ("86 Attackers", "81 Central Mids").
+// Falls back to a bare "+s" for any caller whose contextLabel doesn't match
+// (e.g. Team Index/Custom Scatter, which use contextLabel for something
+// else entirely and never hit the default-subtitle code path that needs this).
+const POSITION_PLURAL = {
+  'All positions': 'Players',
+  'Goalkeeper': 'Goalkeepers',
+  'Centre Back': 'Centre Backs',
+  'Fullback': 'Fullbacks',
+  'Central Mid': 'Central Mids',
+  'Attacker': 'Attackers',
+  'Striker': 'Strikers',
+};
+
 // ── Shared chart view ────────────────────────────────────────────────────────
 // Everything interactive about the scatter chart, for any kind of item (players,
 // teams). The page-specific parts come in as props: the axis fields, colour modes,
@@ -819,7 +837,7 @@ function playerScoreQuad(xf, yf, topPts, targetMin, roleKey) {
 export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLines, buildFields: buildFieldsFor, defaultX, defaultY,
   metricLabel = 'Per-90 value', colorModes, colorOf: colorOfMode, legendBase, scoreQuad, targetTiers, groups = [], leagueOf,
   noun = 'player', openLabel = 'Open profile', onSelect, onClose, contextLabel, defaultMedianOn = true, defaultSample = 50, archetypeSeasonLabel,
-  axesSeasonLabel, showAxesModeToggle, axesMode, setAxesMode, showArchetypeDetailToggle, archetypeDetail, setArchetypeDetail }) {
+  axesSeasonLabel, showAxesModeToggle, axesMode, setAxesMode, showArchetypeDetailToggle, archetypeDetail, setArchetypeDetail, genericSeasonLabel }) {
   // searchPool: an unfiltered roster to search for the "ignores filters" add — falls
   // back to items (no override) when the caller doesn't have one (e.g. Team Index).
   const pool = searchPool && searchPool.length ? searchPool : items;
@@ -871,6 +889,7 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
   const [busy, setBusy] = useState(false);
   const [exportTheme, setExportTheme] = useState('dark'); // 'dark' | 'light'
   const [customTitle, setCustomTitle] = useState('');
+  const [customSubtitle, setCustomSubtitle] = useState(''); // blank = auto subtitle
   const [trimLow, setTrimLow] = useState(false);
   const [targetMin, setTargetMin] = useState(null); // score-quadrant target level; null = auto
   const [exportLegend, setExportLegend] = useState(false); // band/position counts in the export header
@@ -1087,10 +1106,38 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
   const autoTitle = `${yf.label} vs ${xf.label}`;
   const title = customTitle.trim() || autoTitle;
   const usesArchetypeAxis = xKey === 'quadX' || xKey === 'quadY' || yKey === 'quadX' || yKey === 'quadY';
-  const labelledNames = colorBy === 'archetype' && labelledKeys.size
-    ? legend.filter(it => labelledKeys.has(it.key)).map(it => it.label)
-    : [];
-  const subtitle = `${sample.length} Sample · ${contextLabel}${usesArchetypeAxis && axesSeasonLabel ? ` · Axes: ${axesSeasonLabel}` : ''}${colorBy === 'archetype' && archetypeSeasonLabel ? ` · Archetypes: ${archetypeSeasonLabel}` : ''}${inGroup ? ` · highlighted: ${groupLabel} (${groupCount})` : ''}${hlNames.length ? ` · highlighted: ${hlNames.length > 4 ? `${hlNames.slice(0, 4).join(', ')} +${hlNames.length - 4} more` : hlNames.join(', ')}` : ''}${labelledNames.length ? ` · labelled: ${labelledNames.join(', ')}` : ''}`;
+
+  // Short default subtitle (players scatter only — the only caller that
+  // passes genericSeasonLabel): "{sample} {Position plural} · {season}"
+  // (e.g. "86 Attackers · Career blend", "81 Central Mids · 2026-27"). When
+  // both the Feature Q axes and Archetype colour are in play and their
+  // season choice differs, the season part becomes "Axes: latest ·
+  // Archetypes: career" instead of a single word. Anything beyond sample/
+  // position/season (highlighted groups, labelled archetypes, etc.) is
+  // left out of the auto text — the editable subtitle field overrides it
+  // entirely. Other ScatterView callers (Team Index, Custom Scatter) don't
+  // pass genericSeasonLabel and keep the original, fuller default.
+  const capitalize1 = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+  const seasonTag = label => label.replace(/ (blend|season)$/, ''); // "career blend" -> "career", "latest season" -> "latest"
+  const archActive = colorBy === 'archetype' && archetypeSeasonLabel;
+  const axesActive = usesArchetypeAxis && axesSeasonLabel;
+  let autoSubtitle;
+  if (genericSeasonLabel != null) {
+    const seasonPart = (archActive && axesActive)
+      ? (archetypeSeasonLabel === axesSeasonLabel ? capitalize1(archetypeSeasonLabel) : `Axes: ${seasonTag(axesSeasonLabel)} · Archetypes: ${seasonTag(archetypeSeasonLabel)}`)
+      : archActive ? capitalize1(archetypeSeasonLabel)
+      : axesActive ? capitalize1(axesSeasonLabel)
+      : capitalize1(genericSeasonLabel);
+    const positionKey = (contextLabel || '').split(' · ')[0];
+    const positionPlural = POSITION_PLURAL[positionKey] || (positionKey.endsWith('s') ? positionKey : positionKey + 's');
+    autoSubtitle = `${sample.length} ${positionPlural} · ${seasonPart}`;
+  } else {
+    const labelledNames = colorBy === 'archetype' && labelledKeys.size
+      ? legend.filter(it => labelledKeys.has(it.key)).map(it => it.label)
+      : [];
+    autoSubtitle = `${sample.length} Sample · ${contextLabel}${archActive ? ` · Archetypes: ${archetypeSeasonLabel}` : ''}${axesActive ? ` · Axes: ${axesSeasonLabel}` : ''}${inGroup ? ` · highlighted: ${groupLabel} (${groupCount})` : ''}${hlNames.length ? ` · highlighted: ${hlNames.length > 4 ? `${hlNames.slice(0, 4).join(', ')} +${hlNames.length - 4} more` : hlNames.join(', ')}` : ''}${labelledNames.length ? ` · labelled: ${labelledNames.join(', ')}` : ''}`;
+  }
+  const subtitle = customSubtitle.trim() || autoSubtitle;
 
   useEffect(() => {
     const measure = () => { const w = wrapRef.current?.offsetWidth; if (w) setWidth(w); };
@@ -1345,6 +1392,8 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
         )}
         <input aria-label="Chart title" placeholder={`Title: ${autoTitle}`} value={customTitle} onChange={e => setCustomTitle(e.target.value)}
           style={{ ...sel, width:isMobile?200:280, padding:'6px 8px', maxWidth:'100%' }}/>
+        <input aria-label="Chart subtitle" placeholder={`Subtitle: ${autoSubtitle}`} value={customSubtitle} onChange={e => setCustomSubtitle(e.target.value)}
+          style={{ ...sel, width:isMobile?200:280, padding:'6px 8px', maxWidth:'100%' }}/>
         {hlItems.map(it => { const hp = hlPointOf(it); const forced = forcedIds.has(idOf(it)); return (
           <div key={idOf(it)} data-hl-chip={idOf(it)} style={{ display:'flex', alignItems:'center', gap:8, padding:'4px 6px 4px 10px', borderRadius:14, border:`1px ${forced ? 'dashed #f0a637' : 'solid #26456f'}`, background:'#0e2040' }}>
             <span style={{ fontSize:11, color:'#dbeafe' }}>
@@ -1511,7 +1560,7 @@ export default function ScatterChart({ players, allPlayers, getDisplayScore, sea
   const showAxesModeToggle = hasArchetype && seasonFilter === 'all';
   // Archetype colour sub-mode: Simple (default, 5 shared family hues) or
   // Detailed (every archetype its own colour) — see archetypeConfig.js.
-  const [archetypeDetail, setArchetypeDetail] = useState('simple'); // 'simple' | 'detailed'
+  const [archetypeDetail, setArchetypeDetail] = useState('detailed'); // 'simple' | 'detailed' — 2026-10-20: default is Detailed
   const archPoolScores = useMemo(() => {
     if (!hasArchetype) return null;
     if (seasonFilter === 'all' && axesMode === 'career') return computeQuadrantScoresCareerBlend(roleKey, players);
@@ -1528,6 +1577,11 @@ export default function ScatterChart({ players, allPlayers, getDisplayScore, sea
   }, [hasArchetype, roleKey, players, seasonFilter, leagues]);
   const archetypeSeasonLabel = hasArchetype ? (seasonFilter === 'all' ? 'career blend' : seasonFilter) : null;
   const axesSeasonLabel = hasArchetype ? (seasonFilter === 'all' ? (axesMode === 'career' ? 'career blend' : 'latest season') : seasonFilter) : null;
+  // Fallback season label for the default subtitle when neither the
+  // Feature Q axes nor Archetype colour are actually in use (e.g. Position
+  // colour mode, or a non-archetype position group) — same wording as the
+  // rest of the app's "All seasons" convention (e.g. the Minutes field).
+  const genericSeasonLabel = seasonFilter === 'all' ? 'latest season' : seasonFilter;
   const buildFieldsFor = useCallback(metricMode => buildFields({ getDisplayScore, seasonFilter, scoreMode, rawMode, outlierMode, metricMode, roleKey, leagues, archPoolScores }),
     [getDisplayScore, seasonFilter, scoreMode, rawMode, outlierMode, roleKey, leagues, archPoolScores]);
   const displayIsScore = tableIsScore({ seasonFilter, scoreMode, rawMode, outlierMode });
@@ -1575,10 +1629,10 @@ export default function ScatterChart({ players, allPlayers, getDisplayScore, sea
   }, [getDisplayScore, archetypeMap, archetypeDetail, roleKey]);
   return (
     <ScatterView items={players} searchPool={allPlayers} idOf={playerId} nameOf={playerName} subOf={playerSub} tooltipLines={playerTip} leagueOf={playerLeague}
-      buildFields={buildFieldsFor} defaultX="potentialScore" defaultY={seasonFilter !== 'all' ? 'display' : 'careerScore'} metricLabel="Per-90 value"
+      buildFields={buildFieldsFor} defaultX="potentialScore" defaultY={seasonFilter !== 'all' ? 'display' : 'careerScore'} metricLabel="Per-90 value" defaultSample={500}
       colorModes={colorModes} colorOf={colorOf} legendBase={legendBase} scoreQuad={scoreQuadFn} targetTiers={TARGET_TIERS}
       groups={groups} noun="player" openLabel="Open profile" onSelect={onSelect} onClose={onClose} contextLabel={contextLabel} archetypeSeasonLabel={archetypeSeasonLabel}
-      axesSeasonLabel={axesSeasonLabel} showAxesModeToggle={showAxesModeToggle} axesMode={axesMode} setAxesMode={setAxesMode}
+      axesSeasonLabel={axesSeasonLabel} showAxesModeToggle={showAxesModeToggle} axesMode={axesMode} setAxesMode={setAxesMode} genericSeasonLabel={genericSeasonLabel}
       showArchetypeDetailToggle={hasArchetype} archetypeDetail={archetypeDetail} setArchetypeDetail={setArchetypeDetail}/>
   );
 }

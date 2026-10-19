@@ -34,7 +34,7 @@ test('ARCHETYPE_CONFIG: every position has roles, quadrant, max 3 hybrids, mainT
     expect(cfg.quadrant.x.w).toBeTruthy();
     expect(cfg.quadrant.y.w).toBeTruthy();
     expect(cfg.colors[cfg.completeLabel]).toBe('#f8fafc');
-    expect(cfg.colors.Generalist).toBe('#cbd5e1');
+    expect(cfg.colors.Generalist).toBe('#b08d6a');
     expect(cfg.colors['No clear profile']).toBe('#64748b');
     for (const name of [...cfg.mainTypes, ...cfg.hybridNames]) expect(cfg.colors[name]).toBeTruthy();
     // every mainType must itself be a computed role
@@ -64,7 +64,7 @@ test('simpleFamilyOf: complete/generalist/none collapse to universal tokens with
   const generalist = classifyArchetype('CM', { DLP: 52, Playmaker: 51, 'Ball-Winner': 50, Anchor: 20, 'Attacking Midfielder': 20, 'Ball Carrier': 20 });
   const sGeneralist = simpleFamilyOf('CM', generalist);
   expect(sGeneralist.key).toBe('generalist');
-  expect(sGeneralist.color).toBe('#cbd5e1'); // 2026-10-20: Generalist's light grey is now shared by both modes
+  expect(sGeneralist.color).toBe('#b08d6a'); // 2026-10-20: Generalist's warm taupe is shared by both modes
   expect(sGeneralist.color).toBe(ARCHETYPE_CONFIG.CM.colors.Generalist);
 
   const none = classifyArchetype('CM', { DLP: 40, Playmaker: 38, 'Ball-Winner': 20, Anchor: 20, 'Attacking Midfielder': 20, 'Ball Carrier': 20 });
@@ -115,7 +115,7 @@ test('classifyArchetype cascade (CM, trimmed roles — no Box-to-Box): complete,
   expect(dominant).toEqual({ kind: 'dominant', key: 'DLP', label: 'DLP', color: cfg.colors.DLP });
   // Generalist threshold is now 50 (was 54) — 3 roles at exactly 50+ qualifies.
   const generalist = classifyArchetype('CM', { DLP: 52, Playmaker: 51, 'Ball-Winner': 50, Anchor: 20, 'Attacking Midfielder': 20, 'Ball Carrier': 20 });
-  expect(generalist).toEqual({ kind: 'generalist', key: 'Generalist', label: 'Generalist', color: '#cbd5e1' });
+  expect(generalist).toEqual({ kind: 'generalist', key: 'Generalist', label: 'Generalist', color: '#b08d6a' });
   const none = classifyArchetype('CM', { DLP: 40, Playmaker: 38, 'Ball-Winner': 20, Anchor: 20, 'Attacking Midfielder': 20, 'Ball Carrier': 20 });
   expect(none).toEqual({ kind: 'none', key: 'No clear profile', label: 'No clear profile', color: '#64748b' });
 });
@@ -186,12 +186,22 @@ test('CF: "False 9" renamed to "Playmaking Forward" (still reuses the hexagon\'s
   expect(r.key).toBe('Playmaking Forward');
 });
 
-test('Generalist colour (light grey) is now shared by Simple and Detailed — gold is gone', () => {
-  expect(GENERALIST_COLOR).toBe('#cbd5e1');
+test('Generalist colour (warm taupe) is now shared by Simple and Detailed, distinct from white/grey/yellow/orange', () => {
+  expect(GENERALIST_COLOR).toBe('#b08d6a');
   expect(FAMILY_COLOR.generalist).toBe(GENERALIST_COLOR);
   for (const pos of Object.keys(ARCHETYPE_CONFIG)) {
-    expect(ARCHETYPE_CONFIG[pos].colors.Generalist).toBe('#cbd5e1');
-    expect(ARCHETYPE_CONFIG[pos].simpleColors.Generalist).toBe('#cbd5e1');
+    expect(ARCHETYPE_CONFIG[pos].colors.Generalist).toBe('#b08d6a');
+    expect(ARCHETYPE_CONFIG[pos].simpleColors.Generalist).toBe('#b08d6a');
+  }
+  // Not confusable with the other reserved colours or the yellow/orange
+  // Detailed swatches it sits alongside (CM's Attacking Midfielder #FACC15,
+  // CB's Stopper #F97316) — different enough in both hue and lightness.
+  const hexToRgb = h => { const s = h.replace('#', ''); return [0, 2, 4].map(i => parseInt(s.slice(i, i + 2), 16)); };
+  const [gr, gg, gb] = hexToRgb(GENERALIST_COLOR);
+  for (const other of [COMPLETE_COLOR, NONE_COLOR, '#FACC15', '#F97316']) {
+    const [or_, og, ob] = hexToRgb(other);
+    const dist = Math.sqrt((gr - or_) ** 2 + (gg - og) ** 2 + (gb - ob) ** 2);
+    expect(dist).toBeGreaterThan(60);
   }
 });
 
