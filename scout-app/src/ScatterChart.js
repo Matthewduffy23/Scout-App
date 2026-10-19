@@ -283,7 +283,7 @@ function placeLabels(ctx, items, dots, bounds, taken, fs, budget = Infinity) {
 // Export header: title + subtitle on the left, legend right-aligned beside the
 // title (wrapping onto extra rows). If a long title leaves no room, the legend
 // drops to its own rows under the subtitle. Returns where the plot can start.
-function exportHeader(ctx, W, FONT, title, legend, xIsScore) {
+function exportHeader(ctx, W, FONT, title, legend, xIsScore, showCounts = true) {
   const right = W - EXPORT_PAD.r, L0 = EXPORT_PAD.l;
   ctx.font = `700 46px ${FONT}`;
   const titleW = ctx.measureText(title).width;
@@ -293,7 +293,7 @@ function exportHeader(ctx, W, FONT, title, legend, xIsScore) {
       const g = it.gradient, a = `${g.label}  ${g.min}`, b = `${g.max}  ·  median ${g.med}`;
       return { it, txt: '', a, b, w: ctx.measureText(a).width + 16 + GRAD_W + 16 + ctx.measureText(b).width };
     }
-    const txt = `${it.label}  ${it.count}`; return { it, txt, w: ctx.measureText(txt).width + 26 };
+    const txt = showCounts ? `${it.label}  ${it.count}` : it.label; return { it, txt, w: ctx.measureText(txt).width + 26 };
   });
   const GAP = 36;
   const rowsFor = maxW => {
@@ -319,7 +319,7 @@ function exportHeader(ctx, W, FONT, title, legend, xIsScore) {
 export const HL_MAX = 10;
 
 export function drawScatter(canvas, W, H, dpr, forExport, o) {
-  const { pts, xf, yf, hidden, hoverId, highlightIds = [], showNames, soloLabel, title, subtitle, footer, legend, quad: Q, median, group, groupFullLabels, highlightStyle = 'full', theme: themeName = 'dark', labelledKeys, fadeOthers } = o;
+  const { pts, xf, yf, hidden, hoverId, highlightIds = [], showNames, soloLabel, title, subtitle, footer, legend, quad: Q, median, group, groupFullLabels, highlightStyle = 'full', theme: themeName = 'dark', labelledKeys, fadeOthers, showCounts = true } = o;
   const T = THEMES[themeName];
   const FONT = forExport ? 'Montserrat, Inter, sans-serif' : 'Inter, sans-serif';
   canvas.width = W*dpr; canvas.height = H*dpr;
@@ -332,7 +332,7 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
   if (!pts.length) return null;
 
   const stripX = xf.scoreScale ? 2 : median && median.x != null ? 1 : 0; // rows of labels above the plot
-  const head = forExport ? exportHeader(ctx, W, FONT, title, legend, stripX) : null;
+  const head = forExport ? exportHeader(ctx, W, FONT, title, legend, stripX, showCounts) : null;
   const L = computeLayout(W, H, forExport, pts, xf, yf, head && head.plotTop, stripX);
   const { fs, pad, pw, ph, xd, yd, xS, yS, shade } = L;
   const quad = Q || null; // score quadrants (both axes scores) or median quadrants (neither is)
@@ -850,7 +850,16 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
   const [labelledKeys, setLabelledKeys] = useState(() => new Set());
   const [fadeOthers, setFadeOthers] = useState(false); // off by default
   const toggleLabelledKey = k => setLabelledKeys(prev => { const s = new Set(prev); s.has(k) ? s.delete(k) : s.add(k); return s; });
+  const [showCounts, setShowCounts] = useState(true); // legend numbers — every colour mode, on by default
   const [hover, setHover] = useState(null); // {d, left, top}
+  // hover.d is only refreshed by a real mousemove over a NEW point id (see
+  // onMove's dedup check below) — if the mouse sits still while the season
+  // filter (or the axis selection) changes underneath it, the tooltip would
+  // otherwise keep showing the pre-change player/values until the next real
+  // mouse movement, which can read as "nothing changed" even though the
+  // whole plot did. Clear it on every change that can alter what a given
+  // point means, so a frozen tooltip can never show stale data.
+  useEffect(() => { setHover(null); }, [xKey, yKey, contextLabel]);
   // Highlighted items, in pick order (up to HL_MAX). Plain click / search: see below.
   const [highlightIds, setHighlightIds] = useState([]);
   // Ids added via the "ignores filters" search — exempt from the rankById-pruning
@@ -1091,7 +1100,7 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
   }, []);
 
   const archLabelledKeys = colorBy === 'archetype' ? labelledKeys : null;
-  const drawOpts = { pts, xf, yf, hidden, highlightIds, showNames, soloLabel, quad, median, group: !!inGroup, groupFullLabels, highlightStyle, labelledKeys: archLabelledKeys, fadeOthers };
+  const drawOpts = { pts, xf, yf, hidden, highlightIds, showNames, soloLabel, quad, median, group: !!inGroup, groupFullLabels, highlightStyle, labelledKeys: archLabelledKeys, fadeOthers, showCounts };
   useEffect(() => {
     if (!canvasRef.current) return;
     layoutRef.current = drawScatter(canvasRef.current, width, H, window.devicePixelRatio || 1, false, { ...drawOpts, hoverId: hover?.d.id });
@@ -1408,7 +1417,7 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
             <div style={{ display:'flex', alignItems:'center', gap:6 }}>
               <span style={{ fontSize:11, color:'#cbd5e1' }}>{it.gradient.label}</span>
               <span style={{ width:180, height:9, borderRadius:3, background:`linear-gradient(to right, ${it.gradient.stops.join(', ')})` }}/>
-              <span style={{ fontSize:11, color:'#64748b' }}>{it.count}</span>
+              {showCounts && <span style={{ fontSize:11, color:'#64748b' }}>{it.count}</span>}
             </div>
             <div style={{ display:'flex', justifyContent:'space-between', width:180, marginLeft:'auto', fontSize:9.5, color:'#94a3b8' }}>
               <span>min {it.gradient.min}</span><span>median {it.gradient.med}</span><span>max {it.gradient.max}</span>
@@ -1418,18 +1427,22 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
           <button key={it.key} onClick={() => toggleLabelledKey(it.key)} title={labelledKeys.has(it.key) ? 'Stop labelling' : 'Label every player in this entry'}
             style={{ display:'flex', alignItems:'center', gap:5, background:'none', border:'none', cursor:'pointer', padding:0 }}>
             <span style={{ width:9, height:9, borderRadius:'50%', background:it.color }}/>
-            <span style={{ fontSize:11, color: labelledKeys.has(it.key) ? '#f1f5f9' : '#cbd5e1', fontWeight: labelledKeys.has(it.key) ? 800 : 400, textDecoration: labelledKeys.has(it.key) ? 'underline' : 'none' }}>{it.label} <span style={{ color:'#64748b', fontWeight:400, textDecoration:'none' }}>{it.count}</span></span>
+            <span style={{ fontSize:11, color: labelledKeys.has(it.key) ? '#f1f5f9' : '#cbd5e1', fontWeight: labelledKeys.has(it.key) ? 800 : 400, textDecoration: labelledKeys.has(it.key) ? 'underline' : 'none' }}>{it.label}{showCounts && <span style={{ color:'#64748b', fontWeight:400, textDecoration:'none' }}> {it.count}</span>}</span>
           </button>
         ) : (
           <button key={it.key} onClick={() => toggleGroup(it.key)} title={hidden.has(it.key) ? 'Show' : 'Hide'}
             style={{ display:'flex', alignItems:'center', gap:5, background:'none', border:'none', cursor:'pointer', padding:0, opacity:hidden.has(it.key) ? 0.4 : 1 }}>
             <span style={{ width:9, height:9, borderRadius:'50%', background:it.color }}/>
-            <span style={{ fontSize:11, color:'#cbd5e1', textDecoration:hidden.has(it.key) ? 'line-through' : 'none' }}>{it.label} <span style={{ color:'#64748b' }}>{it.count}</span></span>
+            <span style={{ fontSize:11, color:'#cbd5e1', textDecoration:hidden.has(it.key) ? 'line-through' : 'none' }}>{it.label}{showCounts && <span style={{ color:'#64748b' }}> {it.count}</span>}</span>
           </button>
         ))}
         {colorBy === 'archetype' && (
           <button onClick={() => setFadeOthers(v => !v)} title="Drop non-labelled dots to ~25% opacity"
             style={{ ...btn(fadeOthers), padding:'3px 8px' }}>Fade others</button>
+        )}
+        {legend.length > 0 && (
+          <button onClick={() => setShowCounts(v => !v)} title="Show player counts next to each legend entry"
+            style={{ ...btn(showCounts), padding:'3px 8px' }}>Show counts</button>
         )}
         <span style={{ fontSize:10, color:'#64748b', marginLeft:'auto' }}>
           {sample.length} Sample · {topPts.length} plotted{removedHere > 0 ? ` · ${removedHere} removed` : ''}{missing > 0 ? ` · ${missing} without data for these axes` : ''}{trimmed > 0 ? ` · ${trimmed} low outlier${trimmed > 1 ? 's' : ''} hidden` : ''}

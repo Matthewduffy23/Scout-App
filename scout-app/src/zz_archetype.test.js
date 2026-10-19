@@ -4,7 +4,7 @@
 import fs from 'fs';
 import path from 'path';
 import { roleScoresFor, roleScoresForSeason, classifyArchetype, simpleFamilyOf, computeQuadrantScores, computeQuadrantScoresCareerBlend } from './archetypeEngine';
-import { ARCHETYPE_CONFIG, COMPLETE_MIN_ROLES, GENERALIST_THRESHOLD, GENERALIST_MIN_ROLES } from './archetypeConfig';
+import { ARCHETYPE_CONFIG, COMPLETE_MIN_ROLES, GENERALIST_THRESHOLD, GENERALIST_MIN_ROLES, GENERALIST_COLOR, COMPLETE_COLOR, NONE_COLOR, FAMILY_COLOR } from './archetypeConfig';
 
 const PUB = path.join(__dirname, '..', 'public');
 const MIN_MINUTES = 900;
@@ -34,7 +34,7 @@ test('ARCHETYPE_CONFIG: every position has roles, quadrant, max 3 hybrids, mainT
     expect(cfg.quadrant.x.w).toBeTruthy();
     expect(cfg.quadrant.y.w).toBeTruthy();
     expect(cfg.colors[cfg.completeLabel]).toBe('#f8fafc');
-    expect(cfg.colors.Generalist).toBe('#ca8a04');
+    expect(cfg.colors.Generalist).toBe('#cbd5e1');
     expect(cfg.colors['No clear profile']).toBe('#64748b');
     for (const name of [...cfg.mainTypes, ...cfg.hybridNames]) expect(cfg.colors[name]).toBeTruthy();
     // every mainType must itself be a computed role
@@ -64,8 +64,8 @@ test('simpleFamilyOf: complete/generalist/none collapse to universal tokens with
   const generalist = classifyArchetype('CM', { DLP: 52, Playmaker: 51, 'Ball-Winner': 50, Anchor: 20, 'Attacking Midfielder': 20, 'Ball Carrier': 20 });
   const sGeneralist = simpleFamilyOf('CM', generalist);
   expect(sGeneralist.key).toBe('generalist');
-  expect(sGeneralist.color).toBe('#cbd5e1'); // Simple's own light grey, distinct from Detailed's gold (#ca8a04)
-  expect(sGeneralist.color).not.toBe(ARCHETYPE_CONFIG.CM.colors.Generalist);
+  expect(sGeneralist.color).toBe('#cbd5e1'); // 2026-10-20: Generalist's light grey is now shared by both modes
+  expect(sGeneralist.color).toBe(ARCHETYPE_CONFIG.CM.colors.Generalist);
 
   const none = classifyArchetype('CM', { DLP: 40, Playmaker: 38, 'Ball-Winner': 20, Anchor: 20, 'Attacking Midfielder': 20, 'Ball Carrier': 20 });
   const sNone = simpleFamilyOf('CM', none);
@@ -81,7 +81,7 @@ test('simpleFamilyOf: dominant and hybrid archetypes collapse to their configure
   // CB's Aerial is "purple" (aerial/physical family) — same purple used by CF's Target Forward.
   const aerial = classifyArchetype('CB', { Aerial: 70, 'Composed Passer': 20, 'Line-Breaker': 20, 'Ball Carrier': 20, Aggressor: 20, Stopper: 20 });
   expect(simpleFamilyOf('CB', aerial).color).toBe('#a855f7');
-  const targetForward = classifyArchetype('CF', { 'Target Forward': 70, 'Goal Threat': 20, Dribbler: 20, 'False 9': 20 });
+  const targetForward = classifyArchetype('CF', { 'Target Forward': 70, 'Goal Threat': 20, Dribbler: 20, 'Playmaking Forward': 20 });
   expect(simpleFamilyOf('CF', targetForward).color).toBe('#a855f7');
 });
 
@@ -115,7 +115,7 @@ test('classifyArchetype cascade (CM, trimmed roles — no Box-to-Box): complete,
   expect(dominant).toEqual({ kind: 'dominant', key: 'DLP', label: 'DLP', color: cfg.colors.DLP });
   // Generalist threshold is now 50 (was 54) — 3 roles at exactly 50+ qualifies.
   const generalist = classifyArchetype('CM', { DLP: 52, Playmaker: 51, 'Ball-Winner': 50, Anchor: 20, 'Attacking Midfielder': 20, 'Ball Carrier': 20 });
-  expect(generalist).toEqual({ kind: 'generalist', key: 'Generalist', label: 'Generalist', color: '#ca8a04' });
+  expect(generalist).toEqual({ kind: 'generalist', key: 'Generalist', label: 'Generalist', color: '#cbd5e1' });
   const none = classifyArchetype('CM', { DLP: 40, Playmaker: 38, 'Ball-Winner': 20, Anchor: 20, 'Attacking Midfielder': 20, 'Ball Carrier': 20 });
   expect(none).toEqual({ kind: 'none', key: 'No clear profile', label: 'No clear profile', color: '#64748b' });
 });
@@ -173,6 +173,43 @@ test('removed types/hybrids fall back to next-best on real classification', () =
   const cbt = classifyArchetype('CM', { 'Attacking Midfielder': 72, Playmaker: 68, DLP: 20, 'Ball-Winner': 20, Anchor: 20, 'Ball Carrier': 20 });
   expect(cbt.kind).toBe('dominant');
   expect(cbt.key).toBe('Attacking Midfielder');
+});
+
+test('CF: "False 9" renamed to "Playmaking Forward" (still reuses the hexagon\'s own False 9 formula), Creative Dribbler follows', () => {
+  const cf = ARCHETYPE_CONFIG.CF;
+  expect(cf.roles['False 9']).toBeUndefined();
+  expect(cf.roles['Playmaking Forward']).toBeTruthy();
+  expect(cf.hybrids.find(h => h.name === 'Creative Dribbler').roles.sort()).toEqual(['Dribbler', 'Playmaking Forward'].sort());
+  expect(cf.simple.family['Playmaking Forward']).toBe('blue');
+  const r = classifyArchetype('CF', { 'Playmaking Forward': 70, 'Goal Threat': 20, Dribbler: 20, 'Target Forward': 20 });
+  expect(r.kind).toBe('dominant');
+  expect(r.key).toBe('Playmaking Forward');
+});
+
+test('Generalist colour (light grey) is now shared by Simple and Detailed — gold is gone', () => {
+  expect(GENERALIST_COLOR).toBe('#cbd5e1');
+  expect(FAMILY_COLOR.generalist).toBe(GENERALIST_COLOR);
+  for (const pos of Object.keys(ARCHETYPE_CONFIG)) {
+    expect(ARCHETYPE_CONFIG[pos].colors.Generalist).toBe('#cbd5e1');
+    expect(ARCHETYPE_CONFIG[pos].simpleColors.Generalist).toBe('#cbd5e1');
+  }
+});
+
+test('Detailed-mode swatches: exact full-colour-wheel palette (2026-10-20), no family-hue constraint', () => {
+  const EXPECTED = {
+    GK: { 'Shot Stopper': '#EF4444', 'Sweeper': '#22C55E', 'Distributor': '#3B82F6', 'Shot-Stopping Sweeper': '#FACC15', 'Ball-Playing Stopper': '#D946EF' },
+    CB: { 'Aggressor': '#EF4444', 'Stopper': '#F97316', 'Aerial': '#8B5CF6', 'Composed Passer': '#22D3EE', 'Line-Breaker': '#3B82F6', 'Ball Carrier': '#22C55E', 'Build-Up Specialist': '#F472B6', 'Dominant Defender': '#FACC15' },
+    FB: { 'Defensive': '#EF4444', 'Playmaker': '#3B82F6', 'Wide Creator': '#F97316', 'Wide Carrier': '#22C55E', 'All-Phase Playmaker': '#D946EF' },
+    CM: { 'Ball-Winner': '#EF4444', 'Anchor': '#F472B6', 'DLP': '#22D3EE', 'Playmaker': '#3B82F6', 'Attacking Midfielder': '#FACC15', 'Ball Carrier': '#22C55E', 'All-Phase Passer': '#8B5CF6' },
+    ATT: { 'Goal Threat': '#EF4444', 'Dribbling-Finisher': '#F97316', 'Wide Playmaker': '#FACC15', 'Dribbler': '#22C55E', 'Sustainer': '#22D3EE', 'Deep Playmaker': '#3B82F6', 'Roaming Playmaker': '#8B5CF6' },
+    CF: { 'Goal Threat': '#EF4444', 'Target Forward': '#8B5CF6', 'Playmaking Forward': '#3B82F6', 'Creative Dribbler': '#22D3EE', 'Dribbler': '#22C55E' },
+  };
+  for (const [pos, swatches] of Object.entries(EXPECTED)) {
+    const cfg = ARCHETYPE_CONFIG[pos];
+    for (const [name, hex] of Object.entries(swatches)) expect(cfg.colors[name].toUpperCase()).toBe(hex);
+  }
+  expect(COMPLETE_COLOR).toBe('#f8fafc');
+  expect(NONE_COLOR).toBe('#64748b');
 });
 
 test('GK, CB, CF quadrant "both" corner is renamed All-Round, not Complete (reserved for the archetype tier)', () => {

@@ -30,24 +30,22 @@
 // cascade above is unaffected by which one is picked):
 //
 // Detailed: every archetype in a position gets its own colour from
-// DETAILED_SWATCHES below (2026-10-20 redo — every pair in a position is
-// pairwise distinct under normal vision AND simulated deuteranopia/
-// protanopia; see the report for the achieved worst-case CIEDE2000 per
-// position). Complete = white, Generalist = sand/gold, No clear profile =
-// grey, same as before — reserved across every position, never touched by
-// the redo, and never reassigned to an archetype.
+// DETAILED_SWATCHES below — a fixed full-colour-wheel palette (2026-10-20),
+// not constrained to stay near the archetype's Simple family hue. Complete
+// = white, Generalist = light grey, No clear profile = grey — reserved
+// across every position, never reassigned to an archetype.
 //
 // Simple: every archetype collapses into one of five colour "families"
 // (red/blue/orange/green/purple) with the SAME hue meaning in every
 // position (red=defending, blue=passing/creating, orange=goal threat/
 // attacking, green=carrying/running, purple=aerial/physical), plus White=
-// Complete, light grey=Generalist (NOT the same grey as Detailed's gold —
-// Simple's own distinct colour), grey=No clear profile. Each position's
-// `simple.family` map says which family every surviving archetype belongs
-// to; `simple.labels` gives that position's own word for each family used
-// (e.g. CM's red family is labelled "Defensive").
+// Complete, light grey=Generalist, grey=No clear profile (Generalist now
+// shares the same light grey in both modes — see GENERALIST_COLOR). Each
+// position's `simple.family` map says which family every surviving
+// archetype belongs to; `simple.labels` gives that position's own word for
+// each family used (e.g. CM's red family is labelled "Defensive").
 export const COMPLETE_COLOR = '#f8fafc';   // white — most eye-catching, every position
-export const GENERALIST_COLOR = '#ca8a04'; // sand/gold — Detailed mode, every position
+export const GENERALIST_COLOR = '#cbd5e1'; // light grey — every position, both modes (2026-10-20: replaced the gold)
 export const NONE_COLOR = '#64748b';       // grey, every position, both modes
 
 export const FAMILY_COLOR = {
@@ -57,68 +55,64 @@ export const FAMILY_COLOR = {
   green: '#22c55e',
   purple: '#a855f7',
   complete: COMPLETE_COLOR,
-  generalist: '#cbd5e1', // light grey — Simple mode's own Generalist colour, distinct from Detailed's gold
+  generalist: GENERALIST_COLOR,
   none: NONE_COLOR,
 };
 
 // Final Detailed-mode swatch list per position (archetype name -> hex),
-// generated 2026-10-20 by a CIEDE2000 + deuteranopia/protanopia-simulation
-// search (script not checked in) biased to each archetype's Simple family
-// hue, then hand-adjusted where the search alone didn't clear a reasonable
-// bar. See the report for the achieved worst-case pairwise ΔE per position
-// (target was >=20; GK/FB hit ~19.5-19.7, the rest land 13-16 — packing
-// 7-8 archetypes into 4-5 hue families on a bounded wheel runs out of room
-// to hit 20 everywhere, so distinctness was prioritised position-by-
-// position rather than discarded once the target looked out of reach).
+// 2026-10-20: a fixed full-colour-wheel palette per position, specified
+// directly rather than searched/constrained to each archetype's Simple
+// family hue (that constraint is dropped for Detailed — Simple mode is
+// unaffected and still uses FAMILY_COLOR above).
 const DETAILED_SWATCHES = {
   GK: {
-    'Distributor': '#59bbf4',
-    'Ball-Playing Stopper': '#070db4',
-    'Shot Stopper': '#84260b',
-    'Sweeper': '#3ab799',
-    'Shot-Stopping Sweeper': '#5efa9b',
+    'Shot Stopper': '#EF4444',
+    'Sweeper': '#22C55E',
+    'Distributor': '#3B82F6',
+    'Shot-Stopping Sweeper': '#FACC15',
+    'Ball-Playing Stopper': '#D946EF',
   },
   CB: {
-    'Aggressor': '#891f06',
-    'Stopper': '#ca3c56',
-    'Dominant Defender': '#902855',
-    'Aerial': '#4d07d3',
-    'Composed Passer': '#32c0f7',
-    'Line-Breaker': '#0db4a9',
-    'Build-Up Specialist': '#1f84f8',
-    'Ball Carrier': '#5cfb9f',
+    'Aggressor': '#EF4444',
+    'Stopper': '#F97316',
+    'Aerial': '#8B5CF6',
+    'Composed Passer': '#22D3EE',
+    'Line-Breaker': '#3B82F6',
+    'Ball Carrier': '#22C55E',
+    'Build-Up Specialist': '#F472B6',
+    'Dominant Defender': '#FACC15',
   },
   FB: {
-    'Defensive': '#812b11',
-    'Playmaker': '#4dbefa',
-    'Wide Creator': '#120ab2',
-    'All-Phase Playmaker': '#6644f9',
-    'Wide Carrier': '#44cd98',
+    'Defensive': '#EF4444',
+    'Playmaker': '#3B82F6',
+    'Wide Creator': '#F97316',
+    'Wide Carrier': '#22C55E',
+    'All-Phase Playmaker': '#D946EF',
   },
   CM: {
-    'Ball-Winner': '#802c11',
-    'Anchor': '#d68387',
-    'DLP': '#5bbdf8',
-    'Playmaker': '#130db3',
-    'All-Phase Passer': '#6146f9',
-    'Attacking Midfielder': '#fad160',
-    'Ball Carrier': '#267255',
+    'Ball-Winner': '#EF4444',
+    'Anchor': '#F472B6',
+    'DLP': '#22D3EE',
+    'Playmaker': '#3B82F6',
+    'Attacking Midfielder': '#FACC15',
+    'Ball Carrier': '#22C55E',
+    'All-Phase Passer': '#8B5CF6',
   },
   ATT: {
-    'Deep Playmaker': '#53b6fa',
-    'Roaming Playmaker': '#0a05b5',
-    'Sustainer': '#5d46f8',
-    'Goal Threat': '#7d3113',
-    'Dribbling-Finisher': '#fae742',
-    'Dribbler': '#4ac899',
-    'Wide Playmaker': '#aa0859',
+    'Goal Threat': '#EF4444',
+    'Dribbling-Finisher': '#F97316',
+    'Wide Playmaker': '#FACC15',
+    'Dribbler': '#22C55E',
+    'Sustainer': '#22D3EE',
+    'Deep Playmaker': '#3B82F6',
+    'Roaming Playmaker': '#8B5CF6',
   },
   CF: {
-    'Goal Threat': '#7c3217',
-    'Target Forward': '#4206aa',
-    'False 9': '#2cbff8',
-    'Creative Dribbler': '#4a4dfa',
-    'Dribbler': '#4ec798',
+    'Goal Threat': '#EF4444',
+    'Target Forward': '#8B5CF6',
+    'Playmaking Forward': '#3B82F6',
+    'Creative Dribbler': '#22D3EE',
+    'Dribbler': '#22C55E',
   },
 };
 
@@ -302,7 +296,9 @@ export const ARCHETYPE_CONFIG = {
       // Trimmed 2026-10-20: Chance Creator merged into False 9 (score = max
       // of the two) — Chance Creator was a single metric (xA) that was a
       // 100% subset of False 9's own xA weight, not a distinct identity.
-      'False 9': { maxOf: [{ hexagon: 'False 9' }, { weights: { 'xA per 90': 2, 'Key passes per 90': 1 } }] },
+      // Renamed "False 9" -> "Playmaking Forward" 2026-10-20 (display name
+      // only — still reuses the hexagon's own "False 9" formula via maxOf).
+      'Playmaking Forward': { maxOf: [{ hexagon: 'False 9' }, { weights: { 'xA per 90': 2, 'Key passes per 90': 1 } }] },
     },
     quadrant: {
       x: { label: 'Possession', w: { 'xA per 90': 0.2, 'Dribbles per 90': 0.3, 'Aerial duels won, %': 0.1, 'Progressive runs per 90': 0.2, 'Accurate passes, %': 0.1, 'Passes to penalty area per 90': 0.1 } },
@@ -312,10 +308,10 @@ export const ARCHETYPE_CONFIG = {
     hybrids: [
       // Aerial Goal Threat (Goal Threat + Target Forward) removed 2026-10-20
       // — players fall back to their next-best type.
-      { roles: ['False 9', 'Dribbler'], name: 'Creative Dribbler' },
+      { roles: ['Playmaking Forward', 'Dribbler'], name: 'Creative Dribbler' },
     ],
     simple: {
-      family: { 'Goal Threat': 'orange', 'Target Forward': 'purple', 'False 9': 'blue', 'Creative Dribbler': 'blue', 'Dribbler': 'green' },
+      family: { 'Goal Threat': 'orange', 'Target Forward': 'purple', 'Playmaking Forward': 'blue', 'Creative Dribbler': 'blue', 'Dribbler': 'green' },
       labels: { orange: 'Attacking', purple: 'Aerial', blue: 'Creating', green: 'Carrier' },
     },
   },

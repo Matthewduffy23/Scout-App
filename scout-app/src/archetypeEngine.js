@@ -100,8 +100,8 @@ export function roleScoresFor(pos, p) {
 
 // Resolves any role-def shape to a single 0-100 score (or null): a fresh
 // career-blended weights score, a reused hexagon qcRoleCareerScores value,
-// or the max across several sub-defs of either kind (CB's Ball-Playing CB,
-// CM's Attacking Midfielder, CF's False 9 — see archetypeConfig.js).
+// or the max across several sub-defs of either kind (CM's Attacking
+// Midfielder, CF's Playmaking Forward — see archetypeConfig.js).
 function resolveRoleDef(pos, p, def, seasons, qc) {
   if (def.weights) return careerBlend(pos, p, def.weights, seasons);
   if (def.maxOf) {
