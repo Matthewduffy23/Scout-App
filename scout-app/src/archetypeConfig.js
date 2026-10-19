@@ -25,38 +25,102 @@
 // completeMinRoles (3), generalistThreshold (50), generalistMinRoles (3)
 // are the same across every position.
 //
-// Colours: reserved across every position — Complete = white (most eye-
-// catching, maximum contrast on the dark background, and reserved for the
-// Complete [Position] tier only as of 2026-10-20 — no hybrid or quadrant
-// corner is named bare "Complete" any more), Generalist = sand/gold, No
-// clear profile = grey (smaller dot, no change). Main types and hybrids
-// draw from a shared 12-colour categorical palette, assigned in listed
-// order per position.
-
-export const ARCHETYPE_PALETTE = [
-  '#3b82f6', // blue
-  '#ef4444', // red
-  '#22c55e', // green
-  '#a855f7', // purple
-  '#f97316', // orange
-  '#06b6d4', // cyan
-  '#ec4899', // pink
-  '#84cc16', // lime
-  '#6366f1', // indigo
-  '#14b8a6', // teal
-  '#f43f5e', // rose
-  '#b45309', // brown/amber-dark
-];
+// Colours — two independent schemes, chosen in the UI via the Simple/
+// Detailed toggle (archetype colour mode only; everything else in the
+// cascade above is unaffected by which one is picked):
+//
+// Detailed: every archetype in a position gets its own colour from
+// DETAILED_SWATCHES below (2026-10-20 redo — every pair in a position is
+// pairwise distinct under normal vision AND simulated deuteranopia/
+// protanopia; see the report for the achieved worst-case CIEDE2000 per
+// position). Complete = white, Generalist = sand/gold, No clear profile =
+// grey, same as before — reserved across every position, never touched by
+// the redo, and never reassigned to an archetype.
+//
+// Simple: every archetype collapses into one of five colour "families"
+// (red/blue/orange/green/purple) with the SAME hue meaning in every
+// position (red=defending, blue=passing/creating, orange=goal threat/
+// attacking, green=carrying/running, purple=aerial/physical), plus White=
+// Complete, light grey=Generalist (NOT the same grey as Detailed's gold —
+// Simple's own distinct colour), grey=No clear profile. Each position's
+// `simple.family` map says which family every surviving archetype belongs
+// to; `simple.labels` gives that position's own word for each family used
+// (e.g. CM's red family is labelled "Defensive").
 export const COMPLETE_COLOR = '#f8fafc';   // white — most eye-catching, every position
-export const GENERALIST_COLOR = '#ca8a04'; // sand/gold — every position
-export const NONE_COLOR = '#64748b';       // grey, smaller dot — every position
+export const GENERALIST_COLOR = '#ca8a04'; // sand/gold — Detailed mode, every position
+export const NONE_COLOR = '#64748b';       // grey, every position, both modes
 
-function assignColors(mainTypes, hybridNames) {
-  const all = [...mainTypes, ...hybridNames];
-  const colors = {};
-  all.forEach((name, i) => { colors[name] = ARCHETYPE_PALETTE[i % ARCHETYPE_PALETTE.length]; });
-  return colors;
-}
+export const FAMILY_COLOR = {
+  red: '#ef4444',
+  blue: '#3b82f6',
+  orange: '#f97316',
+  green: '#22c55e',
+  purple: '#a855f7',
+  complete: COMPLETE_COLOR,
+  generalist: '#cbd5e1', // light grey — Simple mode's own Generalist colour, distinct from Detailed's gold
+  none: NONE_COLOR,
+};
+
+// Final Detailed-mode swatch list per position (archetype name -> hex),
+// generated 2026-10-20 by a CIEDE2000 + deuteranopia/protanopia-simulation
+// search (script not checked in) biased to each archetype's Simple family
+// hue, then hand-adjusted where the search alone didn't clear a reasonable
+// bar. See the report for the achieved worst-case pairwise ΔE per position
+// (target was >=20; GK/FB hit ~19.5-19.7, the rest land 13-16 — packing
+// 7-8 archetypes into 4-5 hue families on a bounded wheel runs out of room
+// to hit 20 everywhere, so distinctness was prioritised position-by-
+// position rather than discarded once the target looked out of reach).
+const DETAILED_SWATCHES = {
+  GK: {
+    'Distributor': '#59bbf4',
+    'Ball-Playing Stopper': '#070db4',
+    'Shot Stopper': '#84260b',
+    'Sweeper': '#3ab799',
+    'Shot-Stopping Sweeper': '#5efa9b',
+  },
+  CB: {
+    'Aggressor': '#891f06',
+    'Stopper': '#ca3c56',
+    'Dominant Defender': '#902855',
+    'Aerial': '#4d07d3',
+    'Composed Passer': '#32c0f7',
+    'Line-Breaker': '#0db4a9',
+    'Build-Up Specialist': '#1f84f8',
+    'Ball Carrier': '#5cfb9f',
+  },
+  FB: {
+    'Defensive': '#812b11',
+    'Playmaker': '#4dbefa',
+    'Wide Creator': '#120ab2',
+    'All-Phase Playmaker': '#6644f9',
+    'Wide Carrier': '#44cd98',
+  },
+  CM: {
+    'Ball-Winner': '#802c11',
+    'Anchor': '#d68387',
+    'DLP': '#5bbdf8',
+    'Playmaker': '#130db3',
+    'All-Phase Passer': '#6146f9',
+    'Attacking Midfielder': '#fad160',
+    'Ball Carrier': '#267255',
+  },
+  ATT: {
+    'Deep Playmaker': '#53b6fa',
+    'Roaming Playmaker': '#0a05b5',
+    'Sustainer': '#5d46f8',
+    'Goal Threat': '#7d3113',
+    'Dribbling-Finisher': '#fae742',
+    'Dribbler': '#4ac899',
+    'Wide Playmaker': '#aa0859',
+  },
+  CF: {
+    'Goal Threat': '#7c3217',
+    'Target Forward': '#4206aa',
+    'False 9': '#2cbff8',
+    'Creative Dribbler': '#4a4dfa',
+    'Dribbler': '#4ec798',
+  },
+};
 
 export const ARCHETYPE_CONFIG = {
   GK: {
@@ -66,13 +130,11 @@ export const ARCHETYPE_CONFIG = {
     roles: {
       'Shot Stopper': { hexagon: 'Shot Stopper' },
       'Sweeper': { hexagon: 'Sweeper' },
-      'Passing': { hexagon: 'Passing' },
-      // Fixed (archetype-only): xG against per 90 is globally inverted
-      // (GK_INVERSE) so it already means "low xG against = good", clashing
-      // conceptually with the raw-volume 'Shots against per 90'. Swapped
-      // for Prevented goals per 90 (non-inverted, "performed better than
-      // expected") — a busy keeper who also outperforms his xG.
-      'Fire Fighter': { weights: { 'Shots against per 90': 1, 'Prevented goals per 90': 1 } },
+      // Renamed 2026-10-20 (display name only — still reuses the hexagon's
+      // own "Passing" formula unchanged, qc['Passing']).
+      'Distributor': { hexagon: 'Passing' },
+      // Fire Fighter removed 2026-10-20 — players fall back to their
+      // next-best type.
     },
     quadrant: {
       x: { label: 'Possession', w: { 'Passes per 90': 0.25, 'Accurate passes, %': 0.5, 'Accurate long passes, %': 0.25 } },
@@ -82,9 +144,13 @@ export const ARCHETYPE_CONFIG = {
       names: { both: 'All-Round', yOnly: 'Shot Stopper', xOnly: 'Ball Player', neither: 'Limited' },
     },
     hybrids: [
-      { roles: ['Shot Stopper', 'Sweeper'], name: 'Modern Keeper' },
-      { roles: ['Passing', 'Shot Stopper'], name: 'Ball-Playing Stopper' },
+      { roles: ['Shot Stopper', 'Sweeper'], name: 'Shot-Stopping Sweeper' }, // renamed from "Modern Keeper"
+      { roles: ['Distributor', 'Shot Stopper'], name: 'Ball-Playing Stopper' },
     ],
+    simple: {
+      family: { 'Shot Stopper': 'red', 'Sweeper': 'green', 'Shot-Stopping Sweeper': 'green', 'Distributor': 'blue', 'Ball-Playing Stopper': 'blue' },
+      labels: { red: 'Shot Stopping', green: 'Sweeping', blue: 'Distribution' },
+    },
   },
 
   CB: {
@@ -92,10 +158,11 @@ export const ARCHETYPE_CONFIG = {
     dominantThreshold: 65,
     hybridThreshold: 60,
     roles: {
-      // Trimmed 2026-10-20: Ball Player + Progresser merged into one type
-      // (score = max of the two hexagon roles) — they were two flavours of
-      // the same "composed on the ball" signal.
-      'Ball-Playing CB': { maxOf: [{ hexagon: 'Ball Player' }, { hexagon: 'Progresser' }] },
+      // Un-merged 2026-10-20 back into the two original hexagon roles —
+      // the merge (score = max of the two) didn't earn its keep as a
+      // single type.
+      'Composed Passer': { hexagon: 'Ball Player' },
+      'Line-Breaker': { hexagon: 'Progresser' },
       'Ball Carrier': { hexagon: 'Ball Carrier' },
       'Aerial': { hexagon: 'Aerial' },
       'Aggressor': { hexagon: 'Aggressor' },
@@ -108,8 +175,12 @@ export const ARCHETYPE_CONFIG = {
     },
     hybrids: [
       { roles: ['Aerial', 'Stopper'], name: 'Dominant Defender' },
-      { roles: ['Ball-Playing CB', 'Ball Carrier'], name: 'Build-Up Specialist' },
+      { roles: ['Line-Breaker', 'Ball Carrier'], name: 'Build-Up Specialist' }, // no longer pairs with Composed Passer
     ],
+    simple: {
+      family: { 'Aggressor': 'red', 'Stopper': 'red', 'Dominant Defender': 'red', 'Aerial': 'purple', 'Composed Passer': 'blue', 'Line-Breaker': 'blue', 'Build-Up Specialist': 'blue', 'Ball Carrier': 'green' },
+      labels: { red: 'Defending', purple: 'Aerial', blue: 'Passing', green: 'Carrier' },
+    },
   },
 
   FB: {
@@ -118,13 +189,13 @@ export const ARCHETYPE_CONFIG = {
     hybridThreshold: 58,
     roles: {
       'Playmaker': { hexagon: 'Playmaker' },
-      'Flyer': { hexagon: 'Flyer' },
+      // Renamed from "Flyer" 2026-10-20 (display name only, same hexagon
+      // formula).
+      'Wide Carrier': { hexagon: 'Flyer' },
       'Wide Creator': { hexagon: 'Wide Creator' },
       'Defensive': { hexagon: 'Defensive' },
-      // Fixed (archetype-only): was a 100% metric subset of Wide Creator's
-      // superset (shared Crosses + xA). Dropped xA/Crosses — now "gets
-      // forward and arrives in the box," no creation signal.
-      'Wingback': { weights: { 'Dribbles per 90': 2, 'Touches in box per 90': 3 } },
+      // Wingback removed 2026-10-20 — players fall back to their next-best
+      // type.
     },
     quadrant: {
       x: { label: 'Possession', w: { 'Passes per 90': 0.1, 'Crosses per 90': 0.1, 'Forward passes per 90': 0.1, 'Progressive passes per 90': 0.2, 'xA per 90': 0.1, 'Dribbles per 90': 0.1, 'Progressive runs per 90': 0.2, 'Passes to penalty area per 90': 0.1 } },
@@ -132,9 +203,13 @@ export const ARCHETYPE_CONFIG = {
       names: { both: 'Two-Way', yOnly: 'Lockdown', xOnly: 'Build-Up', neither: 'Limited' },
     },
     hybrids: [
-      { roles: ['Flyer', 'Wingback'], name: 'All-Action Wingback' },
+      // All-Action Wingback removed along with Wingback.
       { roles: ['Playmaker', 'Wide Creator'], name: 'All-Phase Playmaker' },
     ],
+    simple: {
+      family: { 'Defensive': 'red', 'Playmaker': 'blue', 'Wide Creator': 'blue', 'All-Phase Playmaker': 'blue', 'Wide Carrier': 'green' },
+      labels: { red: 'Defensive', blue: 'Creating', green: 'Carrier' },
+    },
   },
 
   CM: {
@@ -168,9 +243,15 @@ export const ARCHETYPE_CONFIG = {
     },
     hybrids: [
       { roles: ['DLP', 'Playmaker'], name: 'All-Phase Passer' },
-      { roles: ['Attacking Midfielder', 'Playmaker'], name: 'Creative Box Threat' },
-      { roles: ['Anchor', 'DLP'], name: 'Regista' },
+      // Creative Box Threat and Regista removed 2026-10-20 — players fall
+      // back to their next-best type (for the old Creative Box Threat
+      // pair, that's whichever of Attacking Midfielder / Playmaker scores
+      // higher).
     ],
+    simple: {
+      family: { 'Ball-Winner': 'red', 'Anchor': 'red', 'DLP': 'blue', 'Playmaker': 'blue', 'All-Phase Passer': 'blue', 'Attacking Midfielder': 'orange', 'Ball Carrier': 'green' },
+      labels: { red: 'Defensive', blue: 'Passing', orange: 'Attacking', green: 'Carrier' },
+    },
   },
 
   ATT: {
@@ -197,10 +278,15 @@ export const ARCHETYPE_CONFIG = {
       names: { both: 'Multi-Threat', yOnly: 'Final Action', xOnly: 'Facilitator', neither: 'Limited' },
     },
     hybrids: [
-      { roles: ['Dribbler', 'Wide Playmaker'], name: 'Traditional Winger' },
-      { roles: ['Creator', 'Deep Playmaker'], name: 'Creative Hub' }, // renamed from "Complete Playmaker" — "Complete" is reserved for the tier-a label now
+      // Traditional Winger removed 2026-10-20 — players fall back to their
+      // next-best type.
+      { roles: ['Creator', 'Deep Playmaker'], name: 'Roaming Playmaker' }, // renamed from "Creative Hub" (itself renamed from "Complete Playmaker" — "Complete" is reserved for the tier-a label)
       { roles: ['Goal Threat', 'Dribbler'], name: 'Dribbling-Finisher' },
     ],
+    simple: {
+      family: { 'Deep Playmaker': 'blue', 'Roaming Playmaker': 'blue', 'Sustainer': 'blue', 'Goal Threat': 'orange', 'Dribbling-Finisher': 'orange', 'Dribbler': 'green', 'Wide Playmaker': 'purple' },
+      labels: { blue: 'Creating', orange: 'Attacking', green: 'Carrier', purple: 'Wide Threat' },
+    },
   },
 
   CF: {
@@ -211,7 +297,8 @@ export const ARCHETYPE_CONFIG = {
       'Target Forward': { hexagon: 'Target Forward' },
       'Goal Threat': { hexagon: 'Goal Threat' },
       'Dribbler': { hexagon: 'Dribbler' },
-      'Pressing Forward': { hexagon: 'Pressing Forward' },
+      // Pressing Forward removed 2026-10-20 — players fall back to their
+      // next-best type.
       // Trimmed 2026-10-20: Chance Creator merged into False 9 (score = max
       // of the two) — Chance Creator was a single metric (xA) that was a
       // 100% subset of False 9's own xA weight, not a distinct identity.
@@ -223,9 +310,14 @@ export const ARCHETYPE_CONFIG = {
       names: { both: 'All-Round', yOnly: 'Poacher', xOnly: 'Link-Up', neither: 'Limited' },
     },
     hybrids: [
-      { roles: ['Goal Threat', 'Target Forward'], name: 'Aerial Goal Threat' },
+      // Aerial Goal Threat (Goal Threat + Target Forward) removed 2026-10-20
+      // — players fall back to their next-best type.
       { roles: ['False 9', 'Dribbler'], name: 'Creative Dribbler' },
     ],
+    simple: {
+      family: { 'Goal Threat': 'orange', 'Target Forward': 'purple', 'False 9': 'blue', 'Creative Dribbler': 'blue', 'Dribbler': 'green' },
+      labels: { orange: 'Attacking', purple: 'Aerial', blue: 'Creating', green: 'Carrier' },
+    },
   },
 };
 
@@ -238,10 +330,13 @@ export const GENERALIST_MIN_ROLES = 3;
 export const HYBRID_2_GAP = 8;
 export const HYBRID_3_SPREAD = 10;
 
-// Colours, assigned once per position (mainTypes order, then hybrid order
-// as listed above) from the shared palette, plus the three reserved colours.
-// A role present in `roles` but not `mainTypes` (ATT's Creator) gets no
-// colour — it never becomes a dot colour or legend entry on its own.
+// Detailed colours, from this position's DETAILED_SWATCHES plus the three
+// reserved colours. A role present in `roles` but not `mainTypes` (ATT's
+// Creator) gets no colour — it never becomes a dot colour or legend entry
+// on its own. Simple colours/labels: every mainType/hybrid maps through
+// `simple.family` to one of the five shared family colours, plus the three
+// reserved Simple-mode colours (Complete/Generalist/None — Generalist's
+// Simple colour is its own light grey, not Detailed's gold).
 for (const [pos, cfg] of Object.entries(ARCHETYPE_CONFIG)) {
   if (!cfg.mainTypes) cfg.mainTypes = Object.keys(cfg.roles);
   const hybridNames = cfg.hybrids.map(h => h.name);
@@ -249,7 +344,24 @@ for (const [pos, cfg] of Object.entries(ARCHETYPE_CONFIG)) {
     [cfg.completeLabel]: COMPLETE_COLOR,
     Generalist: GENERALIST_COLOR,
     'No clear profile': NONE_COLOR,
-    ...assignColors(cfg.mainTypes, hybridNames),
+    ...DETAILED_SWATCHES[pos],
   };
   cfg.hybridNames = hybridNames;
+
+  const { family, labels } = cfg.simple;
+  cfg.simpleColors = {
+    [cfg.completeLabel]: FAMILY_COLOR.complete,
+    Generalist: FAMILY_COLOR.generalist,
+    'No clear profile': FAMILY_COLOR.none,
+  };
+  cfg.simpleLabelOf = { [cfg.completeLabel]: 'Complete', Generalist: 'Generalist', 'No clear profile': 'No clear profile' };
+  for (const name of [...cfg.mainTypes, ...hybridNames]) {
+    const token = family[name];
+    cfg.simpleColors[name] = FAMILY_COLOR[token];
+    cfg.simpleLabelOf[name] = labels[token];
+  }
+  // Legend building needs the reverse too: family token -> {label, color},
+  // in a stable family order (shared across positions where present).
+  const order = ['red', 'blue', 'orange', 'green', 'purple'];
+  cfg.simpleFamilies = order.filter(t => Object.values(family).includes(t)).map(t => ({ key: t, label: labels[t], color: FAMILY_COLOR[t] }));
 }

@@ -4,7 +4,7 @@ import { SCORE_TIERS, POS_COLORS, METRIC_OPTIONS, METRIC_OPTIONS_EXTRA, seasonDe
 import { useIsMobile, deliverPng } from './utils';
 import { ensureMontserratEmbedded } from './CoachCard';
 import { barColor } from './QuickCard';
-import { roleScoresFor, roleScoresForSeason, classifyArchetype, computeQuadrantScores, computeQuadrantScoresCareerBlend } from './archetypeEngine';
+import { roleScoresFor, roleScoresForSeason, classifyArchetype, simpleFamilyOf, computeQuadrantScores, computeQuadrantScoresCareerBlend } from './archetypeEngine';
 import { ARCHETYPE_CONFIG } from './archetypeConfig';
 
 // Scatter view of the current Scout Index result list: plots the top N of the
@@ -319,7 +319,7 @@ function exportHeader(ctx, W, FONT, title, legend, xIsScore) {
 export const HL_MAX = 10;
 
 export function drawScatter(canvas, W, H, dpr, forExport, o) {
-  const { pts, xf, yf, hidden, hoverId, highlightIds = [], showNames, soloLabel, title, subtitle, footer, legend, quad: Q, median, group, groupFullLabels, highlightStyle = 'full', theme: themeName = 'dark' } = o;
+  const { pts, xf, yf, hidden, hoverId, highlightIds = [], showNames, soloLabel, title, subtitle, footer, legend, quad: Q, median, group, groupFullLabels, highlightStyle = 'full', theme: themeName = 'dark', labelledKeys, fadeOthers } = o;
   const T = THEMES[themeName];
   const FONT = forExport ? 'Montserrat, Inter, sans-serif' : 'Inter, sans-serif';
   canvas.width = W*dpr; canvas.height = H*dpr;
@@ -517,9 +517,11 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
 
   // ── Dots ─────────────────────────────────────────────────────────────────
   // d.kind (Archetype colour mode only — undefined everywhere else, so this
-  // is a no-op for every other point): 'none' draws smaller ("No clear
-  // profile"). No outline/ring distinction for any archetype — every
-  // archetype gets its own flat colour instead (see archetypeConfig.js).
+  // is a no-op for every other point). No size or outline/ring distinction
+  // for any archetype any more — "No clear profile" and Generalist draw at
+  // the same size as everything else (2026-10-20: grey is a muted colour
+  // only, never a smaller dot); every archetype gets its own flat colour
+  // instead (see archetypeConfig.js).
   // d.muted (a group/age filter, any player not a member): normally forces
   // the flat "out of group" grey — EXCEPT when the Label-only style is
   // selected, where nothing about a non-member's colour changes at all
@@ -530,9 +532,8 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
   // simple highlightIds case.
   const labelStyle = highlightStyle === 'label';
   const ringDot = (d, rad, alpha) => {
-    const rr = d.kind === 'none' ? rad * 0.7 : rad;
     ctx.globalAlpha = alpha;
-    ctx.beginPath(); ctx.arc(xS(d.x), yS(d.y), rr, 0, Math.PI*2);
+    ctx.beginPath(); ctx.arc(xS(d.x), yS(d.y), rad, 0, Math.PI*2);
     ctx.fillStyle = (d.muted && !labelStyle) ? T.muted : d.plain ? T.plain : d.color; ctx.fill();
     ctx.strokeStyle = T.ring;
     ctx.lineWidth = T.ringW * fs;
@@ -555,11 +556,20 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
   const solo = !!(hl && soloLabel && !redDot);
   const fade = hl && !solo && !group && !redDot && !labelOnly ? 0.25 : 0.95;
   const dotColor = d => ((d.muted && !labelStyle) ? T.muted : d.color);
+  // Archetype-legend label selection (independent of group/highlight/Label
+  // only — composes with all of them): a non-empty labelledKeys means the
+  // user clicked one or more legend entries to force-label every matching
+  // player. "Fade others" drops everyone NOT in that set to ~25% opacity,
+  // whatever their group/highlight state would otherwise have given them.
+  const hasArchSel = !!(labelledKeys && labelledKeys.size);
+  const isArchLabelled = d => hasArchSel && labelledKeys.has(d.g);
   for (const pass of group ? [true, false] : [null]) {
     for (let i = visible.length - 1; i >= 0; i--) {
       const d = visible[i];
       if (isHl(d) || (pass !== null && !!d.muted !== pass)) continue;
-      ringDot({ ...d, color: dotColor(d) }, r, d.muted ? 1 : fade);
+      const baseAlpha = d.muted ? 1 : fade;
+      const alpha = (hasArchSel && fadeOthers && !isArchLabelled(d)) ? Math.min(baseAlpha, 0.25) : baseAlpha;
+      ringDot({ ...d, color: dotColor(d) }, r, alpha);
     }
   }
   ctx.lineJoin = 'round'; ctx.textAlign = 'left';
@@ -592,17 +602,32 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
         items.push({ x: xS(d.x), y: yS(d.y), r, px: 9.5*fs, font: f(9.5, 500), text: pname(d), force: true });
       }
       // Optional full-sample labeling: everyone else too, pushed AFTER the
-      // group so group labels never get bumped for them — these are NOT
-      // forced, so they can be dropped/repositioned around a group label.
+      // group so group labels never get bumped for them — not forced UNLESS
+      // an archetype-legend selection also claims this dot (that selection
+      // is independent of the group and always guarantees its own label).
       if (groupFullLabels) {
         for (const d of visible) {
           if (isHl(d) || !d.muted) continue;
-          items.push({ x: xS(d.x), y: yS(d.y), r, px: 9.5*fs, font: f(9.5, 500), text: pname(d) });
+          items.push({ x: xS(d.x), y: yS(d.y), r, px: 9.5*fs, font: f(9.5, 500), text: pname(d), force: isArchLabelled(d) });
+        }
+      } else if (hasArchSel) {
+        // groupFullLabels off: non-members normally get no label at all, but
+        // an archetype-legend selection still forces its matching dots.
+        for (const d of visible) {
+          if (isHl(d) || !d.muted || !isArchLabelled(d)) continue;
+          items.push({ x: xS(d.x), y: yS(d.y), r, px: 9.5*fs, font: f(9.5, 500), text: pname(d), force: true, archSel: true });
         }
       }
     } else {
+      // Archetype-legend-selected dots are forced (guaranteed, unbounded by
+      // the 400-dot/budget cap below) and pushed first so they win any
+      // placement contest; everyone else keeps the existing budgeted pass.
+      if (hasArchSel) for (const d of visible) {
+        if (isHl(d) || !isArchLabelled(d)) continue;
+        items.push({ x: xS(d.x), y: yS(d.y), r, px: 9.5*fs, font: f(9.5, 500), text: pname(d), force: true, archSel: true });
+      }
       for (const d of visible.slice(0, 400)) {
-        if (isHl(d)) continue;
+        if (isHl(d) || isArchLabelled(d)) continue;
         items.push({ x: xS(d.x), y: yS(d.y), r, px: 9.5*fs, font: f(9.5, 500), text: pname(d) });
       }
     }
@@ -611,7 +636,7 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
   L.labels = labels; L.dots = dots; L.bounds = bounds; L.taken = taken;
   ctx.lineJoin = 'round'; ctx.textAlign = 'left';
   for (const lb of labels) {
-    ctx.globalAlpha = lb.hl || !hl || solo || group || redDot || labelOnly ? 1 : 0.35;
+    ctx.globalAlpha = lb.hl || lb.archSel || !hl || solo || group || redDot || labelOnly ? 1 : 0.35;
     if (lb.leader) {
       const bx = Math.max(lb.box.x0, Math.min(lb.x, lb.box.x1)), by = Math.max(lb.box.y0, Math.min(lb.y, lb.box.y1));
       const ang = Math.atan2(by - lb.y, bx - lb.x);
@@ -623,6 +648,16 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
     ctx.strokeStyle = T.halo; ctx.lineWidth = 3*fs; ctx.strokeText(lb.text, bx, by);
     ctx.fillStyle = T.label; ctx.fillText(lb.text, bx, by);
     ctx.globalAlpha = 1;
+  }
+
+  // ── Archetype-legend selection on top ────────────────────────────────────
+  // Same colour and size as always — just redrawn after every other dot and
+  // label so a selected player's dot/label isn't buried under a later one.
+  if (hasArchSel) {
+    for (const d of visible) {
+      if (isHl(d) || !isArchLabelled(d)) continue;
+      ringDot({ ...d, color: dotColor(d) }, r, d.muted ? 1 : fade);
+    }
   }
 
   // ── Highlighted players on top ───────────────────────────────────────────
@@ -784,7 +819,7 @@ function playerScoreQuad(xf, yf, topPts, targetMin, roleKey) {
 export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLines, buildFields: buildFieldsFor, defaultX, defaultY,
   metricLabel = 'Per-90 value', colorModes, colorOf: colorOfMode, legendBase, scoreQuad, targetTiers, groups = [], leagueOf,
   noun = 'player', openLabel = 'Open profile', onSelect, onClose, contextLabel, defaultMedianOn = true, defaultSample = 50, archetypeSeasonLabel,
-  axesSeasonLabel, showAxesModeToggle, axesMode, setAxesMode }) {
+  axesSeasonLabel, showAxesModeToggle, axesMode, setAxesMode, showArchetypeDetailToggle, archetypeDetail, setArchetypeDetail }) {
   // searchPool: an unfiltered roster to search for the "ignores filters" add — falls
   // back to items (no override) when the caller doesn't have one (e.g. Team Index).
   const pool = searchPool && searchPool.length ? searchPool : items;
@@ -808,6 +843,13 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
   // Off by default — group labels always keep placement priority over these.
   const [groupFullLabels, setGroupFullLabels] = useState(false);
   const [hidden, setHidden] = useState(() => new Set());
+  // Archetype colour mode only: legend entries the user has clicked to force-
+  // label every matching player (Simple mode labels the whole family). A
+  // separate mechanism from `hidden` — clicking a legend swatch means
+  // something different in this colour mode (see the legend render below).
+  const [labelledKeys, setLabelledKeys] = useState(() => new Set());
+  const [fadeOthers, setFadeOthers] = useState(false); // off by default
+  const toggleLabelledKey = k => setLabelledKeys(prev => { const s = new Set(prev); s.has(k) ? s.delete(k) : s.add(k); return s; });
   const [hover, setHover] = useState(null); // {d, left, top}
   // Highlighted items, in pick order (up to HL_MAX). Plain click / search: see below.
   const [highlightIds, setHighlightIds] = useState([]);
@@ -859,6 +901,10 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
 
   const groupDef = groups.find(g => g.key === groupKey) || null;
   useEffect(() => { setHidden(new Set()); }, [colorBy, colorKey, groupKey]);
+  // archetypeDetail (Simple/Detailed) changes what a legend key even means
+  // (an archetype name vs. a family token) — stale selections would silently
+  // mislabel the wrong players, so clear on every relevant mode change.
+  useEffect(() => { setLabelledKeys(new Set()); setFadeOthers(false); }, [colorBy, archetypeDetail]);
   useEffect(() => { if (groupDef?.kind === 'number' && groupNum == null) setGroupNum(groupDef.def); }, [groupDef, groupNum]);
 
   const rankById = useMemo(() => new Map(items.map((p, i) => [idOf(p), i + 1])), [items, idOf]);
@@ -1032,7 +1078,10 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
   const autoTitle = `${yf.label} vs ${xf.label}`;
   const title = customTitle.trim() || autoTitle;
   const usesArchetypeAxis = xKey === 'quadX' || xKey === 'quadY' || yKey === 'quadX' || yKey === 'quadY';
-  const subtitle = `${sample.length} Sample · ${contextLabel}${usesArchetypeAxis && axesSeasonLabel ? ` · Axes: ${axesSeasonLabel}` : ''}${colorBy === 'archetype' && archetypeSeasonLabel ? ` · Archetypes: ${archetypeSeasonLabel}` : ''}${inGroup ? ` · highlighted: ${groupLabel} (${groupCount})` : ''}${hlNames.length ? ` · highlighted: ${hlNames.length > 4 ? `${hlNames.slice(0, 4).join(', ')} +${hlNames.length - 4} more` : hlNames.join(', ')}` : ''}`;
+  const labelledNames = colorBy === 'archetype' && labelledKeys.size
+    ? legend.filter(it => labelledKeys.has(it.key)).map(it => it.label)
+    : [];
+  const subtitle = `${sample.length} Sample · ${contextLabel}${usesArchetypeAxis && axesSeasonLabel ? ` · Axes: ${axesSeasonLabel}` : ''}${colorBy === 'archetype' && archetypeSeasonLabel ? ` · Archetypes: ${archetypeSeasonLabel}` : ''}${inGroup ? ` · highlighted: ${groupLabel} (${groupCount})` : ''}${hlNames.length ? ` · highlighted: ${hlNames.length > 4 ? `${hlNames.slice(0, 4).join(', ')} +${hlNames.length - 4} more` : hlNames.join(', ')}` : ''}${labelledNames.length ? ` · labelled: ${labelledNames.join(', ')}` : ''}`;
 
   useEffect(() => {
     const measure = () => { const w = wrapRef.current?.offsetWidth; if (w) setWidth(w); };
@@ -1041,11 +1090,12 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
     return () => window.removeEventListener('resize', measure);
   }, []);
 
-  const drawOpts = { pts, xf, yf, hidden, highlightIds, showNames, soloLabel, quad, median, group: !!inGroup, groupFullLabels, highlightStyle };
+  const archLabelledKeys = colorBy === 'archetype' ? labelledKeys : null;
+  const drawOpts = { pts, xf, yf, hidden, highlightIds, showNames, soloLabel, quad, median, group: !!inGroup, groupFullLabels, highlightStyle, labelledKeys: archLabelledKeys, fadeOthers };
   useEffect(() => {
     if (!canvasRef.current) return;
     layoutRef.current = drawScatter(canvasRef.current, width, H, window.devicePixelRatio || 1, false, { ...drawOpts, hoverId: hover?.d.id });
-  }, [pts, xf, yf, hidden, hover, highlightIds, showNames, soloLabel, quad, median, inGroup, groupFullLabels, highlightStyle, width, H]);
+  }, [pts, xf, yf, hidden, hover, highlightIds, showNames, soloLabel, quad, median, inGroup, groupFullLabels, highlightStyle, archLabelledKeys, fadeOthers, width, H]);
 
   useEffect(() => {
     if (!highlightIds.length) return;
@@ -1164,6 +1214,14 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
             {allColorModes.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
           </select>
         </label>
+        {colorBy === 'archetype' && showArchetypeDetailToggle && (
+          <label style={col}><span style={lbl}>Archetype</span>
+            <div style={{ display:'flex', gap:3 }}>
+              <button style={btn(archetypeDetail === 'simple')} onClick={() => setArchetypeDetail('simple')} title="Colour by family (same 5 hues across every position)">Simple</button>
+              <button style={btn(archetypeDetail === 'detailed')} onClick={() => setArchetypeDetail('detailed')} title="Colour by the specific archetype">Detailed</button>
+            </div>
+          </label>
+        )}
         {colorBy === 'metric' && <label style={col}><span style={lbl}>Colour metric</span>{fieldSelect(colorKey, setColorKey, 'Colour metric')}</label>}
         {colorBy === 'plain' && (
           <label style={col}><span style={lbl}>Plain colour</span>
@@ -1356,6 +1414,12 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
               <span>min {it.gradient.min}</span><span>median {it.gradient.med}</span><span>max {it.gradient.max}</span>
             </div>
           </div>
+        ) : colorBy === 'archetype' ? (
+          <button key={it.key} onClick={() => toggleLabelledKey(it.key)} title={labelledKeys.has(it.key) ? 'Stop labelling' : 'Label every player in this entry'}
+            style={{ display:'flex', alignItems:'center', gap:5, background:'none', border:'none', cursor:'pointer', padding:0 }}>
+            <span style={{ width:9, height:9, borderRadius:'50%', background:it.color }}/>
+            <span style={{ fontSize:11, color: labelledKeys.has(it.key) ? '#f1f5f9' : '#cbd5e1', fontWeight: labelledKeys.has(it.key) ? 800 : 400, textDecoration: labelledKeys.has(it.key) ? 'underline' : 'none' }}>{it.label} <span style={{ color:'#64748b', fontWeight:400, textDecoration:'none' }}>{it.count}</span></span>
+          </button>
         ) : (
           <button key={it.key} onClick={() => toggleGroup(it.key)} title={hidden.has(it.key) ? 'Show' : 'Hide'}
             style={{ display:'flex', alignItems:'center', gap:5, background:'none', border:'none', cursor:'pointer', padding:0, opacity:hidden.has(it.key) ? 0.4 : 1 }}>
@@ -1363,6 +1427,10 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
             <span style={{ fontSize:11, color:'#cbd5e1', textDecoration:hidden.has(it.key) ? 'line-through' : 'none' }}>{it.label} <span style={{ color:'#64748b' }}>{it.count}</span></span>
           </button>
         ))}
+        {colorBy === 'archetype' && (
+          <button onClick={() => setFadeOthers(v => !v)} title="Drop non-labelled dots to ~25% opacity"
+            style={{ ...btn(fadeOthers), padding:'3px 8px' }}>Fade others</button>
+        )}
         <span style={{ fontSize:10, color:'#64748b', marginLeft:'auto' }}>
           {sample.length} Sample · {topPts.length} plotted{removedHere > 0 ? ` · ${removedHere} removed` : ''}{missing > 0 ? ` · ${missing} without data for these axes` : ''}{trimmed > 0 ? ` · ${trimmed} low outlier${trimmed > 1 ? 's' : ''} hidden` : ''}
           {quadNote ? ` · ${quadNote}` : ''}{!sQuad && (xf.scoreScale || yf.scoreScale) ? ' · shaded zones = level bands' : ''}
@@ -1382,7 +1450,7 @@ export const playerGroups = clubOf => [
 ];
 const playerId = p => p.id, playerName = p => p.name;
 const fmtType = v => Number.isFinite(v) ? Math.round(v) : '—';
-const archetypeLegend = pos => {
+const archetypeLegendDetailed = pos => {
   const cfg = ARCHETYPE_CONFIG[pos];
   if (!cfg) return [];
   return [
@@ -1391,6 +1459,19 @@ const archetypeLegend = pos => {
     ...cfg.hybridNames.map(label => ({ key: label, label, color: cfg.colors[label] })),
     { key: 'Generalist', label: 'Generalist', color: cfg.colors.Generalist },
     { key: 'No clear profile', label: 'No clear profile', color: cfg.colors['No clear profile'] },
+  ];
+};
+// Simple mode: one entry per family token actually used by this position,
+// plus the three universal entries (Complete/Generalist/No clear profile),
+// each with that position's own word for the family (cfg.simpleFamilies).
+const archetypeLegendSimple = pos => {
+  const cfg = ARCHETYPE_CONFIG[pos];
+  if (!cfg) return [];
+  return [
+    { key: 'complete', label: 'Complete', color: cfg.simpleColors[cfg.completeLabel] },
+    ...cfg.simpleFamilies.map(f => ({ key: f.key, label: f.label, color: f.color })),
+    { key: 'generalist', label: 'Generalist', color: cfg.simpleColors.Generalist },
+    { key: 'none', label: 'No clear profile', color: cfg.simpleColors['No clear profile'] },
   ];
 };
 
@@ -1415,6 +1496,9 @@ export default function ScatterChart({ players, allPlayers, getDisplayScore, sea
   // archetype colour.
   const [axesMode, setAxesMode] = useState('latest'); // 'latest' | 'career'
   const showAxesModeToggle = hasArchetype && seasonFilter === 'all';
+  // Archetype colour sub-mode: Simple (default, 5 shared family hues) or
+  // Detailed (every archetype its own colour) — see archetypeConfig.js.
+  const [archetypeDetail, setArchetypeDetail] = useState('simple'); // 'simple' | 'detailed'
   const archPoolScores = useMemo(() => {
     if (!hasArchetype) return null;
     if (seasonFilter === 'all' && axesMode === 'career') return computeQuadrantScoresCareerBlend(roleKey, players);
@@ -1441,8 +1525,8 @@ export default function ScatterChart({ players, allPlayers, getDisplayScore, sea
   ], [displayIsScore, seasonFilter, scoreMode, rawMode, outlierMode, hasArchetype]);
   const legendBase = useCallback(mode => (mode === 'position'
     ? [...POS_ORDER, 'Other'].map(g => ({ key: g, label: g, color: POS_COLORS[g] || OTHER_COLOR }))
-    : mode === 'archetype' ? archetypeLegend(roleKey)
-    : [...SCORE_BUCKETS, { key: 'none', label: 'No data', color: NODATA_COLOR }]), [roleKey]);
+    : mode === 'archetype' ? (archetypeDetail === 'detailed' ? archetypeLegendDetailed(roleKey) : archetypeLegendSimple(roleKey))
+    : [...SCORE_BUCKETS, { key: 'none', label: 'No data', color: NODATA_COLOR }]), [roleKey, archetypeDetail]);
   const scoreQuadFn = useCallback((xf, yf, topPts, targetMin) => playerScoreQuad(xf, yf, topPts, targetMin, roleKey), [roleKey]);
   // club + league for the selected season (same helper as the table)
   const playerSub = useCallback(p => seasonClubFor(p, seasonFilter, leagues).team, [seasonFilter, leagues]);
@@ -1455,25 +1539,33 @@ export default function ScatterChart({ players, allPlayers, getDisplayScore, sea
     if (rec && rec.arch) {
       const top3 = Object.entries(rec.types || {}).filter(([, v]) => v != null).sort((a, b) => b[1] - a[1]).slice(0, 3);
       const top3Txt = top3.map(([k, v]) => `${k} ${fmtType(v)}`).join(', ');
-      lines.push(`Archetype: ${rec.arch.label}${top3Txt ? ` (${top3Txt})` : ''}`);
+      // Family + specific archetype, in both Simple and Detailed mode (the
+      // dot colour only shows one or the other, but the tooltip always
+      // gives both, per the family a colour-coded dot belongs to).
+      const simple = simpleFamilyOf(roleKey, rec.arch);
+      const familyTxt = simple && simple.label !== rec.arch.label ? `${simple.label} — ` : '';
+      lines.push(`Archetype: ${familyTxt}${rec.arch.label}${top3Txt ? ` (${top3Txt})` : ''}`);
     }
     return lines;
-  }, [seasonFilter, leagues, archetypeMap]);
+  }, [seasonFilter, leagues, archetypeMap, roleKey]);
   const colorOf = useCallback((p, mode) => {
     if (mode === 'position') return POS_COLORS[p.roleKey] ? { g: p.roleKey, color: POS_COLORS[p.roleKey] } : { g: 'Other', color: OTHER_COLOR };
     if (mode === 'archetype') {
       const rec = archetypeMap?.get(p.id);
       if (!rec || !rec.arch) return { g: 'none', color: NODATA_COLOR };
-      return { g: rec.arch.key, color: rec.arch.color, kind: rec.arch.kind };
+      if (archetypeDetail === 'detailed') return { g: rec.arch.key, color: rec.arch.color, kind: rec.arch.kind };
+      const simple = simpleFamilyOf(roleKey, rec.arch);
+      return { g: simple.key, color: simple.color, kind: simple.kind };
     }
     const v = mode === 'display' ? getDisplayScore(p) : p[mode];
     return Number.isFinite(v) ? { g: scoreBucketKey(v), color: scoreDotColor(v) } : { g: 'none', color: NODATA_COLOR };
-  }, [getDisplayScore, archetypeMap]);
+  }, [getDisplayScore, archetypeMap, archetypeDetail, roleKey]);
   return (
     <ScatterView items={players} searchPool={allPlayers} idOf={playerId} nameOf={playerName} subOf={playerSub} tooltipLines={playerTip} leagueOf={playerLeague}
       buildFields={buildFieldsFor} defaultX="potentialScore" defaultY={seasonFilter !== 'all' ? 'display' : 'careerScore'} metricLabel="Per-90 value"
       colorModes={colorModes} colorOf={colorOf} legendBase={legendBase} scoreQuad={scoreQuadFn} targetTiers={TARGET_TIERS}
       groups={groups} noun="player" openLabel="Open profile" onSelect={onSelect} onClose={onClose} contextLabel={contextLabel} archetypeSeasonLabel={archetypeSeasonLabel}
-      axesSeasonLabel={axesSeasonLabel} showAxesModeToggle={showAxesModeToggle} axesMode={axesMode} setAxesMode={setAxesMode}/>
+      axesSeasonLabel={axesSeasonLabel} showAxesModeToggle={showAxesModeToggle} axesMode={axesMode} setAxesMode={setAxesMode}
+      showArchetypeDetailToggle={hasArchetype} archetypeDetail={archetypeDetail} setArchetypeDetail={setArchetypeDetail}/>
   );
 }

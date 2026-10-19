@@ -192,6 +192,22 @@ export function classifyArchetype(pos, roleScores) {
   return none();
 }
 
+// Collapses a classifyArchetype() result to its Simple-mode family entry
+// for this position: { kind, key: family token, label, color }. `kind` is
+// kept as-is (complete/hybrid/dominant/generalist/none) so callers that
+// branch on it (e.g. "is this a grey dot") don't need a second code path.
+export function simpleFamilyOf(pos, arch) {
+  const cfg = ARCHETYPE_CONFIG[pos];
+  if (!cfg || !arch) return null;
+  const label = cfg.simpleLabelOf[arch.key];
+  const color = cfg.simpleColors[arch.key];
+  // The family token itself (for counting/legend keys) — complete/
+  // generalist/none reuse their own kind as the token, every other
+  // archetype's token comes from cfg.simple.family.
+  const key = arch.kind === 'complete' ? 'complete' : arch.kind === 'generalist' ? 'generalist' : arch.kind === 'none' ? 'none' : cfg.simple.family[arch.key];
+  return { kind: arch.kind, key, label, color };
+}
+
 function percentileRanks(values) {
   const n = values.length;
   const idx = values.map((v, i) => [v, i]).sort((a, b) => a[0] - b[0]);

@@ -3,7 +3,7 @@
 // each position's own chunk files).
 import fs from 'fs';
 import path from 'path';
-import { roleScoresFor, roleScoresForSeason, classifyArchetype, computeQuadrantScores, computeQuadrantScoresCareerBlend } from './archetypeEngine';
+import { roleScoresFor, roleScoresForSeason, classifyArchetype, simpleFamilyOf, computeQuadrantScores, computeQuadrantScoresCareerBlend } from './archetypeEngine';
 import { ARCHETYPE_CONFIG, COMPLETE_MIN_ROLES, GENERALIST_THRESHOLD, GENERALIST_MIN_ROLES } from './archetypeConfig';
 
 const PUB = path.join(__dirname, '..', 'public');
@@ -42,6 +42,49 @@ test('ARCHETYPE_CONFIG: every position has roles, quadrant, max 3 hybrids, mainT
   }
 });
 
+test('Simple mode: every mainType/hybrid in every position has a family mapping, and simpleFamilies covers only families actually used', () => {
+  for (const pos of ['GK', 'CB', 'FB', 'CM', 'ATT', 'CF']) {
+    const cfg = ARCHETYPE_CONFIG[pos];
+    for (const name of [...cfg.mainTypes, ...cfg.hybridNames]) {
+      expect(cfg.simple.family[name]).toBeTruthy();
+      expect(cfg.simpleColors[name]).toBeTruthy();
+      expect(cfg.simpleLabelOf[name]).toBeTruthy();
+    }
+    const usedTokens = new Set(Object.values(cfg.simple.family));
+    expect(new Set(cfg.simpleFamilies.map(f => f.key))).toEqual(usedTokens);
+    for (const f of cfg.simpleFamilies) { expect(f.label).toBeTruthy(); expect(f.color).toBeTruthy(); }
+  }
+});
+
+test('simpleFamilyOf: complete/generalist/none collapse to universal tokens with Simple-mode-specific colours', () => {
+  const complete = classifyArchetype('CM', { DLP: 80, Playmaker: 78, 'Ball-Winner': 76, Anchor: 20, 'Attacking Midfielder': 20, 'Ball Carrier': 20 });
+  const sComplete = simpleFamilyOf('CM', complete);
+  expect(sComplete).toEqual({ kind: 'complete', key: 'complete', label: 'Complete', color: '#f8fafc' });
+
+  const generalist = classifyArchetype('CM', { DLP: 52, Playmaker: 51, 'Ball-Winner': 50, Anchor: 20, 'Attacking Midfielder': 20, 'Ball Carrier': 20 });
+  const sGeneralist = simpleFamilyOf('CM', generalist);
+  expect(sGeneralist.key).toBe('generalist');
+  expect(sGeneralist.color).toBe('#cbd5e1'); // Simple's own light grey, distinct from Detailed's gold (#ca8a04)
+  expect(sGeneralist.color).not.toBe(ARCHETYPE_CONFIG.CM.colors.Generalist);
+
+  const none = classifyArchetype('CM', { DLP: 40, Playmaker: 38, 'Ball-Winner': 20, Anchor: 20, 'Attacking Midfielder': 20, 'Ball Carrier': 20 });
+  const sNone = simpleFamilyOf('CM', none);
+  expect(sNone).toEqual({ kind: 'none', key: 'none', label: 'No clear profile', color: '#64748b' });
+});
+
+test('simpleFamilyOf: dominant and hybrid archetypes collapse to their configured family, same hue across positions', () => {
+  // CM: Ball-Winner and Anchor are both "red" (defending); DLP/Playmaker/All-Phase Passer are "blue".
+  const ballWinner = classifyArchetype('CM', { 'Ball-Winner': 70, DLP: 20, Playmaker: 20, Anchor: 20, 'Attacking Midfielder': 20, 'Ball Carrier': 20 });
+  expect(simpleFamilyOf('CM', ballWinner)).toEqual({ kind: 'dominant', key: 'red', label: 'Defensive', color: '#ef4444' });
+  const allPhasePasser = classifyArchetype('CM', { DLP: 72, Playmaker: 68, 'Ball-Winner': 20, Anchor: 20, 'Attacking Midfielder': 20, 'Ball Carrier': 20 });
+  expect(simpleFamilyOf('CM', allPhasePasser)).toEqual({ kind: 'hybrid', key: 'blue', label: 'Passing', color: '#3b82f6' });
+  // CB's Aerial is "purple" (aerial/physical family) — same purple used by CF's Target Forward.
+  const aerial = classifyArchetype('CB', { Aerial: 70, 'Composed Passer': 20, 'Line-Breaker': 20, 'Ball Carrier': 20, Aggressor: 20, Stopper: 20 });
+  expect(simpleFamilyOf('CB', aerial).color).toBe('#a855f7');
+  const targetForward = classifyArchetype('CF', { 'Target Forward': 70, 'Goal Threat': 20, Dribbler: 20, 'False 9': 20 });
+  expect(simpleFamilyOf('CF', targetForward).color).toBe('#a855f7');
+});
+
 test('ATT Creator is computed but excluded from mainTypes (hybrid-only input, never a standalone label)', () => {
   const cfg = ARCHETYPE_CONFIG.ATT;
   expect(cfg.roles.Creator).toBeTruthy();
@@ -77,12 +120,59 @@ test('classifyArchetype cascade (CM, trimmed roles — no Box-to-Box): complete,
   expect(none).toEqual({ kind: 'none', key: 'No clear profile', label: 'No clear profile', color: '#64748b' });
 });
 
-test('classifyArchetype (CB): Ball-Playing CB = max(Ball Player, Progresser) feeds Build-Up Specialist hybrid, no 3-role hybrid remains', () => {
+test('classifyArchetype (CB): un-merged into Composed Passer + Line-Breaker, no hybrid between them, Build-Up Specialist = Line-Breaker + Ball Carrier only', () => {
   const cfg = ARCHETYPE_CONFIG.CB;
+  expect(Object.keys(cfg.roles).sort()).toEqual(['Aerial', 'Aggressor', 'Ball Carrier', 'Composed Passer', 'Line-Breaker', 'Stopper'].sort());
+  expect(cfg.roles['Ball-Playing CB']).toBeUndefined();
   expect(cfg.hybrids.length).toBe(2);
   expect(cfg.hybrids.map(h => h.name).sort()).toEqual(['Build-Up Specialist', 'Dominant Defender'].sort());
-  const r = classifyArchetype('CB', { 'Ball-Playing CB': 68, 'Ball Carrier': 62, Aerial: 10, Aggressor: 10, Stopper: 10 });
-  expect(r).toEqual({ kind: 'hybrid', key: 'Build-Up Specialist', label: 'Build-Up Specialist', color: cfg.colors['Build-Up Specialist'] });
+  expect(cfg.hybrids.find(h => h.name === 'Build-Up Specialist').roles.sort()).toEqual(['Ball Carrier', 'Line-Breaker'].sort());
+  // Composed Passer and Line-Breaker both high together is NOT a hybrid (no pair lists them) — falls to dominant.
+  const r = classifyArchetype('CB', { 'Composed Passer': 90, 'Line-Breaker': 88, 'Ball Carrier': 20, Aerial: 10, Aggressor: 10, Stopper: 10 });
+  expect(r.kind).toBe('dominant');
+  expect(r.key).toBe('Composed Passer');
+  const hybrid = classifyArchetype('CB', { 'Line-Breaker': 68, 'Ball Carrier': 62, 'Composed Passer': 10, Aerial: 10, Aggressor: 10, Stopper: 10 });
+  expect(hybrid).toEqual({ kind: 'hybrid', key: 'Build-Up Specialist', label: 'Build-Up Specialist', color: cfg.colors['Build-Up Specialist'] });
+});
+
+test('config changes 2026-10-20: GK/FB/CM/ATT/CF renames and removals', () => {
+  const gk = ARCHETYPE_CONFIG.GK;
+  expect(gk.roles['Fire Fighter']).toBeUndefined();
+  expect(gk.roles.Distributor).toBeTruthy(); // renamed from "Passing", still reuses hexagon 'Passing'
+  expect(gk.roles.Distributor.hexagon).toBe('Passing');
+  expect(gk.hybridNames.sort()).toEqual(['Ball-Playing Stopper', 'Shot-Stopping Sweeper'].sort());
+  expect(gk.hybrids.find(h => h.name === 'Ball-Playing Stopper').roles.sort()).toEqual(['Distributor', 'Shot Stopper'].sort());
+
+  const fb = ARCHETYPE_CONFIG.FB;
+  expect(fb.roles.Wingback).toBeUndefined();
+  expect(fb.roles['Wide Carrier']).toBeTruthy(); // renamed from "Flyer"
+  expect(fb.roles['Wide Carrier'].hexagon).toBe('Flyer');
+  expect(fb.hybridNames).toEqual(['All-Phase Playmaker']);
+
+  const cm = ARCHETYPE_CONFIG.CM;
+  expect(cm.hybridNames).toEqual(['All-Phase Passer']);
+  expect(cm.roles['Attacking Midfielder']).toBeTruthy(); // unchanged
+
+  const att = ARCHETYPE_CONFIG.ATT;
+  expect(att.hybridNames.sort()).toEqual(['Dribbling-Finisher', 'Roaming Playmaker'].sort());
+  expect(att.hybrids.find(h => h.name === 'Roaming Playmaker').roles.sort()).toEqual(['Creator', 'Deep Playmaker'].sort());
+
+  const cf = ARCHETYPE_CONFIG.CF;
+  expect(cf.roles['Pressing Forward']).toBeUndefined();
+  expect(cf.hybridNames).toEqual(['Creative Dribbler']);
+});
+
+test('removed types/hybrids fall back to next-best on real classification', () => {
+  // FB: Wingback-shaped player (high dribbling/box-arrival, nothing else) now
+  // falls to whatever role scores next, never produces a "Wingback" key.
+  const r = classifyArchetype('FB', { Playmaker: 20, 'Wide Carrier': 72, 'Wide Creator': 10, Defensive: 10 });
+  expect(r.key).not.toBe('Wingback');
+  expect(r.key).toBe('Wide Carrier');
+  // CM: old Creative Box Threat pair (AM+Playmaker both high) now classifies
+  // as dominant on whichever of the two is higher, not a hybrid.
+  const cbt = classifyArchetype('CM', { 'Attacking Midfielder': 72, Playmaker: 68, DLP: 20, 'Ball-Winner': 20, Anchor: 20, 'Ball Carrier': 20 });
+  expect(cbt.kind).toBe('dominant');
+  expect(cbt.key).toBe('Attacking Midfielder');
 });
 
 test('GK, CB, CF quadrant "both" corner is renamed All-Round, not Complete (reserved for the archetype tier)', () => {
