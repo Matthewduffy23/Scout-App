@@ -4,7 +4,7 @@ import { SCORE_TIERS, POS_COLORS, METRIC_OPTIONS, METRIC_OPTIONS_EXTRA, seasonDe
 import { useIsMobile, deliverPng } from './utils';
 import { ensureMontserratEmbedded } from './CoachCard';
 import { barColor } from './QuickCard';
-import { roleScoresFor, roleScoresForSeason, classifyArchetype, computeQuadrantScores } from './archetypeEngine';
+import { roleScoresFor, roleScoresForSeason, classifyArchetype, computeQuadrantScores, computeQuadrantScoresCareerBlend } from './archetypeEngine';
 import { ARCHETYPE_CONFIG } from './archetypeConfig';
 
 // Scatter view of the current Scout Index result list: plots the top N of the
@@ -783,7 +783,8 @@ function playerScoreQuad(xf, yf, topPts, targetMin, roleKey) {
 // tooltip lines, group-highlight conditions, and what a double-click opens.
 export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLines, buildFields: buildFieldsFor, defaultX, defaultY,
   metricLabel = 'Per-90 value', colorModes, colorOf: colorOfMode, legendBase, scoreQuad, targetTiers, groups = [], leagueOf,
-  noun = 'player', openLabel = 'Open profile', onSelect, onClose, contextLabel, defaultMedianOn = true, defaultSample = 50, archetypeSeasonLabel }) {
+  noun = 'player', openLabel = 'Open profile', onSelect, onClose, contextLabel, defaultMedianOn = true, defaultSample = 50, archetypeSeasonLabel,
+  axesSeasonLabel, showAxesModeToggle, axesMode, setAxesMode }) {
   // searchPool: an unfiltered roster to search for the "ignores filters" add — falls
   // back to items (no override) when the caller doesn't have one (e.g. Team Index).
   const pool = searchPool && searchPool.length ? searchPool : items;
@@ -1030,7 +1031,8 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
   const colorLabel = colorBy === 'metric' ? `Colour: ${baseName(cf)}` : allColorModes.find(o => o[0] === colorBy)?.[1] || colorModes[0]?.[1] || '';
   const autoTitle = `${yf.label} vs ${xf.label}`;
   const title = customTitle.trim() || autoTitle;
-  const subtitle = `${sample.length} Sample · ${contextLabel}${colorBy === 'archetype' && archetypeSeasonLabel ? ` · Archetypes: ${archetypeSeasonLabel}` : ''}${inGroup ? ` · highlighted: ${groupLabel} (${groupCount})` : ''}${hlNames.length ? ` · highlighted: ${hlNames.length > 4 ? `${hlNames.slice(0, 4).join(', ')} +${hlNames.length - 4} more` : hlNames.join(', ')}` : ''}`;
+  const usesArchetypeAxis = xKey === 'quadX' || xKey === 'quadY' || yKey === 'quadX' || yKey === 'quadY';
+  const subtitle = `${sample.length} Sample · ${contextLabel}${usesArchetypeAxis && axesSeasonLabel ? ` · Axes: ${axesSeasonLabel}` : ''}${colorBy === 'archetype' && archetypeSeasonLabel ? ` · Archetypes: ${archetypeSeasonLabel}` : ''}${inGroup ? ` · highlighted: ${groupLabel} (${groupCount})` : ''}${hlNames.length ? ` · highlighted: ${hlNames.length > 4 ? `${hlNames.slice(0, 4).join(', ')} +${hlNames.length - 4} more` : hlNames.join(', ')}` : ''}`;
 
   useEffect(() => {
     const measure = () => { const w = wrapRef.current?.offsetWidth; if (w) setWidth(w); };
@@ -1145,6 +1147,14 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
         <label style={col}><span style={lbl}>Y axis</span>{fieldSelect(yKey, setYKey, 'Y axis')}</label>
         <button title="Swap axes" onClick={swap} style={btn(false)}>⇄</button>
         <label style={col}><span style={lbl}>X axis</span>{fieldSelect(xKey, setXKey, 'X axis')}</label>
+        {showAxesModeToggle && (
+          <label style={col}><span style={lbl}>Axes</span>
+            <div style={{ display:'flex', gap:3 }}>
+              <button style={btn(axesMode === 'latest')} onClick={() => setAxesMode('latest')} title="Feature Q axes use each player's own latest qualifying season">Latest season</button>
+              <button style={btn(axesMode === 'career')} onClick={() => setAxesMode('career')} title="Feature Q axes blend a player's whole season history, weighted by recency and minutes">Career blend</button>
+            </div>
+          </label>
+        )}
         <label style={col}><span style={lbl}>Sample</span>
           <input aria-label="Sample size" type="number" min={1} max={1000} value={n} onChange={e => setN(Math.max(1, Math.min(1000, Number(e.target.value) || 1)))}
             style={{ ...sel, width:70 }}/>
@@ -1398,9 +1408,18 @@ export default function ScatterChart({ players, allPlayers, getDisplayScore, sea
   // they live here; role scores are pool-independent (a pure function of
   // each player's own data) but are still computed per-pool for
   // simplicity/locality.
-  const archPoolScores = useMemo(() => (hasArchetype
-    ? computeQuadrantScores(roleKey, players, p => seasonDetailFor(p, seasonFilter, leagues))
-    : null), [hasArchetype, roleKey, players, seasonFilter, leagues]);
+  // Axes-only option, offered only with 'all' seasons selected: rank each
+  // player's latest season (default, unchanged) or a recency+minutes
+  // weighted blend of their whole season history. Has no effect once a
+  // specific season is picked — axes use that season either way, same as
+  // archetype colour.
+  const [axesMode, setAxesMode] = useState('latest'); // 'latest' | 'career'
+  const showAxesModeToggle = hasArchetype && seasonFilter === 'all';
+  const archPoolScores = useMemo(() => {
+    if (!hasArchetype) return null;
+    if (seasonFilter === 'all' && axesMode === 'career') return computeQuadrantScoresCareerBlend(roleKey, players);
+    return computeQuadrantScores(roleKey, players, p => seasonDetailFor(p, seasonFilter, leagues));
+  }, [hasArchetype, roleKey, players, seasonFilter, leagues, axesMode]);
   const archetypeMap = useMemo(() => {
     if (!hasArchetype) return null;
     const m = new Map();
@@ -1411,6 +1430,7 @@ export default function ScatterChart({ players, allPlayers, getDisplayScore, sea
     return m;
   }, [hasArchetype, roleKey, players, seasonFilter, leagues]);
   const archetypeSeasonLabel = hasArchetype ? (seasonFilter === 'all' ? 'career blend' : seasonFilter) : null;
+  const axesSeasonLabel = hasArchetype ? (seasonFilter === 'all' ? (axesMode === 'career' ? 'career blend' : 'latest season') : seasonFilter) : null;
   const buildFieldsFor = useCallback(metricMode => buildFields({ getDisplayScore, seasonFilter, scoreMode, rawMode, outlierMode, metricMode, roleKey, leagues, archPoolScores }),
     [getDisplayScore, seasonFilter, scoreMode, rawMode, outlierMode, roleKey, leagues, archPoolScores]);
   const displayIsScore = tableIsScore({ seasonFilter, scoreMode, rawMode, outlierMode });
@@ -1453,6 +1473,7 @@ export default function ScatterChart({ players, allPlayers, getDisplayScore, sea
     <ScatterView items={players} searchPool={allPlayers} idOf={playerId} nameOf={playerName} subOf={playerSub} tooltipLines={playerTip} leagueOf={playerLeague}
       buildFields={buildFieldsFor} defaultX="potentialScore" defaultY={seasonFilter !== 'all' ? 'display' : 'careerScore'} metricLabel="Per-90 value"
       colorModes={colorModes} colorOf={colorOf} legendBase={legendBase} scoreQuad={scoreQuadFn} targetTiers={TARGET_TIERS}
-      groups={groups} noun="player" openLabel="Open profile" onSelect={onSelect} onClose={onClose} contextLabel={contextLabel} archetypeSeasonLabel={archetypeSeasonLabel}/>
+      groups={groups} noun="player" openLabel="Open profile" onSelect={onSelect} onClose={onClose} contextLabel={contextLabel} archetypeSeasonLabel={archetypeSeasonLabel}
+      axesSeasonLabel={axesSeasonLabel} showAxesModeToggle={showAxesModeToggle} axesMode={axesMode} setAxesMode={setAxesMode}/>
   );
 }

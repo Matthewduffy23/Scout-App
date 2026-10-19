@@ -3,7 +3,7 @@
 // each position's own chunk files).
 import fs from 'fs';
 import path from 'path';
-import { roleScoresFor, roleScoresForSeason, classifyArchetype, computeQuadrantScores } from './archetypeEngine';
+import { roleScoresFor, roleScoresForSeason, classifyArchetype, computeQuadrantScores, computeQuadrantScoresCareerBlend } from './archetypeEngine';
 import { ARCHETYPE_CONFIG, COMPLETE_MIN_ROLES, GENERALIST_THRESHOLD, GENERALIST_MIN_ROLES } from './archetypeConfig';
 
 const PUB = path.join(__dirname, '..', 'public');
@@ -146,6 +146,22 @@ test('computeQuadrantScores: a seasonDetailOf override changes which season\'s r
   let anyDiff = false;
   for (const [id, v] of withOverride) { const d = defaultLatest.get(id); if (d && Math.abs(d.x - v.x) > 0.01) { anyDiff = true; break; } }
   expect(anyDiff).toBe(true);
+});
+
+test('computeQuadrantScoresCareerBlend: a multi-season player gets different axis values than Latest season', () => {
+  const pool = loadPool('CB');
+  const multiSeason = pool.filter(p => {
+    const seasons = Object.keys(p.seasonsDetail || {}).filter(s => p.seasonsDetail[s].g);
+    return seasons.length >= 2 && seasons.every(s => (p.seasonsDetail[s].minutes || 0) > 0);
+  });
+  expect(multiSeason.length).toBeGreaterThan(20);
+  const latest = computeQuadrantScores('CB', multiSeason); // default = latest season
+  const career = computeQuadrantScoresCareerBlend('CB', multiSeason);
+  expect(career.size).toBeGreaterThan(20);
+  let anyDiff = false;
+  for (const [id, v] of career) { const d = latest.get(id); if (d && Math.abs(d.x - v.x) > 0.01) { anyDiff = true; break; } }
+  expect(anyDiff).toBe(true);
+  for (const { x, y } of career.values()) { expect(x).toBeGreaterThanOrEqual(0); expect(x).toBeLessThanOrEqual(100); expect(y).toBeGreaterThanOrEqual(0); expect(y).toBeLessThanOrEqual(100); }
 });
 
 test('computeQuadrantScores: 0-100 range for a couple of positions', () => {

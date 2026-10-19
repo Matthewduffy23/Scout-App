@@ -207,27 +207,10 @@ function percentileRanks(values) {
   return ranks.map(r => (r / n) * 100);
 }
 
-// Ranks the position's two Feature Q axis scores for every player in
-// `players` against each other (the current filtered Scout Index pool) —
-// recomputed whenever that pool changes, matching how Feature Q itself
-// recomputes per its own league filter rather than a fixed global percentile.
-// seasonDetailOf(player) resolves which season's raw data to use per player;
-// defaults to each player's own latest qualifying season (unchanged
-// behaviour) when the caller doesn't pass one — e.g. when the scatter's
-// season filter is 'all', or for the career-only callers in tests.
-export function computeQuadrantScores(pos, players, seasonDetailOf = latestSeasonDetail) {
-  const cfg = ARCHETYPE_CONFIG[pos];
+// Shared tail for both quadrant-score modes below: percentile-rank each raw
+// metric across the pool, weight into the two axis scores, assign a corner.
+function rankQuadrant(cfg, rows) {
   const { x, y, names } = cfg.quadrant;
-  const rows = [];
-  for (const p of players) {
-    const sd = seasonDetailOf(p);
-    if (!sd) continue;
-    const xRaw = {}, yRaw = {}; let ok = true;
-    for (const m of Object.keys(x.w)) { const v = rawFromSeason(pos, sd, m); if (v == null || Number.isNaN(v)) { ok = false; break; } xRaw[m] = v; }
-    if (ok) for (const m of Object.keys(y.w)) { const v = rawFromSeason(pos, sd, m); if (v == null || Number.isNaN(v)) { ok = false; break; } yRaw[m] = v; }
-    if (!ok) continue;
-    rows.push({ id: p.id, xRaw, yRaw });
-  }
   for (const m of Object.keys(x.w)) { const r = percentileRanks(rows.map(v => v.xRaw[m])); rows.forEach((v, i) => v.xRaw[m + '_pct'] = r[i]); }
   for (const m of Object.keys(y.w)) { const r = percentileRanks(rows.map(v => v.yRaw[m])); rows.forEach((v, i) => v.yRaw[m + '_pct'] = r[i]); }
   const out = new Map();
@@ -238,4 +221,66 @@ export function computeQuadrantScores(pos, players, seasonDetailOf = latestSeaso
     out.set(row.id, { x: xs, y: ys, q });
   }
   return out;
+}
+
+// Ranks the position's two Feature Q axis scores for every player in
+// `players` against each other (the current filtered Scout Index pool) —
+// recomputed whenever that pool changes, matching how Feature Q itself
+// recomputes per its own league filter rather than a fixed global percentile.
+// seasonDetailOf(player) resolves which season's raw data to use per player;
+// defaults to each player's own latest qualifying season (unchanged
+// behaviour) when the caller doesn't pass one — e.g. when the scatter's
+// season filter is 'all', or for the career-only callers in tests.
+export function computeQuadrantScores(pos, players, seasonDetailOf = latestSeasonDetail) {
+  const cfg = ARCHETYPE_CONFIG[pos];
+  const { x, y } = cfg.quadrant;
+  const rows = [];
+  for (const p of players) {
+    const sd = seasonDetailOf(p);
+    if (!sd) continue;
+    const xRaw = {}, yRaw = {}; let ok = true;
+    for (const m of Object.keys(x.w)) { const v = rawFromSeason(pos, sd, m); if (v == null || Number.isNaN(v)) { ok = false; break; } xRaw[m] = v; }
+    if (ok) for (const m of Object.keys(y.w)) { const v = rawFromSeason(pos, sd, m); if (v == null || Number.isNaN(v)) { ok = false; break; } yRaw[m] = v; }
+    if (!ok) continue;
+    rows.push({ id: p.id, xRaw, yRaw });
+  }
+  return rankQuadrant(cfg, rows);
+}
+
+// A player's blended raw per-90 value for one metric, across all their
+// qualifying seasons — weighted by BOTH recency (same decay as the career
+// role-score blend) AND that season's minutes, so a 300-minute season
+// doesn't pull the average as hard as a full one did.
+function careerBlendRaw(pos, p, metric, seasons) {
+  let num = 0, den = 0;
+  seasons.forEach((s, i) => {
+    const sd = p.seasonsDetail[s];
+    const v = rawFromSeason(pos, sd, metric);
+    if (v == null || Number.isNaN(v)) return;
+    const mins = sd.minutes || 0;
+    if (mins <= 0) return;
+    const w = Math.exp(-DECAY * i) * mins;
+    num += v * w; den += w;
+  });
+  return den > 0 ? num / den : null;
+}
+
+// Same ranking as computeQuadrantScores, but each metric is first blended
+// across a player's whole qualifying-season history (recency + minutes
+// weighted) instead of taken from one season — the "Career blend" axes
+// option, offered only when the scatter's season filter is 'all'.
+export function computeQuadrantScoresCareerBlend(pos, players) {
+  const cfg = ARCHETYPE_CONFIG[pos];
+  const { x, y } = cfg.quadrant;
+  const rows = [];
+  for (const p of players) {
+    const seasons = orderedQualifyingSeasons(p);
+    if (!seasons.length) continue;
+    const xRaw = {}, yRaw = {}; let ok = true;
+    for (const m of Object.keys(x.w)) { const v = careerBlendRaw(pos, p, m, seasons); if (v == null || Number.isNaN(v)) { ok = false; break; } xRaw[m] = v; }
+    if (ok) for (const m of Object.keys(y.w)) { const v = careerBlendRaw(pos, p, m, seasons); if (v == null || Number.isNaN(v)) { ok = false; break; } yRaw[m] = v; }
+    if (!ok) continue;
+    rows.push({ id: p.id, xRaw, yRaw });
+  }
+  return rankQuadrant(cfg, rows);
 }
