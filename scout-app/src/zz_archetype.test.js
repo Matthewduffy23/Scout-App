@@ -3,7 +3,7 @@
 // each position's own chunk files).
 import fs from 'fs';
 import path from 'path';
-import { roleScoresFor, classifyArchetype, computeQuadrantScores } from './archetypeEngine';
+import { roleScoresFor, roleScoresForSeason, classifyArchetype, computeQuadrantScores } from './archetypeEngine';
 import { ARCHETYPE_CONFIG, COMPLETE_MIN_ROLES, GENERALIST_THRESHOLD, GENERALIST_MIN_ROLES } from './archetypeConfig';
 
 const PUB = path.join(__dirname, '..', 'public');
@@ -107,6 +107,45 @@ test('roleScoresFor: real player, every position, scores are 0-100 or null and k
     expect(Object.keys(scores).sort()).toEqual(Object.keys(ARCHETYPE_CONFIG[pos].roles).sort());
     for (const v of Object.values(scores)) if (v != null) { expect(v).toBeGreaterThanOrEqual(0); expect(v).toBeLessThanOrEqual(100); }
   }
+});
+
+test('roleScoresForSeason: single-season scores differ from the career blend for a multi-season player, and use that season\'s own qcRoles for hexagon-reuse roles', () => {
+  const arr = JSON.parse(fs.readFileSync(path.join(PUB, FILES.CM[0]), 'utf8'));
+  // A player with >=2 qualifying seasons whose hexagon Playmaker score actually
+  // changed season to season, so the two paths are expected to disagree.
+  const p = arr.find(x => {
+    const seasons = Object.keys(x.seasonsDetail || {}).filter(s => x.seasonsDetail[s].g && x.seasonsDetail[s].qcRoles);
+    if (seasons.length < 2) return false;
+    const vals = seasons.map(s => x.seasonsDetail[s].qcRoles.Playmaker).filter(v => v != null);
+    return vals.length >= 2 && new Set(vals).size > 1;
+  });
+  expect(p).toBeTruthy();
+  const career = roleScoresFor('CM', p);
+  const seasons = Object.keys(p.seasonsDetail).filter(s => p.seasonsDetail[s].g && p.seasonsDetail[s].qcRoles);
+  const olderSeason = seasons.find(s => p.seasonsDetail[s].qcRoles.Playmaker !== career.Playmaker) || seasons[0];
+  const seasonScores = roleScoresForSeason('CM', p.seasonsDetail[olderSeason]);
+  expect(seasonScores).toBeTruthy();
+  expect(seasonScores.Playmaker).toBe(p.seasonsDetail[olderSeason].qcRoles.Playmaker);
+  expect(Object.keys(seasonScores).sort()).toEqual(Object.keys(ARCHETYPE_CONFIG.CM.roles).sort());
+});
+
+test('roleScoresForSeason returns null for a season with no usable data (e.g. under the pipeline\'s scoring-minutes floor)', () => {
+  expect(roleScoresForSeason('CM', null)).toBeNull();
+  expect(roleScoresForSeason('CM', {})).toBeNull();
+});
+
+test('computeQuadrantScores: a seasonDetailOf override changes which season\'s raw stats feed the ranking', () => {
+  const pool = loadPool('CB');
+  const multiSeason = pool.filter(p => Object.keys(p.seasonsDetail || {}).filter(s => p.seasonsDetail[s].g).length >= 2);
+  expect(multiSeason.length).toBeGreaterThan(20);
+  const oldest = p => { const seasons = Object.keys(p.seasonsDetail).filter(s => p.seasonsDetail[s].g); return p.seasonsDetail[seasons[seasons.length - 1]]; };
+  const withOverride = computeQuadrantScores('CB', multiSeason, oldest);
+  const defaultLatest = computeQuadrantScores('CB', multiSeason); // default = latest season
+  expect(withOverride.size).toBeGreaterThan(20);
+  // At least some players should rank differently between oldest- and latest-season stats.
+  let anyDiff = false;
+  for (const [id, v] of withOverride) { const d = defaultLatest.get(id); if (d && Math.abs(d.x - v.x) > 0.01) { anyDiff = true; break; } }
+  expect(anyDiff).toBe(true);
 });
 
 test('computeQuadrantScores: 0-100 range for a couple of positions', () => {

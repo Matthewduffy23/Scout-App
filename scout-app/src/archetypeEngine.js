@@ -112,6 +112,35 @@ function resolveRoleDef(pos, p, def, seasons, qc) {
   return null;
 }
 
+// Same role defs, resolved against ONE season's own data only (no career
+// recency blending) — used when the scatter's season filter picks a
+// specific season instead of 'all'. Hexagon-reuse roles read that season's
+// own seasonsDetail[season].qcRoles (the pipeline's per-season hexagon
+// scores, already shipped for every qualifying season, not just the
+// latest), rather than qcRoleCareerScores.
+function resolveRoleDefSeason(pos, sd, def) {
+  if (def.weights) return weightedPct(pos, sd, def.weights);
+  if (def.maxOf) {
+    const vals = def.maxOf.map(d => resolveRoleDefSeason(pos, sd, d)).filter(v => v != null);
+    return vals.length ? Math.max(...vals) : null;
+  }
+  if (def.hexagon) return (sd.qcRoles && sd.qcRoles[def.hexagon]) ?? null;
+  return null;
+}
+
+// The role scores (0-100) for one player at one position, for ONE season's
+// data only (no career blend) — sd is a seasonsDetail-shaped entry, e.g.
+// from seasonDetailFor(player, season, leagues). Returns null if sd has no
+// usable data for this position's roles.
+export function roleScoresForSeason(pos, sd) {
+  const cfg = ARCHETYPE_CONFIG[pos];
+  if (!cfg || !sd) return null;
+  const scores = {};
+  for (const [roleName, def] of Object.entries(cfg.roles)) scores[roleName] = resolveRoleDefSeason(pos, sd, def);
+  if (Object.values(scores).every(v => v == null)) return null;
+  return scores;
+}
+
 // { kind: 'complete'|'hybrid'|'dominant'|'generalist'|'none', key, label, color }
 export function classifyArchetype(pos, roleScores) {
   const cfg = ARCHETYPE_CONFIG[pos];
@@ -182,12 +211,16 @@ function percentileRanks(values) {
 // `players` against each other (the current filtered Scout Index pool) —
 // recomputed whenever that pool changes, matching how Feature Q itself
 // recomputes per its own league filter rather than a fixed global percentile.
-export function computeQuadrantScores(pos, players) {
+// seasonDetailOf(player) resolves which season's raw data to use per player;
+// defaults to each player's own latest qualifying season (unchanged
+// behaviour) when the caller doesn't pass one — e.g. when the scatter's
+// season filter is 'all', or for the career-only callers in tests.
+export function computeQuadrantScores(pos, players, seasonDetailOf = latestSeasonDetail) {
   const cfg = ARCHETYPE_CONFIG[pos];
   const { x, y, names } = cfg.quadrant;
   const rows = [];
   for (const p of players) {
-    const sd = latestSeasonDetail(p);
+    const sd = seasonDetailOf(p);
     if (!sd) continue;
     const xRaw = {}, yRaw = {}; let ok = true;
     for (const m of Object.keys(x.w)) { const v = rawFromSeason(pos, sd, m); if (v == null || Number.isNaN(v)) { ok = false; break; } xRaw[m] = v; }

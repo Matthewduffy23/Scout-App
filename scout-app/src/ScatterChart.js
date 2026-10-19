@@ -4,7 +4,7 @@ import { SCORE_TIERS, POS_COLORS, METRIC_OPTIONS, METRIC_OPTIONS_EXTRA, seasonDe
 import { useIsMobile, deliverPng } from './utils';
 import { ensureMontserratEmbedded } from './CoachCard';
 import { barColor } from './QuickCard';
-import { roleScoresFor, classifyArchetype, computeQuadrantScores } from './archetypeEngine';
+import { roleScoresFor, roleScoresForSeason, classifyArchetype, computeQuadrantScores } from './archetypeEngine';
 import { ARCHETYPE_CONFIG } from './archetypeConfig';
 
 // Scatter view of the current Scout Index result list: plots the top N of the
@@ -783,7 +783,7 @@ function playerScoreQuad(xf, yf, topPts, targetMin, roleKey) {
 // tooltip lines, group-highlight conditions, and what a double-click opens.
 export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLines, buildFields: buildFieldsFor, defaultX, defaultY,
   metricLabel = 'Per-90 value', colorModes, colorOf: colorOfMode, legendBase, scoreQuad, targetTiers, groups = [], leagueOf,
-  noun = 'player', openLabel = 'Open profile', onSelect, onClose, contextLabel, defaultMedianOn = true, defaultSample = 50 }) {
+  noun = 'player', openLabel = 'Open profile', onSelect, onClose, contextLabel, defaultMedianOn = true, defaultSample = 50, archetypeSeasonLabel }) {
   // searchPool: an unfiltered roster to search for the "ignores filters" add — falls
   // back to items (no override) when the caller doesn't have one (e.g. Team Index).
   const pool = searchPool && searchPool.length ? searchPool : items;
@@ -938,9 +938,9 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
         // below (who gets a forced name) — the draw code no longer lets
         // `muted` force a flat grey fill when this style is active.
         const under = underlyingColorOf(p);
-        return isIn ? under : { ...under, muted: true };
+        return isIn ? { ...under, inGrp: true } : { ...under, muted: true, inGrp: false };
       }
-      return isIn ? { g: 'in', color: GROUP_RED } : { g: 'out', color: GROUP_OUT, muted: true };
+      return isIn ? { g: 'in', color: GROUP_RED, inGrp: true } : { g: 'out', color: GROUP_OUT, muted: true, inGrp: false };
     }
     return underlyingColorOf(p);
   }, [inGroup, underlyingColorOf, forcedIds, idOf, highlightStyle]);
@@ -1025,12 +1025,12 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
       : legendBase(colorBy);
     return base.filter(it => c[it.key]).map(it => ({ ...it, count: c[it.key] }));
   }, [topPts, colorBy, inGroup, groupLabel, legendBase, mScale, cf, plainColor, leagueColor, highlightStyle]);
-  const groupCount = inGroup ? topPts.filter(d => d.g === 'in').length : 0;
+  const groupCount = inGroup ? topPts.filter(d => d.inGrp).length : 0;
 
   const colorLabel = colorBy === 'metric' ? `Colour: ${baseName(cf)}` : allColorModes.find(o => o[0] === colorBy)?.[1] || colorModes[0]?.[1] || '';
   const autoTitle = `${yf.label} vs ${xf.label}`;
   const title = customTitle.trim() || autoTitle;
-  const subtitle = `${sample.length} Sample · ${contextLabel}${inGroup ? ` · highlighted: ${groupLabel} (${groupCount})` : ''}${hlNames.length ? ` · highlighted: ${hlNames.length > 4 ? `${hlNames.slice(0, 4).join(', ')} +${hlNames.length - 4} more` : hlNames.join(', ')}` : ''}`;
+  const subtitle = `${sample.length} Sample · ${contextLabel}${colorBy === 'archetype' && archetypeSeasonLabel ? ` · Archetypes: ${archetypeSeasonLabel}` : ''}${inGroup ? ` · highlighted: ${groupLabel} (${groupCount})` : ''}${hlNames.length ? ` · highlighted: ${hlNames.length > 4 ? `${hlNames.slice(0, 4).join(', ')} +${hlNames.length - 4} more` : hlNames.join(', ')}` : ''}`;
 
   useEffect(() => {
     const measure = () => { const w = wrapRef.current?.offsetWidth; if (w) setWidth(w); };
@@ -1386,18 +1386,31 @@ const archetypeLegend = pos => {
 
 export default function ScatterChart({ players, allPlayers, getDisplayScore, seasonFilter, scoreMode, rawMode, outlierMode, roleKey, leagues, onSelect, onClose, contextLabel }) {
   const hasArchetype = !!ARCHETYPE_CONFIG[roleKey];
+  // Both the quadrant axes and the archetype colour follow the sidebar's
+  // season filter, same convention as every other season-aware field in
+  // this file: 'all' -> each player's own latest qualifying season (axes)
+  // / career blend (colour, matches the hexagon); a specific season ->
+  // that season's row only, via the same seasonDetailFor the rest of the
+  // app uses (handles the league-filter/multi-club disambiguation).
   // Archetype data for the current filtered pool — recomputed only when that
-  // pool or the position-group filter changes. The quadrant axes are pool-
-  // relative (Feature Q's own convention), so they live here; role scores
-  // are pool-independent (a pure function of each player's own data) but
-  // are still computed per-pool for simplicity/locality.
-  const archPoolScores = useMemo(() => (hasArchetype ? computeQuadrantScores(roleKey, players) : null), [hasArchetype, roleKey, players]);
+  // pool, the position-group filter, or the season/league filter changes.
+  // The quadrant axes are pool-relative (Feature Q's own convention), so
+  // they live here; role scores are pool-independent (a pure function of
+  // each player's own data) but are still computed per-pool for
+  // simplicity/locality.
+  const archPoolScores = useMemo(() => (hasArchetype
+    ? computeQuadrantScores(roleKey, players, p => seasonDetailFor(p, seasonFilter, leagues))
+    : null), [hasArchetype, roleKey, players, seasonFilter, leagues]);
   const archetypeMap = useMemo(() => {
     if (!hasArchetype) return null;
     const m = new Map();
-    for (const p of players) { const types = roleScoresFor(roleKey, p); m.set(p.id, { types, arch: classifyArchetype(roleKey, types) }); }
+    for (const p of players) {
+      const types = seasonFilter === 'all' ? roleScoresFor(roleKey, p) : roleScoresForSeason(roleKey, seasonDetailFor(p, seasonFilter, leagues));
+      m.set(p.id, { types, arch: classifyArchetype(roleKey, types) });
+    }
     return m;
-  }, [hasArchetype, roleKey, players]);
+  }, [hasArchetype, roleKey, players, seasonFilter, leagues]);
+  const archetypeSeasonLabel = hasArchetype ? (seasonFilter === 'all' ? 'career blend' : seasonFilter) : null;
   const buildFieldsFor = useCallback(metricMode => buildFields({ getDisplayScore, seasonFilter, scoreMode, rawMode, outlierMode, metricMode, roleKey, leagues, archPoolScores }),
     [getDisplayScore, seasonFilter, scoreMode, rawMode, outlierMode, roleKey, leagues, archPoolScores]);
   const displayIsScore = tableIsScore({ seasonFilter, scoreMode, rawMode, outlierMode });
@@ -1440,6 +1453,6 @@ export default function ScatterChart({ players, allPlayers, getDisplayScore, sea
     <ScatterView items={players} searchPool={allPlayers} idOf={playerId} nameOf={playerName} subOf={playerSub} tooltipLines={playerTip} leagueOf={playerLeague}
       buildFields={buildFieldsFor} defaultX="potentialScore" defaultY={seasonFilter !== 'all' ? 'display' : 'careerScore'} metricLabel="Per-90 value"
       colorModes={colorModes} colorOf={colorOf} legendBase={legendBase} scoreQuad={scoreQuadFn} targetTiers={TARGET_TIERS}
-      groups={groups} noun="player" openLabel="Open profile" onSelect={onSelect} onClose={onClose} contextLabel={contextLabel}/>
+      groups={groups} noun="player" openLabel="Open profile" onSelect={onSelect} onClose={onClose} contextLabel={contextLabel} archetypeSeasonLabel={archetypeSeasonLabel}/>
   );
 }
