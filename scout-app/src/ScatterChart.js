@@ -4,7 +4,8 @@ import { SCORE_TIERS, POS_COLORS, METRIC_OPTIONS, METRIC_OPTIONS_EXTRA, seasonDe
 import { useIsMobile, deliverPng } from './utils';
 import { ensureMontserratEmbedded } from './CoachCard';
 import { barColor } from './QuickCard';
-import { cmTypeScores, classifyCmArchetype, computeCmPoolScores, ARCHETYPE_COLORS, CM_TYPE_KEYS, CM_KEPT_HYBRIDS } from './cmArchetype';
+import { roleScoresFor, classifyArchetype, computeQuadrantScores } from './archetypeEngine';
+import { ARCHETYPE_CONFIG } from './archetypeConfig';
 
 // Scatter view of the current Scout Index result list: plots the top N of the
 // already filtered + sorted players (App passes `sorted`). Canvas, drawn by one
@@ -127,13 +128,15 @@ function buildFields(ctx) {
     { key:'seasons', group:'Profile', neutral:true, label:'Seasons', get:p=>p.seasons },
     { key:'gbeTotal', group:'Profile', label:'GBE points', get:p=>p.gbeTotal },
   ];
-  // CM archetype axes (Feature Q formulas, ranked within the current filtered
-  // pool — see cmArchetype.js). Deliberately not scoreScale: these are 0-100
-  // relative-to-pool percentiles, not level-band scores, so they get the
-  // custom 50/50 quadrant in playerScoreQuad() below instead of band lines.
-  if (ctx.roleKey === 'CM') {
-    f.push({ key:'possessionScore', group:'CM Archetype', label:'Possession Score', short:'Possession', get:p=>ctx.cmPoolScores?.get(p.id)?.possessionScore ?? null });
-    f.push({ key:'defensiveScore', group:'CM Archetype', label:'Defensive Score', short:'Defensive', get:p=>ctx.cmPoolScores?.get(p.id)?.defensiveScore ?? null });
+  // Archetype quadrant axes (Feature Q formulas per position, ranked within
+  // the current filtered pool — see archetypeConfig.js/archetypeEngine.js).
+  // Deliberately not scoreScale: these are 0-100 relative-to-pool
+  // percentiles, not level-band scores, so they get the custom 50/50
+  // quadrant in playerScoreQuad() below instead of band lines.
+  if (ARCHETYPE_CONFIG[ctx.roleKey]) {
+    const qcfg = ARCHETYPE_CONFIG[ctx.roleKey].quadrant;
+    f.push({ key:'quadX', group:'Archetype', label:qcfg.x.label, short:qcfg.x.label, get:p=>ctx.archPoolScores?.get(p.id)?.x ?? null });
+    f.push({ key:'quadY', group:'Archetype', label:qcfg.y.label, short:qcfg.y.label, get:p=>ctx.archPoolScores?.get(p.id)?.y ?? null });
   }
   // Role scores: only for a single position group (roles from different groups aren't
   // comparable). They follow the season filter: all seasons = career role score, a
@@ -513,16 +516,19 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
   ctx.fillText(yf.label, 0, 0); ctx.restore();
 
   // ── Dots ─────────────────────────────────────────────────────────────────
-  // d.kind (CM Archetype colour mode only — undefined everywhere else, so this
+  // d.kind (Archetype colour mode only — undefined everywhere else, so this
   // is a no-op for every other point): 'none' draws smaller ("No clear
-  // profile"), 'hybrid' gets a thin white outline instead of the normal ring.
+  // profile"). No outline/ring distinction for any archetype — every
+  // archetype gets its own flat colour instead (see archetypeConfig.js).
+  // d.muted (Label-only + a group/age filter): the dot keeps its real
+  // colour instead of the flat "out of group" grey — see colorOf() above.
   const ringDot = (d, rad, alpha) => {
     const rr = d.kind === 'none' ? rad * 0.7 : rad;
     ctx.globalAlpha = alpha;
     ctx.beginPath(); ctx.arc(xS(d.x), yS(d.y), rr, 0, Math.PI*2);
-    ctx.fillStyle = d.muted ? T.muted : d.plain ? T.plain : d.color; ctx.fill();
-    ctx.strokeStyle = d.kind === 'hybrid' ? '#ffffff' : T.ring;
-    ctx.lineWidth = (d.kind === 'hybrid' ? 1.5 : T.ringW) * fs;
+    ctx.fillStyle = (d.muted && !labelOnly) ? T.muted : d.plain ? T.plain : d.color; ctx.fill();
+    ctx.strokeStyle = T.ring;
+    ctx.lineWidth = T.ringW * fs;
     ctx.stroke();
     ctx.globalAlpha = 1;
   };
@@ -538,7 +544,7 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
   const labelOnly = !!(hl && highlightStyle === 'label' && !group);
   const solo = !!(hl && soloLabel && !redDot);
   const fade = hl && !solo && !group && !redDot && !labelOnly ? 0.25 : 0.95;
-  const dotColor = d => (d.muted ? T.muted : d.color);
+  const dotColor = d => ((d.muted && !labelOnly) ? T.muted : d.color);
   for (const pass of group ? [true, false] : [null]) {
     for (let i = visible.length - 1; i >= 0; i--) {
       const d = visible[i];
@@ -731,17 +737,19 @@ const OPS = { le: ['≤', (a, b) => a <= b], eq: ['=', (a, b) => a === b], ge: [
 // higher (potential >= current for every player, so an equal split would leave one
 // quadrant permanently empty). Auto target = the band cutoff closest to the median
 // current score on the plot.
-function playerScoreQuad(xf, yf, topPts, targetMin) {
-  // CM Possession Score vs Defensive Score: fixed 50/50 split, Feature Q's own
-  // four names — independent of scoreScale/CHART_TIERS banding, which don't
-  // apply to a pool-relative percentile pair.
-  const xPoss = xf.key === 'possessionScore', xDef = xf.key === 'defensiveScore';
-  const yPoss = yf.key === 'possessionScore', yDef = yf.key === 'defensiveScore';
-  if ((xPoss && yDef) || (xDef && yPoss)) {
+function playerScoreQuad(xf, yf, topPts, targetMin, roleKey) {
+  // Archetype quadrant (any position): fixed 50/50 split, Feature Q's own
+  // four names for that position — independent of scoreScale/CHART_TIERS
+  // banding, which don't apply to a pool-relative percentile pair.
+  const quadXIsX = xf.key === 'quadX' && yf.key === 'quadY';
+  const quadXIsY = xf.key === 'quadY' && yf.key === 'quadX';
+  if ((quadXIsX || quadXIsY) && ARCHETYPE_CONFIG[roleKey]) {
     if (!topPts.length) return null;
-    const names = xPoss
-      ? { tr:'All Action', tl:'Defensive', br:'Playmaker', bl:'Limited' }
-      : { tr:'All Action', tl:'Playmaker', br:'Defensive', bl:'Limited' };
+    const qn = ARCHETYPE_CONFIG[roleKey].quadrant.names;
+    // config's "x" axis (quadX) on the chart's x vs on the chart's y flips which corner is which.
+    const names = quadXIsX
+      ? { tr: qn.both, tl: qn.yOnly, br: qn.xOnly, bl: qn.neither }
+      : { tr: qn.both, tl: qn.xOnly, br: qn.yOnly, bl: qn.neither };
     return { xSplit:50, ySplit:50, names, alt:names, tint:{ tr:'best', br:'x', tl:'y', bl:null } };
   }
   if (!xf.scoreScale || !yf.scoreScale || !topPts.length) return null;
@@ -782,7 +790,7 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
   const [colorBy, setColorBy] = useState(colorModes[0]?.[0] ?? 'plain');
   const [colorKey, setColorKey] = useState(defaultY); // colour-by-metric field
   const [plainColor, setPlainColor] = useState(null); // Plain mode: null = theme default grey
-  const [highlightStyle, setHighlightStyle] = useState('full'); // 'full' | 'dot'
+  const [highlightStyle, setHighlightStyle] = useState('full'); // 'full' | 'dot' | 'label'
   const [quadNames, setQuadNames] = useState({}); // user overrides for the four quadrant labels
   const [showNames, setShowNames] = useState(true);
   // Group mode only: also label every non-group player, not just the group.
@@ -894,16 +902,32 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
   }, [colorBy, leagueOf, top]);
   // Colour-by-metric ranks against the Sample (minus removed items).
   const mScale = useMemo(() => (colorBy === 'metric' ? metricScale(top.map(p => cf.get(p)), cf) : null), [colorBy, top, cf]);
-  const colorOf = useCallback(p => {
-    // A forced-in player (added despite filters) always reads as a group member —
-    // the point of that search is to compare them against the group, not to test
-    // whether they actually belong to it.
-    if (inGroup) return (inGroup(p) || forcedIds.has(idOf(p))) ? { g: 'in', color: GROUP_RED } : { g: 'out', color: GROUP_OUT, muted: true };
+  // The colour a point gets when no group is overriding it — used as-is when
+  // there's no group, and reused (instead of the forced red/grey) by every
+  // group-like mechanism (Team group, an age filter, any future groups[]
+  // entry) when Label-only is selected, so "keeps its normal colour" holds
+  // for every grouping option, not just the plain highlightIds case.
+  const underlyingColorOf = useCallback(p => {
     if (colorBy === 'plain') return plainColor ? { g: 'all', color: plainColor } : { g: 'all', color: PLAIN_SWATCH, plain: true };
     if (colorBy === 'league' && leagueColor) { const l = leagueOf(p); return leagueColor.has(l) ? { g: 'L:' + l, color: leagueColor.get(l) } : { g: 'L:other', color: LEAGUE_OTHER }; }
     if (colorBy === 'metric') { const v = cf.get(p); return mScale && Number.isFinite(v) ? { g: 'val', color: mScale.color(v) } : { g: 'none', color: NODATA_COLOR }; }
     return colorOfMode(p, colorBy);
-  }, [inGroup, colorOfMode, colorBy, cf, mScale, plainColor, leagueColor, leagueOf, forcedIds, idOf]);
+  }, [colorOfMode, colorBy, cf, mScale, plainColor, leagueColor, leagueOf]);
+
+  const colorOf = useCallback(p => {
+    // A forced-in player (added despite filters) always reads as a group member —
+    // the point of that search is to compare them against the group, not to test
+    // whether they actually belong to it.
+    if (inGroup) {
+      const isIn = inGroup(p) || forcedIds.has(idOf(p));
+      if (highlightStyle === 'label') {
+        const under = underlyingColorOf(p);
+        return isIn ? { ...under, g: 'in' } : { ...under, g: 'out', muted: true };
+      }
+      return isIn ? { g: 'in', color: GROUP_RED } : { g: 'out', color: GROUP_OUT, muted: true };
+    }
+    return underlyingColorOf(p);
+  }, [inGroup, underlyingColorOf, forcedIds, idOf, highlightStyle]);
 
   const toPoint = useCallback((p, extra) => {
     const forced = forcedIds.has(idOf(p));
@@ -1327,40 +1351,46 @@ export const playerGroups = clubOf => [
     labelOf:v => { const [t, l] = v.split('|'); return `${t} (${l})`; } },
 ];
 const playerId = p => p.id, playerName = p => p.name;
-const CM_ARCHETYPE_LEGEND = [
-  ...CM_TYPE_KEYS.map(k => ({ key: k, label: k, color: ARCHETYPE_COLORS[k] })),
-  ...CM_KEPT_HYBRIDS.map(label => ({ key: label, label, color: ARCHETYPE_COLORS[label] })),
-  { key: 'Generalist', label: 'Generalist', color: ARCHETYPE_COLORS['Generalist'] },
-  { key: 'No clear profile', label: 'No clear profile', color: ARCHETYPE_COLORS['No clear profile'] },
-];
-const playerLegendBase = mode => (mode === 'position'
-  ? [...POS_ORDER, 'Other'].map(g => ({ key: g, label: g, color: POS_COLORS[g] || OTHER_COLOR }))
-  : mode === 'archetype' ? CM_ARCHETYPE_LEGEND
-  : [...SCORE_BUCKETS, { key: 'none', label: 'No data', color: NODATA_COLOR }]);
 const fmtType = v => Number.isFinite(v) ? Math.round(v) : '—';
+const archetypeLegend = pos => {
+  const cfg = ARCHETYPE_CONFIG[pos];
+  if (!cfg) return [];
+  return [
+    { key: cfg.completeLabel, label: cfg.completeLabel, color: cfg.colors[cfg.completeLabel] },
+    ...cfg.mainTypes.map(k => ({ key: k, label: k, color: cfg.colors[k] })),
+    ...cfg.hybridNames.map(label => ({ key: label, label, color: cfg.colors[label] })),
+    { key: 'Generalist', label: 'Generalist', color: cfg.colors.Generalist },
+    { key: 'No clear profile', label: 'No clear profile', color: cfg.colors['No clear profile'] },
+  ];
+};
 
 export default function ScatterChart({ players, allPlayers, getDisplayScore, seasonFilter, scoreMode, rawMode, outlierMode, roleKey, leagues, onSelect, onClose, contextLabel }) {
-  const isCM = roleKey === 'CM';
-  // CM archetype data for the current filtered pool — recomputed only when
-  // that pool or the position-group filter changes. Possession/Defensive
-  // Score are pool-relative (Feature Q's own convention), so they live here;
-  // the 8 types are pool-independent (a pure function of each player's own
-  // data) but are still computed per-pool for simplicity/locality.
-  const cmPoolScores = useMemo(() => (isCM ? computeCmPoolScores(players) : null), [isCM, players]);
-  const cmArchetypeMap = useMemo(() => {
-    if (!isCM) return null;
+  const hasArchetype = !!ARCHETYPE_CONFIG[roleKey];
+  // Archetype data for the current filtered pool — recomputed only when that
+  // pool or the position-group filter changes. The quadrant axes are pool-
+  // relative (Feature Q's own convention), so they live here; role scores
+  // are pool-independent (a pure function of each player's own data) but
+  // are still computed per-pool for simplicity/locality.
+  const archPoolScores = useMemo(() => (hasArchetype ? computeQuadrantScores(roleKey, players) : null), [hasArchetype, roleKey, players]);
+  const archetypeMap = useMemo(() => {
+    if (!hasArchetype) return null;
     const m = new Map();
-    for (const p of players) { const types = cmTypeScores(p); m.set(p.id, { types, arch: classifyCmArchetype(types) }); }
+    for (const p of players) { const types = roleScoresFor(roleKey, p); m.set(p.id, { types, arch: classifyArchetype(roleKey, types) }); }
     return m;
-  }, [isCM, players]);
-  const buildFieldsFor = useCallback(metricMode => buildFields({ getDisplayScore, seasonFilter, scoreMode, rawMode, outlierMode, metricMode, roleKey, leagues, cmPoolScores }),
-    [getDisplayScore, seasonFilter, scoreMode, rawMode, outlierMode, roleKey, leagues, cmPoolScores]);
+  }, [hasArchetype, roleKey, players]);
+  const buildFieldsFor = useCallback(metricMode => buildFields({ getDisplayScore, seasonFilter, scoreMode, rawMode, outlierMode, metricMode, roleKey, leagues, archPoolScores }),
+    [getDisplayScore, seasonFilter, scoreMode, rawMode, outlierMode, roleKey, leagues, archPoolScores]);
   const displayIsScore = tableIsScore({ seasonFilter, scoreMode, rawMode, outlierMode });
   const colorModes = useMemo(() => [
     ['position', 'Position'], ['careerScore', 'Career score'], ['potentialScore', 'Potential'],
     ...(displayIsScore ? [['display', `Table score · ${tableScoreLabel({ seasonFilter, scoreMode, rawMode, outlierMode })}`]] : []),
-    ...(isCM ? [['archetype', 'Archetype']] : []),
-  ], [displayIsScore, seasonFilter, scoreMode, rawMode, outlierMode, isCM]);
+    ...(hasArchetype ? [['archetype', 'Archetype']] : []),
+  ], [displayIsScore, seasonFilter, scoreMode, rawMode, outlierMode, hasArchetype]);
+  const legendBase = useCallback(mode => (mode === 'position'
+    ? [...POS_ORDER, 'Other'].map(g => ({ key: g, label: g, color: POS_COLORS[g] || OTHER_COLOR }))
+    : mode === 'archetype' ? archetypeLegend(roleKey)
+    : [...SCORE_BUCKETS, { key: 'none', label: 'No data', color: NODATA_COLOR }]), [roleKey]);
+  const scoreQuadFn = useCallback((xf, yf, topPts, targetMin) => playerScoreQuad(xf, yf, topPts, targetMin, roleKey), [roleKey]);
   // club + league for the selected season (same helper as the table)
   const playerSub = useCallback(p => seasonClubFor(p, seasonFilter, leagues).team, [seasonFilter, leagues]);
   const playerLeague = useCallback(p => seasonClubFor(p, seasonFilter, leagues).league, [seasonFilter, leagues]);
@@ -1368,28 +1398,28 @@ export default function ScatterChart({ players, allPlayers, getDisplayScore, sea
   const playerTip = useCallback(p => {
     const c = seasonClubFor(p, seasonFilter, leagues);
     const lines = [`${c.team} · ${c.league}${seasonFilter !== 'all' ? ` (${seasonFilter})` : ''}`, `${p.position} · age ${p.age}`];
-    const rec = cmArchetypeMap?.get(p.id);
+    const rec = archetypeMap?.get(p.id);
     if (rec && rec.arch) {
-      const top2 = Object.entries(rec.types || {}).filter(([, v]) => v != null).sort((a, b) => b[1] - a[1]).slice(0, 2);
-      const top2Txt = top2.map(([k, v]) => `${k} ${fmtType(v)}`).join(', ');
-      lines.push(`Archetype: ${rec.arch.label}${top2Txt ? ` (${top2Txt})` : ''}`);
+      const top3 = Object.entries(rec.types || {}).filter(([, v]) => v != null).sort((a, b) => b[1] - a[1]).slice(0, 3);
+      const top3Txt = top3.map(([k, v]) => `${k} ${fmtType(v)}`).join(', ');
+      lines.push(`Archetype: ${rec.arch.label}${top3Txt ? ` (${top3Txt})` : ''}`);
     }
     return lines;
-  }, [seasonFilter, leagues, cmArchetypeMap]);
+  }, [seasonFilter, leagues, archetypeMap]);
   const colorOf = useCallback((p, mode) => {
     if (mode === 'position') return POS_COLORS[p.roleKey] ? { g: p.roleKey, color: POS_COLORS[p.roleKey] } : { g: 'Other', color: OTHER_COLOR };
     if (mode === 'archetype') {
-      const rec = cmArchetypeMap?.get(p.id);
+      const rec = archetypeMap?.get(p.id);
       if (!rec || !rec.arch) return { g: 'none', color: NODATA_COLOR };
       return { g: rec.arch.key, color: rec.arch.color, kind: rec.arch.kind };
     }
     const v = mode === 'display' ? getDisplayScore(p) : p[mode];
     return Number.isFinite(v) ? { g: scoreBucketKey(v), color: scoreDotColor(v) } : { g: 'none', color: NODATA_COLOR };
-  }, [getDisplayScore, cmArchetypeMap]);
+  }, [getDisplayScore, archetypeMap]);
   return (
     <ScatterView items={players} searchPool={allPlayers} idOf={playerId} nameOf={playerName} subOf={playerSub} tooltipLines={playerTip} leagueOf={playerLeague}
       buildFields={buildFieldsFor} defaultX="potentialScore" defaultY={seasonFilter !== 'all' ? 'display' : 'careerScore'} metricLabel="Per-90 value"
-      colorModes={colorModes} colorOf={colorOf} legendBase={playerLegendBase} scoreQuad={playerScoreQuad} targetTiers={TARGET_TIERS}
+      colorModes={colorModes} colorOf={colorOf} legendBase={legendBase} scoreQuad={scoreQuadFn} targetTiers={TARGET_TIERS}
       groups={groups} noun="player" openLabel="Open profile" onSelect={onSelect} onClose={onClose} contextLabel={contextLabel}/>
   );
 }
