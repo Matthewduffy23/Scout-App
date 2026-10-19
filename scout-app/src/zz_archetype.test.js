@@ -4,7 +4,7 @@
 import fs from 'fs';
 import path from 'path';
 import { roleScoresFor, classifyArchetype, computeQuadrantScores } from './archetypeEngine';
-import { ARCHETYPE_CONFIG, COMPLETE_THRESHOLD, COMPLETE_MIN_ROLES, GENERALIST_THRESHOLD, GENERALIST_MIN_ROLES } from './archetypeConfig';
+import { ARCHETYPE_CONFIG, COMPLETE_MIN_ROLES, GENERALIST_THRESHOLD, GENERALIST_MIN_ROLES } from './archetypeConfig';
 
 const PUB = path.join(__dirname, '..', 'public');
 const MIN_MINUTES = 900;
@@ -25,17 +25,76 @@ function loadPool(pos) {
   return pool;
 }
 
-test('ARCHETYPE_CONFIG: every position has roles, quadrant, hybrids and a full colour set', () => {
+test('ARCHETYPE_CONFIG: every position has roles, quadrant, max 3 hybrids, mainTypes, and a full colour set', () => {
   for (const pos of ['GK', 'CB', 'FB', 'CM', 'ATT', 'CF']) {
     const cfg = ARCHETYPE_CONFIG[pos];
     expect(cfg).toBeTruthy();
     expect(Object.keys(cfg.roles).length).toBeGreaterThan(0);
+    expect(cfg.hybrids.length).toBeLessThanOrEqual(3);
     expect(cfg.quadrant.x.w).toBeTruthy();
     expect(cfg.quadrant.y.w).toBeTruthy();
     expect(cfg.colors[cfg.completeLabel]).toBe('#f8fafc');
     expect(cfg.colors.Generalist).toBe('#ca8a04');
     expect(cfg.colors['No clear profile']).toBe('#64748b');
     for (const name of [...cfg.mainTypes, ...cfg.hybridNames]) expect(cfg.colors[name]).toBeTruthy();
+    // every mainType must itself be a computed role
+    for (const name of cfg.mainTypes) expect(cfg.roles[name]).toBeTruthy();
+  }
+});
+
+test('ATT Creator is computed but excluded from mainTypes (hybrid-only input, never a standalone label)', () => {
+  const cfg = ARCHETYPE_CONFIG.ATT;
+  expect(cfg.roles.Creator).toBeTruthy();
+  expect(cfg.mainTypes).not.toContain('Creator');
+  expect(cfg.hybrids.some(h => h.roles.includes('Creator'))).toBe(true);
+  // Dominant Creator score alone (nothing else close) must NOT become dominant Creator.
+  const r = classifyArchetype('ATT', { Creator: 90, 'Deep Playmaker': 10, 'Goal Threat': 10, Dribbler: 10, 'Wide Playmaker': 10, Sustainer: 10 });
+  expect(r.kind).not.toBe('dominant');
+  expect(r.key).not.toBe('Creator');
+});
+
+test('ATT Complete uses the overridden threshold (80), not the default 75', () => {
+  expect(ARCHETYPE_CONFIG.ATT.completeThreshold).toBe(80);
+  const at75 = classifyArchetype('ATT', { 'Deep Playmaker': 76, 'Goal Threat': 77, Dribbler: 76, 'Wide Playmaker': 10, Sustainer: 10, Creator: 10 });
+  expect(at75.kind).not.toBe('complete'); // 76/77/76 clears the old 75 bar but not ATT's 80
+  const at80 = classifyArchetype('ATT', { 'Deep Playmaker': 81, 'Goal Threat': 82, Dribbler: 80, 'Wide Playmaker': 10, Sustainer: 10, Creator: 10 });
+  expect(at80.kind).toBe('complete');
+});
+
+test('classifyArchetype cascade (CM, trimmed roles — no Box-to-Box): complete, 2-role hybrid, dominant, generalist, none', () => {
+  const cfg = ARCHETYPE_CONFIG.CM;
+  expect(Object.keys(cfg.roles).sort()).toEqual(['Anchor', 'Attacking Midfielder', 'Ball Carrier', 'Ball-Winner', 'DLP', 'Playmaker'].sort());
+  const complete = classifyArchetype('CM', { DLP: 80, Playmaker: 78, 'Ball-Winner': 76, Anchor: 20, 'Attacking Midfielder': 20, 'Ball Carrier': 20 });
+  expect(complete).toEqual({ kind: 'complete', key: cfg.completeLabel, label: cfg.completeLabel, color: '#f8fafc' });
+  const hybrid = classifyArchetype('CM', { DLP: 72, Playmaker: 68, 'Ball-Winner': 20, Anchor: 20, 'Attacking Midfielder': 20, 'Ball Carrier': 20 });
+  expect(hybrid).toEqual({ kind: 'hybrid', key: 'All-Phase Passer', label: 'All-Phase Passer', color: cfg.colors['All-Phase Passer'] });
+  const dominant = classifyArchetype('CM', { DLP: 70, Playmaker: 30, 'Ball-Winner': 20, Anchor: 20, 'Attacking Midfielder': 20, 'Ball Carrier': 20 });
+  expect(dominant).toEqual({ kind: 'dominant', key: 'DLP', label: 'DLP', color: cfg.colors.DLP });
+  // Generalist threshold is now 50 (was 54) — 3 roles at exactly 50+ qualifies.
+  const generalist = classifyArchetype('CM', { DLP: 52, Playmaker: 51, 'Ball-Winner': 50, Anchor: 20, 'Attacking Midfielder': 20, 'Ball Carrier': 20 });
+  expect(generalist).toEqual({ kind: 'generalist', key: 'Generalist', label: 'Generalist', color: '#ca8a04' });
+  const none = classifyArchetype('CM', { DLP: 40, Playmaker: 38, 'Ball-Winner': 20, Anchor: 20, 'Attacking Midfielder': 20, 'Ball Carrier': 20 });
+  expect(none).toEqual({ kind: 'none', key: 'No clear profile', label: 'No clear profile', color: '#64748b' });
+});
+
+test('classifyArchetype (CB): Ball-Playing CB = max(Ball Player, Progresser) feeds Build-Up Specialist hybrid, no 3-role hybrid remains', () => {
+  const cfg = ARCHETYPE_CONFIG.CB;
+  expect(cfg.hybrids.length).toBe(2);
+  expect(cfg.hybrids.map(h => h.name).sort()).toEqual(['Build-Up Specialist', 'Dominant Defender'].sort());
+  const r = classifyArchetype('CB', { 'Ball-Playing CB': 68, 'Ball Carrier': 62, Aerial: 10, Aggressor: 10, Stopper: 10 });
+  expect(r).toEqual({ kind: 'hybrid', key: 'Build-Up Specialist', label: 'Build-Up Specialist', color: cfg.colors['Build-Up Specialist'] });
+});
+
+test('GK, CB, CF quadrant "both" corner is renamed All-Round, not Complete (reserved for the archetype tier)', () => {
+  for (const pos of ['GK', 'CB', 'CF']) expect(ARCHETYPE_CONFIG[pos].quadrant.names.both).toBe('All-Round');
+  expect(ARCHETYPE_CONFIG.FB.quadrant.names.both).toBe('Two-Way');
+  expect(ARCHETYPE_CONFIG.ATT.quadrant.names.both).toBe('Multi-Threat');
+  expect(ARCHETYPE_CONFIG.CM.quadrant.names.both).toBe('All Action');
+  // no hybrid or quadrant name is the bare word "Complete" anywhere
+  for (const pos of Object.keys(ARCHETYPE_CONFIG)) {
+    const cfg = ARCHETYPE_CONFIG[pos];
+    expect(Object.values(cfg.quadrant.names)).not.toContain('Complete');
+    expect(cfg.hybridNames).not.toContain('Complete');
   }
 });
 
@@ -48,33 +107,6 @@ test('roleScoresFor: real player, every position, scores are 0-100 or null and k
     expect(Object.keys(scores).sort()).toEqual(Object.keys(ARCHETYPE_CONFIG[pos].roles).sort());
     for (const v of Object.values(scores)) if (v != null) { expect(v).toBeGreaterThanOrEqual(0); expect(v).toBeLessThanOrEqual(100); }
   }
-});
-
-test('classifyArchetype cascade (CM): complete, 3-role n/a, 2-role hybrid, dominant, generalist, none', () => {
-  const cfg = ARCHETYPE_CONFIG.CM;
-  // a) Complete: 3+ roles >=75
-  const complete = classifyArchetype('CM', { DLP: 80, Playmaker: 78, 'Ball-Winner': 76, Anchor: 20, 'Attacking Midfielder': 20, 'Ball Carrier': 20, 'Box-to-Box': 20 });
-  expect(complete).toEqual({ kind: 'complete', key: cfg.completeLabel, label: cfg.completeLabel, color: '#f8fafc' });
-  // c) 2-role hybrid: DLP+Playmaker >=60, gap<8 -> All-Phase Passer
-  const hybrid = classifyArchetype('CM', { DLP: 72, Playmaker: 68, 'Ball-Winner': 20, Anchor: 20, 'Attacking Midfielder': 20, 'Ball Carrier': 20, 'Box-to-Box': 20 });
-  expect(hybrid).toEqual({ kind: 'hybrid', key: 'All-Phase Passer', label: 'All-Phase Passer', color: cfg.colors['All-Phase Passer'] });
-  // d) dominant: best >=65, no qualifying hybrid
-  const dominant = classifyArchetype('CM', { DLP: 70, Playmaker: 30, 'Ball-Winner': 20, Anchor: 20, 'Attacking Midfielder': 20, 'Ball Carrier': 20, 'Box-to-Box': 20 });
-  expect(dominant).toEqual({ kind: 'dominant', key: 'DLP', label: 'DLP', color: cfg.colors.DLP });
-  // e) generalist: 3+ roles >=54, nothing dominant/hybrid
-  const generalist = classifyArchetype('CM', { DLP: 58, Playmaker: 56, 'Ball-Winner': 55, Anchor: 20, 'Attacking Midfielder': 20, 'Ball Carrier': 20, 'Box-to-Box': 20 });
-  expect(generalist).toEqual({ kind: 'generalist', key: 'Generalist', label: 'Generalist', color: '#ca8a04' });
-  // f) none
-  const none = classifyArchetype('CM', { DLP: 40, Playmaker: 38, 'Ball-Winner': 20, Anchor: 20, 'Attacking Midfielder': 20, 'Ball Carrier': 20, 'Box-to-Box': 20 });
-  expect(none).toEqual({ kind: 'none', key: 'No clear profile', label: 'No clear profile', color: '#64748b' });
-});
-
-test('classifyArchetype cascade (CB): 3-role hybrid beats 2-role and dominant', () => {
-  const cfg = ARCHETYPE_CONFIG.CB;
-  // Progresser+Ball Carrier+Ball Player all >=60, spread<=10 -> Complete Build-Up Player,
-  // even though Ball Player alone would also clear dominantThreshold(65) if checked first.
-  const r = classifyArchetype('CB', { Progresser: 68, 'Ball Carrier': 62, 'Ball Player': 66, Aerial: 10, Aggressor: 10, Stopper: 10 });
-  expect(r).toEqual({ kind: 'hybrid', key: 'Complete Build-Up Player', label: 'Complete Build-Up Player', color: cfg.colors['Complete Build-Up Player'] });
 });
 
 test('computeQuadrantScores: 0-100 range for a couple of positions', () => {
@@ -90,8 +122,8 @@ test('computeQuadrantScores: 0-100 range for a couple of positions', () => {
   }
 });
 
-describe.each(['GK', 'CB', 'FB', 'CM', 'ATT', 'CF'])('%s full pool (>=900 mins latest season)', (pos) => {
-  test('distribution, Complete/Generalist sensitivity, examples', () => {
+describe.each(['GK', 'CB', 'FB', 'CM', 'ATT', 'CF'])('%s full pool (>=900 mins latest season), trimmed config', (pos) => {
+  test('distribution (incl. grey %), 3 examples per archetype', () => {
     const cfg = ARCHETYPE_CONFIG[pos];
     const pool = loadPool(pos);
     const results = pool.map(p => ({ p, types: roleScoresFor(pos, p) })).filter(r => r.types);
@@ -102,46 +134,21 @@ describe.each(['GK', 'CB', 'FB', 'CM', 'ATT', 'CF'])('%s full pool (>=900 mins l
     for (const r of classified) counts[r.arch.label] = (counts[r.arch.label] || 0) + 1;
     const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
     console.log(`[archetype] ${pos} distribution:`, sorted.map(([l, n]) => `${l}=${n}(${(100 * n / classified.length).toFixed(2)}%)`).join(' | '));
+    console.log(`[archetype] ${pos} grey %: ${(100 * (counts['No clear profile'] || 0) / classified.length).toFixed(2)}%`);
+    console.log(`[archetype] ${pos} categories present: ${sorted.length} of max possible ${cfg.mainTypes.length + cfg.hybrids.length + 3}`);
     expect(counts['No clear profile']).toBeGreaterThan(0);
+    expect(sorted.length).toBeLessThanOrEqual(cfg.mainTypes.length + cfg.hybrids.length + 3); // mainTypes + hybrids + Complete + Generalist + grey
 
-    // flag hybrids under 1%
-    for (const h of cfg.hybrids) {
-      const n = counts[h.name] || 0;
-      const pct = 100 * n / classified.length;
-      if (pct < 1) console.log(`[archetype] ${pos} UNDER 1%: ${h.name} = ${n} (${pct.toFixed(2)}%)`);
-    }
-
-    // Complete sensitivity: 3+ >=70, 3+ >=80 (vs shipped >=75)
-    for (const T of [70, 75, 80]) {
-      const n = results.filter(r => Object.values(r.types).filter(v => v != null).filter(v => v >= T).length >= COMPLETE_MIN_ROLES).length;
-      console.log(`[archetype] ${pos} Complete (3+ >=${T}): ${n} (${(100 * n / results.length).toFixed(2)}%)`);
-    }
-    // Generalist sensitivity: 3+ >=50, 3+ >=58 (vs shipped >=54) — NET (after a-d excluded)
-    for (const T of [50, 54, 58]) {
-      let n = 0;
-      for (const r of results) {
-        const entries = Object.entries(r.types).filter(([, v]) => v != null).sort((a, b) => b[1] - a[1]);
-        const [n1, s1] = entries[0] || [null, null];
-        if (s1 != null && s1 >= COMPLETE_THRESHOLD && entries.filter(([, v]) => v >= COMPLETE_THRESHOLD).length >= COMPLETE_MIN_ROLES) continue; // would be Complete
-        // approximate: skip players whose classify() result isn't none/generalist-eligible by threshold T
-        if (entries.filter(([, v]) => v >= T).length >= GENERALIST_MIN_ROLES) {
-          const arch = classifyArchetype(pos, r.types);
-          if (arch.kind !== 'complete' && arch.kind !== 'hybrid' && arch.kind !== 'dominant') n++;
-        }
-      }
-      console.log(`[archetype] ${pos} Generalist net (3+ >=${T}): ${n} (${(100 * n / results.length).toFixed(2)}%)`);
-    }
-
-    console.log(`[archetype] ${pos} 5 examples per archetype (by career score):`);
+    console.log(`[archetype] ${pos} 3 examples per archetype (by career score):`);
     const byLabel = {};
     for (const r of classified) (byLabel[r.arch.label] = byLabel[r.arch.label] || []).push(r);
     for (const [label, arr] of Object.entries(byLabel)) {
       arr.sort((a, b) => (b.p.careerScore || 0) - (a.p.careerScore || 0));
-      const top5 = arr.slice(0, 5).map(r => {
-        const top3 = Object.entries(r.types).filter(([, v]) => v != null).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, v]) => `${k} ${v.toFixed(0)}`).join(', ');
-        return `${r.p.name} (${r.p.team}, ${r.p.league}) [${top3}]`;
+      const top3 = arr.slice(0, 3).map(r => {
+        const topScores = Object.entries(r.types).filter(([, v]) => v != null).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, v]) => `${k} ${v.toFixed(0)}`).join(', ');
+        return `${r.p.name} (${r.p.team}, ${r.p.league}) [${topScores}]`;
       }).join('; ');
-      console.log(`  ${label}: ${top5}`);
+      console.log(`  ${label}: ${top3}`);
     }
   });
 });

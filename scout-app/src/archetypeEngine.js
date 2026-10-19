@@ -93,27 +93,41 @@ export function roleScoresFor(pos, p) {
   if (!seasons.length) return null;
   const qc = p.qcRoleCareerScores || {};
   const scores = {};
-  for (const [roleName, def] of Object.entries(cfg.roles)) {
-    if (def.weights) scores[roleName] = careerBlend(pos, p, def.weights, seasons);
-    else if (def.maxWith) {
-      const vals = def.maxWith.map(k => qc[k]).filter(v => v != null);
-      scores[roleName] = vals.length ? Math.max(...vals) : null;
-    } else scores[roleName] = qc[def.hexagon] ?? null;
-  }
+  for (const [roleName, def] of Object.entries(cfg.roles)) scores[roleName] = resolveRoleDef(pos, p, def, seasons, qc);
   if (Object.values(scores).every(v => v == null)) return null;
   return scores;
+}
+
+// Resolves any role-def shape to a single 0-100 score (or null): a fresh
+// career-blended weights score, a reused hexagon qcRoleCareerScores value,
+// or the max across several sub-defs of either kind (CB's Ball-Playing CB,
+// CM's Attacking Midfielder, CF's False 9 — see archetypeConfig.js).
+function resolveRoleDef(pos, p, def, seasons, qc) {
+  if (def.weights) return careerBlend(pos, p, def.weights, seasons);
+  if (def.maxOf) {
+    const vals = def.maxOf.map(d => resolveRoleDef(pos, p, d, seasons, qc)).filter(v => v != null);
+    return vals.length ? Math.max(...vals) : null;
+  }
+  if (def.hexagon) return qc[def.hexagon] ?? null;
+  return null;
 }
 
 // { kind: 'complete'|'hybrid'|'dominant'|'generalist'|'none', key, label, color }
 export function classifyArchetype(pos, roleScores) {
   const cfg = ARCHETYPE_CONFIG[pos];
   if (!cfg || !roleScores) return null;
+  // ALL computed roles (including any marked not a "main type", e.g. ATT's
+  // Creator) count toward Complete and Generalist — only the dominant step
+  // (d) restricts to cfg.mainTypes, since that's the only one that turns a
+  // single role into its own standalone archetype label.
   const entries = Object.entries(roleScores).filter(([, v]) => v != null);
   const none = () => ({ kind: 'none', key: 'No clear profile', label: 'No clear profile', color: cfg.colors['No clear profile'] });
   if (!entries.length) return none();
 
-  // a) Complete: 3+ roles >= COMPLETE_THRESHOLD
-  if (entries.filter(([, v]) => v >= COMPLETE_THRESHOLD).length >= COMPLETE_MIN_ROLES) {
+  // a) Complete: 3+ roles >= this position's completeThreshold (default
+  // COMPLETE_THRESHOLD, overridable per position — ATT uses 80).
+  const completeT = cfg.completeThreshold ?? COMPLETE_THRESHOLD;
+  if (entries.filter(([, v]) => v >= completeT).length >= COMPLETE_MIN_ROLES) {
     return { kind: 'complete', key: cfg.completeLabel, label: cfg.completeLabel, color: cfg.colors[cfg.completeLabel] };
   }
   // b) 3-role hybrids (checked directly against each named triple, not the player's own top-3)
@@ -132,8 +146,11 @@ export function classifyArchetype(pos, roleScores) {
       return { kind: 'hybrid', key: h.name, label: h.name, color: cfg.colors[h.name] };
     }
   }
-  // d) dominant: best single role >= dominantThreshold
-  const sorted = [...entries].sort((a, b) => b[1] - a[1]);
+  // d) dominant: best single MAIN-TYPE role >= dominantThreshold (a role
+  // that's computed but not in mainTypes, e.g. ATT's Creator, can never
+  // itself become the dominant label).
+  const mainEntries = entries.filter(([name]) => cfg.mainTypes.includes(name));
+  const sorted = [...mainEntries].sort((a, b) => b[1] - a[1]);
   if (sorted.length && sorted[0][1] >= cfg.dominantThreshold) {
     const [name] = sorted[0];
     return { kind: 'dominant', key: name, label: name, color: cfg.colors[name] };

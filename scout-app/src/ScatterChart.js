@@ -520,13 +520,20 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
   // is a no-op for every other point): 'none' draws smaller ("No clear
   // profile"). No outline/ring distinction for any archetype — every
   // archetype gets its own flat colour instead (see archetypeConfig.js).
-  // d.muted (Label-only + a group/age filter): the dot keeps its real
-  // colour instead of the flat "out of group" grey — see colorOf() above.
+  // d.muted (a group/age filter, any player not a member): normally forces
+  // the flat "out of group" grey — EXCEPT when the Label-only style is
+  // selected, where nothing about a non-member's colour changes at all
+  // (colorOf() above still sets `muted` for labelling bookkeeping, but the
+  // fill itself keeps d.color). `labelStyle` is the toggle's raw state —
+  // deliberately not scoped to `hl`/`group` like `labelOnly` below, since
+  // it must suppress the grey override for group members too, not just the
+  // simple highlightIds case.
+  const labelStyle = highlightStyle === 'label';
   const ringDot = (d, rad, alpha) => {
     const rr = d.kind === 'none' ? rad * 0.7 : rad;
     ctx.globalAlpha = alpha;
     ctx.beginPath(); ctx.arc(xS(d.x), yS(d.y), rr, 0, Math.PI*2);
-    ctx.fillStyle = (d.muted && !labelOnly) ? T.muted : d.plain ? T.plain : d.color; ctx.fill();
+    ctx.fillStyle = (d.muted && !labelStyle) ? T.muted : d.plain ? T.plain : d.color; ctx.fill();
     ctx.strokeStyle = T.ring;
     ctx.lineWidth = T.ringW * fs;
     ctx.stroke();
@@ -535,16 +542,19 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
   // Highlight fades everyone else; single-highlight mode instead keeps them solid but
   // unnamed. A group highlight already mutes non-members, so no extra fading then.
   // Red-dot highlight: the chosen dots just turn red — no ring, name or fading.
-  // Label-only: the chosen dots keep their normal colour/size (whatever the
-  // active colour mode gives them) and just get a force-placed name, drawn on
-  // top — no fading of everyone else either, since nothing about them changed.
-  // A group already behaves this way for its own members, so with a group on,
-  // the full style is used instead (same precedent as red-dot below).
+  // Label-only (explicit-highlight case only — group members are handled by
+  // `labelStyle` above and their own always-on forced labels): the chosen
+  // dots keep their normal colour/size and just get a force-placed name,
+  // drawn on top — no fading of everyone else either, since nothing about
+  // them changed. A group already behaves this way for its own members, so
+  // with a group on, the full style is used instead for this flag specifically
+  // (same precedent as red-dot below) — `labelStyle` is what actually drops
+  // the red/grey override when a group is active, not this one.
   const redDot = !!(hl && highlightStyle === 'dot' && !group);
   const labelOnly = !!(hl && highlightStyle === 'label' && !group);
   const solo = !!(hl && soloLabel && !redDot);
   const fade = hl && !solo && !group && !redDot && !labelOnly ? 0.25 : 0.95;
-  const dotColor = d => ((d.muted && !labelOnly) ? T.muted : d.color);
+  const dotColor = d => ((d.muted && !labelStyle) ? T.muted : d.color);
   for (const pass of group ? [true, false] : [null]) {
     for (let i = visible.length - 1; i >= 0; i--) {
       const d = visible[i];
@@ -921,8 +931,14 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
     if (inGroup) {
       const isIn = inGroup(p) || forcedIds.has(idOf(p));
       if (highlightStyle === 'label') {
+        // Label-only: no red/grey override at all, for anyone, group member
+        // or not — keep the real underlying colour AND its real `g` (so the
+        // legend counts by that, e.g. by archetype, not by in/out). `muted`
+        // still flags non-members, but only for the labelling bookkeeping
+        // below (who gets a forced name) — the draw code no longer lets
+        // `muted` force a flat grey fill when this style is active.
         const under = underlyingColorOf(p);
-        return isIn ? { ...under, g: 'in' } : { ...under, g: 'out', muted: true };
+        return isIn ? under : { ...under, muted: true };
       }
       return isIn ? { g: 'in', color: GROUP_RED } : { g: 'out', color: GROUP_OUT, muted: true };
     }
@@ -995,7 +1011,11 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
 
   const legend = useMemo(() => {
     const c = {}; topPts.forEach(d => { c[d.g] = (c[d.g] || 0) + 1; });
-    const base = inGroup ? [{ key: 'in', label: groupLabel, color: GROUP_RED }, { key: 'out', label: 'Others', color: GROUP_OUT }]
+    // Label-only: no in/out legend either — colours (and so the legend) are
+    // exactly as if no group were selected at all; only the dots/labels
+    // change. Covers the live view AND the PNG export, since both read
+    // this same `legend` array.
+    const base = (inGroup && highlightStyle !== 'label') ? [{ key: 'in', label: groupLabel, color: GROUP_RED }, { key: 'out', label: 'Others', color: GROUP_OUT }]
       : colorBy === 'plain' ? [{ key: 'all', label: 'All', color: plainColor || PLAIN_SWATCH }]
       : colorBy === 'league' && leagueColor ? [...[...leagueColor.entries()].map(([l, col]) => ({ key: 'L:' + l, label: l, color: col })), { key: 'L:other', label: 'Other leagues', color: LEAGUE_OTHER }]
       : colorBy === 'metric' ? [
@@ -1004,7 +1024,7 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
           { key: 'none', label: 'No data', color: NODATA_COLOR }]
       : legendBase(colorBy);
     return base.filter(it => c[it.key]).map(it => ({ ...it, count: c[it.key] }));
-  }, [topPts, colorBy, inGroup, groupLabel, legendBase, mScale, cf, plainColor, leagueColor]);
+  }, [topPts, colorBy, inGroup, groupLabel, legendBase, mScale, cf, plainColor, leagueColor, highlightStyle]);
   const groupCount = inGroup ? topPts.filter(d => d.g === 'in').length : 0;
 
   const colorLabel = colorBy === 'metric' ? `Colour: ${baseName(cf)}` : allColorModes.find(o => o[0] === colorBy)?.[1] || colorModes[0]?.[1] || '';
