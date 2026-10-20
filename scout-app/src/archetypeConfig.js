@@ -231,18 +231,31 @@ export const ARCHETYPE_CONFIG = {
     hybridThreshold: 60,
     completeSides: { a: ['Ball-Winner', 'Anchor'], b: ['DLP', 'Playmaker', 'Attacking Midfielder', 'Ball Carrier'] }, // Defensive vs Possession
     roles: {
-      // Refined (archetype-only): hexagon Deep Playmaker CM minus the two
-      // generic-passing metrics ('Passes per 90', 'Accurate passes, %')
-      // that overlapped with a since-removed Tempo-Setter type.
-      'DLP': { weights: { 'Forward passes per 90': 2, 'Progressive passes per 90': 3, 'Passes to final third per 90': 2.5, 'Accurate forward passes, %': 1.5, 'Accurate long passes, %': 1 } },
+      // Hexagon-exact (2026-10-20 — was a "refined" custom weight set that
+      // quietly dropped 'Passes per 90'/'Accurate passes, %' vs the real
+      // hexagon DLP; see the hexagon-audit this round). Matching the
+      // QuickCard formula exactly means the scatter can never contradict
+      // the card.
+      'DLP': { hexagon: 'DLP' },
       'Playmaker': { hexagon: 'Playmaker' },
-      // Re-derived via the same fresh-percentile method as DLP/Anchor for
-      // methodological consistency, even though the weights are identical
-      // to the hexagon's Ball-Winner.
-      'Ball-Winner': { weights: { 'Defensive duels per 90': 3, 'Defensive duels won, %': 2 } },
-      // Refined (archetype-only): duel volume and Aerial duels won % dropped
-      // entirely — the thing that made it overlap with Ball-Winner.
-      'Anchor': { weights: { 'PAdj Interceptions': 3, 'Shots blocked per 90': 2, 'Defensive duels won, %': 1 } },
+      // Hexagon-exact (2026-10-20 — previously recomputed fresh from the
+      // same weights as a methodological-consistency exercise; switched to
+      // reading qc['Ball-Winner'] directly so it can never drift from the
+      // hexagon even if one side's weights change later).
+      'Ball-Winner': { hexagon: 'Ball-Winner' },
+      // Hexagon-exact (2026-10-20 — was a custom "refined" formula that
+      // dropped the hexagon's duel-volume/aerial% weight and added Shots
+      // Blocked, which isn't in the hexagon Anchor formula at all. That
+      // mismatch is what let a player (e.g. G. Franco, Swansea 2025-26) show
+      // as scatter-Anchor while the QuickCard hexagon had Ball-Winner on top
+      // and Anchor/Destroyer not even in the top 6 — confirmed by this
+      // round's hexagon audit at 13.7% CM top-role disagreement, almost all
+      // of it this one role. The pipeline relabels this hexagon role to
+      // "Destroyer" (apply_anchor_destroyer_relabel) once a player's
+      // Touches-in-box percentile clears 30 — same formula/score either
+      // way, just a different qc key — so this reads whichever of the two
+      // keys is actually present (a player only ever has one).
+      'Anchor': { maxOf: [{ hexagon: 'Anchor' }, { hexagon: 'Destroyer' }] },
       // Folds Box-Crasher in via max(), per the original CM spec.
       'Attacking Midfielder': { maxOf: [{ hexagon: 'Attacking Midfielder' }, { hexagon: 'Box-Crasher' }] },
       'Ball Carrier': { hexagon: 'Ball Carrier' },
@@ -371,7 +384,13 @@ export const ARCHETYPE_CONFIG = {
       // 100% subset of False 9's own xA weight, not a distinct identity.
       // Renamed "False 9" -> "Playmaking Forward" 2026-10-20 (display name
       // only — still reuses the hexagon's own "False 9" formula via maxOf).
-      'Playmaking Forward': { maxOf: [{ hexagon: 'False 9' }, { weights: { 'xA per 90': 2, 'Key passes per 90': 1 } }] },
+      // Hexagon-exact (2026-10-20 hexagon audit): the Chance Creator side of
+      // this max() was a custom {xA:2, Key passes:1} approximation, not the
+      // real hexagon Chance Creator ({xA:1} alone) — a high-xA, average-key-
+      // passes player (mostly young/small-sample CFs) could show hexagon
+      // Chance Creator as their clear #1 while the scatter ranked
+      // Playmaking Forward below Dribbler/Target Forward/Goal Threat.
+      'Playmaking Forward': { maxOf: [{ hexagon: 'False 9' }, { hexagon: 'Chance Creator' }] },
     },
     quadrant: {
       x: { label: 'Possession', w: { 'xA per 90': 0.2, 'Dribbles per 90': 0.3, 'Aerial duels won, %': 0.1, 'Progressive runs per 90': 0.2, 'Accurate passes, %': 0.1, 'Passes to penalty area per 90': 0.1 } },

@@ -483,3 +483,60 @@ test('Season-based position (2026-10-20): A. Gray (Tottenham) lands in a differe
   expect(seasonPositionFor(p, '2026-27')).toBe('RB');
   expect(seasonRoleKeyFor(p, '2026-27')).toBe('FB'); // Spurs, display-only row — right-back again
 });
+
+test('Hexagon-exact (2026-10-20 hexagon audit): no scatter role recomputes from custom weights when a hexagon equivalent exists', () => {
+  // Every leaf role-def in every position must resolve to {hexagon} (or a
+  // maxOf of only {hexagon} leaves) — a bare {weights} def would silently
+  // let the scatter disagree with the QuickCard hexagon it's supposed to
+  // mirror. The two allowed custom-weight exceptions from before this round
+  // (CM DLP/Ball-Winner/Anchor, CF Playmaking Forward's Chance Creator leg)
+  // were the actual root cause of that disagreement and are gone now.
+  function isHexagonOnly(def) {
+    if (def.hexagon) return true;
+    if (def.maxOf) return def.maxOf.every(isHexagonOnly);
+    return false;
+  }
+  for (const [pos, cfg] of Object.entries(ARCHETYPE_CONFIG)) {
+    for (const [roleName, def] of Object.entries(cfg.roles)) {
+      expect(isHexagonOnly(def)).toBe(true);
+    }
+    if (cfg.fallbackRole) expect(isHexagonOnly(cfg.fallbackRole.def)).toBe(true);
+  }
+});
+
+test('G. Franco (Swansea, CM, 2026-10-20 bug report): scatter role scores now match the hexagon exactly, final label is Ball-Winner', () => {
+  const pool = loadPool('CM');
+  const p = pool.find(x => x.name === 'Gonçalo Franco' && x.team === 'Swansea City');
+  expect(p).toBeTruthy();
+  const qc = p.qcRoleCareerScores;
+  const types = roleScoresFor('CM', p);
+  // Direct hexagon reuses: identical by construction, just re-asserted here
+  // as a regression guard.
+  expect(types.DLP).toBe(qc.DLP);
+  expect(types.Playmaker).toBe(qc.Playmaker);
+  expect(types['Ball-Winner']).toBe(qc['Ball-Winner']);
+  // Anchor was relabeled "Destroyer" upstream (his Touches-in-box% cleared
+  // 30) — the maxOf picks up whichever key is actually present.
+  expect(qc.Anchor).toBeUndefined();
+  expect(types.Anchor).toBe(qc.Destroyer);
+  // Attacking Midfielder = max(hexagon Attacking Midfielder, hexagon Box-Crasher).
+  expect(types['Attacking Midfielder']).toBe(Math.max(qc['Attacking Midfielder'], qc['Box-Crasher']));
+  expect(types['Ball Carrier']).toBe(qc['Ball Carrier']);
+  // The bug: Anchor (69.1) used to beat Ball-Winner (75.8) on the scatter via
+  // a custom formula that dropped duel volume/aerial% and added Shots
+  // Blocked. Now the two are compared on equal (exact-hexagon) footing and
+  // Ball-Winner — his real #1 on the QuickCard — wins.
+  const fb = fallbackRoleScoreFor('CM', p);
+  const arch = classifyArchetypeWithFallback('CM', types, fb);
+  expect(arch.label).toBe('Ball-Winner');
+});
+
+test('CF Playmaking Forward (2026-10-20 hexagon audit fix): max(hexagon False 9, hexagon Chance Creator), not a custom xA/Key-passes approximation', () => {
+  const pool = loadPool('CF');
+  const p = pool.find(x => x.name === 'B. Hütten' && x.team === 'Köln U17');
+  expect(p).toBeTruthy();
+  const qc = p.qcRoleCareerScores;
+  expect(qc['Chance Creator']).toBeGreaterThan(qc['False 9']); // this player is the case the old custom formula missed
+  const types = roleScoresFor('CF', p);
+  expect(types['Playmaking Forward']).toBe(Math.max(qc['False 9'], qc['Chance Creator']));
+});
