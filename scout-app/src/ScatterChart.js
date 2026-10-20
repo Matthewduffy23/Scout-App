@@ -4,7 +4,7 @@ import { SCORE_TIERS, POS_COLORS, METRIC_OPTIONS, METRIC_OPTIONS_EXTRA, seasonDe
 import { useIsMobile, deliverPng } from './utils';
 import { ensureMontserratEmbedded } from './CoachCard';
 import { barColor } from './QuickCard';
-import { roleScoresFor, roleScoresForSeason, classifyArchetype, simpleFamilyOf, computeQuadrantScores, computeQuadrantScoresCareerBlend } from './archetypeEngine';
+import { roleScoresFor, roleScoresForSeason, classifyArchetypeWithFallback, fallbackRoleScoreFor, fallbackRoleScoreForSeason, simpleFamilyOf, computeQuadrantScores, computeQuadrantScoresCareerBlend } from './archetypeEngine';
 import { ARCHETYPE_CONFIG } from './archetypeConfig';
 
 // Scatter view of the current Scout Index result list: plots the top N of the
@@ -566,11 +566,18 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
   // whatever their group/highlight state would otherwise have given them.
   const hasArchSel = !!(labelledKeys && labelledKeys.size);
   const isArchLabelled = d => hasArchSel && labelledKeys.has(d.g);
+  // "Leaning" dots (no real archetype, but their best role cleared the
+  // lower leaning bar — see archetypeConfig.js/LEANING_THRESHOLD): same
+  // colour and size as a real dot of that role, just faded to ~45%. Any
+  // other reason to fade (Fade others, a dimmed highlight) only fades it
+  // further, never brightens it back up.
+  const LEANING_ALPHA = 0.45;
   for (const pass of group ? [true, false] : [null]) {
     for (let i = visible.length - 1; i >= 0; i--) {
       const d = visible[i];
       if (isHl(d) || (pass !== null && !!d.muted !== pass)) continue;
-      const baseAlpha = d.muted ? 1 : fade;
+      let baseAlpha = d.muted ? 1 : fade;
+      if (d.kind === 'leaning') baseAlpha = Math.min(baseAlpha, LEANING_ALPHA);
       const alpha = (hasArchSel && fadeOthers && !isArchLabelled(d)) ? Math.min(baseAlpha, 0.25) : baseAlpha;
       ringDot({ ...d, color: dotColor(d) }, r, alpha);
     }
@@ -659,7 +666,9 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
   if (hasArchSel) {
     for (const d of visible) {
       if (isHl(d) || !isArchLabelled(d)) continue;
-      ringDot({ ...d, color: dotColor(d) }, r, d.muted ? 1 : fade);
+      let a = d.muted ? 1 : fade;
+      if (d.kind === 'leaning') a = Math.min(a, LEANING_ALPHA);
+      ringDot({ ...d, color: dotColor(d) }, r, a);
     }
   }
 
@@ -837,7 +846,8 @@ const POSITION_PLURAL = {
 export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLines, buildFields: buildFieldsFor, defaultX, defaultY,
   metricLabel = 'Per-90 value', colorModes, colorOf: colorOfMode, legendBase, scoreQuad, targetTiers, groups = [], leagueOf,
   noun = 'player', openLabel = 'Open profile', onSelect, onClose, contextLabel, defaultMedianOn = true, defaultSample = 50, archetypeSeasonLabel,
-  axesSeasonLabel, showAxesModeToggle, axesMode, setAxesMode, showArchetypeDetailToggle, archetypeDetail, setArchetypeDetail, genericSeasonLabel }) {
+  axesSeasonLabel, showAxesModeToggle, axesMode, setAxesMode, showArchetypeDetailToggle, archetypeDetail, setArchetypeDetail, genericSeasonLabel,
+  showLeaning, setShowLeaning }) {
   // searchPool: an unfiltered roster to search for the "ignores filters" add — falls
   // back to items (no override) when the caller doesn't have one (e.g. Team Index).
   const pool = searchPool && searchPool.length ? searchPool : items;
@@ -1489,9 +1499,16 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
           <button onClick={() => setFadeOthers(v => !v)} title="Drop non-labelled dots to ~25% opacity"
             style={{ ...btn(fadeOthers), padding:'3px 8px' }}>Fade others</button>
         )}
+        {colorBy === 'archetype' && setShowLeaning && (
+          <button onClick={() => setShowLeaning(v => !v)} title="Players with no real archetype, but a best role >=55, show faded at that role's colour instead of plain grey"
+            style={{ ...btn(showLeaning), padding:'3px 8px' }}>Show leaning</button>
+        )}
         {legend.length > 0 && (
           <button onClick={() => setShowCounts(v => !v)} title="Show player counts next to each legend entry"
             style={{ ...btn(showCounts), padding:'3px 8px' }}>Show counts</button>
+        )}
+        {colorBy === 'archetype' && setShowLeaning && showLeaning && (
+          <span style={{ fontSize:9.5, color:'#64748b', fontStyle:'italic' }}>faded = leaning</span>
         )}
         <span style={{ fontSize:10, color:'#64748b', marginLeft:'auto' }}>
           {sample.length} Sample · {topPts.length} plotted{removedHere > 0 ? ` · ${removedHere} removed` : ''}{missing > 0 ? ` · ${missing} without data for these axes` : ''}{trimmed > 0 ? ` · ${trimmed} low outlier${trimmed > 1 ? 's' : ''} hidden` : ''}
@@ -1519,6 +1536,7 @@ const archetypeLegendDetailed = pos => {
     { key: cfg.completeLabel, label: cfg.completeLabel, color: cfg.colors[cfg.completeLabel] },
     ...cfg.mainTypes.map(k => ({ key: k, label: k, color: cfg.colors[k] })),
     ...cfg.hybridNames.map(label => ({ key: label, label, color: cfg.colors[label] })),
+    ...(cfg.fallbackRole ? [{ key: cfg.fallbackRole.name, label: cfg.fallbackRole.name, color: cfg.colors[cfg.fallbackRole.name] }] : []),
     { key: 'Generalist', label: 'Generalist', color: cfg.colors.Generalist },
     { key: 'No clear profile', label: 'No clear profile', color: cfg.colors['No clear profile'] },
   ];
@@ -1561,20 +1579,34 @@ export default function ScatterChart({ players, allPlayers, getDisplayScore, sea
   // Archetype colour sub-mode: Simple (default, 5 shared family hues) or
   // Detailed (every archetype its own colour) — see archetypeConfig.js.
   const [archetypeDetail, setArchetypeDetail] = useState('detailed'); // 'simple' | 'detailed' — 2026-10-20: default is Detailed
+  // "Leaning" (2026-10-20, every position): a player with no archetype gets
+  // labelled with their best role, faded, instead of grey — on by default.
+  // Off reverts those players to the plain "No clear profile" grey, both in
+  // the data (the classification used for colour/legend/counts below) and
+  // the drawing (no faded dots at all).
+  const [showLeaning, setShowLeaning] = useState(true);
   const archPoolScores = useMemo(() => {
     if (!hasArchetype) return null;
     if (seasonFilter === 'all' && axesMode === 'career') return computeQuadrantScoresCareerBlend(roleKey, players);
     return computeQuadrantScores(roleKey, players, p => seasonDetailFor(p, seasonFilter, leagues));
   }, [hasArchetype, roleKey, players, seasonFilter, leagues, axesMode]);
+  const noneResult = useMemo(() => {
+    const cfg = ARCHETYPE_CONFIG[roleKey];
+    return cfg ? { kind: 'none', key: 'No clear profile', label: 'No clear profile', color: cfg.colors['No clear profile'] } : null;
+  }, [roleKey]);
   const archetypeMap = useMemo(() => {
     if (!hasArchetype) return null;
     const m = new Map();
     for (const p of players) {
-      const types = seasonFilter === 'all' ? roleScoresFor(roleKey, p) : roleScoresForSeason(roleKey, seasonDetailFor(p, seasonFilter, leagues));
-      m.set(p.id, { types, arch: classifyArchetype(roleKey, types) });
+      const sd = seasonFilter === 'all' ? null : seasonDetailFor(p, seasonFilter, leagues);
+      const types = seasonFilter === 'all' ? roleScoresFor(roleKey, p) : roleScoresForSeason(roleKey, sd);
+      const fallbackScore = seasonFilter === 'all' ? fallbackRoleScoreFor(roleKey, p) : fallbackRoleScoreForSeason(roleKey, sd);
+      let arch = classifyArchetypeWithFallback(roleKey, types, fallbackScore);
+      if (arch && arch.kind === 'leaning' && !showLeaning) arch = noneResult;
+      m.set(p.id, { types, arch, fallbackScore });
     }
     return m;
-  }, [hasArchetype, roleKey, players, seasonFilter, leagues]);
+  }, [hasArchetype, roleKey, players, seasonFilter, leagues, showLeaning, noneResult]);
   const archetypeSeasonLabel = hasArchetype ? (seasonFilter === 'all' ? 'career blend' : seasonFilter) : null;
   const axesSeasonLabel = hasArchetype ? (seasonFilter === 'all' ? (axesMode === 'career' ? 'career blend' : 'latest season') : seasonFilter) : null;
   // Fallback season label for the default subtitle when neither the
@@ -1604,14 +1636,17 @@ export default function ScatterChart({ players, allPlayers, getDisplayScore, sea
     const lines = [`${c.team} · ${c.league}${seasonFilter !== 'all' ? ` (${seasonFilter})` : ''}`, `${p.position} · age ${p.age}`];
     const rec = archetypeMap?.get(p.id);
     if (rec && rec.arch) {
-      const top3 = Object.entries(rec.types || {}).filter(([, v]) => v != null).sort((a, b) => b[1] - a[1]).slice(0, 3);
+      const cfg = ARCHETYPE_CONFIG[roleKey];
+      const allScores = { ...rec.types, ...(cfg?.fallbackRole && rec.fallbackScore != null ? { [cfg.fallbackRole.name]: rec.fallbackScore } : {}) };
+      const top3 = Object.entries(allScores).filter(([, v]) => v != null).sort((a, b) => b[1] - a[1]).slice(0, 3);
       const top3Txt = top3.map(([k, v]) => `${k} ${fmtType(v)}`).join(', ');
       // Family + specific archetype, in both Simple and Detailed mode (the
       // dot colour only shows one or the other, but the tooltip always
       // gives both, per the family a colour-coded dot belongs to).
       const simple = simpleFamilyOf(roleKey, rec.arch);
       const familyTxt = simple && simple.label !== rec.arch.label ? `${simple.label} — ` : '';
-      lines.push(`Archetype: ${familyTxt}${rec.arch.label}${top3Txt ? ` (${top3Txt})` : ''}`);
+      const archLabel = rec.arch.kind === 'leaning' ? `${rec.arch.label} (leaning)` : rec.arch.label;
+      lines.push(`Archetype: ${familyTxt}${archLabel}${top3Txt ? ` (${top3Txt})` : ''}`);
     }
     return lines;
   }, [seasonFilter, leagues, archetypeMap, roleKey]);
@@ -1633,6 +1668,7 @@ export default function ScatterChart({ players, allPlayers, getDisplayScore, sea
       colorModes={colorModes} colorOf={colorOf} legendBase={legendBase} scoreQuad={scoreQuadFn} targetTiers={TARGET_TIERS}
       groups={groups} noun="player" openLabel="Open profile" onSelect={onSelect} onClose={onClose} contextLabel={contextLabel} archetypeSeasonLabel={archetypeSeasonLabel}
       axesSeasonLabel={axesSeasonLabel} showAxesModeToggle={showAxesModeToggle} axesMode={axesMode} setAxesMode={setAxesMode} genericSeasonLabel={genericSeasonLabel}
-      showArchetypeDetailToggle={hasArchetype} archetypeDetail={archetypeDetail} setArchetypeDetail={setArchetypeDetail}/>
+      showArchetypeDetailToggle={hasArchetype} archetypeDetail={archetypeDetail} setArchetypeDetail={setArchetypeDetail}
+      showLeaning={showLeaning} setShowLeaning={setShowLeaning}/>
   );
 }

@@ -3,8 +3,8 @@
 // each position's own chunk files).
 import fs from 'fs';
 import path from 'path';
-import { roleScoresFor, roleScoresForSeason, classifyArchetype, simpleFamilyOf, computeQuadrantScores, computeQuadrantScoresCareerBlend } from './archetypeEngine';
-import { ARCHETYPE_CONFIG, COMPLETE_MIN_ROLES, GENERALIST_THRESHOLD, GENERALIST_MIN_ROLES, GENERALIST_COLOR, COMPLETE_COLOR, NONE_COLOR, FAMILY_COLOR } from './archetypeConfig';
+import { roleScoresFor, roleScoresForSeason, classifyArchetype, classifyArchetypeWithFallback, fallbackRoleScoreFor, simpleFamilyOf, computeQuadrantScores, computeQuadrantScoresCareerBlend } from './archetypeEngine';
+import { ARCHETYPE_CONFIG, COMPLETE_MIN_ROLES, GENERALIST_THRESHOLD, GENERALIST_MIN_ROLES, GENERALIST_COLOR, COMPLETE_COLOR, NONE_COLOR, FAMILY_COLOR, LEANING_THRESHOLD } from './archetypeConfig';
 
 const PUB = path.join(__dirname, '..', 'public');
 const MIN_MINUTES = 900;
@@ -186,6 +186,56 @@ test('CF: "False 9" renamed to "Playmaking Forward" (still reuses the hexagon\'s
   expect(r.key).toBe('Playmaking Forward');
 });
 
+test('CM Controller: fallback-only role, exact hexagon formula, never competes in the normal cascade', () => {
+  const cfg = ARCHETYPE_CONFIG.CM;
+  expect(cfg.fallbackRole).toEqual({ name: 'Controller', def: { hexagon: 'Controller' }, threshold: 60, color: '#14b8a6', simpleFamily: 'blue' });
+  expect(cfg.roles.Controller).toBeUndefined(); // not a normal role — can't feed Complete/Generalist/hybrids
+  expect(cfg.mainTypes).not.toContain('Controller');
+  expect(cfg.colors.Controller).toBe('#14b8a6');
+  expect(cfg.simple.family.Controller).toBe('blue');
+  expect(cfg.simpleColors.Controller).toBe(FAMILY_COLOR.blue);
+
+  // Normal classification unaffected: a real DLP/Playmaker hybrid ignores
+  // Controller entirely, even if Controller would itself have been huge.
+  const types = { DLP: 72, Playmaker: 68, 'Ball-Winner': 20, Anchor: 20, 'Attacking Midfielder': 20, 'Ball Carrier': 20 };
+  expect(classifyArchetypeWithFallback('CM', types, 95)).toEqual(classifyArchetype('CM', types));
+
+  // Only kicks in when the normal cascade is "none", AND Controller clears
+  // its threshold, AND is the single highest score of any kind.
+  const noneTypes = { DLP: 40, Playmaker: 38, 'Ball-Winner': 20, Anchor: 20, 'Attacking Midfielder': 20, 'Ball Carrier': 20 };
+  expect(classifyArchetype('CM', noneTypes).kind).toBe('none');
+  expect(classifyArchetypeWithFallback('CM', noneTypes, 65)).toEqual({ kind: 'fallback', key: 'Controller', label: 'Controller', color: '#14b8a6' });
+  // Below the fallback threshold (60): never promoted to Controller, even
+  // if it's still high enough to qualify as leaning instead (see the
+  // dedicated leaning test below).
+  expect(classifyArchetypeWithFallback('CM', noneTypes, 55).kind).not.toBe('fallback');
+  // Clears the threshold but isn't the highest score of any kind (DLP=40
+  // here is still beaten by it, but a role between 60 and the fallback
+  // score should block it) — Controller=61 vs an existing role at 63.
+  const closeTypes = { DLP: 63, Playmaker: 38, 'Ball-Winner': 20, Anchor: 20, 'Attacking Midfielder': 20, 'Ball Carrier': 20 };
+  expect(classifyArchetypeWithFallback('CM', closeTypes, 61).kind).not.toBe('fallback');
+});
+
+test('Leaning: every position, only when still "none" after the fallback step, same colour as the best role, no new legend key', () => {
+  expect(LEANING_THRESHOLD).toBe(55);
+  // CM: best role 56 (below dominant, below Generalist's 3-role rule) -> leaning on that role.
+  const types = { DLP: 56, Playmaker: 30, 'Ball-Winner': 20, Anchor: 20, 'Attacking Midfielder': 20, 'Ball Carrier': 20 };
+  const r = classifyArchetypeWithFallback('CM', types, 30);
+  expect(r).toEqual({ kind: 'leaning', key: 'DLP', label: 'DLP', color: ARCHETYPE_CONFIG.CM.colors.DLP });
+  // Below LEANING_THRESHOLD stays none.
+  const low = { DLP: 54, Playmaker: 30, 'Ball-Winner': 20, Anchor: 20, 'Attacking Midfielder': 20, 'Ball Carrier': 20 };
+  expect(classifyArchetypeWithFallback('CM', low, 30).kind).toBe('none');
+  // Controller itself can be the leaning role (fallback score between
+  // LEANING_THRESHOLD and its own higher fallback threshold).
+  const leaningController = classifyArchetypeWithFallback('CM', low, 58);
+  expect(leaningController).toEqual({ kind: 'leaning', key: 'Controller', label: 'Controller', color: '#14b8a6' });
+  // A position with no fallbackRole (e.g. ATT) leans on a plain role the
+  // same way.
+  const attTypes = { 'Deep Playmaker': 57, 'Goal Threat': 20, Dribbler: 20, 'Wide Playmaker': 20, Sustainer: 20, Creator: 20 };
+  const rAtt = classifyArchetypeWithFallback('ATT', attTypes, null);
+  expect(rAtt).toEqual({ kind: 'leaning', key: 'Deep Playmaker', label: 'Deep Playmaker', color: ARCHETYPE_CONFIG.ATT.colors['Deep Playmaker'] });
+});
+
 test('Generalist colour (warm taupe) is now shared by Simple and Detailed, distinct from white/grey/yellow/orange', () => {
   expect(GENERALIST_COLOR).toBe('#b08d6a');
   expect(FAMILY_COLOR.generalist).toBe(GENERALIST_COLOR);
@@ -315,21 +365,28 @@ test('computeQuadrantScores: 0-100 range for a couple of positions', () => {
 });
 
 describe.each(['GK', 'CB', 'FB', 'CM', 'ATT', 'CF'])('%s full pool (>=900 mins latest season), trimmed config', (pos) => {
-  test('distribution (incl. grey %), 3 examples per archetype', () => {
+  test('distribution (incl. grey % with/without leaning, Controller for CM), 3 examples per archetype', () => {
     const cfg = ARCHETYPE_CONFIG[pos];
     const pool = loadPool(pos);
-    const results = pool.map(p => ({ p, types: roleScoresFor(pos, p) })).filter(r => r.types);
-    const classified = results.map(r => ({ ...r, arch: classifyArchetype(pos, r.types) }));
+    const results = pool.map(p => ({ p, types: roleScoresFor(pos, p), fb: fallbackRoleScoreFor(pos, p) })).filter(r => r.types);
+    const classified = results.map(r => ({ ...r, arch: classifyArchetypeWithFallback(pos, r.types, r.fb) }));
     console.log(`\n[archetype] ${pos} pool=${pool.length} withScores=${results.length}`);
 
     const counts = {};
     for (const r of classified) counts[r.arch.label] = (counts[r.arch.label] || 0) + 1;
     const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
     console.log(`[archetype] ${pos} distribution:`, sorted.map(([l, n]) => `${l}=${n}(${(100 * n / classified.length).toFixed(2)}%)`).join(' | '));
-    console.log(`[archetype] ${pos} grey %: ${(100 * (counts['No clear profile'] || 0) / classified.length).toFixed(2)}%`);
-    console.log(`[archetype] ${pos} categories present: ${sorted.length} of max possible ${cfg.mainTypes.length + cfg.hybrids.length + 3}`);
+    const greyWithLeaning = counts['No clear profile'] || 0;
+    const leaningCount = classified.filter(r => r.arch.kind === 'leaning').length;
+    const greyWithoutLeaning = greyWithLeaning + leaningCount;
+    console.log(`[archetype] ${pos} grey %: leaning ON = ${(100 * greyWithLeaning / classified.length).toFixed(2)}% | leaning OFF = ${(100 * greyWithoutLeaning / classified.length).toFixed(2)}% (${leaningCount} leaning, ${(100 * leaningCount / classified.length).toFixed(2)}%)`);
+    if (cfg.fallbackRole) {
+      const fbCount = classified.filter(r => r.arch.kind === 'fallback').length;
+      console.log(`[archetype] ${pos} ${cfg.fallbackRole.name} (fallback): ${fbCount} (${(100 * fbCount / classified.length).toFixed(2)}%)`);
+    }
+    console.log(`[archetype] ${pos} categories present: ${sorted.length} of max possible ${cfg.mainTypes.length + cfg.hybrids.length + (cfg.fallbackRole ? 1 : 0) + 3}`);
     expect(counts['No clear profile']).toBeGreaterThan(0);
-    expect(sorted.length).toBeLessThanOrEqual(cfg.mainTypes.length + cfg.hybrids.length + 3); // mainTypes + hybrids + Complete + Generalist + grey
+    expect(sorted.length).toBeLessThanOrEqual(cfg.mainTypes.length + cfg.hybrids.length + (cfg.fallbackRole ? 1 : 0) + 3); // mainTypes + hybrids + fallbackRole + Complete + Generalist + grey
 
     console.log(`[archetype] ${pos} 3 examples per archetype (by career score):`);
     const byLabel = {};
@@ -337,8 +394,10 @@ describe.each(['GK', 'CB', 'FB', 'CM', 'ATT', 'CF'])('%s full pool (>=900 mins l
     for (const [label, arr] of Object.entries(byLabel)) {
       arr.sort((a, b) => (b.p.careerScore || 0) - (a.p.careerScore || 0));
       const top3 = arr.slice(0, 3).map(r => {
-        const topScores = Object.entries(r.types).filter(([, v]) => v != null).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, v]) => `${k} ${v.toFixed(0)}`).join(', ');
-        return `${r.p.name} (${r.p.team}, ${r.p.league}) [${topScores}]`;
+        const allScores = { ...r.types, ...(cfg.fallbackRole && r.fb != null ? { [cfg.fallbackRole.name]: r.fb } : {}) };
+        const topScores = Object.entries(allScores).filter(([, v]) => v != null).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, v]) => `${k} ${v.toFixed(0)}`).join(', ');
+        const kindTag = r.arch.kind === 'leaning' ? ' (leaning)' : r.arch.kind === 'fallback' ? ' (fallback)' : '';
+        return `${r.p.name} (${r.p.team}, ${r.p.league}) [${topScores}]${kindTag}`;
       }).join('; ');
       console.log(`  ${label}: ${top3}`);
     }

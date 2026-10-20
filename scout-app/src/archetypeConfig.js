@@ -243,8 +243,19 @@ export const ARCHETYPE_CONFIG = {
       // pair, that's whichever of Attacking Midfielder / Playmaker scores
       // higher).
     ],
+    // Fallback-only type, added 2026-10-20: NOT in `roles`/`mainTypes` — it
+    // never competes in the normal cascade (can't feed Complete/Generalist,
+    // can't be a hybrid, can't out-rank DLP/Playmaker/All-Phase Passer/
+    // anything else). Applied by classifyArchetypeWithFallback() only when
+    // the normal cascade already returned "No clear profile": if this
+    // player's Controller score (exact hexagon formula, via qc['Controller']
+    // — same number the QuickCard shows) is >= threshold AND is their
+    // single highest score of any kind (including the roles above), they
+    // get labelled Controller instead of grey. Threshold starts at 60;
+    // bumped to 62 2026-10-20 once the first report came back >8% of CMs.
+    fallbackRole: { name: 'Controller', def: { hexagon: 'Controller' }, threshold: 60, color: '#14b8a6', simpleFamily: 'blue' },
     simple: {
-      family: { 'Ball-Winner': 'red', 'Anchor': 'red', 'DLP': 'blue', 'Playmaker': 'blue', 'All-Phase Passer': 'blue', 'Attacking Midfielder': 'orange', 'Ball Carrier': 'green' },
+      family: { 'Ball-Winner': 'red', 'Anchor': 'red', 'DLP': 'blue', 'Playmaker': 'blue', 'All-Phase Passer': 'blue', 'Attacking Midfielder': 'orange', 'Ball Carrier': 'green', 'Controller': 'blue' },
       labels: { red: 'Defensive', blue: 'Passing', orange: 'Attacking', green: 'Carrier' },
     },
   },
@@ -326,6 +337,13 @@ export const GENERALIST_THRESHOLD = 50;
 export const GENERALIST_MIN_ROLES = 3;
 export const HYBRID_2_GAP = 8;
 export const HYBRID_3_SPREAD = 10;
+// "Leaning" (2026-10-20, every position, applied after the fallback-role
+// step above): a player who still has no archetype gets labelled with
+// their single highest-scoring role (including a position's fallbackRole,
+// e.g. CM's Controller, if it has one) when that score is >= this bar —
+// same colour as that role, just faded, never a separate legend entry or
+// its own classification "kind" beyond the opacity treatment.
+export const LEANING_THRESHOLD = 55;
 
 // Detailed colours, from this position's DETAILED_SWATCHES plus the three
 // reserved colours. A role present in `roles` but not `mainTypes` (ATT's
@@ -343,6 +361,7 @@ for (const [pos, cfg] of Object.entries(ARCHETYPE_CONFIG)) {
     'No clear profile': NONE_COLOR,
     ...DETAILED_SWATCHES[pos],
   };
+  if (cfg.fallbackRole) cfg.colors[cfg.fallbackRole.name] = cfg.fallbackRole.color;
   cfg.hybridNames = hybridNames;
 
   const { family, labels } = cfg.simple;
@@ -357,8 +376,15 @@ for (const [pos, cfg] of Object.entries(ARCHETYPE_CONFIG)) {
     cfg.simpleColors[name] = FAMILY_COLOR[token];
     cfg.simpleLabelOf[name] = labels[token];
   }
+  if (cfg.fallbackRole) {
+    const token = cfg.fallbackRole.simpleFamily;
+    cfg.simpleColors[cfg.fallbackRole.name] = FAMILY_COLOR[token];
+    cfg.simpleLabelOf[cfg.fallbackRole.name] = labels[token];
+  }
   // Legend building needs the reverse too: family token -> {label, color},
   // in a stable family order (shared across positions where present).
   const order = ['red', 'blue', 'orange', 'green', 'purple'];
-  cfg.simpleFamilies = order.filter(t => Object.values(family).includes(t)).map(t => ({ key: t, label: labels[t], color: FAMILY_COLOR[t] }));
+  const familiesUsed = new Set(Object.values(family));
+  if (cfg.fallbackRole) familiesUsed.add(cfg.fallbackRole.simpleFamily);
+  cfg.simpleFamilies = order.filter(t => familiesUsed.has(t)).map(t => ({ key: t, label: labels[t], color: FAMILY_COLOR[t] }));
 }

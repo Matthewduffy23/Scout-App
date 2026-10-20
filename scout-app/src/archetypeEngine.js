@@ -4,7 +4,7 @@
 // entirely from data already shipped in the player JSON
 // (seasonsDetail[season].g.{A,D,P} per-season percentiles/raw values,
 // qcRoleCareerScores), so no pipeline rebuild is needed.
-import { ARCHETYPE_CONFIG, COMPLETE_THRESHOLD, COMPLETE_MIN_ROLES, GENERALIST_THRESHOLD, GENERALIST_MIN_ROLES, HYBRID_2_GAP, HYBRID_3_SPREAD } from './archetypeConfig';
+import { ARCHETYPE_CONFIG, COMPLETE_THRESHOLD, COMPLETE_MIN_ROLES, GENERALIST_THRESHOLD, GENERALIST_MIN_ROLES, HYBRID_2_GAP, HYBRID_3_SPREAD, LEANING_THRESHOLD } from './archetypeConfig';
 
 const DECAY = 0.45;
 
@@ -141,6 +141,25 @@ export function roleScoresForSeason(pos, sd) {
   return scores;
 }
 
+// A position's fallback-only role (CM's Controller) is deliberately NOT in
+// `roles` — it must never feed Complete/Generalist or compete as a normal
+// dominant/hybrid candidate — so it's resolved separately, through the same
+// resolveRoleDef/resolveRoleDefSeason machinery every other role uses (the
+// exact hexagon formula, matching the QuickCard, when def is {hexagon:...}).
+export function fallbackRoleScoreFor(pos, p) {
+  const cfg = ARCHETYPE_CONFIG[pos];
+  if (!cfg || !cfg.fallbackRole) return null;
+  const seasons = orderedQualifyingSeasons(p);
+  if (!seasons.length) return null;
+  const qc = p.qcRoleCareerScores || {};
+  return resolveRoleDef(pos, p, cfg.fallbackRole.def, seasons, qc);
+}
+export function fallbackRoleScoreForSeason(pos, sd) {
+  const cfg = ARCHETYPE_CONFIG[pos];
+  if (!cfg || !cfg.fallbackRole || !sd) return null;
+  return resolveRoleDefSeason(pos, sd, cfg.fallbackRole.def);
+}
+
 // { kind: 'complete'|'hybrid'|'dominant'|'generalist'|'none', key, label, color }
 export function classifyArchetype(pos, roleScores) {
   const cfg = ARCHETYPE_CONFIG[pos];
@@ -190,6 +209,51 @@ export function classifyArchetype(pos, roleScores) {
   }
   // f) none
   return none();
+}
+
+// classifyArchetype(), unchanged, plus two fallback steps that only ever
+// run when it already returned "none" — neither can promote a player who
+// already qualified for something above (Complete/hybrid/dominant/
+// Generalist), so nothing above this ever gets relabelled:
+//  1) Fallback role (CM's Controller only, via cfg.fallbackRole): if this
+//     position has one and the player's score for it is >= its threshold
+//     AND is their single highest score of any kind (fallback role
+//     included), label them with it — { kind: 'fallback' }.
+//  2) Leaning (every position): if still nothing, take the single highest
+//     score of any kind (fallback role included) and, if it's >=
+//     LEANING_THRESHOLD, label them with THAT role at the normal colour —
+//     { kind: 'leaning' } — so the caller can draw it faded instead of
+//     grey. `label`/`key` are the bare role name (no "(leaning)" suffix)
+//     so it folds into that role's own legend count rather than creating
+//     a separate entry; callers add the suffix only where they display it
+//     (e.g. the tooltip).
+export function classifyArchetypeWithFallback(pos, roleScores, fallbackScore) {
+  const cfg = ARCHETYPE_CONFIG[pos];
+  const base = classifyArchetype(pos, roleScores);
+  if (!cfg || !base || base.kind !== 'none') return base;
+
+  // Restricted to mainTypes, same as the dominant step above — a hidden
+  // role (ATT's Creator) can't become a standalone "leaning" label any
+  // more than it can become a dominant one.
+  const entries = Object.entries(roleScores || {}).filter(([name, v]) => v != null && cfg.mainTypes.includes(name));
+  const hasFallback = cfg.fallbackRole && fallbackScore != null;
+
+  if (hasFallback) {
+    const maxOther = entries.length ? Math.max(...entries.map(([, v]) => v)) : -Infinity;
+    if (fallbackScore >= cfg.fallbackRole.threshold && fallbackScore >= maxOther) {
+      const name = cfg.fallbackRole.name;
+      return { kind: 'fallback', key: name, label: name, color: cfg.colors[name] };
+    }
+  }
+
+  const candidates = hasFallback ? [...entries, [cfg.fallbackRole.name, fallbackScore]] : entries;
+  if (candidates.length) {
+    const [bestName, bestVal] = candidates.reduce((a, b) => (b[1] > a[1] ? b : a));
+    if (bestVal >= LEANING_THRESHOLD) {
+      return { kind: 'leaning', key: bestName, label: bestName, color: cfg.colors[bestName] };
+    }
+  }
+  return base;
 }
 
 // Collapses a classifyArchetype() result to its Simple-mode family entry
