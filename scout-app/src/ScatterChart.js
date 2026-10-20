@@ -1255,7 +1255,7 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
   const missing = top.length - allTopPts.length;
   const usesMetric = xf.metric || yf.metric || (colorBy === 'metric' && cf.metric);
   const hasNonScore = !xf.scoreScale || !yf.scoreScale;
-  const [tip1, tip2, tip3] = hover ? tooltipLines(hover.d.p) : [];
+  const [tip1, tip2, tip3, tip4] = hover ? tooltipLines(hover.d.p) : [];
 
   return (
     <div style={{ flex:1, overflow:'auto', padding:isMobile?'10px 12px 80px':'12px 16px', display:'flex', flexDirection:'column', gap:10 }}>
@@ -1464,6 +1464,7 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
             {colorBy === 'metric' && !inGroup && cf !== xf && cf !== yf && <div style={{ fontSize:10.5, color:'#e2e8f4' }}>{cf.label}: <b>{Number.isFinite(cf.get(hover.d.p)) ? valueText(cf.get(hover.d.p), cf) : 'no data'}</b></div>}
             {quad && <div style={{ fontSize:10.5, color:'#5eead4', marginTop:3, fontWeight:600 }}>{quadOf(quad, hover.d)}</div>}
             {tip3 && <div style={{ fontSize:10.5, color:'#fbbf24', marginTop:3 }}>{tip3}</div>}
+            {tip4 && <div style={{ fontSize:9.5, color:'#64748b', marginTop:2 }}>{tip4}</div>}
             <div style={{ fontSize:9.5, color:'#64748b', marginTop:4 }}>Click to highlight · Shift-click to add{onSelect ? ` · double-click for ${noun === 'team' ? 'team card' : 'profile'}` : ''}</div>
           </div>
         )}
@@ -1625,12 +1626,16 @@ export default function ScatterChart({ players, allPlayers, getDisplayScore, sea
       const sd = seasonFilter === 'all' ? null : seasonDetailFor(p, seasonFilter, leagues);
       const types = seasonFilter === 'all' ? roleScoresFor(roleKey, p) : roleScoresForSeason(roleKey, sd);
       const fallbackScore = seasonFilter === 'all' ? fallbackRoleScoreFor(roleKey, p) : fallbackRoleScoreForSeason(roleKey, sd);
-      let arch = classifyArchetypeWithFallback(roleKey, types, fallbackScore);
+      // Complete also requires the SAME pool-relative axis scores being
+      // plotted (archPoolScores, this axes mode) to both sit >=50 — see
+      // classifyArchetype's axisScore param (2026-10-20).
+      const axisScore = archPoolScores ? archPoolScores.get(p.id) : null;
+      let arch = classifyArchetypeWithFallback(roleKey, types, fallbackScore, axisScore);
       if (arch && arch.kind === 'leaning' && !showLeaning) arch = noneResult;
       m.set(p.id, { types, arch, fallbackScore });
     }
     return m;
-  }, [hasArchetype, roleKey, players, seasonFilter, leagues, showLeaning, noneResult]);
+  }, [hasArchetype, roleKey, players, seasonFilter, leagues, showLeaning, noneResult, archPoolScores]);
   const archetypeSeasonLabel = hasArchetype ? (seasonFilter === 'all' ? 'career blend' : seasonFilter) : null;
   const axesSeasonLabel = hasArchetype ? (seasonFilter === 'all' ? (axesMode === 'career' ? 'career blend' : 'latest season') : seasonFilter) : null;
   // Fallback season label for the default subtitle when neither the
@@ -1680,6 +1685,13 @@ export default function ScatterChart({ players, allPlayers, getDisplayScore, sea
       const archLabel = renameRole(rec.arch.label);
       const archLabelSuffixed = rec.arch.kind === 'leaning' ? `${archLabel} (leaning)` : archLabel;
       lines.push(`Archetype: ${familyTxt}${archLabelSuffixed}${top3Txt ? ` (${top3Txt})` : ''}`);
+      // Added 2026-10-20: a player who cleared the role-count+sides bar for
+      // Complete but was blocked purely by the top-right axis gate — shown
+      // regardless of which kind they ultimately landed on instead.
+      if (rec.arch.blockedByAxis && rec.arch.blockedByAxis.length) {
+        const failTxt = rec.arch.blockedByAxis.map(f => `${f.label} ${f.value != null ? fmtType(f.value) : '—'} < 50`).join(', ');
+        lines.push(`(not Complete: ${failTxt})`);
+      }
     }
     return lines;
   }, [seasonFilter, leagues, archetypeMap, roleKey]);

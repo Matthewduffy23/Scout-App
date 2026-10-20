@@ -161,7 +161,15 @@ export function fallbackRoleScoreForSeason(pos, sd) {
 }
 
 // { kind: 'complete'|'hybrid'|'dominant'|'generalist'|'none', key, label, color }
-export function classifyArchetype(pos, roleScores) {
+// axisScore ({x,y}, added 2026-10-20): the SAME pool-relative Feature Q axis
+// scores already being plotted for the current axes mode (season-specific,
+// latest-season, or career-blend — see computeQuadrantScores/
+// computeQuadrantScoresCareerBlend and the callers below) — required for a
+// player to qualify as Complete (see step a). Omit it only when the caller
+// has no quadrant context at all (e.g. a unit test of the role-only cascade
+// that never reaches the Complete branch anyway); a real Complete-eligible
+// player with no axisScore fails the axis gate, not an exception to it.
+export function classifyArchetype(pos, roleScores, axisScore) {
   const cfg = ARCHETYPE_CONFIG[pos];
   if (!cfg || !roleScores) return null;
   // ALL computed roles (including any marked not a "main type", e.g. ATT's
@@ -175,23 +183,47 @@ export function classifyArchetype(pos, roleScores) {
   // a) Complete: 3+ roles >= this position's completeThreshold (default
   // COMPLETE_THRESHOLD, overridable per position — ATT uses 80), AND (added
   // 2026-10-20, cfg.completeSides) at least one role >=75 on EACH side of
-  // that position's Feature Q axes — so a player can't be "Complete" purely
-  // on one kind of strength (e.g. a CB high only in Aggressor/Stopper/
-  // Aerial). The side bar is a fixed 75, independent of completeThreshold.
-  // A player who fails the side check falls through to hybrid/dominant as
-  // normal, same as failing the role-count check.
+  // that position's Feature Q axes, AND (added 2026-10-20) both Feature Q
+  // AXIS SCORES themselves are >=50 — i.e. the player actually sits in this
+  // position's top-right quadrant — so a Complete dot can never appear
+  // outside top-right regardless of how its role scores alone shake out.
+  // The side bar is a fixed 75, independent of completeThreshold. A player
+  // who fails any of these three checks falls through to hybrid/dominant as
+  // normal, same as failing the role-count check alone used to.
   const completeT = cfg.completeThreshold ?? COMPLETE_THRESHOLD;
   const sides = cfg.completeSides;
   const sidesOk = !sides || (entries.some(([n, v]) => v >= 75 && sides.a.includes(n)) && entries.some(([n, v]) => v >= 75 && sides.b.includes(n)));
-  if (sidesOk && entries.filter(([, v]) => v >= completeT).length >= COMPLETE_MIN_ROLES) {
+  const roleCountOk = entries.filter(([, v]) => v >= completeT).length >= COMPLETE_MIN_ROLES;
+
+  // Only computed (and only matters) when the player would otherwise be
+  // Complete — a non-candidate never needs an axis verdict at all.
+  let axisFails = null;
+  if (sidesOk && roleCountOk) {
+    axisFails = [];
+    if (!axisScore) {
+      // No quadrant data for this player in the current pool — can't verify
+      // top-right, so fail closed rather than risk an off-quadrant Complete.
+      axisFails.push({ label: cfg.quadrant.x.label, value: null }, { label: cfg.quadrant.y.label, value: null });
+    } else {
+      if (!(axisScore.x >= 50)) axisFails.push({ label: cfg.quadrant.x.label, value: axisScore.x });
+      if (!(axisScore.y >= 50)) axisFails.push({ label: cfg.quadrant.y.label, value: axisScore.y });
+    }
+  }
+  if (sidesOk && roleCountOk && axisFails.length === 0) {
     return { kind: 'complete', key: cfg.completeLabel, label: cfg.completeLabel, color: cfg.colors[cfg.completeLabel] };
   }
+  // A player who cleared the role-count+sides bar but was blocked purely by
+  // the axis gate: attach why, so a caller (e.g. the tooltip) can explain
+  // it, no matter which kind they land on instead.
+  const blockedByAxis = (axisFails && axisFails.length) ? axisFails : null;
+  const attach = r => blockedByAxis ? { ...r, blockedByAxis } : r;
+
   // b) 3-role hybrids (checked directly against each named triple, not the player's own top-3)
   for (const h of cfg.hybrids) {
     if (h.roles.length !== 3) continue;
     const vals = h.roles.map(r => roleScores[r]);
     if (vals.every(v => v != null && v >= cfg.hybridThreshold) && (Math.max(...vals) - Math.min(...vals)) <= HYBRID_3_SPREAD) {
-      return { kind: 'hybrid', key: h.name, label: h.name, color: cfg.colors[h.name] };
+      return attach({ kind: 'hybrid', key: h.name, label: h.name, color: cfg.colors[h.name] });
     }
   }
   // c) 2-role hybrids
@@ -199,7 +231,7 @@ export function classifyArchetype(pos, roleScores) {
     if (h.roles.length !== 2) continue;
     const [a, b] = h.roles.map(r => roleScores[r]);
     if (a != null && b != null && a >= cfg.hybridThreshold && b >= cfg.hybridThreshold && Math.abs(a - b) < HYBRID_2_GAP) {
-      return { kind: 'hybrid', key: h.name, label: h.name, color: cfg.colors[h.name] };
+      return attach({ kind: 'hybrid', key: h.name, label: h.name, color: cfg.colors[h.name] });
     }
   }
   // d) dominant: best single MAIN-TYPE role >= dominantThreshold (a role
@@ -209,14 +241,14 @@ export function classifyArchetype(pos, roleScores) {
   const sorted = [...mainEntries].sort((a, b) => b[1] - a[1]);
   if (sorted.length && sorted[0][1] >= cfg.dominantThreshold) {
     const [name] = sorted[0];
-    return { kind: 'dominant', key: name, label: name, color: cfg.colors[name] };
+    return attach({ kind: 'dominant', key: name, label: name, color: cfg.colors[name] });
   }
   // e) generalist: 3+ roles >= GENERALIST_THRESHOLD
   if (entries.filter(([, v]) => v >= GENERALIST_THRESHOLD).length >= GENERALIST_MIN_ROLES) {
-    return { kind: 'generalist', key: 'Generalist', label: 'Generalist', color: cfg.colors.Generalist };
+    return attach({ kind: 'generalist', key: 'Generalist', label: 'Generalist', color: cfg.colors.Generalist });
   }
   // f) none
-  return none();
+  return attach(none());
 }
 
 // classifyArchetype(), unchanged, plus two fallback steps that only ever
@@ -235,10 +267,13 @@ export function classifyArchetype(pos, roleScores) {
 //     so it folds into that role's own legend count rather than creating
 //     a separate entry; callers add the suffix only where they display it
 //     (e.g. the tooltip).
-export function classifyArchetypeWithFallback(pos, roleScores, fallbackScore) {
+export function classifyArchetypeWithFallback(pos, roleScores, fallbackScore, axisScore) {
   const cfg = ARCHETYPE_CONFIG[pos];
-  const base = classifyArchetype(pos, roleScores);
+  const base = classifyArchetype(pos, roleScores, axisScore);
   if (!cfg || !base || base.kind !== 'none') return base;
+  // A player blocked from Complete by the axis gate but who still lands on
+  // "none" keeps that diagnostic through fallback/leaning too (2026-10-20).
+  const attach = r => base.blockedByAxis ? { ...r, blockedByAxis: base.blockedByAxis } : r;
 
   // Restricted to mainTypes, same as the dominant step above — a hidden
   // role (ATT's Creator) can't become a standalone "leaning" label any
@@ -250,7 +285,7 @@ export function classifyArchetypeWithFallback(pos, roleScores, fallbackScore) {
     const maxOther = entries.length ? Math.max(...entries.map(([, v]) => v)) : -Infinity;
     if (fallbackScore >= cfg.fallbackRole.threshold && fallbackScore >= maxOther) {
       const name = cfg.fallbackRole.name;
-      return { kind: 'fallback', key: name, label: name, color: cfg.colors[name] };
+      return attach({ kind: 'fallback', key: name, label: name, color: cfg.colors[name] });
     }
   }
 
@@ -258,7 +293,7 @@ export function classifyArchetypeWithFallback(pos, roleScores, fallbackScore) {
   if (candidates.length) {
     const [bestName, bestVal] = candidates.reduce((a, b) => (b[1] > a[1] ? b : a));
     if (bestVal >= LEANING_THRESHOLD) {
-      return { kind: 'leaning', key: bestName, label: bestName, color: cfg.colors[bestName] };
+      return attach({ kind: 'leaning', key: bestName, label: bestName, color: cfg.colors[bestName] });
     }
   }
   return base;

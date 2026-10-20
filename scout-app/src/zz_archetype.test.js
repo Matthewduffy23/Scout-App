@@ -59,7 +59,7 @@ test('Simple mode: every mainType/hybrid in every position has a family mapping,
 });
 
 test('simpleFamilyOf: complete/generalist/none collapse to universal tokens with Simple-mode-specific colours', () => {
-  const complete = classifyArchetype('CM', { DLP: 80, Playmaker: 78, 'Ball-Winner': 76, Anchor: 20, 'Attacking Midfielder': 20, 'Ball Carrier': 20 });
+  const complete = classifyArchetype('CM', { DLP: 80, Playmaker: 78, 'Ball-Winner': 76, Anchor: 20, 'Attacking Midfielder': 20, 'Ball Carrier': 20 }, { x: 80, y: 80 });
   const sComplete = simpleFamilyOf('CM', complete);
   expect(sComplete).toEqual({ kind: 'complete', key: 'complete', label: 'Complete', color: '#f8fafc' });
 
@@ -102,7 +102,7 @@ test('ATT Complete uses the overridden threshold (80), not the default 75', () =
   expect(ARCHETYPE_CONFIG.ATT.completeThreshold).toBe(80);
   const at75 = classifyArchetype('ATT', { 'Deep Playmaker': 76, 'Goal Threat': 77, Dribbler: 76, 'Wide Playmaker': 10, Sustainer: 10, Creator: 10 });
   expect(at75.kind).not.toBe('complete'); // 76/77/76 clears the old 75 bar but not ATT's 80
-  const at80 = classifyArchetype('ATT', { 'Deep Playmaker': 81, 'Goal Threat': 82, Dribbler: 80, 'Wide Playmaker': 10, Sustainer: 10, Creator: 10 });
+  const at80 = classifyArchetype('ATT', { 'Deep Playmaker': 81, 'Goal Threat': 82, Dribbler: 80, 'Wide Playmaker': 10, Sustainer: 10, Creator: 10 }, { x: 80, y: 80 });
   expect(at80.kind).toBe('complete');
 });
 
@@ -117,7 +117,7 @@ test('Complete (added 2026-10-20): 3+ roles >=75 is no longer enough on its own 
   expect(cmSameSide.key).toBe('Attacking Midfielder');
   // Same 3 high roles, but Ball-Winner now also clears 75 (Defensive side
   // covered) — Complete.
-  const cmBothSides = classifyArchetype('CM', { 'Attacking Midfielder': 90, 'Ball Carrier': 85, DLP: 77, Playmaker: 20, 'Ball-Winner': 75, Anchor: 40 });
+  const cmBothSides = classifyArchetype('CM', { 'Attacking Midfielder': 90, 'Ball Carrier': 85, DLP: 77, Playmaker: 20, 'Ball-Winner': 75, Anchor: 40 }, { x: 80, y: 80 });
   expect(cmBothSides.kind).toBe('complete');
 
   // CB: Aggressor/Stopper/Aerial are all the Defensive side — no Possession
@@ -129,30 +129,30 @@ test('Complete (added 2026-10-20): 3+ roles >=75 is no longer enough on its own 
   // include it, even though the role-count rule alone wouldn't require it.
   const attNoThreat = classifyArchetype('ATT', { 'Deep Playmaker': 90, 'Wide Playmaker': 88, Creator: 82, 'Goal Threat': 60, Dribbler: 10, Sustainer: 10 });
   expect(attNoThreat.kind).not.toBe('complete'); // clears 3-of-6 >=80 (90/88/82) but Goal Threat (60) misses the fixed 75 side bar
-  const attWithThreat = classifyArchetype('ATT', { 'Deep Playmaker': 90, 'Wide Playmaker': 88, Creator: 82, 'Goal Threat': 80, Dribbler: 10, Sustainer: 10 });
+  const attWithThreat = classifyArchetype('ATT', { 'Deep Playmaker': 90, 'Wide Playmaker': 88, Creator: 82, 'Goal Threat': 80, Dribbler: 10, Sustainer: 10 }, { x: 80, y: 80 });
   expect(attWithThreat.kind).toBe('complete');
 
   // GK can never be demoted by this rule: it needs 3-of-3 roles (all of
   // them), split 2/1 across sides (Goalkeeping=Shot Stopper+Sweeper,
   // Possession=Distributor) — pigeonhole guarantees both sides are covered
   // whenever the role-count rule is met, since every role is forced in.
-  const gk = classifyArchetype('GK', { 'Shot Stopper': 90, Sweeper: 85, Distributor: 78 });
+  const gk = classifyArchetype('GK', { 'Shot Stopper': 90, Sweeper: 85, Distributor: 78 }, { x: 80, y: 80 });
   expect(gk.kind).toBe('complete');
 
   // CF has no such guarantee: Threat=Goal Threat only, Possession=Target
   // Forward/Dribbler/Playmaking Forward (3 roles) — a 3-of-4 Complete CAN
   // be exactly those 3 Possession roles with Goal Threat low, so CF still
   // gets real demotions under this rule (unlike GK).
-  const cfSameSide = classifyArchetype('CF', { Dribbler: 90, 'Playmaking Forward': 85, 'Target Forward': 78, 'Goal Threat': 40 });
+  const cfSameSide = classifyArchetype('CF', { Dribbler: 90, 'Playmaking Forward': 85, 'Target Forward': 78, 'Goal Threat': 40 }, { x: 80, y: 80 });
   expect(cfSameSide.kind).not.toBe('complete');
-  const cfWithThreat = classifyArchetype('CF', { Dribbler: 90, 'Playmaking Forward': 85, 'Target Forward': 78, 'Goal Threat': 76 });
+  const cfWithThreat = classifyArchetype('CF', { Dribbler: 90, 'Playmaking Forward': 85, 'Target Forward': 78, 'Goal Threat': 76 }, { x: 80, y: 80 });
   expect(cfWithThreat.kind).toBe('complete');
 });
 
 test('classifyArchetype cascade (CM, trimmed roles — no Box-to-Box): complete, 2-role hybrid, dominant, generalist, none', () => {
   const cfg = ARCHETYPE_CONFIG.CM;
   expect(Object.keys(cfg.roles).sort()).toEqual(['Anchor', 'Attacking Midfielder', 'Ball Carrier', 'Ball-Winner', 'DLP', 'Playmaker'].sort());
-  const complete = classifyArchetype('CM', { DLP: 80, Playmaker: 78, 'Ball-Winner': 76, Anchor: 20, 'Attacking Midfielder': 20, 'Ball Carrier': 20 });
+  const complete = classifyArchetype('CM', { DLP: 80, Playmaker: 78, 'Ball-Winner': 76, Anchor: 20, 'Attacking Midfielder': 20, 'Ball Carrier': 20 }, { x: 80, y: 80 });
   expect(complete).toEqual({ kind: 'complete', key: cfg.completeLabel, label: cfg.completeLabel, color: '#f8fafc' });
   const hybrid = classifyArchetype('CM', { DLP: 72, Playmaker: 68, 'Ball-Winner': 20, Anchor: 20, 'Attacking Midfielder': 20, 'Ball Carrier': 20 });
   expect(hybrid).toEqual({ kind: 'hybrid', key: 'All-Phase Passer', label: 'All-Phase Passer', color: cfg.colors['All-Phase Passer'] });
@@ -414,7 +414,11 @@ describe.each(['GK', 'CB', 'FB', 'CM', 'ATT', 'CF'])('%s full pool (>=900 mins l
     const cfg = ARCHETYPE_CONFIG[pos];
     const pool = loadPool(pos);
     const results = pool.map(p => ({ p, types: roleScoresFor(pos, p), fb: fallbackRoleScoreFor(pos, p) })).filter(r => r.types);
-    const classified = results.map(r => ({ ...r, arch: classifyArchetypeWithFallback(pos, r.types, r.fb) }));
+    // Complete now also needs the top-right axis gate (2026-10-20) — same
+    // career-blend axis scores this report has always used for the
+    // Complete-outside-top-right checks.
+    const quad = computeQuadrantScoresCareerBlend(pos, pool);
+    const classified = results.map(r => ({ ...r, arch: classifyArchetypeWithFallback(pos, r.types, r.fb, quad.get(r.p.id)) }));
     console.log(`\n[archetype] ${pos} pool=${pool.length} withScores=${results.length}`);
 
     const counts = {};
@@ -565,4 +569,33 @@ test('CM Anchor/Destroyer naming (2026-10-20): per-player display name follows t
   // not a wrong guess.
   const neitherPlayer = pool.find(p => p.qcRoleCareerScores && p.qcRoleCareerScores.Anchor == null && p.qcRoleCareerScores.Destroyer == null && Object.keys(p.qcRoleCareerScores).length);
   if (neitherPlayer) expect(anchorVariantFor(neitherPlayer, 'all')).toBeNull();
+});
+
+test('Complete must be top-right (2026-10-20): both Feature Q axis scores >=50, on top of the existing role-count+sides rule', () => {
+  // Same role scores that already passed 3-roles+sides (from the earlier
+  // "Complete (added 2026-10-20)" test) — now also needs a passing axisScore.
+  const cmRoles = { 'Attacking Midfielder': 90, 'Ball Carrier': 85, DLP: 77, Playmaker: 20, 'Ball-Winner': 75, Anchor: 40 };
+  expect(classifyArchetype('CM', cmRoles, { x: 80, y: 80 }).kind).toBe('complete');
+  expect(classifyArchetype('CM', cmRoles, { x: 27, y: 80 }).kind).not.toBe('complete'); // Possession (x) < 50
+  expect(classifyArchetype('CM', cmRoles, { x: 80, y: 49 }).kind).not.toBe('complete'); // Defensive (y) < 50
+  expect(classifyArchetype('CM', cmRoles, null).kind).not.toBe('complete'); // no axis data at all -> fails closed
+  // Blocked purely by axis falls through to dominant, same as failing any
+  // other Complete gate, and carries why for the tooltip.
+  const blocked = classifyArchetype('CM', cmRoles, { x: 27, y: 80 });
+  expect(blocked.kind).toBe('dominant');
+  expect(blocked.blockedByAxis).toEqual([{ label: ARCHETYPE_CONFIG.CM.quadrant.x.label, value: 27 }]);
+  // A real player this round's audit found: 3+ roles/sides cleared, but one
+  // axis failed — demoted to dominant, never shows as a Complete dot outside
+  // top-right.
+  const pool = loadPool('CB');
+  const rWhite = pool.find(p => p.name === 'R. White' && p.team === 'Inter Miami II');
+  if (rWhite) {
+    const types = roleScoresFor('CB', rWhite);
+    const quad = computeQuadrantScoresCareerBlend('CB', pool);
+    const axisScore = quad.get(rWhite.id);
+    expect(axisScore.x).toBeLessThan(50);
+    const arch = classifyArchetypeWithFallback('CB', types, fallbackRoleScoreFor('CB', rWhite), axisScore);
+    expect(arch.kind).not.toBe('complete');
+    expect(arch.blockedByAxis[0].label).toBe(ARCHETYPE_CONFIG.CB.quadrant.x.label);
+  }
 });
