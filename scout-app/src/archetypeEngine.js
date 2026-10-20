@@ -31,10 +31,6 @@ const G_GROUPS = {
         D: [['Aerial Duels','Aerial duels per 90'],['Aerial Duel %','Aerial duels won, %'],['Defensive Duels','Defensive duels per 90'],['Defensive Duel %','Defensive duels won, %'],['PAdj Interceptions','PAdj Interceptions']],
         P: [['Deep Completions','Deep completions per 90'],['Dribbles','Dribbles per 90'],['Dribble %','Successful dribbles, %'],['Key Passes','Key passes per 90'],['Passes','Passes per 90'],['Pass %','Accurate passes, %'],['Passes to Box','Passes to penalty area per 90'],['Passes to Box %','Accurate passes to penalty area, %'],['Smart Passes','Smart passes per 90']] },
 };
-// AM (Attacking Mid, split out of ATT 2026-10-20 — primary position starts
-// with "AMF") reuses ATT's role formulas and Feature Q axes verbatim, so it
-// reuses ATT's metric lookup table too.
-G_GROUPS.AM = G_GROUPS.ATT;
 
 const REVERSE = {}; // pos -> Wyscout metric name -> { label, bucket }
 for (const pos of Object.keys(G_GROUPS)) {

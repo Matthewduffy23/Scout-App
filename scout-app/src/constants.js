@@ -124,18 +124,6 @@ export const DEFAULT_LEAGUES = new Set(
 );
 
 export const ROLE_KEY_LABELS={GK:'Goalkeeper',CB:'Centre Back',FB:'Fullback',CM:'Central Mid',ATT:'Attacker',CF:'Striker'};
-// AM (Attacking Mid) is NOT a pipeline roleKey — it's a frontend-only split
-// of the ATT pool (scatter archetype feature only, added 2026-10-20): any
-// player with roleKey 'ATT' whose primary (first-listed) position starts
-// with "AMF" is an AM instead of an ATT, percentiled against AMs only.
-// Wingers (LW/RW/LWF/RWF/LAMF/RAMF-primary) stay in ATT. Never touches
-// p.roleKey itself or anything pipeline-baked.
-export const AM_LABEL='Attacking Mid';
-// Season-aware (2026-10-20): with a season+leagues pair, checks THAT season's
-// own primary position (seasonPositionFor, defined below) instead of the
-// player's current one — omit both args (or pass 'all') for the original,
-// current-position-only check.
-export const isAM=(p,season,leagues)=>((season&&season!=='all'?seasonPositionFor(p,season,leagues):p.position)||'').split(',')[0].trim().startsWith('AMF');
 export const ROLES_BY_KEY={
   GK:['Shot Stopper GK','Ball Playing GK','Sweeper GK','Complete GK'],
   CB:['Ball Playing CB','Wide CB','Box Defender'],

@@ -115,15 +115,6 @@ const DETAILED_SWATCHES = {
     'Creative Dribbler': '#22D3EE',
     'Dribbler': '#22C55E',
   },
-  // AM: same swatches as ATT, minus Wide Playmaker (not a role here).
-  AM: {
-    'Goal Threat': '#EF4444',
-    'Dribbling-Finisher': '#F97316',
-    'Dribbler': '#22C55E',
-    'Sustainer': '#22D3EE',
-    'Deep Playmaker': '#3B82F6',
-    'Roaming Playmaker': '#8B5CF6',
-  },
 };
 
 export const ARCHETYPE_CONFIG = {
@@ -329,42 +320,6 @@ export const ARCHETYPE_CONFIG = {
     simple: {
       family: { 'Deep Playmaker': 'blue', 'Roaming Playmaker': 'blue', 'Sustainer': 'blue', 'Goal Threat': 'orange', 'Dribbling-Finisher': 'orange', 'Dribbler': 'green', 'Wide Playmaker': 'purple' },
       labels: { blue: 'Creating', orange: 'Attacking', green: 'Carrier', purple: 'Wide Threat' },
-    },
-  },
-
-  // AM — split out of ATT 2026-10-20: players whose primary position starts
-  // with "AMF" get their own pool (percentiled against AMs only, not mixed
-  // with wingers) instead of sharing ATT's. Same role formulas/axes as ATT,
-  // minus Wide Playmaker (a winger-specific role that makes no sense here —
-  // its hybrid, Traditional Winger, was already removed from ATT itself).
-  // Pool membership (App.js) is a frontend-only split of the existing ATT
-  // roleKey pool via the player's own `position` field — no pipeline change.
-  AM: {
-    completeLabel: 'Complete Attacking Mid',
-    completeThreshold: 80, // same override as ATT
-    dominantThreshold: 65,
-    hybridThreshold: 60,
-    completeSides: { a: ['Goal Threat'], b: ['Deep Playmaker', 'Dribbler', 'Sustainer', 'Creator'] }, // Threat vs Possession
-    roles: {
-      'Deep Playmaker': { hexagon: 'Deep Playmaker' },
-      'Goal Threat': { hexagon: 'Goal Threat' },
-      'Dribbler': { hexagon: 'Dribbler' },
-      'Sustainer': { hexagon: 'Sustainer' },
-      'Creator': { hexagon: 'Creator' }, // hidden role, same as ATT — feeds Roaming Playmaker + Complete/Generalist only
-    },
-    mainTypes: ['Deep Playmaker', 'Goal Threat', 'Dribbler', 'Sustainer'],
-    quadrant: {
-      x: { label: 'Possession', w: { 'Smart passes per 90': 0.1, 'Dribbles per 90': 0.3, 'Deep completions per 90': 0.1, 'Progressive runs per 90': 0.2, 'Passes to penalty area per 90': 0.3 } },
-      y: { label: 'Threat', w: { 'xG per 90': 0.3, 'Non-penalty goals per 90': 0.4, 'xA per 90': 0.3 } },
-      names: { both: 'Multi-Threat', yOnly: 'Final Action', xOnly: 'Facilitator', neither: 'Limited' },
-    },
-    hybrids: [
-      { roles: ['Creator', 'Deep Playmaker'], name: 'Roaming Playmaker' },
-      { roles: ['Goal Threat', 'Dribbler'], name: 'Dribbling-Finisher' },
-    ],
-    simple: {
-      family: { 'Deep Playmaker': 'blue', 'Roaming Playmaker': 'blue', 'Sustainer': 'blue', 'Goal Threat': 'orange', 'Dribbling-Finisher': 'orange', 'Dribbler': 'green' },
-      labels: { blue: 'Creating', orange: 'Attacking', green: 'Carrier' },
     },
   },
 

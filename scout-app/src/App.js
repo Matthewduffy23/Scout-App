@@ -6,7 +6,7 @@ import TeamIndex from './TeamIndex';
 import CustomScatter from './CustomScatter';
 import ScatterChart from './ScatterChart';
 import { Photo, Crest, photoUrl, useIsMobile, deliverJson } from './utils';
-import { scoreBandColor, formatMV, formatFoot, ROLE_KEY_LABELS, ROLES_BY_KEY, POSITION_ATTRIBUTES, playerHasAttribute, ALL_LEAGUES, DEFAULT_LEAGUES, HIDDEN_LEAGUES, YOUTH_LEAGUES, PRESET_LEAGUES, COUNTRY_TO_REGION, GBE_LEAGUE_BANDS, leagueToRegion, leagueToBand, scoreLabel, scoreToStars, promotionBadge, ALL_SEASONS, CURRENT_SEASON, PREV_SEASON, AM_LABEL, isAM, seasonRoleKeyFor, seasonBucketMatch, seasonDetailFor, seasonRowFor, seasonEntryFor, seasonClubFor, leagueSeasonMatch, seasonLeagueFor, metricFromDetail, METRIC_OPTIONS, LEAGUE_STRENGTHS, CAREER_POSITION_GROUPS } from './constants';
+import { scoreBandColor, formatMV, formatFoot, ROLE_KEY_LABELS, ROLES_BY_KEY, POSITION_ATTRIBUTES, playerHasAttribute, ALL_LEAGUES, DEFAULT_LEAGUES, HIDDEN_LEAGUES, YOUTH_LEAGUES, PRESET_LEAGUES, COUNTRY_TO_REGION, GBE_LEAGUE_BANDS, leagueToRegion, leagueToBand, scoreLabel, scoreToStars, promotionBadge, ALL_SEASONS, CURRENT_SEASON, PREV_SEASON, seasonRoleKeyFor, seasonBucketMatch, seasonDetailFor, seasonRowFor, seasonEntryFor, seasonClubFor, leagueSeasonMatch, seasonLeagueFor, metricFromDetail, METRIC_OPTIONS, LEAGUE_STRENGTHS, CAREER_POSITION_GROUPS } from './constants';
 
 // Re-exported so anything that already imports these from App.js keeps working —
 // but there is now ONE implementation, in utils.js, rather than a second copy here.
@@ -422,7 +422,7 @@ export default function App(){
 
   const groupCacheRef=React.useRef({}); // mobile only: {gk:[...players], cf:[...players], ...}
   const manifestRef=React.useRef(null);
-  const rk=useMemo(()=>pos===AM_LABEL?'AM':Object.entries(ROLE_KEY_LABELS).find(([,v])=>v===pos)?.[0]||'',[pos]);
+  const rk=useMemo(()=>Object.entries(ROLE_KEY_LABELS).find(([,v])=>v===pos)?.[0]||'',[pos]);
 
   // Desktop: unchanged — load every position group upfront.
   useEffect(()=>{
@@ -527,20 +527,11 @@ export default function App(){
       if(currentLeagueOnly&&!leagues.has(p.league)) return false;
       // When specific season selected, player must have data for that season
       if(seasonFilter!=='all'&&!p.sh?.find(x=>seasonBucketMatch(x.s,seasonFilter))) return false;
-      // AM (Attacking Mid): frontend-only split of the ATT roleKey pool —
-      // primary position starts with "AMF" (see isAM, constants.js).
-      // Wingers (the rest of ATT) are unaffected; AM never touches p.roleKey.
       // Season-aware (2026-10-20): with a season selected, pool membership
-      // follows THAT season's own position (seasonRoleKeyFor/isAM), not
-      // today's roleKey — a 2022-23 CF shows in the CF pool for 2022-23 even
-      // if he's a winger now. 'All seasons' is unchanged (= p.roleKey).
-      const srk=seasonRoleKeyFor(p,seasonFilter,leagues);
-      if(pos===AM_LABEL){
-        if(srk!=='ATT'||!isAM(p,seasonFilter,leagues)) return false;
-      } else if(pos!=='All'){
-        if(ROLE_KEY_LABELS[srk]!==pos) return false;
-        if(pos==='Attacker'&&isAM(p,seasonFilter,leagues)) return false;
-      }
+      // follows THAT season's own position (seasonRoleKeyFor), not today's
+      // roleKey — a 2022-23 CF shows in the CF pool for 2022-23 even if
+      // he's a winger now. 'All seasons' is unchanged (= p.roleKey).
+      if(pos!=='All'&&ROLE_KEY_LABELS[seasonRoleKeyFor(p,seasonFilter,leagues)]!==pos) return false;
       if(sideFilter!=='Any'){
         if(rk==='FB'){
           if(p.side&&p.side!=='C'&&p.side!==sideFilter) return false;
@@ -728,7 +719,7 @@ export default function App(){
             <span style={T.fl}>Position Group</span>
             <select style={T.sel} value={pos} onChange={e=>{setPos(e.target.value);setAttrFilters(new Set());setMinMins(0);setCurrentLeagueOnly(false);setSideFilter('Any');setPage(0);}}>
               <option>All</option>
-              {Object.values(ROLE_KEY_LABELS).map(v=>v==='Attacker'?[<option key={v}>{v}</option>,<option key={AM_LABEL}>{AM_LABEL}</option>]:<option key={v}>{v}</option>)}
+              {Object.values(ROLE_KEY_LABELS).map(v=><option key={v}>{v}</option>)}
             </select>
           </div>
 

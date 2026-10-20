@@ -5,7 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import { roleScoresFor, roleScoresForSeason, classifyArchetype, classifyArchetypeWithFallback, fallbackRoleScoreFor, simpleFamilyOf, computeQuadrantScores, computeQuadrantScoresCareerBlend } from './archetypeEngine';
 import { ARCHETYPE_CONFIG, COMPLETE_MIN_ROLES, GENERALIST_THRESHOLD, GENERALIST_MIN_ROLES, GENERALIST_COLOR, COMPLETE_COLOR, NONE_COLOR, FAMILY_COLOR, LEANING_THRESHOLD } from './archetypeConfig';
-import { isAM, posToRk, seasonRoleKeyFor, seasonPositionFor } from './constants';
+import { posToRk, seasonRoleKeyFor, seasonPositionFor } from './constants';
 
 const PUB = path.join(__dirname, '..', 'public');
 const MIN_MINUTES = 900;
@@ -14,26 +14,20 @@ const FILES = {
   CB: [1, 2, 3, 4].map(i => `players_cb_${i}.json`),
   FB: [1, 2, 3, 4].map(i => `players_fb_${i}.json`),
   ATT: [1, 2, 3, 4].map(i => `players_att_${i}.json`),
-  AM: [1, 2, 3, 4].map(i => `players_att_${i}.json`), // AM is a split of the ATT files, not its own chunk set
   CF: [1, 2, 3].map(i => `players_cf_${i}.json`),
   CM: [1, 2, 3, 4].map(i => `players_cm_${i}.json`),
 };
-// AM/ATT split (2026-10-20): primary position starting with "AMF" -> AM pool,
-// percentiled separately; everyone else stays in ATT. Mirrors App.js's own
-// pool-membership logic (src/constants.js isAM) exactly.
 function loadPool(pos) {
   let pool = [];
   for (const f of FILES[pos]) {
     const arr = JSON.parse(fs.readFileSync(path.join(PUB, f), 'utf8'));
     for (const p of arr) if ((p.minutesLatest || 0) >= MIN_MINUTES) pool.push(p);
   }
-  if (pos === 'AM') return pool.filter(p => isAM(p));
-  if (pos === 'ATT') return pool.filter(p => !isAM(p));
   return pool;
 }
 
 test('ARCHETYPE_CONFIG: every position has roles, quadrant, max 3 hybrids, mainTypes, and a full colour set', () => {
-  for (const pos of ['GK', 'CB', 'FB', 'CM', 'ATT', 'CF', 'AM']) {
+  for (const pos of ['GK', 'CB', 'FB', 'CM', 'ATT', 'CF']) {
     const cfg = ARCHETYPE_CONFIG[pos];
     expect(cfg).toBeTruthy();
     expect(Object.keys(cfg.roles).length).toBeGreaterThan(0);
@@ -414,7 +408,7 @@ test('computeQuadrantScores: 0-100 range for a couple of positions', () => {
   }
 });
 
-describe.each(['GK', 'CB', 'FB', 'CM', 'ATT', 'CF', 'AM'])('%s full pool (>=900 mins latest season), trimmed config', (pos) => {
+describe.each(['GK', 'CB', 'FB', 'CM', 'ATT', 'CF'])('%s full pool (>=900 mins latest season), trimmed config', (pos) => {
   test('distribution (incl. grey % with/without leaning, Controller for CM), 3 examples per archetype', () => {
     const cfg = ARCHETYPE_CONFIG[pos];
     const pool = loadPool(pos);
@@ -458,7 +452,7 @@ test('posToRk: mirrors the pipeline\'s own pos_to_rk() token mapping (Pipeline/b
   expect(posToRk('RB')).toBe('FB');
   expect(posToRk('LCB, RCB, RB')).toBe('CB'); // first/primary token only
   expect(posToRk('LDMF, RDMF, RB')).toBe('CM');
-  expect(posToRk('AMF')).toBe('ATT'); // AM split happens on top of this, via isAM
+  expect(posToRk('AMF')).toBe('ATT'); // AMF-primary players are Attackers, same as wingers
   expect(posToRk('CF')).toBe('CF');
   expect(posToRk('GK')).toBe('GK');
   expect(posToRk('')).toBe('');
