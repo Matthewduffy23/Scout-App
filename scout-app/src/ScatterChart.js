@@ -1529,12 +1529,36 @@ export const playerGroups = clubOf => [
 ];
 const playerId = p => p.id, playerName = p => p.name;
 const fmtType = v => Number.isFinite(v) ? Math.round(v) : '—';
+// CM-only (2026-10-20): "Anchor" and "Destroyer" are the exact same hexagon
+// role — the pipeline just relabels the qc key once a player's Touches-in-box
+// percentile clears 30 (a player only ever has one of the two keys, never
+// both). The scatter's CM "Anchor" role already reads max(qc.Anchor,
+// qc.Destroyer) so the SCORE is right either way; this only decides which of
+// the two names to display for THIS player, so the tooltip/legend can never
+// contradict the QuickCard. Prefers the selected season's own qcRoles key
+// (seasonsDetail[season].qcRoles) when one is selected and that season
+// actually has either key; otherwise (including 'all seasons') falls back to
+// the career qcRoleCareerScores key. Returns null if the player has neither
+// (no Anchor score at all).
+export function anchorVariantFor(p, seasonFilter, leagues) {
+  if (seasonFilter && seasonFilter !== 'all') {
+    const qcRoles = seasonDetailFor(p, seasonFilter, leagues)?.qcRoles;
+    if (qcRoles) {
+      if (qcRoles.Destroyer != null) return 'Destroyer';
+      if (qcRoles.Anchor != null) return 'Anchor';
+    }
+  }
+  const qc = p.qcRoleCareerScores || {};
+  if (qc.Destroyer != null) return 'Destroyer';
+  if (qc.Anchor != null) return 'Anchor';
+  return null;
+}
 const archetypeLegendDetailed = pos => {
   const cfg = ARCHETYPE_CONFIG[pos];
   if (!cfg) return [];
   return [
     { key: cfg.completeLabel, label: cfg.completeLabel, color: cfg.colors[cfg.completeLabel] },
-    ...cfg.mainTypes.map(k => ({ key: k, label: k, color: cfg.colors[k] })),
+    ...cfg.mainTypes.map(k => ({ key: k, label: cfg.legendLabels?.[k] || k, color: cfg.colors[k] })),
     ...cfg.hybridNames.map(label => ({ key: label, label, color: cfg.colors[label] })),
     ...(cfg.fallbackRole ? [{ key: cfg.fallbackRole.name, label: cfg.fallbackRole.name, color: cfg.colors[cfg.fallbackRole.name] }] : []),
     { key: 'Generalist', label: 'Generalist', color: cfg.colors.Generalist },
@@ -1640,14 +1664,22 @@ export default function ScatterChart({ players, allPlayers, getDisplayScore, sea
       const cfg = ARCHETYPE_CONFIG[roleKey];
       const allScores = { ...rec.types, ...(cfg?.fallbackRole && rec.fallbackScore != null ? { [cfg.fallbackRole.name]: rec.fallbackScore } : {}) };
       const top3 = Object.entries(allScores).filter(([, v]) => v != null).sort((a, b) => b[1] - a[1]).slice(0, 3);
-      const top3Txt = top3.map(([k, v]) => `${k} ${fmtType(v)}`).join(', ');
+      // CM's "Anchor" role is max(hexagon Anchor, hexagon Destroyer) — the
+      // same role, just relabeled by the pipeline per player (Touches-in-box
+      // %>=30 -> Destroyer). Shown everywhere here under whichever of the
+      // two names is THIS player's actual hexagon key, so the tooltip can
+      // never contradict the QuickCard (2026-10-20).
+      const anchorName = roleKey === 'CM' ? anchorVariantFor(p, seasonFilter, leagues) : null;
+      const renameRole = k => (k === 'Anchor' && anchorName) ? anchorName : k;
+      const top3Txt = top3.map(([k, v]) => `${renameRole(k)} ${fmtType(v)}`).join(', ');
       // Family + specific archetype, in both Simple and Detailed mode (the
       // dot colour only shows one or the other, but the tooltip always
       // gives both, per the family a colour-coded dot belongs to).
       const simple = simpleFamilyOf(roleKey, rec.arch);
       const familyTxt = simple && simple.label !== rec.arch.label ? `${simple.label} — ` : '';
-      const archLabel = rec.arch.kind === 'leaning' ? `${rec.arch.label} (leaning)` : rec.arch.label;
-      lines.push(`Archetype: ${familyTxt}${archLabel}${top3Txt ? ` (${top3Txt})` : ''}`);
+      const archLabel = renameRole(rec.arch.label);
+      const archLabelSuffixed = rec.arch.kind === 'leaning' ? `${archLabel} (leaning)` : archLabel;
+      lines.push(`Archetype: ${familyTxt}${archLabelSuffixed}${top3Txt ? ` (${top3Txt})` : ''}`);
     }
     return lines;
   }, [seasonFilter, leagues, archetypeMap, roleKey]);

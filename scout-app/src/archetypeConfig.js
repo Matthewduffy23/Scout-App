@@ -221,6 +221,14 @@ export const ARCHETYPE_CONFIG = {
     dominantThreshold: 65,
     hybridThreshold: 60,
     completeSides: { a: ['Ball-Winner', 'Anchor'], b: ['DLP', 'Playmaker', 'Attacking Midfielder', 'Ball Carrier'] }, // Defensive vs Possession
+    // Detailed-mode legend only (2026-10-20) — the single 'Anchor' key (same
+    // colour, same grouping/counting/label-by-archetype selection for both)
+    // shows this combined name in the legend, since individual players under
+    // it are shown as "Anchor" or "Destroyer" per their own hexagon key
+    // (ScatterChart.js's anchorVariantFor) everywhere else — tooltip and
+    // leaning. Simple mode is untouched (still the shared red/Defensive
+    // family, no per-role label).
+    legendLabels: { Anchor: 'Anchor / Destroyer' },
     roles: {
       // Hexagon-exact (2026-10-20 — was a "refined" custom weight set that
       // quietly dropped 'Passes per 90'/'Accurate passes, %' vs the real

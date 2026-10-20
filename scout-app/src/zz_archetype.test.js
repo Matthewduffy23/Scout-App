@@ -6,6 +6,7 @@ import path from 'path';
 import { roleScoresFor, roleScoresForSeason, classifyArchetype, classifyArchetypeWithFallback, fallbackRoleScoreFor, simpleFamilyOf, computeQuadrantScores, computeQuadrantScoresCareerBlend } from './archetypeEngine';
 import { ARCHETYPE_CONFIG, COMPLETE_MIN_ROLES, GENERALIST_THRESHOLD, GENERALIST_MIN_ROLES, GENERALIST_COLOR, COMPLETE_COLOR, NONE_COLOR, FAMILY_COLOR, LEANING_THRESHOLD } from './archetypeConfig';
 import { posToRk, seasonRoleKeyFor, seasonPositionFor } from './constants';
+import { anchorVariantFor } from './ScatterChart';
 
 const PUB = path.join(__dirname, '..', 'public');
 const MIN_MINUTES = 900;
@@ -533,4 +534,35 @@ test('CF Playmaking Forward (2026-10-20 hexagon audit fix): max(hexagon False 9,
   expect(qc['Chance Creator']).toBeGreaterThan(qc['False 9']); // this player is the case the old custom formula missed
   const types = roleScoresFor('CF', p);
   expect(types['Playmaking Forward']).toBe(Math.max(qc['False 9'], qc['Chance Creator']));
+});
+
+test('CM Anchor/Destroyer naming (2026-10-20): per-player display name follows the hexagon key, legend stays one combined entry', () => {
+  const cfg = ARCHETYPE_CONFIG.CM;
+  // Legend: the grouping/colour/counting key is still the single 'Anchor'
+  // (so label-by-archetype selects both names at once); only the display
+  // text changes.
+  expect(cfg.legendLabels.Anchor).toBe('Anchor / Destroyer');
+  expect(cfg.colors.Anchor).toBe('#F472B6');
+
+  const pool = loadPool('CM');
+  const franco = pool.find(x => x.name === 'Gonçalo Franco' && x.team === 'Swansea City');
+  expect(franco.qcRoleCareerScores.Anchor).toBeUndefined();
+  expect(franco.qcRoleCareerScores.Destroyer).toBeGreaterThan(0);
+  // 'all seasons' (no season filter) -> falls straight to the career key.
+  expect(anchorVariantFor(franco, 'all')).toBe('Destroyer');
+  expect(anchorVariantFor(franco)).toBe('Destroyer'); // no season arg at all behaves the same as 'all'
+  // 2025-26 has its own qcRoles.Destroyer -> uses the season key directly.
+  expect(franco.seasonsDetail['2025-26'].qcRoles.Destroyer).toBeGreaterThan(0);
+  expect(anchorVariantFor(franco, '2025-26')).toBe('Destroyer');
+
+  // A player whose career key is the plain 'Anchor' (Touches-in-box% stayed
+  // under 30) must display "Anchor", never "Destroyer".
+  const anchorPlayer = pool.find(p => p.qcRoleCareerScores?.Anchor != null && p.qcRoleCareerScores?.Destroyer == null);
+  expect(anchorPlayer).toBeTruthy();
+  expect(anchorVariantFor(anchorPlayer, 'all')).toBe('Anchor');
+
+  // A player with neither key (no Anchor-hexagon score at all) gets null,
+  // not a wrong guess.
+  const neitherPlayer = pool.find(p => p.qcRoleCareerScores && p.qcRoleCareerScores.Anchor == null && p.qcRoleCareerScores.Destroyer == null && Object.keys(p.qcRoleCareerScores).length);
+  if (neitherPlayer) expect(anchorVariantFor(neitherPlayer, 'all')).toBeNull();
 });
