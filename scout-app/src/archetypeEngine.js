@@ -31,6 +31,10 @@ const G_GROUPS = {
         D: [['Aerial Duels','Aerial duels per 90'],['Aerial Duel %','Aerial duels won, %'],['Defensive Duels','Defensive duels per 90'],['Defensive Duel %','Defensive duels won, %'],['PAdj Interceptions','PAdj Interceptions']],
         P: [['Deep Completions','Deep completions per 90'],['Dribbles','Dribbles per 90'],['Dribble %','Successful dribbles, %'],['Key Passes','Key passes per 90'],['Passes','Passes per 90'],['Pass %','Accurate passes, %'],['Passes to Box','Passes to penalty area per 90'],['Passes to Box %','Accurate passes to penalty area, %'],['Smart Passes','Smart passes per 90']] },
 };
+// AM (Attacking Mid, split out of ATT 2026-10-20 — primary position starts
+// with "AMF") reuses ATT's role formulas and Feature Q axes verbatim, so it
+// reuses ATT's metric lookup table too.
+G_GROUPS.AM = G_GROUPS.ATT;
 
 const REVERSE = {}; // pos -> Wyscout metric name -> { label, bucket }
 for (const pos of Object.keys(G_GROUPS)) {
@@ -173,9 +177,17 @@ export function classifyArchetype(pos, roleScores) {
   if (!entries.length) return none();
 
   // a) Complete: 3+ roles >= this position's completeThreshold (default
-  // COMPLETE_THRESHOLD, overridable per position — ATT uses 80).
+  // COMPLETE_THRESHOLD, overridable per position — ATT uses 80), AND (added
+  // 2026-10-20, cfg.completeSides) at least one role >=75 on EACH side of
+  // that position's Feature Q axes — so a player can't be "Complete" purely
+  // on one kind of strength (e.g. a CB high only in Aggressor/Stopper/
+  // Aerial). The side bar is a fixed 75, independent of completeThreshold.
+  // A player who fails the side check falls through to hybrid/dominant as
+  // normal, same as failing the role-count check.
   const completeT = cfg.completeThreshold ?? COMPLETE_THRESHOLD;
-  if (entries.filter(([, v]) => v >= completeT).length >= COMPLETE_MIN_ROLES) {
+  const sides = cfg.completeSides;
+  const sidesOk = !sides || (entries.some(([n, v]) => v >= 75 && sides.a.includes(n)) && entries.some(([n, v]) => v >= 75 && sides.b.includes(n)));
+  if (sidesOk && entries.filter(([, v]) => v >= completeT).length >= COMPLETE_MIN_ROLES) {
     return { kind: 'complete', key: cfg.completeLabel, label: cfg.completeLabel, color: cfg.colors[cfg.completeLabel] };
   }
   // b) 3-role hybrids (checked directly against each named triple, not the player's own top-3)

@@ -115,6 +115,15 @@ const DETAILED_SWATCHES = {
     'Creative Dribbler': '#22D3EE',
     'Dribbler': '#22C55E',
   },
+  // AM: same swatches as ATT, minus Wide Playmaker (not a role here).
+  AM: {
+    'Goal Threat': '#EF4444',
+    'Dribbling-Finisher': '#F97316',
+    'Dribbler': '#22C55E',
+    'Sustainer': '#22D3EE',
+    'Deep Playmaker': '#3B82F6',
+    'Roaming Playmaker': '#8B5CF6',
+  },
 };
 
 export const ARCHETYPE_CONFIG = {
@@ -122,6 +131,13 @@ export const ARCHETYPE_CONFIG = {
     completeLabel: 'Complete Keeper',
     dominantThreshold: 60,
     hybridThreshold: 58,
+    // Complete, added 2026-10-20: 3+ roles >=75 (below) is no longer enough
+    // on its own — at least one of those roles must come from EACH side
+    // here (fixed 75 bar, independent of completeThreshold), so a player
+    // can't be "Complete" purely on one kind of strength (e.g. a CB high
+    // only in Aggressor/Stopper/Aerial). Sides match this position's own
+    // Feature Q axis THEME, not the literal quadrant weight formula.
+    completeSides: { a: ['Shot Stopper', 'Sweeper'], b: ['Distributor'] }, // Goalkeeping vs Possession
     roles: {
       'Shot Stopper': { hexagon: 'Shot Stopper' },
       'Sweeper': { hexagon: 'Sweeper' },
@@ -152,6 +168,7 @@ export const ARCHETYPE_CONFIG = {
     completeLabel: 'Complete Centre-Back',
     dominantThreshold: 65,
     hybridThreshold: 60,
+    completeSides: { a: ['Aggressor', 'Stopper', 'Aerial'], b: ['Composed Passer', 'Line-Breaker', 'Ball Carrier'] }, // Defensive vs Possession
     roles: {
       // Un-merged 2026-10-20 back into the two original hexagon roles —
       // the merge (score = max of the two) didn't earn its keep as a
@@ -182,6 +199,7 @@ export const ARCHETYPE_CONFIG = {
     completeLabel: 'Complete Full-Back',
     dominantThreshold: 60,
     hybridThreshold: 58,
+    completeSides: { a: ['Defensive'], b: ['Playmaker', 'Wide Carrier', 'Wide Creator'] }, // Defensive vs Possession
     roles: {
       'Playmaker': { hexagon: 'Playmaker' },
       // Renamed from "Flyer" 2026-10-20 (display name only, same hexagon
@@ -211,6 +229,7 @@ export const ARCHETYPE_CONFIG = {
     completeLabel: 'Complete Midfielder',
     dominantThreshold: 65,
     hybridThreshold: 60,
+    completeSides: { a: ['Ball-Winner', 'Anchor'], b: ['DLP', 'Playmaker', 'Attacking Midfielder', 'Ball Carrier'] }, // Defensive vs Possession
     roles: {
       // Refined (archetype-only): hexagon Deep Playmaker CM minus the two
       // generic-passing metrics ('Passes per 90', 'Accurate passes, %')
@@ -249,13 +268,17 @@ export const ARCHETYPE_CONFIG = {
     // anything else). Applied by classifyArchetypeWithFallback() only when
     // the normal cascade already returned "No clear profile": if this
     // player's Controller score (exact hexagon formula, via qc['Controller']
-    // — same number the QuickCard shows) is >= threshold AND is their
-    // single highest score of any kind (including the roles above), they
-    // get labelled Controller instead of grey. Threshold starts at 60;
-    // bumped to 62 2026-10-20 once the first report came back >8% of CMs.
-    fallbackRole: { name: 'Controller', def: { hexagon: 'Controller' }, threshold: 60, color: '#14b8a6', simpleFamily: 'blue' },
+    // — same number the QuickCard shows, name unchanged there) is >=
+    // threshold AND is their single highest score of any kind (including
+    // the roles above), they get labelled "Safe Circulator" — renamed
+    // 2026-10-20, scatter display only, QuickCard keeps calling it
+    // Controller — instead of grey. Threshold is 60 (checked against the
+    // >8%-of-CMs trigger on 2026-10-20: overall came back 3.68%, kept at 60
+    // — the only subset that cleared 8% was PL 2025-26 specifically, off a
+    // 23-player sample).
+    fallbackRole: { name: 'Safe Circulator', def: { hexagon: 'Controller' }, threshold: 60, color: '#14b8a6', simpleFamily: 'blue' },
     simple: {
-      family: { 'Ball-Winner': 'red', 'Anchor': 'red', 'DLP': 'blue', 'Playmaker': 'blue', 'All-Phase Passer': 'blue', 'Attacking Midfielder': 'orange', 'Ball Carrier': 'green', 'Controller': 'blue' },
+      family: { 'Ball-Winner': 'red', 'Anchor': 'red', 'DLP': 'blue', 'Playmaker': 'blue', 'All-Phase Passer': 'blue', 'Attacking Midfielder': 'orange', 'Ball Carrier': 'green', 'Safe Circulator': 'blue' },
       labels: { red: 'Defensive', blue: 'Passing', orange: 'Attacking', green: 'Carrier' },
     },
   },
@@ -265,6 +288,7 @@ export const ARCHETYPE_CONFIG = {
     completeThreshold: 80, // override: ATT uses 3+ roles >=80 (every other position uses the default 75)
     dominantThreshold: 65,
     hybridThreshold: 60,
+    completeSides: { a: ['Goal Threat'], b: ['Deep Playmaker', 'Dribbler', 'Wide Playmaker', 'Sustainer', 'Creator'] }, // Threat vs Possession
     roles: {
       'Deep Playmaker': { hexagon: 'Deep Playmaker' },
       'Goal Threat': { hexagon: 'Goal Threat' },
@@ -295,10 +319,47 @@ export const ARCHETYPE_CONFIG = {
     },
   },
 
+  // AM — split out of ATT 2026-10-20: players whose primary position starts
+  // with "AMF" get their own pool (percentiled against AMs only, not mixed
+  // with wingers) instead of sharing ATT's. Same role formulas/axes as ATT,
+  // minus Wide Playmaker (a winger-specific role that makes no sense here —
+  // its hybrid, Traditional Winger, was already removed from ATT itself).
+  // Pool membership (App.js) is a frontend-only split of the existing ATT
+  // roleKey pool via the player's own `position` field — no pipeline change.
+  AM: {
+    completeLabel: 'Complete Attacking Mid',
+    completeThreshold: 80, // same override as ATT
+    dominantThreshold: 65,
+    hybridThreshold: 60,
+    completeSides: { a: ['Goal Threat'], b: ['Deep Playmaker', 'Dribbler', 'Sustainer', 'Creator'] }, // Threat vs Possession
+    roles: {
+      'Deep Playmaker': { hexagon: 'Deep Playmaker' },
+      'Goal Threat': { hexagon: 'Goal Threat' },
+      'Dribbler': { hexagon: 'Dribbler' },
+      'Sustainer': { hexagon: 'Sustainer' },
+      'Creator': { hexagon: 'Creator' }, // hidden role, same as ATT — feeds Roaming Playmaker + Complete/Generalist only
+    },
+    mainTypes: ['Deep Playmaker', 'Goal Threat', 'Dribbler', 'Sustainer'],
+    quadrant: {
+      x: { label: 'Possession', w: { 'Smart passes per 90': 0.1, 'Dribbles per 90': 0.3, 'Deep completions per 90': 0.1, 'Progressive runs per 90': 0.2, 'Passes to penalty area per 90': 0.3 } },
+      y: { label: 'Threat', w: { 'xG per 90': 0.3, 'Non-penalty goals per 90': 0.4, 'xA per 90': 0.3 } },
+      names: { both: 'Multi-Threat', yOnly: 'Final Action', xOnly: 'Facilitator', neither: 'Limited' },
+    },
+    hybrids: [
+      { roles: ['Creator', 'Deep Playmaker'], name: 'Roaming Playmaker' },
+      { roles: ['Goal Threat', 'Dribbler'], name: 'Dribbling-Finisher' },
+    ],
+    simple: {
+      family: { 'Deep Playmaker': 'blue', 'Roaming Playmaker': 'blue', 'Sustainer': 'blue', 'Goal Threat': 'orange', 'Dribbling-Finisher': 'orange', 'Dribbler': 'green' },
+      labels: { blue: 'Creating', orange: 'Attacking', green: 'Carrier' },
+    },
+  },
+
   CF: {
     completeLabel: 'Complete Forward',
     dominantThreshold: 65,
     hybridThreshold: 60,
+    completeSides: { a: ['Goal Threat'], b: ['Target Forward', 'Dribbler', 'Playmaking Forward'] }, // Threat vs Possession
     roles: {
       'Target Forward': { hexagon: 'Target Forward' },
       'Goal Threat': { hexagon: 'Goal Threat' },

@@ -124,6 +124,18 @@ export const DEFAULT_LEAGUES = new Set(
 );
 
 export const ROLE_KEY_LABELS={GK:'Goalkeeper',CB:'Centre Back',FB:'Fullback',CM:'Central Mid',ATT:'Attacker',CF:'Striker'};
+// AM (Attacking Mid) is NOT a pipeline roleKey — it's a frontend-only split
+// of the ATT pool (scatter archetype feature only, added 2026-10-20): any
+// player with roleKey 'ATT' whose primary (first-listed) position starts
+// with "AMF" is an AM instead of an ATT, percentiled against AMs only.
+// Wingers (LW/RW/LWF/RWF/LAMF/RAMF-primary) stay in ATT. Never touches
+// p.roleKey itself or anything pipeline-baked.
+export const AM_LABEL='Attacking Mid';
+// Season-aware (2026-10-20): with a season+leagues pair, checks THAT season's
+// own primary position (seasonPositionFor, defined below) instead of the
+// player's current one — omit both args (or pass 'all') for the original,
+// current-position-only check.
+export const isAM=(p,season,leagues)=>((season&&season!=='all'?seasonPositionFor(p,season,leagues):p.position)||'').split(',')[0].trim().startsWith('AMF');
 export const ROLES_BY_KEY={
   GK:['Shot Stopper GK','Ball Playing GK','Sweeper GK','Complete GK'],
   CB:['Ball Playing CB','Wide CB','Box Defender'],
@@ -135,6 +147,8 @@ export const ROLES_BY_KEY={
 export const ALL_SEASONS=['2026-27','2025-26','2024-25','2023-24','2022-23','2021-22','2020-21','2019-20','2018-19'];
 // Newest split-year season — drives the sidebar "Played in <season> only" toggles.
 export const CURRENT_SEASON=ALL_SEASONS[0];
+// Previous split-year season — the sidebar "Played in" filter's second tickbox.
+export const PREV_SEASON=ALL_SEASONS[1];
 // Newest-first order over BOTH season formats: each split-year season, then the
 // calendar year it starts in ('2026-27','2026','2025-26','2025',...). Derived from
 // ALL_SEASONS so it moves forward on its own at a season transition.
@@ -265,6 +279,38 @@ export function seasonEntryFor(player,row){
   if(e) return e;
   const d=player.seasonsDetail?.[row.s];
   return d&&d.league===row.l?d:null;
+}
+// GK/CB/FB/CM/ATT/CF from a raw position token string (first/primary token
+// only) — mirrors the pipeline's own pos_to_rk() in build_players.py exactly,
+// so a season's own position classifies into the same pool the pipeline
+// would assign if that were the player's current season. Scatter-only,
+// frontend-only, added 2026-10-20 for season-based pool membership.
+export function posToRk(pos){
+  const tok=String(pos||'').trim().toUpperCase().split(',')[0].trim();
+  if(tok==='GK') return 'GK';
+  if(tok==='CB'||tok==='LCB'||tok==='RCB') return 'CB';
+  if(tok==='RB'||tok==='LB'||tok==='RWB'||tok==='LWB') return 'FB';
+  if(tok==='DMF'||tok==='CMF'||tok==='LCMF'||tok==='RCMF'||tok==='LDMF'||tok==='RDMF') return 'CM';
+  if(tok==='RW'||tok==='RWF'||tok==='LW'||tok==='LWF'||tok==='AMF'||tok==='RAMF'||tok==='LAMF') return 'ATT';
+  if(tok==='CF') return 'CF';
+  return '';
+}
+// This season's own position string (seasonsDetail/seasonsDetailAll), or the
+// player's current position with 'all'/no season. Falls back to the current
+// position if the season has no position on record (e.g. a display-only row).
+export function seasonPositionFor(player,season,leagues){
+  if(!season||season==='all') return player.position;
+  const e=seasonEntryFor(player,seasonRowFor(player,season,leagues));
+  return e?.position||player.position;
+}
+// Season-aware position-group membership (Scatter only): with a season
+// selected, a player's pool is driven by THAT season's own position, not
+// today's pipeline-baked roleKey — a 2022-23 CF shows in the CF pool for
+// 2022-23 even if he's a winger now. 'all' keeps using the current roleKey,
+// unchanged (identical to p.roleKey).
+export function seasonRoleKeyFor(player,season,leagues){
+  if(!season||season==='all') return player.roleKey;
+  return posToRk(seasonPositionFor(player,season,leagues))||player.roleKey;
 }
 // [percentile, per-90 value] for one metric in a seasonsDetail entry, or null.
 export function metricFromDetail(sd,key){

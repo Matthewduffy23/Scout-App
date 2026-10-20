@@ -5,6 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import { roleScoresFor, roleScoresForSeason, classifyArchetype, classifyArchetypeWithFallback, fallbackRoleScoreFor, simpleFamilyOf, computeQuadrantScores, computeQuadrantScoresCareerBlend } from './archetypeEngine';
 import { ARCHETYPE_CONFIG, COMPLETE_MIN_ROLES, GENERALIST_THRESHOLD, GENERALIST_MIN_ROLES, GENERALIST_COLOR, COMPLETE_COLOR, NONE_COLOR, FAMILY_COLOR, LEANING_THRESHOLD } from './archetypeConfig';
+import { isAM, posToRk, seasonRoleKeyFor, seasonPositionFor } from './constants';
 
 const PUB = path.join(__dirname, '..', 'public');
 const MIN_MINUTES = 900;
@@ -13,20 +14,26 @@ const FILES = {
   CB: [1, 2, 3, 4].map(i => `players_cb_${i}.json`),
   FB: [1, 2, 3, 4].map(i => `players_fb_${i}.json`),
   ATT: [1, 2, 3, 4].map(i => `players_att_${i}.json`),
+  AM: [1, 2, 3, 4].map(i => `players_att_${i}.json`), // AM is a split of the ATT files, not its own chunk set
   CF: [1, 2, 3].map(i => `players_cf_${i}.json`),
   CM: [1, 2, 3, 4].map(i => `players_cm_${i}.json`),
 };
+// AM/ATT split (2026-10-20): primary position starting with "AMF" -> AM pool,
+// percentiled separately; everyone else stays in ATT. Mirrors App.js's own
+// pool-membership logic (src/constants.js isAM) exactly.
 function loadPool(pos) {
   let pool = [];
   for (const f of FILES[pos]) {
     const arr = JSON.parse(fs.readFileSync(path.join(PUB, f), 'utf8'));
     for (const p of arr) if ((p.minutesLatest || 0) >= MIN_MINUTES) pool.push(p);
   }
+  if (pos === 'AM') return pool.filter(p => isAM(p));
+  if (pos === 'ATT') return pool.filter(p => !isAM(p));
   return pool;
 }
 
 test('ARCHETYPE_CONFIG: every position has roles, quadrant, max 3 hybrids, mainTypes, and a full colour set', () => {
-  for (const pos of ['GK', 'CB', 'FB', 'CM', 'ATT', 'CF']) {
+  for (const pos of ['GK', 'CB', 'FB', 'CM', 'ATT', 'CF', 'AM']) {
     const cfg = ARCHETYPE_CONFIG[pos];
     expect(cfg).toBeTruthy();
     expect(Object.keys(cfg.roles).length).toBeGreaterThan(0);
@@ -102,6 +109,49 @@ test('ATT Complete uses the overridden threshold (80), not the default 75', () =
   expect(at75.kind).not.toBe('complete'); // 76/77/76 clears the old 75 bar but not ATT's 80
   const at80 = classifyArchetype('ATT', { 'Deep Playmaker': 81, 'Goal Threat': 82, Dribbler: 80, 'Wide Playmaker': 10, Sustainer: 10, Creator: 10 });
   expect(at80.kind).toBe('complete');
+});
+
+test('Complete (added 2026-10-20): 3+ roles >=75 is no longer enough on its own — needs >=1 role >=75 on EACH Feature-Q-axis side', () => {
+  // CM: 3 high roles all on the Possession side (Attacking Midfielder/Ball
+  // Carrier/DLP, with Playmaker kept low so the DLP+Playmaker hybrid can't
+  // fire) and nothing >=75 on the Defensive side (Ball-Winner/Anchor) —
+  // falls through to dominant, same as failing the 3-role count.
+  const cmSameSide = classifyArchetype('CM', { 'Attacking Midfielder': 90, 'Ball Carrier': 85, DLP: 77, Playmaker: 20, 'Ball-Winner': 50, Anchor: 40 });
+  expect(cmSameSide.kind).not.toBe('complete');
+  expect(cmSameSide.kind).toBe('dominant');
+  expect(cmSameSide.key).toBe('Attacking Midfielder');
+  // Same 3 high roles, but Ball-Winner now also clears 75 (Defensive side
+  // covered) — Complete.
+  const cmBothSides = classifyArchetype('CM', { 'Attacking Midfielder': 90, 'Ball Carrier': 85, DLP: 77, Playmaker: 20, 'Ball-Winner': 75, Anchor: 40 });
+  expect(cmBothSides.kind).toBe('complete');
+
+  // CB: Aggressor/Stopper/Aerial are all the Defensive side — no Possession
+  // role >=75 — same demotion.
+  const cbSameSide = classifyArchetype('CB', { Aggressor: 90, Stopper: 85, Aerial: 78, 'Composed Passer': 40, 'Line-Breaker': 30, 'Ball Carrier': 20 });
+  expect(cbSameSide.kind).not.toBe('complete');
+
+  // ATT: Goal Threat is the ONLY role on the Threat side — a Complete must
+  // include it, even though the role-count rule alone wouldn't require it.
+  const attNoThreat = classifyArchetype('ATT', { 'Deep Playmaker': 90, 'Wide Playmaker': 88, Creator: 82, 'Goal Threat': 60, Dribbler: 10, Sustainer: 10 });
+  expect(attNoThreat.kind).not.toBe('complete'); // clears 3-of-6 >=80 (90/88/82) but Goal Threat (60) misses the fixed 75 side bar
+  const attWithThreat = classifyArchetype('ATT', { 'Deep Playmaker': 90, 'Wide Playmaker': 88, Creator: 82, 'Goal Threat': 80, Dribbler: 10, Sustainer: 10 });
+  expect(attWithThreat.kind).toBe('complete');
+
+  // GK can never be demoted by this rule: it needs 3-of-3 roles (all of
+  // them), split 2/1 across sides (Goalkeeping=Shot Stopper+Sweeper,
+  // Possession=Distributor) — pigeonhole guarantees both sides are covered
+  // whenever the role-count rule is met, since every role is forced in.
+  const gk = classifyArchetype('GK', { 'Shot Stopper': 90, Sweeper: 85, Distributor: 78 });
+  expect(gk.kind).toBe('complete');
+
+  // CF has no such guarantee: Threat=Goal Threat only, Possession=Target
+  // Forward/Dribbler/Playmaking Forward (3 roles) — a 3-of-4 Complete CAN
+  // be exactly those 3 Possession roles with Goal Threat low, so CF still
+  // gets real demotions under this rule (unlike GK).
+  const cfSameSide = classifyArchetype('CF', { Dribbler: 90, 'Playmaking Forward': 85, 'Target Forward': 78, 'Goal Threat': 40 });
+  expect(cfSameSide.kind).not.toBe('complete');
+  const cfWithThreat = classifyArchetype('CF', { Dribbler: 90, 'Playmaking Forward': 85, 'Target Forward': 78, 'Goal Threat': 76 });
+  expect(cfWithThreat.kind).toBe('complete');
 });
 
 test('classifyArchetype cascade (CM, trimmed roles — no Box-to-Box): complete, 2-role hybrid, dominant, generalist, none', () => {
@@ -186,32 +236,32 @@ test('CF: "False 9" renamed to "Playmaking Forward" (still reuses the hexagon\'s
   expect(r.key).toBe('Playmaking Forward');
 });
 
-test('CM Controller: fallback-only role, exact hexagon formula, never competes in the normal cascade', () => {
+test('CM Safe Circulator: fallback-only role (renamed from "Controller" 2026-10-20, still the exact hexagon Controller formula), never competes in the normal cascade', () => {
   const cfg = ARCHETYPE_CONFIG.CM;
-  expect(cfg.fallbackRole).toEqual({ name: 'Controller', def: { hexagon: 'Controller' }, threshold: 60, color: '#14b8a6', simpleFamily: 'blue' });
-  expect(cfg.roles.Controller).toBeUndefined(); // not a normal role — can't feed Complete/Generalist/hybrids
-  expect(cfg.mainTypes).not.toContain('Controller');
-  expect(cfg.colors.Controller).toBe('#14b8a6');
-  expect(cfg.simple.family.Controller).toBe('blue');
-  expect(cfg.simpleColors.Controller).toBe(FAMILY_COLOR.blue);
+  expect(cfg.fallbackRole).toEqual({ name: 'Safe Circulator', def: { hexagon: 'Controller' }, threshold: 60, color: '#14b8a6', simpleFamily: 'blue' });
+  expect(cfg.roles['Safe Circulator']).toBeUndefined(); // not a normal role — can't feed Complete/Generalist/hybrids
+  expect(cfg.mainTypes).not.toContain('Safe Circulator');
+  expect(cfg.colors['Safe Circulator']).toBe('#14b8a6');
+  expect(cfg.simple.family['Safe Circulator']).toBe('blue');
+  expect(cfg.simpleColors['Safe Circulator']).toBe(FAMILY_COLOR.blue);
 
   // Normal classification unaffected: a real DLP/Playmaker hybrid ignores
-  // Controller entirely, even if Controller would itself have been huge.
+  // the fallback role entirely, even if its score would itself have been huge.
   const types = { DLP: 72, Playmaker: 68, 'Ball-Winner': 20, Anchor: 20, 'Attacking Midfielder': 20, 'Ball Carrier': 20 };
   expect(classifyArchetypeWithFallback('CM', types, 95)).toEqual(classifyArchetype('CM', types));
 
-  // Only kicks in when the normal cascade is "none", AND Controller clears
-  // its threshold, AND is the single highest score of any kind.
+  // Only kicks in when the normal cascade is "none", AND the fallback score
+  // clears its threshold, AND is the single highest score of any kind.
   const noneTypes = { DLP: 40, Playmaker: 38, 'Ball-Winner': 20, Anchor: 20, 'Attacking Midfielder': 20, 'Ball Carrier': 20 };
   expect(classifyArchetype('CM', noneTypes).kind).toBe('none');
-  expect(classifyArchetypeWithFallback('CM', noneTypes, 65)).toEqual({ kind: 'fallback', key: 'Controller', label: 'Controller', color: '#14b8a6' });
-  // Below the fallback threshold (60): never promoted to Controller, even
-  // if it's still high enough to qualify as leaning instead (see the
+  expect(classifyArchetypeWithFallback('CM', noneTypes, 65)).toEqual({ kind: 'fallback', key: 'Safe Circulator', label: 'Safe Circulator', color: '#14b8a6' });
+  // Below the fallback threshold (60): never promoted to Safe Circulator,
+  // even if it's still high enough to qualify as leaning instead (see the
   // dedicated leaning test below).
   expect(classifyArchetypeWithFallback('CM', noneTypes, 55).kind).not.toBe('fallback');
   // Clears the threshold but isn't the highest score of any kind (DLP=40
   // here is still beaten by it, but a role between 60 and the fallback
-  // score should block it) — Controller=61 vs an existing role at 63.
+  // score should block it) — fallback=61 vs an existing role at 63.
   const closeTypes = { DLP: 63, Playmaker: 38, 'Ball-Winner': 20, Anchor: 20, 'Attacking Midfielder': 20, 'Ball Carrier': 20 };
   expect(classifyArchetypeWithFallback('CM', closeTypes, 61).kind).not.toBe('fallback');
 });
@@ -225,10 +275,10 @@ test('Leaning: every position, only when still "none" after the fallback step, s
   // Below LEANING_THRESHOLD stays none.
   const low = { DLP: 54, Playmaker: 30, 'Ball-Winner': 20, Anchor: 20, 'Attacking Midfielder': 20, 'Ball Carrier': 20 };
   expect(classifyArchetypeWithFallback('CM', low, 30).kind).toBe('none');
-  // Controller itself can be the leaning role (fallback score between
-  // LEANING_THRESHOLD and its own higher fallback threshold).
+  // The fallback role itself can be the leaning role (fallback score
+  // between LEANING_THRESHOLD and its own higher fallback threshold).
   const leaningController = classifyArchetypeWithFallback('CM', low, 58);
-  expect(leaningController).toEqual({ kind: 'leaning', key: 'Controller', label: 'Controller', color: '#14b8a6' });
+  expect(leaningController).toEqual({ kind: 'leaning', key: 'Safe Circulator', label: 'Safe Circulator', color: '#14b8a6' });
   // A position with no fallbackRole (e.g. ATT) leans on a plain role the
   // same way.
   const attTypes = { 'Deep Playmaker': 57, 'Goal Threat': 20, Dribbler: 20, 'Wide Playmaker': 20, Sustainer: 20, Creator: 20 };
@@ -364,7 +414,7 @@ test('computeQuadrantScores: 0-100 range for a couple of positions', () => {
   }
 });
 
-describe.each(['GK', 'CB', 'FB', 'CM', 'ATT', 'CF'])('%s full pool (>=900 mins latest season), trimmed config', (pos) => {
+describe.each(['GK', 'CB', 'FB', 'CM', 'ATT', 'CF', 'AM'])('%s full pool (>=900 mins latest season), trimmed config', (pos) => {
   test('distribution (incl. grey % with/without leaning, Controller for CM), 3 examples per archetype', () => {
     const cfg = ARCHETYPE_CONFIG[pos];
     const pool = loadPool(pos);
@@ -402,4 +452,34 @@ describe.each(['GK', 'CB', 'FB', 'CM', 'ATT', 'CF'])('%s full pool (>=900 mins l
       console.log(`  ${label}: ${top3}`);
     }
   });
+});
+
+test('posToRk: mirrors the pipeline\'s own pos_to_rk() token mapping (Pipeline/build_players.py)', () => {
+  expect(posToRk('RB')).toBe('FB');
+  expect(posToRk('LCB, RCB, RB')).toBe('CB'); // first/primary token only
+  expect(posToRk('LDMF, RDMF, RB')).toBe('CM');
+  expect(posToRk('AMF')).toBe('ATT'); // AM split happens on top of this, via isAM
+  expect(posToRk('CF')).toBe('CF');
+  expect(posToRk('GK')).toBe('GK');
+  expect(posToRk('')).toBe('');
+});
+
+test('Season-based position (2026-10-20): A. Gray (Tottenham) lands in a different pool per season, from seasonsDetail — no pipeline change', () => {
+  const pool = [...FILES.CM.flatMap(f => JSON.parse(fs.readFileSync(path.join(PUB, f), 'utf8')))];
+  const p = pool.find(x => x.name === 'A. Gray' && x.team === 'Tottenham Hotspur');
+  expect(p).toBeTruthy();
+  // 'All seasons' is unchanged — still today's pipeline-baked roleKey (CM,
+  // from his most recent REAL-score season, 2025-26 — not his latest
+  // in-progress 2026-27 row, which is display-only with no score).
+  expect(p.roleKey).toBe('CM');
+  expect(seasonRoleKeyFor(p, 'all')).toBe('CM');
+  // Per season, using that season's own seasonsDetail position:
+  expect(seasonPositionFor(p, '2023-24')).toBe('RB, RDMF');
+  expect(seasonRoleKeyFor(p, '2023-24')).toBe('FB'); // Leeds, England 2. — right-back
+  expect(seasonPositionFor(p, '2024-25')).toBe('LCB, RCB, RB');
+  expect(seasonRoleKeyFor(p, '2024-25')).toBe('CB'); // Spurs — centre-back
+  expect(seasonPositionFor(p, '2025-26')).toBe('LDMF, RDMF, RB');
+  expect(seasonRoleKeyFor(p, '2025-26')).toBe('CM'); // Spurs — defensive mid (same as roleKey)
+  expect(seasonPositionFor(p, '2026-27')).toBe('RB');
+  expect(seasonRoleKeyFor(p, '2026-27')).toBe('FB'); // Spurs, display-only row — right-back again
 });

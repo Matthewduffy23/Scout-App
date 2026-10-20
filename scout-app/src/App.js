@@ -6,7 +6,7 @@ import TeamIndex from './TeamIndex';
 import CustomScatter from './CustomScatter';
 import ScatterChart from './ScatterChart';
 import { Photo, Crest, photoUrl, useIsMobile, deliverJson } from './utils';
-import { scoreBandColor, formatMV, formatFoot, ROLE_KEY_LABELS, ROLES_BY_KEY, POSITION_ATTRIBUTES, playerHasAttribute, ALL_LEAGUES, DEFAULT_LEAGUES, HIDDEN_LEAGUES, YOUTH_LEAGUES, PRESET_LEAGUES, COUNTRY_TO_REGION, GBE_LEAGUE_BANDS, leagueToRegion, leagueToBand, scoreLabel, scoreToStars, promotionBadge, ALL_SEASONS, CURRENT_SEASON, seasonBucketMatch, seasonDetailFor, seasonRowFor, seasonEntryFor, seasonClubFor, leagueSeasonMatch, seasonLeagueFor, metricFromDetail, METRIC_OPTIONS, LEAGUE_STRENGTHS, CAREER_POSITION_GROUPS } from './constants';
+import { scoreBandColor, formatMV, formatFoot, ROLE_KEY_LABELS, ROLES_BY_KEY, POSITION_ATTRIBUTES, playerHasAttribute, ALL_LEAGUES, DEFAULT_LEAGUES, HIDDEN_LEAGUES, YOUTH_LEAGUES, PRESET_LEAGUES, COUNTRY_TO_REGION, GBE_LEAGUE_BANDS, leagueToRegion, leagueToBand, scoreLabel, scoreToStars, promotionBadge, ALL_SEASONS, CURRENT_SEASON, PREV_SEASON, AM_LABEL, isAM, seasonRoleKeyFor, seasonBucketMatch, seasonDetailFor, seasonRowFor, seasonEntryFor, seasonClubFor, leagueSeasonMatch, seasonLeagueFor, metricFromDetail, METRIC_OPTIONS, LEAGUE_STRENGTHS, CAREER_POSITION_GROUPS } from './constants';
 
 // Re-exported so anything that already imports these from App.js keeps working —
 // but there is now ONE implementation, in utils.js, rather than a second copy here.
@@ -359,7 +359,8 @@ export default function App(){
   const [xValueMax,setXValueMax]=useState(50);
   const [showXValueFilter,setShowXValueFilter]=useState(false);
   const [potentialMin,setPotentialMin]=useState(40);
-  const [playedCurrent,setPlayedCurrent]=useState(false);
+  // Which of the two most recent seasons the "Played in" filter is ticked for, OR-combined.
+  const [playedSeasons,setPlayedSeasons]=useState(()=>new Set());
   const [escOnly,setEscOnly]=useState(false);
   const [gbeMin,setGbeMin]=useState(0);
   const [natFilter,setNatFilter]=useState('');
@@ -421,7 +422,7 @@ export default function App(){
 
   const groupCacheRef=React.useRef({}); // mobile only: {gk:[...players], cf:[...players], ...}
   const manifestRef=React.useRef(null);
-  const rk=useMemo(()=>Object.entries(ROLE_KEY_LABELS).find(([,v])=>v===pos)?.[0]||'',[pos]);
+  const rk=useMemo(()=>pos===AM_LABEL?'AM':Object.entries(ROLE_KEY_LABELS).find(([,v])=>v===pos)?.[0]||'',[pos]);
 
   // Desktop: unchanged — load every position group upfront.
   useEffect(()=>{
@@ -511,7 +512,7 @@ export default function App(){
     const list=all.filter(p=>{
       if(q&&!_norm(p.name).includes(q)&&!_norm(p.team).includes(q)) return false;
       // RecentOnly: skip if no recent data, BUT allow all if a specific season is selected
-      if(recentOnly&&!p.hasRecentData&&seasonFilter==='all'&&!playedCurrent&&!youthActive) return false;
+      if(recentOnly&&!p.hasRecentData&&seasonFilter==='all'&&playedSeasons.size===0&&!youthActive) return false;
       // Min minutes: with a season selected, that season's row (the same row the score,
       // club and league come from — seasonEntryFor); with All seasons, latest minutes.
       if(minMins>0){
@@ -526,7 +527,20 @@ export default function App(){
       if(currentLeagueOnly&&!leagues.has(p.league)) return false;
       // When specific season selected, player must have data for that season
       if(seasonFilter!=='all'&&!p.sh?.find(x=>seasonBucketMatch(x.s,seasonFilter))) return false;
-      if(pos!=='All'&&ROLE_KEY_LABELS[p.roleKey]!==pos) return false;
+      // AM (Attacking Mid): frontend-only split of the ATT roleKey pool —
+      // primary position starts with "AMF" (see isAM, constants.js).
+      // Wingers (the rest of ATT) are unaffected; AM never touches p.roleKey.
+      // Season-aware (2026-10-20): with a season selected, pool membership
+      // follows THAT season's own position (seasonRoleKeyFor/isAM), not
+      // today's roleKey — a 2022-23 CF shows in the CF pool for 2022-23 even
+      // if he's a winger now. 'All seasons' is unchanged (= p.roleKey).
+      const srk=seasonRoleKeyFor(p,seasonFilter,leagues);
+      if(pos===AM_LABEL){
+        if(srk!=='ATT'||!isAM(p,seasonFilter,leagues)) return false;
+      } else if(pos!=='All'){
+        if(ROLE_KEY_LABELS[srk]!==pos) return false;
+        if(pos==='Attacker'&&isAM(p,seasonFilter,leagues)) return false;
+      }
       if(sideFilter!=='Any'){
         if(rk==='FB'){
           if(p.side&&p.side!=='C'&&p.side!==sideFilter) return false;
@@ -549,7 +563,11 @@ export default function App(){
       const scoreLow=ds<minScore;
       if(p.seasons<minSeas) return false;
       if(potentialMin>40&&(p.potentialScore||p.careerScore)<potentialMin) return false;
-      if(playedCurrent&&!p.sh?.find(x=>seasonBucketMatch(x.s,CURRENT_SEASON))) return false;
+      // Played in: OR across ticked seasons, league-aware — needs a real row in that
+      // season whose league is in the active league filter (same rule as the main
+      // league filter above, leagueSeasonMatch), so a player who left the league no
+      // longer qualifies on that season.
+      if(playedSeasons.size>0&&![...playedSeasons].some(s=>leagueSeasonMatch(p,s,leagues))) return false;
       if(escOnly&&!p.escEligible) return false;
       if(gbeMin>0&&(p.gbeTotal||0)<gbeMin) return false;
       if(natFilter&&!(p.passportCountries||'').toLowerCase().includes(natFilter.toLowerCase())&&!(p.birthCountry||'').toLowerCase().includes(natFilter.toLowerCase())) return false;
@@ -629,7 +647,7 @@ export default function App(){
       return true;
     });
     return {list,below};
-  },[all,search,pos,leagues,ageMin,ageMax,heightMin,heightMax,foot,minScore,minSeas,showMvFilter,mvMax,showContractFilter,contractBefore,roleFilter,roleScoreMin,seasonFilter,metricFilters,xValueFilter,onlyElite,versatileOnly,getDisplayScore,recentOnly,showXValueFilter,xValueMin,xValueMax,attrFilters,minMins,showCareerMinsFilter,careerMinMins,currentLeagueOnly,playedCurrent,potentialMin,lsMin,lsMax,escOnly,gbeMin,natFilter,softMode,roleFilters,shortlist,showShortlist,notPlayingOnly,domesticOnly,internationalOnly,tierFilters,sideFilter,rk,careerPosFilters,careerPosTokenGroups]);
+  },[all,search,pos,leagues,ageMin,ageMax,heightMin,heightMax,foot,minScore,minSeas,showMvFilter,mvMax,showContractFilter,contractBefore,roleFilter,roleScoreMin,seasonFilter,metricFilters,xValueFilter,onlyElite,versatileOnly,getDisplayScore,recentOnly,showXValueFilter,xValueMin,xValueMax,attrFilters,minMins,showCareerMinsFilter,careerMinMins,currentLeagueOnly,playedSeasons,potentialMin,lsMin,lsMax,escOnly,gbeMin,natFilter,softMode,roleFilters,shortlist,showShortlist,notPlayingOnly,domesticOnly,internationalOnly,tierFilters,sideFilter,rk,careerPosFilters,careerPosTokenGroups]);
   const filtered=filterRes.list, belowMinScore=filterRes.below;
 
   const sorted=useMemo(()=>{
@@ -663,7 +681,7 @@ export default function App(){
     avgAge:filtered.length?filtered.reduce((s,p)=>s+p.age,0)/filtered.length:0,
   }),[filtered,getDisplayScore]);
 
-  const reset=()=>{setSearch('');setPos('All');setSideFilter('Any');setRoleFilter('');setRoleFilters(new Set());setSoftMode(false);setRoleFilters(new Set());setSoftMode(false);setRoleScoreMin(50);setActivePreset('');setActivePresetLeagues(null);setShowHidden(false);setShowYouth(false);setActiveBands(new Set());setActiveRegions(new Set());setLsMin(0);setLsMax(101);setAgeMin(16);setAgeMax(38);setHeightMin(152);setHeightMax(211);setFoot('Any');setMinScore(40);setMinSeas(1);setShowMvFilter(false);setMvMax(50);setShowContractFilter(false);setContractBefore(2028);setSeasonFilter('all');setScoreMode('complete');setMetricFilters([]);setXValueFilter('');setRawMode(false);setOutlierMode(false);setOnlyElite(false);setVersatileOnly(false);setRecentOnly(true);setShowXValueFilter(false);setXValueMin(0);setXValueMax(50);setAttrFilters(new Set());setMinMins(500);setShowCareerMinsFilter(false);setCareerMinMins(500);setCurrentLeagueOnly(false);setPotentialMin(40);setPlayedCurrent(false);setEscOnly(false);setGbeMin(0);setNatFilter('');setNotPlayingOnly(false);setDomesticOnly(false);setInternationalOnly(false);setTierFilters(new Set());setShowShortlist(false);setSoftMode(false);setRoleFilters(new Set());setPage(0);};
+  const reset=()=>{setSearch('');setPos('All');setSideFilter('Any');setRoleFilter('');setRoleFilters(new Set());setSoftMode(false);setRoleFilters(new Set());setSoftMode(false);setRoleScoreMin(50);setActivePreset('');setActivePresetLeagues(null);setShowHidden(false);setShowYouth(false);setActiveBands(new Set());setActiveRegions(new Set());setLsMin(0);setLsMax(101);setAgeMin(16);setAgeMax(38);setHeightMin(152);setHeightMax(211);setFoot('Any');setMinScore(40);setMinSeas(1);setShowMvFilter(false);setMvMax(50);setShowContractFilter(false);setContractBefore(2028);setSeasonFilter('all');setScoreMode('complete');setMetricFilters([]);setXValueFilter('');setRawMode(false);setOutlierMode(false);setOnlyElite(false);setVersatileOnly(false);setRecentOnly(true);setShowXValueFilter(false);setXValueMin(0);setXValueMax(50);setAttrFilters(new Set());setMinMins(500);setShowCareerMinsFilter(false);setCareerMinMins(500);setCurrentLeagueOnly(false);setPotentialMin(40);setPlayedSeasons(new Set());setEscOnly(false);setGbeMin(0);setNatFilter('');setNotPlayingOnly(false);setDomesticOnly(false);setInternationalOnly(false);setTierFilters(new Set());setShowShortlist(false);setSoftMode(false);setRoleFilters(new Set());setPage(0);};
 
   if(loading) return <div style={{...T.app,alignItems:'center',justifyContent:'center'}}><style>{'@keyframes spin{to{transform:rotate(360deg)}}'}</style><div style={{width:24,height:24,border:'2px solid #1e2d45',borderTop:'2px solid #3b7de8',borderRadius:'50%',animation:'spin 0.8s linear infinite'}}/><div style={{color:'#94a3b8',fontSize:11,marginTop:8}}>Loading…</div></div>;
 
@@ -710,7 +728,7 @@ export default function App(){
             <span style={T.fl}>Position Group</span>
             <select style={T.sel} value={pos} onChange={e=>{setPos(e.target.value);setAttrFilters(new Set());setMinMins(0);setCurrentLeagueOnly(false);setSideFilter('Any');setPage(0);}}>
               <option>All</option>
-              {Object.values(ROLE_KEY_LABELS).map(v=><option key={v}>{v}</option>)}
+              {Object.values(ROLE_KEY_LABELS).map(v=>v==='Attacker'?[<option key={v}>{v}</option>,<option key={AM_LABEL}>{AM_LABEL}</option>]:<option key={v}>{v}</option>)}
             </select>
           </div>
 
@@ -1018,10 +1036,16 @@ export default function App(){
             <input type="range" style={T.sl} min={40} max={90} step={1} value={potentialMin} onChange={e=>{setPotentialMin(Number(e.target.value));setPage(0);}}/>
           </div>
           <div style={T.fg}>
-            <label style={T.cr} onClick={()=>{setPlayedCurrent(p=>!p);setPage(0);}}>
-              <div style={T.cb(playedCurrent)}>{playedCurrent&&<span style={{color:'#fff',fontSize:8,lineHeight:1}}>✓</span>}</div>
-              <span style={T.cl(playedCurrent)}>Played in {CURRENT_SEASON} only</span>
-            </label>
+            <span style={T.fl}>Played in</span>
+            {[CURRENT_SEASON,PREV_SEASON].map(s=>{
+              const on=playedSeasons.has(s);
+              return (
+                <label key={s} style={T.cr} onClick={()=>{setPlayedSeasons(prev=>{const n=new Set(prev);n.has(s)?n.delete(s):n.add(s);return n;});setPage(0);}}>
+                  <div style={T.cb(on)}>{on&&<span style={{color:'#fff',fontSize:8,lineHeight:1}}>✓</span>}</div>
+                  <span style={T.cl(on)}>{s}</span>
+                </label>
+              );
+            })}
           </div>
           <div style={T.fg}>
             <label style={T.cr} onClick={()=>{setEscOnly(p=>!p);setPage(0);}}>

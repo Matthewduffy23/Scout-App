@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { SCORE_TIERS, POS_COLORS, METRIC_OPTIONS, METRIC_OPTIONS_EXTRA, seasonDetailFor, metricFromDetail, ROLES_BY_KEY, ROLE_KEY_LABELS,
-  SCORE_DOT_STEPS, SCORE_DOT_LOW, scoreDotColor, EXPORT_W, EXPORT_H, seasonClubFor, seasonRowFor, ALL_SEASONS } from './constants';
+  SCORE_DOT_STEPS, SCORE_DOT_LOW, scoreDotColor, EXPORT_W, EXPORT_H, seasonClubFor, seasonRowFor, seasonPositionFor, ALL_SEASONS } from './constants';
 import { useIsMobile, deliverPng } from './utils';
 import { ensureMontserratEmbedded } from './CoachCard';
 import { barColor } from './QuickCard';
@@ -1633,7 +1633,8 @@ export default function ScatterChart({ players, allPlayers, getDisplayScore, sea
   const groups = useMemo(() => playerGroups(p => seasonClubFor(p, seasonFilter, leagues)), [seasonFilter, leagues]);
   const playerTip = useCallback(p => {
     const c = seasonClubFor(p, seasonFilter, leagues);
-    const lines = [`${c.team} · ${c.league}${seasonFilter !== 'all' ? ` (${seasonFilter})` : ''}`, `${p.position} · age ${p.age}`];
+    const pos = seasonPositionFor(p, seasonFilter, leagues);
+    const lines = [`${c.team} · ${c.league}${seasonFilter !== 'all' ? ` (${seasonFilter})` : ''}`, `${pos} · age ${p.age}`];
     const rec = archetypeMap?.get(p.id);
     if (rec && rec.arch) {
       const cfg = ARCHETYPE_CONFIG[roleKey];
