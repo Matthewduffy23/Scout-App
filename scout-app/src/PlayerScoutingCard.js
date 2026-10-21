@@ -487,6 +487,13 @@ const HEADER_R     = 'rgb(17,22,42)';   // header gradient right (default, no cl
 const ACCENT_PINK  = '#ff66c4';         // spec
 const TREND_CYAN   = '#00cadc';         // spec trend line
 
+// NOTES section (Key Attributes / Development Areas / View) layout — shared
+// between buildCardElement's markup and fitNotesSection's measurement so the
+// two can never drift out of sync with each other.
+const NOTES_TOP = 311;
+const NOTES_GAP = 14; // fixed gap between bullets AND the minimum gap kept to CURRENT LEVEL
+const CURRENT_LEVEL_TOP = 894;
+
 function darkenHex(hex, amount = 0.35) {
   if (!hex || typeof hex !== 'string') return hex;
   const m = hex.trim().match(/^#?([0-9a-f]{6})$/i);
@@ -830,12 +837,6 @@ export function scoutingCardSeason(player, manual = {}) {
 }
 
 export function buildCardElement(player, manual = {}) {
-  // Shared layout constants for the NOTES section (Key Attributes / Development
-  // Areas / View) and fitNotesSection below, so the HTML and the JS measurement
-  // that shrinks it to fit can never drift out of sync with each other.
-  const NOTES_TOP = 311;
-  const NOTES_GAP = 14; // fixed gap between bullets AND the minimum gap kept to CURRENT LEVEL
-  const CURRENT_LEVEL_TOP = 894;
   // Single source of truth for the SVG-star path: the level-label offsets below must
   // move in lockstep with the stars or the text lands on top of them.
   const svgStars = !!manual.iphoneExport || isTouchDevice();
@@ -1176,26 +1177,25 @@ export function buildCardElement(player, manual = {}) {
       <div style="position:absolute;top:1033px;left:937px;">${starsHtml(manual.potentialScore ?? player.potentialScore ?? player.careerScore, 40, manual.potentialStarsOverride != null && manual.potentialStarsOverride !== '' ? Number(manual.potentialStarsOverride) : null, svgStars)}</div>
       <div style="position:absolute;top:1039px;left:${svgStars ? '1163px' : '1133px'};font-size:20px;font-weight:500;color:#c0c0c0;">${manual.potentialLevel || scoreLabel(player.potentialScore || player.careerScore)}</div>
 
-      <!-- TEMP build marker (remove once font is confirmed) -->
-
     </div>
   `;
 
   document.body.appendChild(container);
-  fitNotesSection(container, { notesTop: NOTES_TOP, gap: NOTES_GAP, currentLevelTop: CURRENT_LEVEL_TOP });
   return container;
 }
 
 // Shrinks the NOTES section's font-size (never its gaps — those stay fixed
 // at NOTES_GAP) as one unit until its real rendered height fits the space
-// above CURRENT_LEVEL_TOP, keeping at least `gap` clear above it. Runs after
-// the container is attached to the DOM (so scrollHeight reflects real,
-// wrapped text in the real font, not a guess) and before toPng() captures
-// it. No-op when the text already fits at the default size.
-function fitNotesSection(container, { notesTop, gap, currentLevelTop }) {
+// above CURRENT_LEVEL_TOP, keeping at least NOTES_GAP clear above it. Called
+// from downloadScoutingCardPNG only after Montserrat is loaded AND the
+// browser has actually painted with it (see waitForFontsSettled) — scrollHeight
+// measured any earlier can still reflect fallback-font line-wrapping, giving
+// a bullet an extra line of height that never gets reclaimed. No-op when the
+// text already fits at the default size.
+function fitNotesSection(container) {
   const notes = container.querySelector('#scc-notes');
   if (!notes) return;
-  const available = currentLevelTop - notesTop - gap;
+  const available = CURRENT_LEVEL_TOP - NOTES_TOP - NOTES_GAP;
   const minFontSize = 16;
   let fontSize = 27.9;
   while (notes.scrollHeight > available && fontSize > minFontSize) {
@@ -1230,12 +1230,26 @@ function ensureMontserratEmbedded() {
   return _montserratEmbedPromise;
 }
 
+// document.fonts.ready resolving doesn't guarantee the browser has actually
+// REPAINTED with the newly-loaded face yet — on a cold/first export, text
+// measured in the same tick can still reflect fallback-font line-wrapping
+// (a bullet reads one line too tall, which is exactly fitNotesSection's
+// uneven-gap bug). Two animation frames give the browser a real paint pass
+// on the loaded font before anything measures scrollHeight.
+function waitForFontsSettled() {
+  return new Promise(resolve => {
+    requestAnimationFrame(() => requestAnimationFrame(resolve));
+  });
+}
+
 export async function downloadScoutingCardPNG(player, manual = {}) {
   const { toPng } = await import('html-to-image');
 
   await ensureMontserratEmbedded();
 
   const el = buildCardElement(player, manual);
+  await waitForFontsSettled();
+  fitNotesSection(el);
 
   // background-image has no onerror — preload the real photo URL manually and
   // swap to the fallback image if it 404s, before html2canvas captures the card.
