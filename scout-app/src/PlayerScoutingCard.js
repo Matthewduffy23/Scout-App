@@ -494,6 +494,12 @@ const NOTES_TOP = 311;
 const NOTES_GAP = 14; // fixed gap between bullets AND the minimum gap kept to CURRENT LEVEL
 const CURRENT_LEVEL_TOP = 894;
 
+// Set to this commit's own short hash right before committing (see the
+// commit message) — lets a downloaded PNG itself prove which exact code
+// built it, instead of trusting that a given preview URL reflects the
+// commit its deployment ID claims to.
+const BUILD_MARKER = 'PENDING_COMMIT_HASH';
+
 function darkenHex(hex, amount = 0.35) {
   if (!hex || typeof hex !== 'string') return hex;
   const m = hex.trim().match(/^#?([0-9a-f]{6})$/i);
@@ -1177,6 +1183,10 @@ export function buildCardElement(player, manual = {}) {
       <div style="position:absolute;top:1033px;left:937px;">${starsHtml(manual.potentialScore ?? player.potentialScore ?? player.careerScore, 40, manual.potentialStarsOverride != null && manual.potentialStarsOverride !== '' ? Number(manual.potentialStarsOverride) : null, svgStars)}</div>
       <div style="position:absolute;top:1039px;left:${svgStars ? '1163px' : '1133px'};font-size:20px;font-weight:500;color:#c0c0c0;">${manual.potentialLevel || scoreLabel(player.potentialScore || player.careerScore)}</div>
 
+      <!-- Build marker: proves which commit actually produced this PNG.
+           Remove once Vercel-serves-stale-build is ruled out for good. -->
+      <div style="position:absolute;bottom:4px;right:8px;font-size:10px;color:#4b5563;">${BUILD_MARKER}</div>
+
     </div>
   `;
 
@@ -1234,8 +1244,30 @@ function logNotesDiagnostics(container) {
   }
 }
 
+// Montserrat's bytes are preloaded globally from the first paint (see
+// public/index.html), but preload only prefetches bytes into the HTTP cache
+// — it does not register the face as loaded/ready in document.fonts, since
+// nothing else on the page ever uses font-family:Montserrat to trigger that
+// on its own. Confirmed directly on a live deployment: document.fonts.check
+// reads false right after page load even with the preload already having
+// fired, and calling load()+ready explicitly resolves in ~3ms once the bytes
+// are cached (vs. an unbounded wait before the preload existed). This is a
+// correctness requirement of the Font Loading API, not a timing guess: the
+// face is registered statically in index.html, so unlike the earlier
+// dynamically-injected <style> version, this match cannot silently fail.
+async function ensureMontserratReady() {
+  try {
+    await Promise.all(MONTSERRAT_WEIGHTS.map(w => document.fonts.load(`${w} 16px Montserrat`)));
+    await document.fonts.ready;
+  } catch (e) {
+    console.error('[card] Montserrat load check failed', e);
+  }
+}
+
 export async function downloadScoutingCardPNG(player, manual = {}) {
   const { toPng } = await import('html-to-image');
+
+  await ensureMontserratReady();
 
   const el = buildCardElement(player, manual);
   fitNotesSection(el);
