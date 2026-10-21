@@ -1186,12 +1186,12 @@ export function buildCardElement(player, manual = {}) {
 
 // Shrinks the NOTES section's font-size (never its gaps — those stay fixed
 // at NOTES_GAP) as one unit until its real rendered height fits the space
-// above CURRENT_LEVEL_TOP, keeping at least NOTES_GAP clear above it. Called
-// from downloadScoutingCardPNG only after Montserrat is loaded AND the
-// browser has actually painted with it (see waitForFontsSettled) — scrollHeight
-// measured any earlier can still reflect fallback-font line-wrapping, giving
-// a bullet an extra line of height that never gets reclaimed. No-op when the
-// text already fits at the default size.
+// above CURRENT_LEVEL_TOP, keeping at least NOTES_GAP clear above it. Safe to
+// call immediately after buildCardElement: Montserrat is preloaded globally
+// in public/index.html, long before the app ever reaches the export button,
+// so scrollHeight here already reflects real Montserrat line-wrapping rather
+// than a race against the font still loading. No-op when the text already
+// fits at the default size.
 function fitNotesSection(container) {
   const notes = container.querySelector('#scc-notes');
   if (!notes) return;
@@ -1204,112 +1204,42 @@ function fitNotesSection(container) {
   }
 }
 
-// html2canvas renders the card in a cloned context that does NOT inherit fonts
-// loaded via a stylesheet <link> (woff2 loads async and loses the race), so captures
-// fall back to Arial. Fix: Montserrat (weights 400/500/600/700/900, latin) is inlined
-// above as base64 @font-face CSS — embedded synchronously, no network needed. We add it
-// to the document and force every weight to load before capture, and re-inject it into
-// html2canvas's clone via onclone so getComputedStyle resolves Montserrat there too.
 const MONTSERRAT_WEIGHTS = [400, 500, 600, 700, 900];
 
-// Pulls each weight's own @font-face src straight out of MONTSERRAT_EMBED_CSS
-// (same embedded base64 data, single source of truth) so it can be loaded
-// directly via the FontFace API below — belt-and-braces alongside the
-// <style> tag, since document.fonts.load('<weight> 16px Montserrat') only
-// works if the browser has already parsed that exact @font-face rule out of
-// the stylesheet; if that match ever silently fails, this doesn't depend on it.
-function parseMontserratFaces() {
-  const re = /@font-face\{font-family:'Montserrat';font-style:normal;font-weight:(\d+);font-display:\w+;src:url\((data:font\/[a-z0-9]+;base64,[^)]+)\)[^}]*\}/g;
-  const faces = [];
-  let m;
-  while ((m = re.exec(MONTSERRAT_EMBED_CSS))) {
-    faces.push({ weight: Number(m[1]), src: `url(${m[2]})` });
-  }
-  return faces;
-}
-
-let _montserratEmbedPromise = null;
-function ensureMontserratEmbedded() {
-  if (_montserratEmbedPromise) return _montserratEmbedPromise;
-  _montserratEmbedPromise = (async () => {
-    if (!document.getElementById('scc-montserrat-embed')) {
-      const style = document.createElement('style');
-      style.id = 'scc-montserrat-embed';
-      style.textContent = MONTSERRAT_EMBED_CSS;
-      document.head.appendChild(style);
-    }
-    await Promise.all(parseMontserratFaces().map(async ({ weight, src }) => {
-      try {
-        const face = new FontFace('Montserrat', src, { weight: String(weight) });
-        document.fonts.add(face);
-        await face.load();
-      } catch (e) {
-        console.error(`[card] Montserrat weight ${weight} failed to load via FontFace API`, e);
-      }
-    }));
-    try {
-      await Promise.all(MONTSERRAT_WEIGHTS.map(w => document.fonts.load(`${w} 16px Montserrat`)));
-      await document.fonts.ready;
-    } catch (e) {
-      await new Promise(r => setTimeout(r, 300));
-    }
-    MONTSERRAT_WEIGHTS.forEach(w => {
-      const ok = document.fonts.check(`${w} 16px Montserrat`);
-      console.log(`[card] document.fonts.check(${w}) =`, ok);
-      if (!ok) console.error(`[card] Montserrat weight ${w} is NOT ready — card will build against the fallback font`);
-    });
-  })();
-  return _montserratEmbedPromise;
-}
-
-// Logs each notes bullet's rendered geometry and the gap to the next one, so
-// a bad render can be confirmed by numbers instead of eyeballing an exported
-// PNG. height/lineHeight should be a whole number of lines; every gap should
-// read the same (NOTES_GAP) regardless of label.
-function logNotesDiagnostics(container, label) {
+// Read-only diagnostics (no waiting, no loading — Montserrat is already
+// loaded globally by public/index.html's preload + @font-face by the time
+// any of this runs): confirms every weight actually is ready, and logs each
+// notes bullet's rendered geometry and the gap to the next one, so a bad
+// render can be confirmed by numbers instead of eyeballing an exported PNG.
+// height/lineHeight should be a whole number of lines; every gap should read
+// the same (NOTES_GAP) regardless of label.
+function logNotesDiagnostics(container) {
+  MONTSERRAT_WEIGHTS.forEach(w => {
+    const ok = document.fonts.check(`${w} 16px Montserrat`);
+    console.log(`[card] document.fonts.check(${w}) =`, ok);
+    if (!ok) console.error(`[card] Montserrat weight ${w} is NOT ready — index.html's preload should have loaded this well before the export button was ever reachable`);
+  });
   const notes = container.querySelector('#scc-notes');
   if (!notes) return;
   const rows = Array.from(notes.children);
   const rects = rows.map(row => row.getBoundingClientRect());
-  console.log(`[card] (${label}) notes font-size =`, getComputedStyle(notes).fontSize);
+  console.log('[card] notes font-size =', getComputedStyle(notes).fontSize);
   rows.forEach((row, i) => {
     const lh = parseFloat(getComputedStyle(row).lineHeight);
     const h = rects[i].height;
-    console.log(`[card] (${label}) row${i} height=${h.toFixed(2)} lineHeight=${lh.toFixed(2)} lines=${(h / lh).toFixed(2)}`);
+    console.log(`[card] row${i} height=${h.toFixed(2)} lineHeight=${lh.toFixed(2)} lines=${(h / lh).toFixed(2)}`);
   });
   for (let i = 1; i < rects.length; i++) {
-    console.log(`[card] (${label}) gap row${i - 1}->row${i} = ${(rects[i].top - rects[i - 1].bottom).toFixed(2)}px`);
+    console.log(`[card] gap row${i - 1}->row${i} = ${(rects[i].top - rects[i - 1].bottom).toFixed(2)}px`);
   }
-}
-
-// document.fonts.ready resolving doesn't guarantee the browser has actually
-// REPAINTED with the newly-loaded face yet — on a cold/first export, text
-// measured in the same tick can still reflect fallback-font line-wrapping
-// (a bullet reads one line too tall, which is exactly fitNotesSection's
-// uneven-gap bug). Two animation frames give the browser a real paint pass
-// on the loaded font before anything measures scrollHeight.
-function waitForFontsSettled() {
-  return new Promise(resolve => {
-    requestAnimationFrame(() => requestAnimationFrame(resolve));
-  });
 }
 
 export async function downloadScoutingCardPNG(player, manual = {}) {
   const { toPng } = await import('html-to-image');
 
-  await ensureMontserratEmbedded();
-
   const el = buildCardElement(player, manual);
-  logNotesDiagnostics(el, 'before-settle');
-  await waitForFontsSettled();
-  logNotesDiagnostics(el, 'after-settle');
   fitNotesSection(el);
-  logNotesDiagnostics(el, 'after-fit');
-  // Defensive: html-to-image clones this exact live node for capture, so make
-  // sure none of the 3 bullet rows carry a fixed height into it — they never
-  // set one explicitly, but this guarantees the clone reflows on whatever
-  // font it actually paints with instead of a stale measured height.
-  el.querySelectorAll('#scc-notes > div').forEach(row => { row.style.height = 'auto'; });
+  logNotesDiagnostics(el);
 
   // background-image has no onerror — preload the real photo URL manually and
   // swap to the fallback image if it 404s, before html2canvas captures the card.

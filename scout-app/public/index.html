@@ -6,6 +6,31 @@
     <title>Scout Index</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- Montserrat is only used by the Scouting Card PNG export, nowhere else
+         in the app, so it was never loaded until a user actually opened that
+         export — which raced the first export against the font still being
+         parsed/decoded, wrapping text in the fallback font and baking a wrong
+         line-count into the notes section's measured height. Preloading +
+         registering it here means it starts loading the instant the app
+         loads, long before anyone reaches the export button; font-display:
+         block means if a card is somehow still built before it's ready, text
+         stays invisible rather than painting in the wrong font and never
+         reflowing. Same woff2 files as PlayerScoutingCard.js's embedded
+         MONTSERRAT_EMBED_CSS (single source of truth: extracted from there,
+         not a separate font source). -->
+    <link rel="preload" as="font" type="font/woff2" href="%PUBLIC_URL%/fonts/montserrat-400.woff2" crossorigin>
+    <link rel="preload" as="font" type="font/woff2" href="%PUBLIC_URL%/fonts/montserrat-500.woff2" crossorigin>
+    <link rel="preload" as="font" type="font/woff2" href="%PUBLIC_URL%/fonts/montserrat-600.woff2" crossorigin>
+    <link rel="preload" as="font" type="font/woff2" href="%PUBLIC_URL%/fonts/montserrat-700.woff2" crossorigin>
+    <link rel="preload" as="font" type="font/woff2" href="%PUBLIC_URL%/fonts/montserrat-900.woff2" crossorigin>
+    <style>
+      @font-face{font-family:'Montserrat';font-style:normal;font-weight:400;font-display:block;src:url('%PUBLIC_URL%/fonts/montserrat-400.woff2') format('woff2');}
+      @font-face{font-family:'Montserrat';font-style:normal;font-weight:500;font-display:block;src:url('%PUBLIC_URL%/fonts/montserrat-500.woff2') format('woff2');}
+      @font-face{font-family:'Montserrat';font-style:normal;font-weight:600;font-display:block;src:url('%PUBLIC_URL%/fonts/montserrat-600.woff2') format('woff2');}
+      @font-face{font-family:'Montserrat';font-style:normal;font-weight:700;font-display:block;src:url('%PUBLIC_URL%/fonts/montserrat-700.woff2') format('woff2');}
+      @font-face{font-family:'Montserrat';font-style:normal;font-weight:900;font-display:block;src:url('%PUBLIC_URL%/fonts/montserrat-900.woff2') format('woff2');}
+    </style>
   </head>
   <body>
     <div id="root"></div>
