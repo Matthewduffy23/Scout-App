@@ -830,6 +830,12 @@ export function scoutingCardSeason(player, manual = {}) {
 }
 
 export function buildCardElement(player, manual = {}) {
+  // Shared layout constants for the NOTES section (Key Attributes / Development
+  // Areas / View) and fitNotesSection below, so the HTML and the JS measurement
+  // that shrinks it to fit can never drift out of sync with each other.
+  const NOTES_TOP = 311;
+  const NOTES_GAP = 14; // fixed gap between bullets AND the minimum gap kept to CURRENT LEVEL
+  const CURRENT_LEVEL_TOP = 894;
   // Single source of truth for the SVG-star path: the level-label offsets below must
   // move in lockstep with the stars or the text lands on top of them.
   const svgStars = !!manual.iphoneExport || isTouchDevice();
@@ -1140,24 +1146,30 @@ export function buildCardElement(player, manual = {}) {
         </div>
       </div>
 
-      <!-- NOTES (Key Attributes / Dev / View) — spread across the text box -->
-      <div style="position:absolute;top:311px;left:898px;width:616px;height:570px;padding:0 22px;box-sizing:border-box;display:flex;flex-direction:column;justify-content:space-between;">
+      <!-- NOTES (Key Attributes / Dev / View) — fixed-gap top-down stack
+           (see fitNotesSection below): every gap is the same NOTES_GAP
+           regardless of how long any one bullet's text is. Font-size lives
+           on this container and every bullet below reads it via
+           font-size:inherit, so fitNotesSection can shrink the whole
+           section as one unit — by font-size, never by the gaps — if the
+           text would otherwise run into CURRENT LEVEL. -->
+      <div id="scc-notes" style="position:absolute;top:${NOTES_TOP}px;left:898px;width:616px;padding:0 22px;box-sizing:border-box;display:flex;flex-direction:column;gap:${NOTES_GAP}px;font-size:27.9px;">
         <div style="display:flex;gap:10px;">
-          <span style="color:#fff;font-size:27.9px;flex-shrink:0;line-height:1.5;">•</span>
-          <div style="font-size:27.9px;line-height:1.5;color:#fff;"><span style="color:${ACCENT_PINK};font-weight:700;">Key Attributes: </span><span style="font-weight:600;">${manual.keyAttributes || ''}</span></div>
+          <span style="color:#fff;font-size:inherit;flex-shrink:0;line-height:1.5;">•</span>
+          <div style="font-size:inherit;line-height:1.5;color:#fff;"><span style="color:${ACCENT_PINK};font-weight:700;">Key Attributes: </span><span style="font-weight:600;">${manual.keyAttributes || ''}</span></div>
         </div>
         <div style="display:flex;gap:10px;">
-          <span style="color:#fff;font-size:27.9px;flex-shrink:0;line-height:1.5;">•</span>
-          <div style="font-size:27.9px;line-height:1.5;color:#fff;"><span style="color:${ACCENT_PINK};font-weight:700;">Development Areas: </span><span style="font-weight:600;">${manual.devAreas || ''}</span></div>
+          <span style="color:#fff;font-size:inherit;flex-shrink:0;line-height:1.5;">•</span>
+          <div style="font-size:inherit;line-height:1.5;color:#fff;"><span style="color:${ACCENT_PINK};font-weight:700;">Development Areas: </span><span style="font-weight:600;">${manual.devAreas || ''}</span></div>
         </div>
         <div style="display:flex;gap:10px;">
-          <span style="color:#fff;font-size:27.9px;flex-shrink:0;line-height:1.5;">•</span>
-          <div style="font-size:27.9px;line-height:1.5;color:#fff;"><span style="color:${ACCENT_PINK};font-weight:700;">View: </span><span style="font-weight:600;">${manual.view || ''}</span></div>
+          <span style="color:#fff;font-size:inherit;flex-shrink:0;line-height:1.5;">•</span>
+          <div style="font-size:inherit;line-height:1.5;color:#fff;"><span style="color:${ACCENT_PINK};font-weight:700;">View: </span><span style="font-weight:600;">${manual.view || ''}</span></div>
         </div>
       </div>
 
       <!-- CURRENT / POTENTIAL LEVEL -->
-      <div style="position:absolute;top:894px;left:938px;font-size:26.6px;font-weight:700;color:#fff;">CURRENT LEVEL</div>
+      <div style="position:absolute;top:${CURRENT_LEVEL_TOP}px;left:938px;font-size:26.6px;font-weight:700;color:#fff;">CURRENT LEVEL</div>
       <div style="position:absolute;top:940px;left:941px;">${starsHtml(manual.currentScore ?? player.careerScore, 40, manual.currentStarsOverride != null && manual.currentStarsOverride !== '' ? Number(manual.currentStarsOverride) : null, svgStars)}</div>
       <div style="position:absolute;top:948px;left:${svgStars ? '1163px' : '1133px'};font-size:20px;font-weight:500;color:#c0c0c0;">${manual.currentLevel || scoreLabel(player.careerScore)}</div>
       <div style="position:absolute;top:995px;left:938px;font-size:26.6px;font-weight:700;color:#fff;">POTENTIAL LEVEL</div>
@@ -1170,7 +1182,26 @@ export function buildCardElement(player, manual = {}) {
   `;
 
   document.body.appendChild(container);
+  fitNotesSection(container, { notesTop: NOTES_TOP, gap: NOTES_GAP, currentLevelTop: CURRENT_LEVEL_TOP });
   return container;
+}
+
+// Shrinks the NOTES section's font-size (never its gaps — those stay fixed
+// at NOTES_GAP) as one unit until its real rendered height fits the space
+// above CURRENT_LEVEL_TOP, keeping at least `gap` clear above it. Runs after
+// the container is attached to the DOM (so scrollHeight reflects real,
+// wrapped text in the real font, not a guess) and before toPng() captures
+// it. No-op when the text already fits at the default size.
+function fitNotesSection(container, { notesTop, gap, currentLevelTop }) {
+  const notes = container.querySelector('#scc-notes');
+  if (!notes) return;
+  const available = currentLevelTop - notesTop - gap;
+  const minFontSize = 16;
+  let fontSize = 27.9;
+  while (notes.scrollHeight > available && fontSize > minFontSize) {
+    fontSize = Math.max(minFontSize, fontSize - 0.5);
+    notes.style.fontSize = `${fontSize}px`;
+  }
 }
 
 // html2canvas renders the card in a cloned context that does NOT inherit fonts
