@@ -491,14 +491,16 @@ const TREND_CYAN   = '#00cadc';         // spec trend line
 // between buildCardElement's markup and fitNotesSection's measurement so the
 // two can never drift out of sync with each other.
 const NOTES_TOP = 311;
-const NOTES_GAP = 14; // fixed gap between bullets AND the minimum gap kept to CURRENT LEVEL
+const NOTES_GAP = 14; // minimum gap between bullets — justify-content:space-between only adds to this, never below it
+const NOTES_BOTTOM_MARGIN = 40; // fixed clearance kept between the notes section's own fixed-height box and CURRENT LEVEL
 const CURRENT_LEVEL_TOP = 894;
+const NOTES_HEIGHT = CURRENT_LEVEL_TOP - NOTES_BOTTOM_MARGIN - NOTES_TOP;
 
 // Set to this commit's own short hash right before committing (see the
 // commit message) — lets a downloaded PNG itself prove which exact code
 // built it, instead of trusting that a given preview URL reflects the
 // commit its deployment ID claims to.
-const BUILD_MARKER = '11ea0f4';
+const BUILD_MARKER = 'PENDING_COMMIT_HASH';
 
 function darkenHex(hex, amount = 0.35) {
   if (!hex || typeof hex !== 'string') return hex;
@@ -1153,29 +1155,32 @@ export function buildCardElement(player, manual = {}) {
         </div>
       </div>
 
-      <!-- NOTES (Key Attributes / Dev / View) — fixed-gap top-down stack
-           (see fitNotesSection below): every gap is the same NOTES_GAP
-           regardless of how long any one bullet's text is. Font-size lives
-           on this container and every bullet below reads it via
-           font-size:inherit, so fitNotesSection can shrink the whole
-           section as one unit — by font-size, never by the gaps — if the
-           text would otherwise run into CURRENT LEVEL. -->
+      <!-- NOTES (Key Attributes / Dev / View) — fixed-HEIGHT box (top to
+           ~NOTES_BOTTOM_MARGIN above CURRENT LEVEL) with
+           justify-content:space-between, so leftover vertical space (short
+           text) splits evenly between the 2 gaps and the section fills down
+           toward CURRENT LEVEL like the original design — gap:NOTES_GAP sets
+           the MINIMUM per modern flexbox (gap + space-between combine: gap is
+           the floor, space-between distributes anything beyond it), so a gap
+           is never pushed below 14px. See fitNotesSection: if the 3 bullets'
+           combined content can't fit in the fixed box even with every gap at
+           its 14px floor, the whole section shrinks by font-size instead —
+           never by compressing a gap below the floor. -->
       <!-- html-to-image's clone can wrap this same text slightly narrower
            than the live DOM measured it (sub-pixel/engine differences in its
            SVG foreignObject render), painting fewer lines than fitNotesSection
-           saw — but the clone still carries each row's baked-in computed height
-           (and block-size, its logical-property twin) from the live DOM,
-           leaving a dead gap where the missing line was. A stylesheet
+           saw — but the clone still carries each ROW's baked-in computed
+           height (and block-size, its logical-property twin) from the live
+           DOM, leaving a dead gap where the missing line was. A stylesheet
            !important override placed in this same markup does NOT fix this —
-           confirmed empirically two ways running: the override is present and
-           well-formed in the serialized SVG, yet the exported PNG's gaps are
-           pixel-for-pixel identical with or without it. Whatever mechanism
-           inside html-to-image's SVG/foreignObject rendering is responsible,
-           CSS cascade from within the captured markup can't reach it — see
-           stripBakedHeights in downloadScoutingCardPNG, which removes these
-           inline declarations from the serialized SVG string directly,
-           after html-to-image has already produced it. -->
-      <div id="scc-notes" style="position:absolute;top:${NOTES_TOP}px;left:898px;width:616px;padding:0 22px;box-sizing:border-box;display:flex;flex-direction:column;gap:${NOTES_GAP}px;font-size:27.9px;">
+           confirmed empirically: the override was present and well-formed in
+           the serialized SVG, yet the exported PNG's gaps were pixel-for-pixel
+           identical with or without it. See stripNotesBakedHeights in
+           downloadScoutingCardPNG, which removes these inline declarations
+           from the serialized SVG string directly, after html-to-image has
+           already produced it — deliberately scoped to the 3 ROWS only, not
+           this container, whose own height is fixed by design, not a bug. -->
+      <div id="scc-notes" style="position:absolute;top:${NOTES_TOP}px;left:898px;width:616px;height:${NOTES_HEIGHT}px;padding:0 22px;box-sizing:border-box;display:flex;flex-direction:column;justify-content:space-between;gap:${NOTES_GAP}px;font-size:27.9px;">
         <div style="display:flex;gap:10px;">
           <span style="color:#fff;font-size:inherit;flex-shrink:0;line-height:1.5;">•</span>
           <div style="font-size:inherit;line-height:1.5;color:#fff;"><span style="color:${ACCENT_PINK};font-weight:700;">Key Attributes: </span><span style="font-weight:600;">${manual.keyAttributes || ''}</span></div>
@@ -1209,21 +1214,25 @@ export function buildCardElement(player, manual = {}) {
   return container;
 }
 
-// Shrinks the NOTES section's font-size (never its gaps — those stay fixed
-// at NOTES_GAP) as one unit until its real rendered height fits the space
-// above CURRENT_LEVEL_TOP, keeping at least NOTES_GAP clear above it. Safe to
-// call immediately after buildCardElement: Montserrat is preloaded globally
-// in public/index.html, long before the app ever reaches the export button,
-// so scrollHeight here already reflects real Montserrat line-wrapping rather
-// than a race against the font still loading. No-op when the text already
-// fits at the default size.
+// Shrinks the NOTES section's font-size (never its gaps — those stay at
+// their NOTES_GAP floor; justify-content:space-between only ever ADDS to
+// that floor when content is short) as one unit until its real content fits
+// the section's fixed NOTES_HEIGHT box. notes.scrollHeight reads at most
+// NOTES_HEIGHT whenever content comfortably fits (nothing overflows a
+// fixed-height, overflow:visible box with room to spare — space-between
+// just stretches the gaps to fill it), and only exceeds it once the 3
+// bullets can't fit even at every gap's 14px floor — exactly the shrink
+// trigger we want. Safe to call immediately after buildCardElement:
+// Montserrat is preloaded globally in public/index.html, long before the app
+// ever reaches the export button, so scrollHeight here already reflects
+// real Montserrat line-wrapping rather than a race against the font still
+// loading. No-op when the text already fits at the default size.
 function fitNotesSection(container) {
   const notes = container.querySelector('#scc-notes');
   if (!notes) return;
-  const available = CURRENT_LEVEL_TOP - NOTES_TOP - NOTES_GAP;
   const minFontSize = 16;
   let fontSize = 27.9;
-  while (notes.scrollHeight > available && fontSize > minFontSize) {
+  while (notes.scrollHeight > NOTES_HEIGHT && fontSize > minFontSize) {
     fontSize = Math.max(minFontSize, fontSize - 0.5);
     notes.style.fontSize = `${fontSize}px`;
   }
@@ -1287,27 +1296,22 @@ async function ensureMontserratReady() {
 // twin block-size, yet the output is pixel-identical with or without it).
 // So instead of fighting that from inside the DOM, this edits html-to-image's
 // OWN finished SVG string directly, after the fact: strips every baked
-// height/block-size (and their min-/max- variants) from the #scc-notes
-// subtree, so each row has nothing left to size it but its own painted
-// content when the SVG is finally rasterized.
-//
-// #scc-notes itself (position:absolute) also needed its own fix: Chrome's
-// computed cssText reports top/right/bottom/left as the single `inset`
-// shorthand, not as separate longhands — stripping height/block-size alone
-// left `inset: 311px 406px 206.781px 898px` behind, and bottom+top together
-// on an absolutely positioned box still forces a fixed height regardless of
-// whether `height` itself is present. That shorthand is rewritten down to
-// just top/left (the only two #scc-notes was ever meant to use) before the
-// height-stripping pass runs.
+// height/block-size (and their min-/max- variants) from the 3 bullet ROWS
+// only — NOT the #scc-notes container itself, whose own fixed height is
+// deliberate (see NOTES_HEIGHT) and renders correctly as-is, since it's an
+// explicit value from the template, not an auto/content-derived one that
+// could get baked wrong. Only the region AFTER the container's own opening
+// tag is touched, so its own style attribute is never modified.
 function stripNotesBakedHeights(svgText) {
   const startIdx = svgText.indexOf('id="scc-notes"');
   if (startIdx === -1) return svgText;
-  const endIdx = svgText.indexOf('CURRENT LEVEL', startIdx);
+  const childrenStart = svgText.indexOf('>', startIdx) + 1;
+  const endIdx = svgText.indexOf('CURRENT LEVEL', childrenStart);
   if (endIdx === -1) return svgText;
-  let region = svgText.slice(startIdx, endIdx);
-  region = region.replace(/inset:\s*([\d.]+)px\s+[\d.]+px\s+[\d.]+px\s+([\d.]+)px;/, 'top: $1px; left: $2px;');
-  region = region.replace(/\s*(?:height|block-size|min-height|min-block-size|max-height|max-block-size):\s*[^;"]+;/g, '');
-  return svgText.slice(0, startIdx) + region + svgText.slice(endIdx);
+  const region = svgText
+    .slice(childrenStart, endIdx)
+    .replace(/\s*(?:height|block-size|min-height|min-block-size|max-height|max-block-size):\s*[^;"]+;/g, '');
+  return svgText.slice(0, childrenStart) + region + svgText.slice(endIdx);
 }
 
 // Replicates html-to-image's own toCanvas()->toPng() (load the SVG as an
