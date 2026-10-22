@@ -498,7 +498,7 @@ const CURRENT_LEVEL_TOP = 894;
 // commit message) — lets a downloaded PNG itself prove which exact code
 // built it, instead of trusting that a given preview URL reflects the
 // commit its deployment ID claims to.
-const BUILD_MARKER = '49cd6a3';
+const BUILD_MARKER = '11ea0f4';
 
 function darkenHex(hex, amount = 0.35) {
   if (!hex || typeof hex !== 'string') return hex;
