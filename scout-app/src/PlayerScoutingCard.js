@@ -1160,6 +1160,15 @@ export function buildCardElement(player, manual = {}) {
            font-size:inherit, so fitNotesSection can shrink the whole
            section as one unit — by font-size, never by the gaps — if the
            text would otherwise run into CURRENT LEVEL. -->
+      <!-- html-to-image's clone can wrap this same text slightly narrower
+           than the live DOM measured it (sub-pixel/engine differences in its
+           SVG foreignObject render), painting fewer lines than fitNotesSection
+           saw — but the clone still carries each row's bake-in computed height
+           from the live DOM, leaving a dead gap where the missing line was.
+           A stylesheet !important rule beats that non-important inline height
+           regardless of how it got there, forcing the clone to size each row
+           by what it actually paints. -->
+      <style>#scc-notes, #scc-notes * { height:auto !important; min-height:0 !important; max-height:none !important; }</style>
       <div id="scc-notes" style="position:absolute;top:${NOTES_TOP}px;left:898px;width:616px;padding:0 22px;box-sizing:border-box;display:flex;flex-direction:column;gap:${NOTES_GAP}px;font-size:27.9px;">
         <div style="display:flex;gap:10px;">
           <span style="color:#fff;font-size:inherit;flex-shrink:0;line-height:1.5;">•</span>
