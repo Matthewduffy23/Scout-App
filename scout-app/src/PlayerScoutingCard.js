@@ -1290,14 +1290,23 @@ async function ensureMontserratReady() {
 // height/block-size (and their min-/max- variants) from the #scc-notes
 // subtree, so each row has nothing left to size it but its own painted
 // content when the SVG is finally rasterized.
+//
+// #scc-notes itself (position:absolute) also needed its own fix: Chrome's
+// computed cssText reports top/right/bottom/left as the single `inset`
+// shorthand, not as separate longhands — stripping height/block-size alone
+// left `inset: 311px 406px 206.781px 898px` behind, and bottom+top together
+// on an absolutely positioned box still forces a fixed height regardless of
+// whether `height` itself is present. That shorthand is rewritten down to
+// just top/left (the only two #scc-notes was ever meant to use) before the
+// height-stripping pass runs.
 function stripNotesBakedHeights(svgText) {
   const startIdx = svgText.indexOf('id="scc-notes"');
   if (startIdx === -1) return svgText;
   const endIdx = svgText.indexOf('CURRENT LEVEL', startIdx);
   if (endIdx === -1) return svgText;
-  const region = svgText
-    .slice(startIdx, endIdx)
-    .replace(/\s*(?:height|block-size|min-height|min-block-size|max-height|max-block-size):\s*[^;"]+;/g, '');
+  let region = svgText.slice(startIdx, endIdx);
+  region = region.replace(/inset:\s*([\d.]+)px\s+[\d.]+px\s+[\d.]+px\s+([\d.]+)px;/, 'top: $1px; left: $2px;');
+  region = region.replace(/\s*(?:height|block-size|min-height|min-block-size|max-height|max-block-size):\s*[^;"]+;/g, '');
   return svgText.slice(0, startIdx) + region + svgText.slice(endIdx);
 }
 
