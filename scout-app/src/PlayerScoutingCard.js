@@ -500,7 +500,7 @@ const NOTES_HEIGHT = CURRENT_LEVEL_TOP - NOTES_BOTTOM_MARGIN - NOTES_TOP;
 // commit message) — lets a downloaded PNG itself prove which exact code
 // built it, instead of trusting that a given preview URL reflects the
 // commit its deployment ID claims to.
-const BUILD_MARKER = 'PENDING_COMMIT_HASH';
+const BUILD_MARKER = '8b7c0fe';
 
 function darkenHex(hex, amount = 0.35) {
   if (!hex || typeof hex !== 'string') return hex;
