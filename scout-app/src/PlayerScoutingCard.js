@@ -496,12 +496,6 @@ const NOTES_BOTTOM_MARGIN = 40; // fixed clearance kept between the notes sectio
 const CURRENT_LEVEL_TOP = 894;
 const NOTES_HEIGHT = CURRENT_LEVEL_TOP - NOTES_BOTTOM_MARGIN - NOTES_TOP;
 
-// Set to this commit's own short hash right before committing (see the
-// commit message) — lets a downloaded PNG itself prove which exact code
-// built it, instead of trusting that a given preview URL reflects the
-// commit its deployment ID claims to.
-const BUILD_MARKER = '8b7c0fe';
-
 function darkenHex(hex, amount = 0.35) {
   if (!hex || typeof hex !== 'string') return hex;
   const m = hex.trim().match(/^#?([0-9a-f]{6})$/i);
@@ -1203,10 +1197,6 @@ export function buildCardElement(player, manual = {}) {
       <div style="position:absolute;top:1033px;left:937px;">${starsHtml(manual.potentialScore ?? player.potentialScore ?? player.careerScore, 40, manual.potentialStarsOverride != null && manual.potentialStarsOverride !== '' ? Number(manual.potentialStarsOverride) : null, svgStars)}</div>
       <div style="position:absolute;top:1039px;left:${svgStars ? '1163px' : '1133px'};font-size:20px;font-weight:500;color:#c0c0c0;">${manual.potentialLevel || scoreLabel(player.potentialScore || player.careerScore)}</div>
 
-      <!-- Build marker: proves which commit actually produced this PNG.
-           Remove once Vercel-serves-stale-build is ruled out for good. -->
-      <div style="position:absolute;bottom:4px;right:8px;font-size:10px;color:#4b5563;">${BUILD_MARKER}</div>
-
     </div>
   `;
 
@@ -1239,34 +1229,6 @@ function fitNotesSection(container) {
 }
 
 const MONTSERRAT_WEIGHTS = [400, 500, 600, 700, 900];
-
-// Read-only diagnostics (no waiting, no loading — Montserrat is already
-// loaded globally by public/index.html's preload + @font-face by the time
-// any of this runs): confirms every weight actually is ready, and logs each
-// notes bullet's rendered geometry and the gap to the next one, so a bad
-// render can be confirmed by numbers instead of eyeballing an exported PNG.
-// height/lineHeight should be a whole number of lines; every gap should read
-// the same (NOTES_GAP) regardless of label.
-function logNotesDiagnostics(container) {
-  MONTSERRAT_WEIGHTS.forEach(w => {
-    const ok = document.fonts.check(`${w} 16px Montserrat`);
-    console.log(`[card] document.fonts.check(${w}) =`, ok);
-    if (!ok) console.error(`[card] Montserrat weight ${w} is NOT ready — index.html's preload should have loaded this well before the export button was ever reachable`);
-  });
-  const notes = container.querySelector('#scc-notes');
-  if (!notes) return;
-  const rows = Array.from(notes.children);
-  const rects = rows.map(row => row.getBoundingClientRect());
-  console.log('[card] notes font-size =', getComputedStyle(notes).fontSize);
-  rows.forEach((row, i) => {
-    const lh = parseFloat(getComputedStyle(row).lineHeight);
-    const h = rects[i].height;
-    console.log(`[card] row${i} height=${h.toFixed(2)} lineHeight=${lh.toFixed(2)} lines=${(h / lh).toFixed(2)}`);
-  });
-  for (let i = 1; i < rects.length; i++) {
-    console.log(`[card] gap row${i - 1}->row${i} = ${(rects[i].top - rects[i - 1].bottom).toFixed(2)}px`);
-  }
-}
 
 // Montserrat's bytes are preloaded globally from the first paint (see
 // public/index.html), but preload only prefetches bytes into the HTTP cache
@@ -1348,7 +1310,6 @@ export async function downloadScoutingCardPNG(player, manual = {}) {
 
   const el = buildCardElement(player, manual);
   fitNotesSection(el);
-  logNotesDiagnostics(el);
 
   // background-image has no onerror — preload the real photo URL manually and
   // swap to the fallback image if it 404s, before html2canvas captures the card.
