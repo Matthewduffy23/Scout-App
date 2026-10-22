@@ -498,7 +498,7 @@ const CURRENT_LEVEL_TOP = 894;
 // commit message) — lets a downloaded PNG itself prove which exact code
 // built it, instead of trusting that a given preview URL reflects the
 // commit its deployment ID claims to.
-const BUILD_MARKER = 'be18e3a';
+const BUILD_MARKER = 'PENDING_COMMIT_HASH';
 
 function darkenHex(hex, amount = 0.35) {
   if (!hex || typeof hex !== 'string') return hex;
@@ -1163,12 +1163,18 @@ export function buildCardElement(player, manual = {}) {
       <!-- html-to-image's clone can wrap this same text slightly narrower
            than the live DOM measured it (sub-pixel/engine differences in its
            SVG foreignObject render), painting fewer lines than fitNotesSection
-           saw — but the clone still carries each row's bake-in computed height
-           from the live DOM, leaving a dead gap where the missing line was.
-           A stylesheet !important rule beats that non-important inline height
-           regardless of how it got there, forcing the clone to size each row
-           by what it actually paints. -->
-      <style>#scc-notes, #scc-notes * { height:auto !important; min-height:0 !important; max-height:none !important; }</style>
+           saw — but the clone still carries each row's baked-in computed height
+           (and block-size, its logical-property twin) from the live DOM,
+           leaving a dead gap where the missing line was. A stylesheet
+           !important override placed in this same markup does NOT fix this —
+           confirmed empirically two ways running: the override is present and
+           well-formed in the serialized SVG, yet the exported PNG's gaps are
+           pixel-for-pixel identical with or without it. Whatever mechanism
+           inside html-to-image's SVG/foreignObject rendering is responsible,
+           CSS cascade from within the captured markup can't reach it — see
+           stripBakedHeights in downloadScoutingCardPNG, which removes these
+           inline declarations from the serialized SVG string directly,
+           after html-to-image has already produced it. -->
       <div id="scc-notes" style="position:absolute;top:${NOTES_TOP}px;left:898px;width:616px;padding:0 22px;box-sizing:border-box;display:flex;flex-direction:column;gap:${NOTES_GAP}px;font-size:27.9px;">
         <div style="display:flex;gap:10px;">
           <span style="color:#fff;font-size:inherit;flex-shrink:0;line-height:1.5;">•</span>
@@ -1273,9 +1279,58 @@ async function ensureMontserratReady() {
   }
 }
 
-export async function downloadScoutingCardPNG(player, manual = {}) {
-  const { toPng } = await import('html-to-image');
+// html-to-image's clone-node.js copies getComputedStyle(nativeNode).cssText
+// onto every cloned element's own style attribute — a stylesheet !important
+// override placed inside the captured markup does not win against this in
+// html-to-image's SVG/foreignObject rendering (confirmed empirically: the
+// override is present, well-formed, and targets both height and its logical
+// twin block-size, yet the output is pixel-identical with or without it).
+// So instead of fighting that from inside the DOM, this edits html-to-image's
+// OWN finished SVG string directly, after the fact: strips every baked
+// height/block-size (and their min-/max- variants) from the #scc-notes
+// subtree, so each row has nothing left to size it but its own painted
+// content when the SVG is finally rasterized.
+function stripNotesBakedHeights(svgText) {
+  const startIdx = svgText.indexOf('id="scc-notes"');
+  if (startIdx === -1) return svgText;
+  const endIdx = svgText.indexOf('CURRENT LEVEL', startIdx);
+  if (endIdx === -1) return svgText;
+  const region = svgText
+    .slice(startIdx, endIdx)
+    .replace(/\s*(?:height|block-size|min-height|min-block-size|max-height|max-block-size):\s*[^;"]+;/g, '');
+  return svgText.slice(0, startIdx) + region + svgText.slice(endIdx);
+}
 
+// Replicates html-to-image's own toCanvas()->toPng() (load the SVG as an
+// Image, draw it to a canvas, read back a PNG data URL) against our
+// post-processed SVG url instead of calling toPng() directly, since toPng()
+// always renders html-to-image's own unmodified SVG.
+function svgUrlToPng(svgUrl, opts) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.decoding = 'async';
+    img.onload = () => {
+      img.decode().then(() => requestAnimationFrame(() => {
+        const ratio = opts.pixelRatio || 1;
+        const canvas = document.createElement('canvas');
+        canvas.width = opts.width * ratio;
+        canvas.height = opts.height * ratio;
+        const ctx = canvas.getContext('2d');
+        if (opts.backgroundColor) {
+          ctx.fillStyle = opts.backgroundColor;
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL());
+      })).catch(reject);
+    };
+    img.onerror = reject;
+    img.src = svgUrl;
+  });
+}
+
+export async function downloadScoutingCardPNG(player, manual = {}) {
   await ensureMontserratReady();
 
   const el = buildCardElement(player, manual);
@@ -1344,10 +1399,14 @@ export async function downloadScoutingCardPNG(player, manual = {}) {
         'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
     };
 
+    const { toSvg } = await import('html-to-image');
+
     // First pass can come back blank before fonts/images are inlined into the
     // clone, so render once to warm up, then capture for real.
-    await toPng(cardNode, opts);
-    const dataUrl = await toPng(cardNode, opts);
+    await toSvg(cardNode, opts);
+    const svgUrl = await toSvg(cardNode, opts);
+    const fixedSvgUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(stripNotesBakedHeights(decodeURIComponent(svgUrl.split(',')[1])))}`;
+    const dataUrl = await svgUrlToPng(fixedSvgUrl, opts);
 
     await deliverPng(dataUrl, `${player.name.replace(/\s+/g, '_')}_scouting_card.png`);
   } finally {
