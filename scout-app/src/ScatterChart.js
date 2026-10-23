@@ -3,9 +3,10 @@ import { SCORE_TIERS, POS_COLORS, METRIC_OPTIONS, METRIC_OPTIONS_EXTRA, seasonDe
   SCORE_DOT_STEPS, SCORE_DOT_LOW, scoreDotColor, EXPORT_W, EXPORT_H, seasonClubFor, seasonRowFor, seasonPositionFor, ALL_SEASONS } from './constants';
 import { useIsMobile, deliverPng } from './utils';
 import { ensureMontserratEmbedded } from './CoachCard';
-import { barColor } from './QuickCard';
 import { roleScoresFor, roleScoresForSeason, classifyArchetypeWithFallback, fallbackRoleScoreFor, fallbackRoleScoreForSeason, simpleFamilyOf, computeQuadrantScores, computeQuadrantScoresCareerBlend } from './archetypeEngine';
 import { ARCHETYPE_CONFIG } from './archetypeConfig';
+import { METRIC_PALETTES, METRIC_PALETTE_GROUPS, paletteColorAt, paletteGradientStops, valueToUnitT, percentileOf,
+  SOLID_PRESETS, solidMonoFor, QUADRANT_THEMES, QUADRANT_THEME_ORDER } from './scatterPalettes';
 
 // Scatter view of the current Scout Index result list: plots the top N of the
 // already filtered + sorted players (App passes `sorted`). Canvas, drawn by one
@@ -25,22 +26,26 @@ const THEMES = {
     axisTitle:'#cbd5e1', title:'#f8fafc', sub:'#94a3b8', zoneText:'rgba(203,213,225,0.50)',
     label:'#e5e7eb', halo:'rgba(6,11,20,0.92)', ring:'#060b14', ringW:1.6, hl:'#ffffff',
     leader:'rgba(148,163,184,0.55)', legendText:'#cbd5e1', rule:'#1e293b', footer:'#64748b',
-    // Quadrant tints (teal / indigo / slate), stronger on the right-hand (high X) side
-    quadTR:'rgba(20,184,166,0.15)', quadBR:'rgba(99,102,241,0.13)', quadTL:'rgba(100,116,139,0.08)',
     quadText:'rgba(226,232,240,0.62)', split:'rgba(148,163,184,0.55)',
     muted:'rgba(203,213,225,0.34)', // group mode: everyone outside the group
-    plain:'#cbd5e1', // Plain colour mode
+    plain:'#F8FAFC', // Solid colour mode, no preset chosen: "White/Black depending on theme"
+    // Font weights — unchanged from what drawScatter already used before per-theme
+    // weights existed, so dark-mode rendering is byte-for-byte the same as before.
+    wTitle:700, wSub:500, wAxisTitle:600, wTick:500, wLabel:500,
   },
   light: {
-    bg:'#ffffff', plot:'#fbfcfe', zone:'30,41,59', zoneBase:0.008, zoneStep:0.018,
-    grid:'rgba(15,23,42,0.06)', band:'rgba(71,85,105,0.22)', axis:'#94a3b8', tick:'#64748b',
-    axisTitle:'#1e293b', title:'#0f172a', sub:'#475569', zoneText:'rgba(51,65,85,0.60)',
-    label:'#0f172a', halo:'rgba(255,255,255,0.94)', ring:'rgba(15,23,42,0.6)', ringW:1.1, hl:'#0f172a',
+    // 2026-10-23 readability pass: pure white + slate-on-white was too low-contrast
+    // for some combinations (quadrant tints, metric dots) — a slightly off-white
+    // surface plus darker, heavier text throughout fixes it. Dark mode untouched.
+    bg:'#EBEBEB', plot:'#F4F4F4', zone:'30,41,59', zoneBase:0.008, zoneStep:0.018,
+    grid:'#D1D5DB', band:'rgba(71,85,105,0.22)', axis:'#94a3b8', tick:'#374151',
+    axisTitle:'#1F2937', title:'#111111', sub:'#374151', zoneText:'rgba(51,65,85,0.60)',
+    label:'#111111', halo:'rgba(235,235,235,0.94)', ring:'rgba(15,23,42,0.6)', ringW:1.1, hl:'#0f172a',
     leader:'rgba(71,85,105,0.6)', legendText:'#1e293b', rule:'#e2e8f0', footer:'#64748b',
-    quadTR:'rgba(13,148,136,0.12)', quadBR:'rgba(79,70,229,0.09)', quadTL:'rgba(100,116,139,0.07)',
-    quadText:'rgba(30,41,59,0.62)', split:'rgba(71,85,105,0.50)',
+    quadText:'rgba(30,41,59,0.62)', split:'#6B7280',
     muted:'rgba(148,163,184,0.42)',
-    plain:'#64748b',
+    plain:'#111111',
+    wTitle:800, wSub:500, wAxisTitle:700, wTick:600, wLabel:600,
   },
 };
 
@@ -284,16 +289,16 @@ function placeLabels(ctx, items, dots, bounds, taken, fs, budget = Infinity) {
 // title (wrapping onto extra rows). If a long title OR subtitle leaves no
 // room, the legend drops to its own rows under the subtitle. Returns where
 // the plot can start.
-function exportHeader(ctx, W, FONT, title, subtitle, legend, xIsScore, showCounts = true) {
+function exportHeader(ctx, W, FONT, title, subtitle, legend, xIsScore, showCounts = true, T) {
   const right = W - EXPORT_PAD.r, L0 = EXPORT_PAD.l;
-  ctx.font = `700 46px ${FONT}`;
+  ctx.font = `${T.wTitle} 46px ${FONT}`;
   const titleW = ctx.measureText(title).width;
-  ctx.font = `500 24px ${FONT}`;
+  ctx.font = `${T.wSub} 24px ${FONT}`;
   const subtitleW = ctx.measureText(subtitle || '').width;
   ctx.font = `600 21px ${FONT}`;
   const items = (legend || []).map(it => {
     if (it.gradient) {
-      const g = it.gradient, a = `${g.label}  ${g.min}`, b = `${g.max}  ·  median ${g.med}`;
+      const g = it.gradient, a = `${g.label}  low ${g.min}`, b = g.kind === 'diverging' ? `high ${g.max}  ·  median ${g.med}` : `high ${g.max}`;
       return { it, txt: '', a, b, w: ctx.measureText(a).width + 16 + GRAD_W + 16 + ctx.measureText(b).width };
     }
     const txt = showCounts ? `${it.label}  ${it.count}` : it.label; return { it, txt, w: ctx.measureText(txt).width + 26 };
@@ -322,7 +327,7 @@ function exportHeader(ctx, W, FONT, title, subtitle, legend, xIsScore, showCount
 export const HL_MAX = 10;
 
 export function drawScatter(canvas, W, H, dpr, forExport, o) {
-  const { pts, xf, yf, hidden, hoverId, highlightIds = [], showNames, soloLabel, title, subtitle, footer, legend, quad: Q, median, group, groupFullLabels, highlightStyle = 'full', theme: themeName = 'dark', labelledKeys, fadeOthers, showCounts = true } = o;
+  const { pts, xf, yf, hidden, hoverId, highlightIds = [], showNames, soloLabel, title, subtitle, footer, legend, quad: Q, median, group, groupFullLabels, highlightStyle = 'full', theme: themeName = 'dark', quadThemeKey = 'tealLilac', labelledKeys, fadeOthers, showCounts = true } = o;
   const T = THEMES[themeName];
   const FONT = forExport ? 'Montserrat, Inter, sans-serif' : 'Inter, sans-serif';
   canvas.width = W*dpr; canvas.height = H*dpr;
@@ -335,7 +340,7 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
   if (!pts.length) return null;
 
   const stripX = xf.scoreScale ? 2 : median && median.x != null ? 1 : 0; // rows of labels above the plot
-  const head = forExport ? exportHeader(ctx, W, FONT, title, subtitle, legend, stripX, showCounts) : null;
+  const head = forExport ? exportHeader(ctx, W, FONT, title, subtitle, legend, stripX, showCounts, T) : null;
   const L = computeLayout(W, H, forExport, pts, xf, yf, head && head.plotTop, stripX);
   const { fs, pad, pw, ph, xd, yd, xS, yS, shade } = L;
   const quad = Q || null; // score quadrants (both axes scores) or median quadrants (neither is)
@@ -351,13 +356,13 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
   if (quad) {
     const sx = Math.max(pad.l, Math.min(pad.l + pw, xS(quad.xSplit))), sy = Math.max(pad.t, Math.min(pad.t + ph, yS(quad.ySplit)));
     qs = { sx, sy };
-    // tint per corner: 'best' (better on both axes) teal, 'x' (better on X only) indigo,
-    // 'y' (better on Y only) slate, none for worse on both
-    const tint = quad.tint || { tr:'best', br:'x', tl:'y', bl:null };
-    const fillOf = k => ({ best: T.quadTR, x: T.quadBR, y: T.quadTL })[k];
+    // Tint is keyed by PHYSICAL screen corner (the "Quadrant colours" theme, see
+    // scatterPalettes.js) — e.g. Traffic light always shades top-right green,
+    // regardless of which axis direction happens to be "good" for this data.
+    const qBg = (QUADRANT_THEMES[quadThemeKey] || QUADRANT_THEMES.tealLilac).bg[themeName] || QUADRANT_THEMES.tealLilac.bg.dark;
     const rects = { tr: [sx, pad.t, pad.l + pw - sx, sy - pad.t], br: [sx, sy, pad.l + pw - sx, pad.t + ph - sy],
       tl: [pad.l, pad.t, sx - pad.l, sy - pad.t], bl: [pad.l, sy, sx - pad.l, pad.t + ph - sy] };
-    for (const k of ['tr', 'br', 'tl', 'bl']) if (fillOf(tint[k])) { ctx.fillStyle = fillOf(tint[k]); ctx.fillRect(...rects[k]); }
+    for (const k of ['tr', 'br', 'tl', 'bl']) if (qBg[k] && qBg[k] !== 'rgba(0,0,0,0)') { ctx.fillStyle = qBg[k]; ctx.fillRect(...rects[k]); }
   }
   // ── Single score axis: neutral band zones along it ──────────────────────
   if (shade) {
@@ -502,7 +507,7 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
   // ── Axes, ticks, titles ──────────────────────────────────────────────────
   ctx.strokeStyle = T.axis; ctx.lineWidth = forExport ? 2 : 1;
   ctx.beginPath(); ctx.moveTo(pad.l, pad.t); ctx.lineTo(pad.l, pad.t + ph); ctx.lineTo(pad.l + pw, pad.t + ph); ctx.stroke();
-  ctx.font = f(10, 500); ctx.fillStyle = T.tick;
+  ctx.font = f(10, T.wTick); ctx.fillStyle = T.tick;
   ctx.textAlign = 'right';
   for (const v of ticksOf(yd)) {
     ctx.fillText(tickText(v, yf, yd.step), pad.l - 8*fs, yS(v) + 3.5*fs);
@@ -513,7 +518,7 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
     ctx.fillText(tickText(v, xf, xd.step), xS(v), pad.t + ph + 17*fs);
     ctx.beginPath(); ctx.moveTo(xS(v), pad.t + ph); ctx.lineTo(xS(v), pad.t + ph + 4*fs); ctx.stroke();
   }
-  ctx.font = f(10.5, 600); ctx.fillStyle = T.axisTitle; ctx.textAlign = 'center';
+  ctx.font = f(10.5, T.wAxisTitle); ctx.fillStyle = T.axisTitle; ctx.textAlign = 'center';
   ctx.fillText(xf.label, pad.l + pw/2, pad.t + ph + 36*fs);
   ctx.save(); ctx.translate(pad.l - 44*fs, pad.t + ph/2); ctx.rotate(-Math.PI/2);
   ctx.fillText(yf.label, 0, 0); ctx.restore();
@@ -592,12 +597,12 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
   // ── Name labels ──────────────────────────────────────────────────────────
   const bounds = { x0: pad.l + 2, y0: pad.t + 2, x1: pad.l + pw - 2, y1: pad.t + ph - 2 };
   const items = [];
-  if (labelOnly) for (const h of hls) items.push({ x: xS(h.x), y: yS(h.y), r, force: true, px: 9.5*fs, font: f(9.5, 500), text: pname(h) });
+  if (labelOnly) for (const h of hls) items.push({ x: xS(h.x), y: yS(h.y), r, force: true, px: 9.5*fs, font: f(9.5, T.wLabel), text: pname(h) });
   else if (!redDot) for (const h of hls) items.push({ x: xS(h.x), y: yS(h.y), r: r*1.6, force: true, px: 11*fs, font: f(11, 700),
     text: pname(h) + (h.extra && h.rank != null ? `  #${h.rank}` : ''), hl: true });
   // Red dot keeps the normal name style, but a highlighted name is placed first, so
   // nearby names make way for it rather than it being the one dropped.
-  else if (showNames) for (const h of hls) items.push({ x: xS(h.x), y: yS(h.y), r, force: true, px: 9.5*fs, font: f(9.5, 500), text: pname(h) });
+  else if (showNames) for (const h of hls) items.push({ x: xS(h.x), y: yS(h.y), r, force: true, px: 9.5*fs, font: f(9.5, T.wLabel), text: pname(h) });
   // Names: walk the list in rank order and keep placing until the budget of
   // *placed* names is used, so names that can't fit in a cluster don't use up
   // the allowance and sparse areas still get labelled.
@@ -609,7 +614,7 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
       // clear, same as the hls force items below (small, known set: one squad).
       for (const d of visible) {
         if (isHl(d) || d.muted) continue;
-        items.push({ x: xS(d.x), y: yS(d.y), r, px: 9.5*fs, font: f(9.5, 500), text: pname(d), force: true });
+        items.push({ x: xS(d.x), y: yS(d.y), r, px: 9.5*fs, font: f(9.5, T.wLabel), text: pname(d), force: true });
       }
       // Optional full-sample labeling: everyone else too, pushed AFTER the
       // group so group labels never get bumped for them — not forced UNLESS
@@ -618,14 +623,14 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
       if (groupFullLabels) {
         for (const d of visible) {
           if (isHl(d) || !d.muted) continue;
-          items.push({ x: xS(d.x), y: yS(d.y), r, px: 9.5*fs, font: f(9.5, 500), text: pname(d), force: isArchLabelled(d) });
+          items.push({ x: xS(d.x), y: yS(d.y), r, px: 9.5*fs, font: f(9.5, T.wLabel), text: pname(d), force: isArchLabelled(d) });
         }
       } else if (hasArchSel) {
         // groupFullLabels off: non-members normally get no label at all, but
         // an archetype-legend selection still forces its matching dots.
         for (const d of visible) {
           if (isHl(d) || !d.muted || !isArchLabelled(d)) continue;
-          items.push({ x: xS(d.x), y: yS(d.y), r, px: 9.5*fs, font: f(9.5, 500), text: pname(d), force: true, archSel: true });
+          items.push({ x: xS(d.x), y: yS(d.y), r, px: 9.5*fs, font: f(9.5, T.wLabel), text: pname(d), force: true, archSel: true });
         }
       }
     } else {
@@ -634,11 +639,11 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
       // placement contest; everyone else keeps the existing budgeted pass.
       if (hasArchSel) for (const d of visible) {
         if (isHl(d) || !isArchLabelled(d)) continue;
-        items.push({ x: xS(d.x), y: yS(d.y), r, px: 9.5*fs, font: f(9.5, 500), text: pname(d), force: true, archSel: true });
+        items.push({ x: xS(d.x), y: yS(d.y), r, px: 9.5*fs, font: f(9.5, T.wLabel), text: pname(d), force: true, archSel: true });
       }
       for (const d of visible.slice(0, 400)) {
         if (isHl(d) || isArchLabelled(d)) continue;
-        items.push({ x: xS(d.x), y: yS(d.y), r, px: 9.5*fs, font: f(9.5, 500), text: pname(d) });
+        items.push({ x: xS(d.x), y: yS(d.y), r, px: 9.5*fs, font: f(9.5, T.wLabel), text: pname(d) });
       }
     }
   }
@@ -692,8 +697,8 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
   // ── Export frame: title block, right-aligned legend, footer ──────────────
   if (forExport) {
     ctx.textAlign = 'left';
-    ctx.fillStyle = T.title; ctx.font = `700 46px ${FONT}`; ctx.fillText(title, pad.l, 72);
-    ctx.fillStyle = T.sub; ctx.font = `500 24px ${FONT}`; ctx.fillText(subtitle, pad.l, 108);
+    ctx.fillStyle = T.title; ctx.font = `${T.wTitle} 46px ${FONT}`; ctx.fillText(title, pad.l, 72);
+    ctx.fillStyle = T.sub; ctx.font = `${T.wSub} 24px ${FONT}`; ctx.fillText(subtitle, pad.l, 108);
     ctx.font = `600 21px ${FONT}`;
     head.rows.forEach((row, i) => {
       const rowW = row.reduce((a, x) => a + x.w, 0) + head.GAP * (row.length - 1);
@@ -765,15 +770,22 @@ export function medianQuadrant(xf, yf, mx, my) {
 // extreme value can't wash everyone else out and the median dot is the middle
 // colour). Red -> gold -> green (the app's percentile-bar gradient) with green at
 // the better end; neutral fields (age, height, value...) get a plain blue ramp.
-const NEUTRAL_LO = [191, 219, 254], NEUTRAL_HI = [29, 78, 216];
-const neutralColor = t => `rgb(${NEUTRAL_LO.map((a, i) => Math.round(a + (NEUTRAL_HI[i] - a) * t)).join(',')})`;
-function metricScale(values, f) {
+// Colour-by-metric: value-based (not rank-based), scale ends clamped to the
+// plotted sample's 5th/95th percentile so one outlier can't wash everything
+// out. Diverging palettes centre on the sample's MEDIAN (not the midpoint of
+// the 5-95 span); sequential palettes just sweep low->high. `reverseToggle`
+// is the user's explicit "Reverse" control; it starts pre-seeded from the
+// field's own known better-direction (upIsGood) so the smart default already
+// points green/high-end at "good" values, and the toggle flips it from there.
+function metricPaletteScale(values, f, paletteKey, reverseToggle) {
   const vals = values.filter(Number.isFinite).sort((a, b) => a - b), n = vals.length;
   if (!n) return null;
-  const bound = (v, le) => { let lo = 0, hi = n; while (lo < hi) { const m = (lo + hi) >> 1; if (le ? vals[m] <= v : vals[m] < v) lo = m + 1; else hi = m; } return lo; };
-  const rank = v => (n < 2 ? 0.5 : ((bound(v, false) + bound(v, true) - 1) / 2) / (n - 1));
-  const colorAt = t => (f.neutral ? neutralColor(t) : barColor(100 * (upIsGood(f) ? t : 1 - t)));
-  return { rank, colorAt, color: v => colorAt(rank(v)), min: vals[0], max: vals[n - 1], med: medianOf(vals), stops: [0, 0.25, 0.5, 0.75, 1].map(colorAt) };
+  const palette = METRIC_PALETTES[paletteKey] || METRIC_PALETTES.rgg;
+  const lo = percentileOf(vals, 5), hi = percentileOf(vals, 95), med = percentileOf(vals, 50);
+  const autoFlip = !upIsGood(f);
+  const reverse = reverseToggle !== autoFlip;
+  const color = v => paletteColorAt(paletteKey, valueToUnitT(v, { lo, hi, median: med, kind: palette.kind, reverse }));
+  return { kind: palette.kind, reverse, color, min: lo, max: hi, med, stops: paletteGradientStops(paletteKey, reverse) };
 }
 const PLAIN_SWATCH = '#cbd5e1';
 // Colour by League: the dataviz reference categorical palette (dark steps), with its
@@ -847,7 +859,7 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
   metricLabel = 'Per-90 value', colorModes, colorOf: colorOfMode, legendBase, scoreQuad, targetTiers, groups = [], leagueOf,
   noun = 'player', openLabel = 'Open profile', onSelect, onClose, contextLabel, defaultMedianOn = true, defaultSample = 50, archetypeSeasonLabel,
   axesSeasonLabel, showAxesModeToggle, axesMode, setAxesMode, showArchetypeDetailToggle, archetypeDetail, setArchetypeDetail, genericSeasonLabel,
-  showLeaning, setShowLeaning }) {
+  showLeaning, setShowLeaning, shortSubtitle = false }) {
   // searchPool: an unfiltered roster to search for the "ignores filters" add — falls
   // back to items (no override) when the caller doesn't have one (e.g. Team Index).
   const pool = searchPool && searchPool.length ? searchPool : items;
@@ -863,7 +875,11 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
   const [metricMode, setMetricMode] = useState('val'); // 'val' (raw / per-90 value) | 'pct' (percentile)
   const [colorBy, setColorBy] = useState(colorModes[0]?.[0] ?? 'plain');
   const [colorKey, setColorKey] = useState(defaultY); // colour-by-metric field
-  const [plainColor, setPlainColor] = useState(null); // Plain mode: null = theme default grey
+  const [paletteKey, setPaletteKey] = useState('rgg'); // colour-by-metric palette (section 1)
+  const [reverseMetric, setReverseMetric] = useState(false); // explicit "Reverse" toggle
+  const [plainColor, setPlainColor] = useState(null); // Solid mode: null = theme default (white/black)
+  const [quadThemeKey, setQuadThemeKey] = useState('tealLilac'); // "Quadrant colours" theme (section 3)
+  const [showDate, setShowDate] = useState(true); // export footer date (section 5)
   const [highlightStyle, setHighlightStyle] = useState('full'); // 'full' | 'dot' | 'label'
   const [quadNames, setQuadNames] = useState({}); // user overrides for the four quadrant labels
   const [showNames, setShowNames] = useState(true);
@@ -931,7 +947,7 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
   // whose own colorModes already includes one of those keys (or passes none at
   // all) can't produce a repeated <option> / duplicate React key.
   const allColorModes = useMemo(() => {
-    const combined = [...colorModes, ...(leagueOf ? [['league', 'League']] : []), ['metric', 'Metric…'], ['plain', 'Plain']];
+    const combined = [...colorModes, ...(leagueOf ? [['league', 'League']] : []), ['metric', 'Metric…'], ['quadrant', 'Quadrant'], ['plain', 'Solid']];
     const seen = new Set();
     return combined.filter(([k]) => (seen.has(k) ? false : (seen.add(k), true)));
   }, [colorModes, leagueOf]);
@@ -995,19 +1011,79 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
     const order = [...c.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(e => e[0]);
     return new Map(order.slice(0, LEAGUE_COLORS.length).map((l, i) => [l, LEAGUE_COLORS[i]]));
   }, [colorBy, leagueOf, top]);
-  // Colour-by-metric ranks against the Sample (minus removed items).
-  const mScale = useMemo(() => (colorBy === 'metric' ? metricScale(top.map(p => cf.get(p)), cf) : null), [colorBy, top, cf]);
+  // Colour-by-metric: value-based, clamped to the Sample's (minus removed items) 5th-95th percentile.
+  const mScale = useMemo(() => (colorBy === 'metric' ? metricPaletteScale(top.map(p => cf.get(p)), cf, paletteKey, reverseMetric) : null), [colorBy, top, cf, paletteKey, reverseMetric]);
+
+  // x/y only, no colour — built BEFORE the median/quadrant split below, so
+  // "Colour by Quadrant" can read the split without a circular dependency
+  // (colour needs the quadrant; the quadrant needs these points' x/y; x/y used
+  // to be computed in the SAME pass as colour, which would have made colour
+  // depend on itself through the quadrant).
+  const toPointXY = useCallback((p, extra) => {
+    const forced = forcedIds.has(idOf(p));
+    return { p, id: idOf(p), name: nameOf(p), x: xf.get(p, forced), y: yf.get(p, forced), rank: rankById.get(idOf(p)), extra };
+  }, [xf, yf, rankById, idOf, nameOf, forcedIds]);
+  const allTopPts = useMemo(() => top.map(p => toPointXY(p, false)).filter(d => Number.isFinite(d.x) && Number.isFinite(d.y)), [top, toPointXY]);
+  // "Hide low outliers": same rule as PlayerCard's squad chart — drop points more
+  // than 2 SD below the mean, checked on each axis (only with 5+ points).
+  const topPtsXY = useMemo(() => {
+    if (!trimLow || allTopPts.length <= 4) return allTopPts;
+    const floor = k => { const v = allTopPts.map(d => d[k]), m = v.reduce((a, b) => a + b, 0) / v.length;
+      return m - 2 * Math.sqrt(v.reduce((a, b) => a + (b - m) ** 2, 0) / v.length); };
+    const fx = floor('x'), fy = floor('y');
+    return allTopPts.filter(d => d.x >= fx && d.y >= fy);
+  }, [allTopPts, trimLow]);
+  const trimmed = allTopPts.length - topPtsXY.length;
+
+  // Computed before median so a custom scoreQuad (e.g. CM Possession vs
+  // Defensive — fixed 50/50 split, not scoreScale) can suppress the median
+  // lines too, the same way the built-in current/potential quadrant already
+  // does via the scoreScale check below.
+  const sQuad = useMemo(() => (scoreQuad ? scoreQuad(xf, yf, topPtsXY, targetMin) : null), [scoreQuad, xf, yf, topPtsXY, targetMin]);
+  // Medians of the PLOTTED items, on each non-score axis — of whatever the axis
+  // shows (raw value or percentile). "Colour by Quadrant" needs this split to
+  // mean anything, so it's still computed with the Median split DISPLAY toggle
+  // off — that toggle only hides the lines/shading, the colour mode still needs
+  // the quadrant itself to exist.
+  const median = useMemo(() => {
+    if ((!medianOn && colorBy !== 'quadrant') || !topPtsXY.length || (xf.scoreScale && yf.scoreScale) || sQuad) return null;
+    const mx = xf.scoreScale ? null : medianOf(topPtsXY.map(d => d.x)), my = yf.scoreScale ? null : medianOf(topPtsXY.map(d => d.y));
+    return { x: mx, y: my, xText: mx == null ? '' : valueText(mx, xf), yText: my == null ? '' : valueText(my, yf) };
+  }, [medianOn, colorBy, topPtsXY, xf, yf, sQuad]);
+  const autoQuad = sQuad || (median && median.x != null && median.y != null ? medianQuadrant(xf, yf, median.x, median.y) : null);
+  useEffect(() => { setQuadNames({}); }, [xKey, yKey]);
+  const quad = useMemo(() => {
+    if (!autoQuad) return null;
+    const set = Object.fromEntries(Object.entries(quadNames).filter(([, v]) => v && v.trim()).map(([k, v]) => [k, v.trim()]));
+    if (!Object.keys(set).length) return autoQuad;
+    const alt = { ...(autoQuad.alt || {}) };
+    for (const k of Object.keys(set)) alt[k] = set[k]; // a custom label never swaps to the short fallback
+    return { ...autoQuad, names: { ...autoQuad.names, ...set }, alt };
+  }, [autoQuad, quadNames]);
+  const quadNote = sQuad ? `quadrants: ${shortLabel(yf.label)} ≥ ${sQuad.ySplit} · ${shortLabel(xf.label)} ≥ ${sQuad.xSplit}`
+    : median ? `median${median.x != null && median.y != null ? 's' : ''}: ${[median.y != null && `${baseName(yf)} ${median.yText}`, median.x != null && `${baseName(xf)} ${median.xText}`].filter(Boolean).join(' · ')}` : '';
+
   // The colour a point gets when no group is overriding it — used as-is when
   // there's no group, and reused (instead of the forced red/grey) by every
   // group-like mechanism (Team group, an age filter, any future groups[]
   // entry) when Label-only is selected, so "keeps its normal colour" holds
-  // for every grouping option, not just the plain highlightIds case.
+  // for every grouping option, not just the plain highlightIds case. Defined
+  // AFTER `quad` so "Colour by Quadrant" can read it directly, with no cycle.
   const underlyingColorOf = useCallback(p => {
     if (colorBy === 'plain') return plainColor ? { g: 'all', color: plainColor } : { g: 'all', color: PLAIN_SWATCH, plain: true };
     if (colorBy === 'league' && leagueColor) { const l = leagueOf(p); return leagueColor.has(l) ? { g: 'L:' + l, color: leagueColor.get(l) } : { g: 'L:other', color: LEAGUE_OTHER }; }
     if (colorBy === 'metric') { const v = cf.get(p); return mScale && Number.isFinite(v) ? { g: 'val', color: mScale.color(v) } : { g: 'none', color: NODATA_COLOR }; }
+    if (colorBy === 'quadrant') {
+      if (!quad) return { g: 'none', color: NODATA_COLOR };
+      const forced = forcedIds.has(idOf(p));
+      const xv = xf.get(p, forced), yv = yf.get(p, forced);
+      if (!Number.isFinite(xv) || !Number.isFinite(yv)) return { g: 'none', color: NODATA_COLOR };
+      const corner = (yv >= quad.ySplit ? 't' : 'b') + (xv >= quad.xSplit ? 'r' : 'l');
+      const qDot = (QUADRANT_THEMES[quadThemeKey] || QUADRANT_THEMES.tealLilac).dot;
+      return { g: 'q:' + corner, color: qDot[corner] };
+    }
     return colorOfMode(p, colorBy);
-  }, [colorOfMode, colorBy, cf, mScale, plainColor, leagueColor, leagueOf]);
+  }, [colorOfMode, colorBy, cf, mScale, plainColor, leagueColor, leagueOf, quad, quadThemeKey, xf, yf, forcedIds, idOf]);
 
   const colorOf = useCallback(p => {
     // A forced-in player (added despite filters) always reads as a group member —
@@ -1030,46 +1106,13 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
     return underlyingColorOf(p);
   }, [inGroup, underlyingColorOf, forcedIds, idOf, highlightStyle]);
 
+  // Colour attached once the quadrant split (if any) is known.
+  const topPts = useMemo(() => topPtsXY.map(d => ({ ...d, ...colorOf(d.p) })), [topPtsXY, colorOf]);
+
   const toPoint = useCallback((p, extra) => {
     const forced = forcedIds.has(idOf(p));
     return { p, id: idOf(p), name: nameOf(p), x: xf.get(p, forced), y: yf.get(p, forced), rank: rankById.get(idOf(p)), extra, ...colorOf(p) };
   }, [xf, yf, rankById, colorOf, idOf, nameOf, forcedIds]);
-  const allTopPts = useMemo(() => top.map(p => toPoint(p, false)).filter(d => Number.isFinite(d.x) && Number.isFinite(d.y)), [top, toPoint]);
-  // "Hide low outliers": same rule as PlayerCard's squad chart — drop points more
-  // than 2 SD below the mean, checked on each axis (only with 5+ points).
-  const topPts = useMemo(() => {
-    if (!trimLow || allTopPts.length <= 4) return allTopPts;
-    const floor = k => { const v = allTopPts.map(d => d[k]), m = v.reduce((a, b) => a + b, 0) / v.length;
-      return m - 2 * Math.sqrt(v.reduce((a, b) => a + (b - m) ** 2, 0) / v.length); };
-    const fx = floor('x'), fy = floor('y');
-    return allTopPts.filter(d => d.x >= fx && d.y >= fy);
-  }, [allTopPts, trimLow]);
-  const trimmed = allTopPts.length - topPts.length;
-
-  // Computed before median so a custom scoreQuad (e.g. CM Possession vs
-  // Defensive — fixed 50/50 split, not scoreScale) can suppress the median
-  // lines too, the same way the built-in current/potential quadrant already
-  // does via the scoreScale check below.
-  const sQuad = useMemo(() => (scoreQuad ? scoreQuad(xf, yf, topPts, targetMin) : null), [scoreQuad, xf, yf, topPts, targetMin]);
-  // Medians of the PLOTTED items, on each non-score axis — of whatever the axis
-  // shows (raw value or percentile).
-  const median = useMemo(() => {
-    if (!medianOn || !topPts.length || (xf.scoreScale && yf.scoreScale) || sQuad) return null;
-    const mx = xf.scoreScale ? null : medianOf(topPts.map(d => d.x)), my = yf.scoreScale ? null : medianOf(topPts.map(d => d.y));
-    return { x: mx, y: my, xText: mx == null ? '' : valueText(mx, xf), yText: my == null ? '' : valueText(my, yf) };
-  }, [medianOn, topPts, xf, yf, sQuad]);
-  const autoQuad = sQuad || (median && median.x != null && median.y != null ? medianQuadrant(xf, yf, median.x, median.y) : null);
-  useEffect(() => { setQuadNames({}); }, [xKey, yKey]);
-  const quad = useMemo(() => {
-    if (!autoQuad) return null;
-    const set = Object.fromEntries(Object.entries(quadNames).filter(([, v]) => v && v.trim()).map(([k, v]) => [k, v.trim()]));
-    if (!Object.keys(set).length) return autoQuad;
-    const alt = { ...(autoQuad.alt || {}) };
-    for (const k of Object.keys(set)) alt[k] = set[k]; // a custom label never swaps to the short fallback
-    return { ...autoQuad, names: { ...autoQuad.names, ...set }, alt };
-  }, [autoQuad, quadNames]);
-  const quadNote = sQuad ? `quadrants: ${shortLabel(yf.label)} ≥ ${sQuad.ySplit} · ${shortLabel(xf.label)} ≥ ${sQuad.xSplit}`
-    : median ? `median${median.x != null && median.y != null ? 's' : ''}: ${[median.y != null && `${baseName(yf)} ${median.yText}`, median.x != null && `${baseName(xf)} ${median.xText}`].filter(Boolean).join(' · ')}` : '';
 
   // Resolve each highlighted id against `items` first; a forced-in id that `items`
   // doesn't have (it failed the app's filters) falls back to the search pool.
@@ -1105,11 +1148,14 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
       : colorBy === 'league' && leagueColor ? [...[...leagueColor.entries()].map(([l, col]) => ({ key: 'L:' + l, label: l, color: col })), { key: 'L:other', label: 'Other leagues', color: LEAGUE_OTHER }]
       : colorBy === 'metric' ? [
           ...(mScale ? [{ key: 'val', label: baseName(cf), color: mScale.stops[4],
-            gradient: { label: baseName(cf), stops: mScale.stops, min: valueText(mScale.min, cf), med: valueText(mScale.med, cf), max: valueText(mScale.max, cf) } }] : []),
+            gradient: { label: baseName(cf), stops: mScale.stops, kind: mScale.kind, min: valueText(mScale.min, cf), med: valueText(mScale.med, cf), max: valueText(mScale.max, cf) } }] : []),
           { key: 'none', label: 'No data', color: NODATA_COLOR }]
+      : colorBy === 'quadrant' ? (quad
+          ? ['tr', 'br', 'tl', 'bl'].map(k => ({ key: 'q:' + k, label: quad.names[k] || k.toUpperCase(), color: (QUADRANT_THEMES[quadThemeKey] || QUADRANT_THEMES.tealLilac).dot[k] }))
+          : [{ key: 'none', label: 'No quadrant split for these axes', color: NODATA_COLOR }])
       : legendBase(colorBy);
     return base.filter(it => c[it.key]).map(it => ({ ...it, count: c[it.key] }));
-  }, [topPts, colorBy, inGroup, groupLabel, legendBase, mScale, cf, plainColor, leagueColor, highlightStyle]);
+  }, [topPts, colorBy, inGroup, groupLabel, legendBase, mScale, cf, plainColor, leagueColor, highlightStyle, quad, quadThemeKey]);
   const groupCount = inGroup ? topPts.filter(d => d.inGrp).length : 0;
 
   const colorLabel = colorBy === 'metric' ? `Colour: ${baseName(cf)}` : allColorModes.find(o => o[0] === colorBy)?.[1] || colorModes[0]?.[1] || '';
@@ -1132,7 +1178,10 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
   const archActive = colorBy === 'archetype' && archetypeSeasonLabel;
   const axesActive = usesArchetypeAxis && axesSeasonLabel;
   let autoSubtitle;
-  if (genericSeasonLabel != null) {
+  if (shortSubtitle) {
+    // Custom Scatter: no CSV file name, no row count, no "Sample" wording.
+    autoSubtitle = `Custom Scatter "${sample.length} players"`;
+  } else if (genericSeasonLabel != null) {
     const seasonPart = (archActive && axesActive)
       ? (archetypeSeasonLabel === axesSeasonLabel ? capitalize1(archetypeSeasonLabel) : `Axes: ${seasonTag(axesSeasonLabel)} · Archetypes: ${seasonTag(archetypeSeasonLabel)}`)
       : archActive ? capitalize1(archetypeSeasonLabel)
@@ -1157,11 +1206,11 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
   }, []);
 
   const archLabelledKeys = colorBy === 'archetype' ? labelledKeys : null;
-  const drawOpts = { pts, xf, yf, hidden, highlightIds, showNames, soloLabel, quad, median, group: !!inGroup, groupFullLabels, highlightStyle, labelledKeys: archLabelledKeys, fadeOthers, showCounts };
+  const drawOpts = { pts, xf, yf, hidden, highlightIds, showNames, soloLabel, quad, median, group: !!inGroup, groupFullLabels, highlightStyle, labelledKeys: archLabelledKeys, fadeOthers, showCounts, quadThemeKey };
   useEffect(() => {
     if (!canvasRef.current) return;
     layoutRef.current = drawScatter(canvasRef.current, width, H, window.devicePixelRatio || 1, false, { ...drawOpts, hoverId: hover?.d.id });
-  }, [pts, xf, yf, hidden, hover, highlightIds, showNames, soloLabel, quad, median, inGroup, groupFullLabels, highlightStyle, archLabelledKeys, fadeOthers, width, H]);
+  }, [pts, xf, yf, hidden, hover, highlightIds, showNames, soloLabel, quad, median, inGroup, groupFullLabels, highlightStyle, archLabelledKeys, fadeOthers, width, H, quadThemeKey]);
 
   useEffect(() => {
     if (!highlightIds.length) return;
@@ -1204,9 +1253,11 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
       await ensureMontserratEmbedded();
       const slug = t => t.replace(/[^\w]+/g, '_').replace(/^_|_$/g, '');
       const base = customTitle.trim() ? slug(customTitle) : `scatter_${slug(yf.label)}_vs_${slug(xf.label)}`;
+      // Footer is ONLY the date, gated by its own toggle — medians/bands/"Scout
+      // Index" used to be crammed in here too, but the median lines already
+      // show their own values on the chart, so this is just the date now.
       const date = new Date().toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
-      const bandsNote = (xf.scoreScale || yf.scoreScale) ? 'dashed lines = Scout Index level bands' : '';
-      const footer = ['Scout Index · ' + date, quadNote, sQuad ? bandsNote : (xf.scoreScale || yf.scoreScale) ? 'shaded zones / dashed lines = Scout Index level bands' : ''].filter(Boolean).join(' · ');
+      const footer = showDate ? date : '';
       const off = document.createElement('canvas');
       drawScatter(off, EXPORT_W, EXPORT_H, 1, true, { ...drawOpts, hoverId: null, title, subtitle, footer, legend: exportLegend ? legend : [], theme: exportTheme });
       await deliverPng(off.toDataURL('image/png'), `${base}_${exportTheme}.png`);
@@ -1289,13 +1340,36 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
           </label>
         )}
         {colorBy === 'metric' && <label style={col}><span style={lbl}>Colour metric</span>{fieldSelect(colorKey, setColorKey, 'Colour metric')}</label>}
+        {colorBy === 'metric' && (
+          <label style={col}><span style={lbl}>Palette</span>
+            <select aria-label="Colour palette" style={sel} value={paletteKey} onChange={e => setPaletteKey(e.target.value)}>
+              {METRIC_PALETTE_GROUPS.map(g => <optgroup key={g.label} label={g.label}>{g.keys.map(k => <option key={k} value={k}>{METRIC_PALETTES[k].label}</option>)}</optgroup>)}
+            </select>
+          </label>
+        )}
+        {colorBy === 'metric' && (
+          <button style={btn(reverseMetric)} aria-pressed={reverseMetric} title="Flip which end of the palette is 'good' — for metrics where lower is better (e.g. xG against, goals conceded)" onClick={() => setReverseMetric(v => !v)}>Reverse</button>
+        )}
         {colorBy === 'plain' && (
-          <label style={col}><span style={lbl}>Plain colour</span>
-            <div style={{ display:'flex', gap:4, alignItems:'center' }}>
-              <input aria-label="Plain colour" type="color" value={plainColor || PLAIN_SWATCH} onChange={e => setPlainColor(e.target.value)}
-                style={{ width:34, height:26, padding:0, border:'1px solid #1e2d45', borderRadius:5, background:'#0d1220', cursor:'pointer' }}/>
-              {plainColor && <button style={{ ...btn(false), padding:'3px 7px' }} onClick={() => setPlainColor(null)} title="Back to the default grey (whitish in dark, slate in light)">Default</button>}
+          <label style={col}><span style={lbl}>Solid colour</span>
+            <div style={{ display:'flex', gap:4, alignItems:'center', flexWrap:'wrap' }}>
+              {SOLID_PRESETS.map(p => (
+                <button key={p.key} title={p.label} onClick={() => setPlainColor(p.hex)}
+                  style={{ width:20, height:20, borderRadius:4, border: plainColor === p.hex ? '2px solid #3b7de8' : '1px solid #1e2d45', background:p.hex, cursor:'pointer', padding:0 }}/>
+              ))}
+              <button title="White/Black depending on theme" onClick={() => setPlainColor(solidMonoFor(exportTheme))}
+                style={{ width:20, height:20, borderRadius:4, border: plainColor === solidMonoFor(exportTheme) ? '2px solid #3b7de8' : '1px solid #1e2d45', background:`linear-gradient(135deg, #fff 50%, #111 50%)`, cursor:'pointer', padding:0 }}/>
+              <input aria-label="Solid colour hex" type="color" value={plainColor || PLAIN_SWATCH} onChange={e => setPlainColor(e.target.value)}
+                style={{ width:28, height:22, padding:0, border:'1px solid #1e2d45', borderRadius:5, background:'#0d1220', cursor:'pointer' }}/>
+              {plainColor && <button style={{ ...btn(false), padding:'3px 7px' }} onClick={() => setPlainColor(null)} title="Back to the default (white in dark, black in light)">Default</button>}
             </div>
+          </label>
+        )}
+        {autoQuad && (
+          <label style={col}><span style={lbl}>Quadrant colours</span>
+            <select aria-label="Quadrant colours" style={sel} value={quadThemeKey} onChange={e => setQuadThemeKey(e.target.value)}>
+              {QUADRANT_THEME_ORDER.map(k => <option key={k} value={k}>{QUADRANT_THEMES[k].label}</option>)}
+            </select>
           </label>
         )}
         {groups.length > 0 && (
@@ -1350,6 +1424,7 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
           title={highlightStyle === 'dot' && !inGroup ? 'Red dot highlights have no name, so there is nothing to show alone' : `When a ${noun} is highlighted, name only them`}
           onClick={() => setSoloLabel(v => !v)}>Single highlight</button>
         <button style={btn(exportLegend)} aria-pressed={exportLegend} title="Show the colour legend with counts in the downloaded image" onClick={() => setExportLegend(v => !v)}>Legend in export</button>
+        <button style={btn(showDate)} aria-pressed={showDate} title="Show the date in the downloaded image's footer" onClick={() => setShowDate(v => !v)}>Show date</button>
         <button style={btn(trimLow)} aria-pressed={trimLow} title="Hide points more than 2 SD below the mean on either axis" onClick={() => setTrimLow(v => !v)}>Hide low outliers</button>
         <div style={{ marginLeft:'auto', display:'flex', gap:6 }}>
           {onClose && <button style={btn(false)} onClick={onClose}>☰ Table</button>}
@@ -1480,7 +1555,9 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
               {showCounts && <span style={{ fontSize:11, color:'#64748b' }}>{it.count}</span>}
             </div>
             <div style={{ display:'flex', justifyContent:'space-between', width:180, marginLeft:'auto', fontSize:9.5, color:'#94a3b8' }}>
-              <span>min {it.gradient.min}</span><span>median {it.gradient.med}</span><span>max {it.gradient.max}</span>
+              <span>low {it.gradient.min}</span>
+              {it.gradient.kind === 'diverging' && <span>median {it.gradient.med}</span>}
+              <span>high {it.gradient.max}</span>
             </div>
           </div>
         ) : colorBy === 'archetype' ? (

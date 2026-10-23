@@ -210,7 +210,7 @@ export default function CustomScatter() {
         colorModes={[]} colorOf={noColorOf} legendBase={noLegend}
         scoreQuad={null} targetTiers={null} groups={[]} noun="team"
         defaultMedianOn={false} defaultSample={parsed.rowCount}
-        contextLabel={`${fileName} · ${parsed.rowCount} rows`}
+        contextLabel={`${fileName} · ${parsed.rowCount} rows`} shortSubtitle
       />
     </div>
   );
