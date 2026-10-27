@@ -1327,7 +1327,7 @@ export default function App(){
                         {roleModeScore!=null&&<span style={{...T.chip,color:outlierMode?zScoreColor(roleModeScore):scoreBandColor(roleModeScore)}}>Role {roleModeScore.toFixed(1)}</span>}
                         <span style={T.chip}>Peak {p.peakScore?.toFixed(1) ?? '—'}</span>
                         <span style={{...T.chip,color:'#22c55e'}}>Pot {(p.potentialScore||p.careerScore).toFixed(1)}</span>
-                        {p.marketValue>0&&p.xValue?<span style={{...T.chip,color:'#93c5fd'}}>xV {formatMV(p.xValue)}</span>:null}
+                        {p.xValue!=null?<span style={{...T.chip,color:'#93c5fd'}}>xV {formatMV(p.xValue)}</span>:null}
                         {p.marketValue>0&&<span style={T.chip}>MV {formatMV(p.marketValue)}</span>}
                         {p.xValue&&p.marketValue>0&&p.xValueGapPct!=null&&<span style={{...T.chip,color:p.xValueGapPct>20?'#22c55e':p.xValueGapPct<-20?'#ef4444':'#94a3b8'}}>{p.xValueGapPct>0?'+':''}{p.xValueGapPct.toFixed(0)}% vs MV</span>}
                         {p.contract&&p.contract!=='nan'&&<span style={{...T.chip,color:p.contractYear<=2026?'#fbbf24':'#94a3b8'}}>{p.contract}</span>}
@@ -1398,7 +1398,7 @@ export default function App(){
                           {!hiddenCols.has('peakScore')&&<td style={{...T.td,color:'#94a3b8'}}>{p.peakScore?.toFixed(1) ?? '—'}</td>}
                           {!hiddenCols.has('seasons')&&<td style={{...T.td,color:'#94a3b8'}}>{p.seasons}</td>}
                           {!hiddenCols.has('potentialScore')&&<td style={T.td}><div style={{display:'flex',alignItems:'center',gap:4}}><div style={{width:6,height:6,borderRadius:'50%',background:'#22c55e',flexShrink:0}}/><span style={{fontWeight:600,color:'#22c55e',fontSize:11}}>{(p.potentialScore||p.careerScore)?.toFixed(1) ?? '—'}</span></div></td>}
-                          {!hiddenCols.has('xValue')&&<td style={T.td}>{p.marketValue>0&&p.xValue?<span style={{fontSize:11,fontWeight:700,color:'#93c5fd'}}>{formatMV(p.xValue)}</span>:<span style={{color:'#475569'}}>—</span>}</td>}
+                          {!hiddenCols.has('xValue')&&<td style={T.td}>{p.xValue!=null?<span style={{fontSize:11,fontWeight:700,color:'#93c5fd'}}>{formatMV(p.xValue)}</span>:<span style={{color:'#475569'}}>—</span>}</td>}
                           {!hiddenCols.has('xValueGapPct')&&<td style={T.td}>{p.xValue&&p.marketValue>0&&p.xValueGapPct!=null?<span style={{fontSize:11,fontWeight:700,color:p.xValueGapPct>20?'#22c55e':p.xValueGapPct<-20?'#ef4444':'#94a3b8'}}>{p.xValueGapPct>0?'+':''}{p.xValueGapPct.toFixed(0)}%</span>:<span style={{color:'#475569'}}>—</span>}</td>}
                           {!hiddenCols.has('marketValue')&&<td style={{...T.td,color:'#94a3b8'}}>{formatMV(p.marketValue)}</td>}
                           {!hiddenCols.has('contract')&&<td style={{...T.td,color:p.contractYear<=2026?'#fbbf24':'#94a3b8',fontSize:11}}>{p.contract&&p.contract!=='nan'?p.contract:'—'}</td>}

@@ -1197,14 +1197,15 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
                 <div style={{...SEC,marginBottom:8}}>xValue Analysis</div>
                 <div style={{display:'grid',gridTemplateColumns:isMobile?'repeat(2,1fr)':'repeat(3,1fr)',gap:10,marginBottom:10}}>
                   {[
-                    // With no real MV behind it, xValue is just the fallback-league-median
-                    // base times the performance multiplier — not a usable estimate (see
-                    // Pipeline\build_players.py's LEAGUE_MEDIAN_MV, only populated for
-                    // English/Scottish/Irish/Welsh leagues; every other league falls back
-                    // to a flat £200k regardless of how strong it actually is). Show "—"
-                    // rather than a number that reads as precise but is actually arbitrary.
-                    {label:'xValue',val:player.marketValue?formatMV(player.xValue):'—',color:'#93c5fd',sub:player.marketValue?'model estimate':'no MV to base it on'},
-                    {label:'Actual MV',val:player.marketValue?formatMV(player.marketValue):'No MV data',color:'#94a3b8',sub:player.xValueMvSource==='team_avg'?'used team avg base':player.xValueMvSource==='actual'?'transfermarkt':'estimated'},
+                    // xValue comes from either a real Wyscout marketValue (xValueMvSource
+                    // 'wyscout') or train_xvalue.py's league-anchor + performance model
+                    // (xValueMvSource 'model', used whenever that model has an entry for
+                    // this player at all — even across a transfer since it was last run).
+                    // Only when NEITHER exists (no real MV, no model entry) is xValue null
+                    // — "—" rather than the old flat £200k-per-league guess. Pipeline-side
+                    // (Pipeline\build_players.py/train_xvalue.py), 2026-10-27.
+                    {label:'xValue',val:player.xValue!=null?formatMV(player.xValue):'—',color:'#93c5fd',sub:player.xValueMvSource==='model'?'Model estimate':player.xValueMvSource==='wyscout'?'Wyscout':'no MV or model value'},
+                    {label:'Actual MV',val:player.marketValue?formatMV(player.marketValue):'No MV data',color:'#94a3b8',sub:player.marketValue?'Wyscout':''},
                     {label:'Value Gap',val:player.marketValue>0?(player.xValueGapPct>0?'+':'')+player.xValueGapPct?.toFixed(0)+'%':'—',color:player.xValueGapPct>20?'#22c55e':player.xValueGapPct<-20?'#ef4444':'#94a3b8',sub:player.xValueGapPct>20?'Undervalued':player.xValueGapPct<-20?'Overvalued':'Fair value'},
                   ].map(({label,val,color,sub})=>(
                     <div key={label} style={{background:'#07090f',border:'1px solid #131c2e',borderRadius:7,padding:'10px',textAlign:'center'}}>
@@ -1217,12 +1218,12 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
                 <div style={{display:'flex',gap:12,fontSize:10,color:'#64748b'}}>
                   <span>Performance: <strong style={{color:'#c8d4e8'}}>{player.rawPct?.toFixed(0) ?? player.perfPct?.toFixed(0)}th pct</strong> in league (raw)</span>
                   <span>Multiplier: <strong style={{color:'#c8d4e8'}}>{player.xMultiplier?.toFixed(2)}x</strong></span>
-                  {/* xValueContractYrs is never actually computed by the pipeline (Pipeline\build_players.py
-                      only forwards the previous build's own never-set value) — always null today, which
-                      rendered as a bare "yrs" with nothing in front of it. Show "—" instead so this reads
-                      as "no data" rather than a broken label. See item 5 diagnosis: this needs a pipeline
-                      code change (compute_xvalue() would need to actually return/surface contract years
-                      remaining) plus a full rebuild to populate real data — not fixed here. */}
+                  {/* xValueContractYrs is now actually computed by compute_xvalue() in
+                      Pipeline\build_players.py (2026-10-27) — null only when the player's
+                      own contract-expiry date couldn't be parsed at all, not a dead field
+                      forwarded from build to build any more. Still shows "—" for that
+                      genuine-unknown case rather than a bare "yrs". Needs the next full
+                      rebuild to reach this app's live data. */}
                   <span>Contract: <strong style={{color:'#c8d4e8'}}>{player.xValueContractYrs ?? '—'}{player.xValueContractYrs!=null?' yrs':''}</strong>{player.isEnglish&&<span style={{marginLeft:6}}>🏴󠁧󠁢󠁥󠁮󠁧󠁿 English +20%</span>}</span>
                 </div>
                 <div style={{marginTop:6,fontSize:9,color:'#334155'}}>

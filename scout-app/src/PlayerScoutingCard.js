@@ -1026,7 +1026,7 @@ export function buildCardElement(player, manual = {}) {
       <div style="position:absolute;left:1164px;top:45px;width:3px;height:155px;background:#737373;"></div>
 
       <!-- INFO BOX -->
-      ${[['Height:', manual.height || cmToFeet(player.height) || '—'], ['Value:', manual.valueOverride || (player.marketValue > 0 ? formatMV(player.xValue) : '—')], ['Contract:', manual.contractOverride || ((player.contractYear && player.contractYear !== 'nan') ? String(player.contractYear) : '—')]].map(([k,v],i) => `
+      ${[['Height:', manual.height || cmToFeet(player.height) || '—'], ['Value:', manual.valueOverride || (player.xValue != null ? formatMV(player.xValue) : '—')], ['Contract:', manual.contractOverride || ((player.contractYear && player.contractYear !== 'nan') ? String(player.contractYear) : '—')]].map(([k,v],i) => `
         <div style="position:absolute;left:1196px;top:${56 + i*50}px;font-size:20px;font-weight:600;color:#d9d9d9;">${k}</div>
         <div style="position:absolute;left:1311px;top:${56 + i*50}px;font-size:20px;font-weight:600;color:#fff;">${v}</div>`).join('')}
 

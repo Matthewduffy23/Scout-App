@@ -1161,7 +1161,7 @@ function headerHtml(player, ctx, opts) {
          // than recorded.
          showXValue
            ? ((xValueOverride && xValueOverride.trim())
-              || (player.marketValue > 0 ? formatMV(player.xValue) : null))
+              || (player.xValue != null ? formatMV(player.xValue) : null))
            : null,
         ].filter(Boolean).map((v, i) => `
         ${i ? `<span style="color:${ink.muted};margin:0 8px;font-size:11px;">&middot;</span>` : ''}
@@ -1228,7 +1228,7 @@ function headerHtml(player, ctx, opts) {
     <div style="position:absolute;left:${PITCH_X}px;top:34px;width:${PITCH_W}px;">
       ${[['POSITION', POSITION_LABELS[rawTok] || rawTok || '—'],
          ['FOOT', player.foot && player.foot !== 'unknown' && player.foot !== 'nan' ? formatFoot(player.foot) : '—'],
-         ['xVALUE', player.marketValue > 0 ? formatMV(player.xValue) : '—'],
+         ['xVALUE', player.xValue != null ? formatMV(player.xValue) : '—'],
          ['CONTRACT', player.contractYear && player.contractYear !== 'nan' ? String(player.contractYear) : '—'],
         ].map(([k, v], i) => `
         <div style="position:absolute;left:0;top:${i * 22}px;font-size:8px;font-weight:700;
@@ -2147,7 +2147,7 @@ export default function PlayerPagerModal({ player, players = [], onClose }) {
                      value={showXValue} onChange={setShowXValue} />
               {showXValue && (
                 <input value={xValueOverride} onChange={e => setXValueOverride(e.target.value)}
-                       placeholder={player.marketValue > 0 ? formatMV(player.xValue) : 'xValue'}
+                       placeholder={player.xValue != null ? formatMV(player.xValue) : 'xValue'}
                        style={UI.input} />
               )}
             </div>

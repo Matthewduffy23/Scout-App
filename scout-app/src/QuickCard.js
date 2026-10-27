@@ -1421,7 +1421,7 @@ export function buildQuickCardElement(player, players, manual = {}) {
       <div style="position:absolute;left:1188px;top:36px;width:2px;height:210px;background:rgba(255,255,255,0.14);"></div>
 
       <!-- INFO BOX -->
-      ${[['Height:', manual.heightOverride || cmToFeet(player.height) || '—'], ['xValue:', manual.valueOverride || (player.marketValue > 0 ? formatMV(player.xValue) : '—')], ['Contract:', manual.contractOverride || ((player.contractYear && player.contractYear !== 'nan') ? String(player.contractYear) : '—')], ['Agent:', manual.agentOverride || '—']].map(([k,v],i) => `
+      ${[['Height:', manual.heightOverride || cmToFeet(player.height) || '—'], ['xValue:', manual.valueOverride || (player.xValue != null ? formatMV(player.xValue) : '—')], ['Contract:', manual.contractOverride || ((player.contractYear && player.contractYear !== 'nan') ? String(player.contractYear) : '—')], ['Agent:', manual.agentOverride || '—']].map(([k,v],i) => `
         <div style="position:absolute;left:1208px;top:${50 + i*48}px;font-size:18px;font-weight:500;color:#9aa3b8;white-space:nowrap;">${k}</div>
         <div style="position:absolute;left:1353px;top:${50 + i*48}px;font-size:18px;font-weight:600;color:#fff;white-space:nowrap;">${truncateText(v, 20)}</div>`).join('')}
 
@@ -1672,7 +1672,7 @@ export default function QuickCardModal({ player, players, onClose }) {
 
         <div style={{marginBottom:12}}>
           <label style={qcLabelStyle}>xValue</label>
-          <input style={qcInputStyle} value={valueOverride} onChange={e=>setValueOverride(e.target.value)} placeholder={player.marketValue > 0 ? formatMV(player.xValue) : '—'} />
+          <input style={qcInputStyle} value={valueOverride} onChange={e=>setValueOverride(e.target.value)} placeholder={player.xValue != null ? formatMV(player.xValue) : '—'} />
         </div>
 
         <div style={{marginBottom:12}}>
