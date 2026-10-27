@@ -178,11 +178,11 @@ function CandidateCard({player, tmplMetrics, rk, onUseAsTemplate, onOpenCard}){
       {open&&(
         <div style={{borderTop:'1px solid #131c2e',paddingTop:10,marginTop:10}}>
           <div style={{display:'flex',gap:8,flexWrap:'wrap',fontSize:10,color:'#64748b',marginBottom:8}}>
-            {[['Peak',player.peakScore?.toFixed(1),'#94a3b8'],['Pot',(player.potentialScore||player.careerScore).toFixed(1),'#22c55e'],['Seasons',player.seasons,'#94a3b8'],[formatMV(player.marketValue)||null,null,'#94a3b8'],['xVal',formatMV(player.xValue)||null,'#93c5fd'],['Cont',player.contract&&player.contract!=='nan'?player.contract:null,player.contractYear<=2026?'#fbbf24':'#94a3b8'],[player.foot&&player.foot!=='unknown'?player.foot:null,null,'#94a3b8']].map(([k,v,c],i)=>
+            {[['Peak',player.peakScore?.toFixed(1),'#94a3b8'],['Pot',(player.potentialScore||player.careerScore).toFixed(1),'#22c55e'],['Seasons',player.seasons,'#94a3b8'],[formatMV(player.marketValue)||null,null,'#94a3b8'],['xVal',player.marketValue>0?formatMV(player.xValue):null,'#93c5fd'],['Cont',player.contract&&player.contract!=='nan'?player.contract:null,player.contractYear<=2026?'#fbbf24':'#94a3b8'],[player.foot&&player.foot!=='unknown'?player.foot:null,null,'#94a3b8']].map(([k,v,c],i)=>
               k&&k!=='nan'?<span key={i}>{k}{v?`: `+v:''}<span style={{color:c}}></span></span>:null
             ).filter(Boolean)}
             {player.marketValue>0&&<span>MV: <strong style={{color:'#94a3b8'}}>{formatMV(player.marketValue)}</strong></span>}
-            {player.xValue>0&&<span>xVal: <strong style={{color:'#93c5fd'}}>{formatMV(player.xValue)}</strong></span>}
+            {player.marketValue>0&&player.xValue>0&&<span>xVal: <strong style={{color:'#93c5fd'}}>{formatMV(player.xValue)}</strong></span>}
             {player.contract&&player.contract!=='nan'&&<span>Cont: <strong style={{color:player.contractYear<=2026?'#fbbf24':'#94a3b8'}}>{player.contract}</strong></span>}
             {player.foot&&player.foot!=='unknown'&&player.foot!=='nan'&&<span>Foot: <strong style={{color:'#94a3b8'}}>{player.foot}</strong></span>}
           </div>

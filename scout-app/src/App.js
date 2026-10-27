@@ -309,6 +309,15 @@ export default function App(){
   const [roleFilters,setRoleFilters]=useState(new Set());
   const [roleFilter,setRoleFilter]=useState('');
   const [roleScoreMin,setRoleScoreMin]=useState(50);
+  // "Style" filter — separate from the Role filter above (which reads
+  // p.roleCareerScores, the coarse APP role set). This one reads
+  // p.qcRoleCareerScores, the same QC_ROLES set the QuickCard hexagon and
+  // the Profile tab's Style Scores panel use — scored /10 here to match
+  // those. Up to 2 entries, ANDed together.
+  const [styleFilters,setStyleFilters]=useState([]); // [{role,min}]
+  const addStyleFilter=()=>setStyleFilters(f=>f.length<2?[...f,{role:'',min:7}]:f);
+  const updateStyleFilter=(i,patch)=>setStyleFilters(f=>f.map((x,idx)=>idx===i?{...x,...patch}:x));
+  const removeStyleFilter=i=>setStyleFilters(f=>f.filter((_,idx)=>idx!==i));
   const [scoreMode,setScoreMode]=useState('complete');
   const [activePreset,setActivePreset]=useState('');
   const [showHidden,setShowHidden]=useState(false);
@@ -461,7 +470,7 @@ export default function App(){
       .catch(()=>{if(!cancelled)setLoading(false);});
     return ()=>{cancelled=true;};
   },[isMobile,rk]);
-  useEffect(()=>{setRoleFilter('');setRoleScoreMin(50);setScoreMode('complete');},[pos]);
+  useEffect(()=>{setRoleFilter('');setRoleScoreMin(50);setScoreMode('complete');setStyleFilters([]);},[pos]);
   useEffect(()=>{if(activePreset&&PRESET_LEAGUES[activePreset]){setActivePresetLeagues([...PRESET_LEAGUES[activePreset]]);}  },[activePreset]);
 
   const onSort=useCallback(col=>{setSort(p=>p.col===col?{col,asc:!p.asc}:{col,asc:false});setPage(0);},[]);
@@ -502,6 +511,19 @@ export default function App(){
   // Selected chips as separate token lists — kept per-group, not flattened, because
   // matching is AND across chips and OR within a chip's own tokens.
   const careerPosTokenGroups=useMemo(()=>CAREER_POSITION_GROUPS.filter(g=>careerPosFilters.has(g.label)).map(g=>g.tokens),[careerPosFilters]);
+  // Style filter role options: the QC_ROLES (hexagon) keys that actually appear on
+  // players in the selected position group — there's no separate constant listing
+  // them (unlike ROLES_BY_KEY for the coarse app role set above), so derive the set
+  // empirically from the loaded roster rather than hand-maintaining a duplicate list.
+  const styleRoleOptions=useMemo(()=>{
+    const set=new Set();
+    for(const p of all){
+      if(rk&&p.roleKey!==rk) continue;
+      const qc=p.qcRoleCareerScores||p.qcLatestRoles;
+      if(qc) for(const k of Object.keys(qc)) set.add(k);
+    }
+    return [...set].sort();
+  },[all,rk]);
 
   // Min Score is checked LAST so an empty table can say how many players match
   // everything except it ("N players match but score below Min Score").
@@ -603,6 +625,17 @@ export default function App(){
         if(roleScoreMin>0&&rs<roleScoreMin) return false;
         if(!roleScoreMin&&!rs) return false;
       }
+      // Style filter: QC_ROLES (hexagon) scores, not the roleFilter(s) above —
+      // ANDed across up to 2 rows, each scored /10 (the pipeline stores 0-100;
+      // divide by 10 to match the sidebar's and Profile tab's /10 scale).
+      if(styleFilters.length>0){
+        const qc=p.qcRoleCareerScores||p.qcLatestRoles||{};
+        for(const sf of styleFilters){
+          if(!sf.role) continue;
+          const score10=(qc[sf.role]||0)/10;
+          if(score10<sf.min) return false;
+        }
+      }
       if(onlyElite&&!promotionBadge(p.careerScore,sl)) return false;
       if(versatileOnly&&!isVersatile(p)) return false;
       if(careerPosFilters.size>0){
@@ -638,7 +671,7 @@ export default function App(){
       return true;
     });
     return {list,below};
-  },[all,search,pos,leagues,ageMin,ageMax,heightMin,heightMax,foot,minScore,minSeas,showMvFilter,mvMax,showContractFilter,contractBefore,roleFilter,roleScoreMin,seasonFilter,metricFilters,xValueFilter,onlyElite,versatileOnly,getDisplayScore,recentOnly,showXValueFilter,xValueMin,xValueMax,attrFilters,minMins,showCareerMinsFilter,careerMinMins,currentLeagueOnly,playedSeasons,potentialMin,lsMin,lsMax,escOnly,gbeMin,natFilter,softMode,roleFilters,shortlist,showShortlist,notPlayingOnly,domesticOnly,internationalOnly,tierFilters,sideFilter,rk,careerPosFilters,careerPosTokenGroups]);
+  },[all,search,pos,leagues,ageMin,ageMax,heightMin,heightMax,foot,minScore,minSeas,showMvFilter,mvMax,showContractFilter,contractBefore,roleFilter,roleScoreMin,seasonFilter,metricFilters,xValueFilter,onlyElite,versatileOnly,getDisplayScore,recentOnly,showXValueFilter,xValueMin,xValueMax,attrFilters,minMins,showCareerMinsFilter,careerMinMins,currentLeagueOnly,playedSeasons,potentialMin,lsMin,lsMax,escOnly,gbeMin,natFilter,softMode,roleFilters,shortlist,showShortlist,notPlayingOnly,domesticOnly,internationalOnly,tierFilters,sideFilter,rk,careerPosFilters,careerPosTokenGroups,styleFilters]);
   const filtered=filterRes.list, belowMinScore=filterRes.below;
 
   const sorted=useMemo(()=>{
@@ -801,6 +834,27 @@ export default function App(){
                 <input type="range" style={T.sl} min={40} max={95} step={1} value={roleScoreMin} onChange={e=>{setRoleScoreMin(Number(e.target.value));setPage(0);}}/>
               </div>
             )}
+            {/* Style filter: QuickCard hexagon (QC_ROLES) scores, /10 — separate
+                from "Filter by Role" above. Up to 2 rows, ANDed. */}
+            <div style={T.fg}>
+              <span style={T.fl}>Style</span>
+              {styleFilters.map((sf,i)=>(
+                <div key={i} style={{display:'flex',gap:4,alignItems:'center',marginTop:i>0?4:0}}>
+                  <select style={{...T.sel,flex:1}} value={sf.role} onChange={e=>{updateStyleFilter(i,{role:e.target.value});setPage(0);}}>
+                    <option value="">Pick a style…</option>
+                    {styleRoleOptions.map(r=><option key={r} value={r}>{r}</option>)}
+                  </select>
+                  <input aria-label={`Min ${sf.role||'style'} score`} type="number" min={1} max={10} step={0.5} style={{...T.ri,width:44}}
+                    value={sf.min} onChange={e=>{updateStyleFilter(i,{min:Number(e.target.value)});setPage(0);}}/>
+                  <button onClick={()=>{removeStyleFilter(i);setPage(0);}} style={{background:'none',border:'none',color:'#64748b',cursor:'pointer',fontSize:13,padding:'0 4px'}}>✕</button>
+                </div>
+              ))}
+              {styleFilters.length<2&&(
+                <button onClick={addStyleFilter} style={{marginTop:4,background:'none',border:'1px dashed #2a3950',color:'#60a5fa',borderRadius:5,fontSize:10,padding:'3px 8px',cursor:'pointer'}}>
+                  + {styleFilters.length?'Add second style (AND)':'Add style filter'}
+                </button>
+              )}
+            </div>
           </>)}
 
           <div style={T.dv}/>
@@ -1273,7 +1327,7 @@ export default function App(){
                         {roleModeScore!=null&&<span style={{...T.chip,color:outlierMode?zScoreColor(roleModeScore):scoreBandColor(roleModeScore)}}>Role {roleModeScore.toFixed(1)}</span>}
                         <span style={T.chip}>Peak {p.peakScore?.toFixed(1) ?? '—'}</span>
                         <span style={{...T.chip,color:'#22c55e'}}>Pot {(p.potentialScore||p.careerScore).toFixed(1)}</span>
-                        {p.xValue?<span style={{...T.chip,color:'#93c5fd'}}>xV {formatMV(p.xValue)}</span>:null}
+                        {p.marketValue>0&&p.xValue?<span style={{...T.chip,color:'#93c5fd'}}>xV {formatMV(p.xValue)}</span>:null}
                         {p.marketValue>0&&<span style={T.chip}>MV {formatMV(p.marketValue)}</span>}
                         {p.xValue&&p.marketValue>0&&p.xValueGapPct!=null&&<span style={{...T.chip,color:p.xValueGapPct>20?'#22c55e':p.xValueGapPct<-20?'#ef4444':'#94a3b8'}}>{p.xValueGapPct>0?'+':''}{p.xValueGapPct.toFixed(0)}% vs MV</span>}
                         {p.contract&&p.contract!=='nan'&&<span style={{...T.chip,color:p.contractYear<=2026?'#fbbf24':'#94a3b8'}}>{p.contract}</span>}
@@ -1344,7 +1398,7 @@ export default function App(){
                           {!hiddenCols.has('peakScore')&&<td style={{...T.td,color:'#94a3b8'}}>{p.peakScore?.toFixed(1) ?? '—'}</td>}
                           {!hiddenCols.has('seasons')&&<td style={{...T.td,color:'#94a3b8'}}>{p.seasons}</td>}
                           {!hiddenCols.has('potentialScore')&&<td style={T.td}><div style={{display:'flex',alignItems:'center',gap:4}}><div style={{width:6,height:6,borderRadius:'50%',background:'#22c55e',flexShrink:0}}/><span style={{fontWeight:600,color:'#22c55e',fontSize:11}}>{(p.potentialScore||p.careerScore)?.toFixed(1) ?? '—'}</span></div></td>}
-                          {!hiddenCols.has('xValue')&&<td style={T.td}>{p.xValue?<span style={{fontSize:11,fontWeight:700,color:'#93c5fd'}}>{formatMV(p.xValue)}</span>:<span style={{color:'#475569'}}>—</span>}</td>}
+                          {!hiddenCols.has('xValue')&&<td style={T.td}>{p.marketValue>0&&p.xValue?<span style={{fontSize:11,fontWeight:700,color:'#93c5fd'}}>{formatMV(p.xValue)}</span>:<span style={{color:'#475569'}}>—</span>}</td>}
                           {!hiddenCols.has('xValueGapPct')&&<td style={T.td}>{p.xValue&&p.marketValue>0&&p.xValueGapPct!=null?<span style={{fontSize:11,fontWeight:700,color:p.xValueGapPct>20?'#22c55e':p.xValueGapPct<-20?'#ef4444':'#94a3b8'}}>{p.xValueGapPct>0?'+':''}{p.xValueGapPct.toFixed(0)}%</span>:<span style={{color:'#475569'}}>—</span>}</td>}
                           {!hiddenCols.has('marketValue')&&<td style={{...T.td,color:'#94a3b8'}}>{formatMV(p.marketValue)}</td>}
                           {!hiddenCols.has('contract')&&<td style={{...T.td,color:p.contractYear<=2026?'#fbbf24':'#94a3b8',fontSize:11}}>{p.contract&&p.contract!=='nan'?p.contract:'—'}</td>}

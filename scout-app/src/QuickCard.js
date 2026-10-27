@@ -1,6 +1,6 @@
 // QuickCard v69 - Heat-style pitch option (Player Pager pitch + heatmap upload); Team Context follows selected season.
 import React, { useState, useMemo } from 'react';
-import { scoreLabel, formatFoot, formatMV, GBE_LEAGUE_BANDS, METRIC_DISPLAY, seasonXgXa, defaultSeasonLeague, seasonDetailExact } from './constants';
+import { scoreLabel, formatFoot, formatMV, GBE_LEAGUE_BANDS, METRIC_DISPLAY, seasonXgXa, defaultSeasonLeague, seasonDetailExact, CURRENT_SEASON, seasonBucketMatch, hasMetrics } from './constants';
 import { useIsMobile, deliverPng } from './utils';
 
 // Player photo naming lives in photoName.js — a character-for-character port of
@@ -1093,7 +1093,15 @@ export function quickCardSeason(player, manual = {}) {
   // bars instead of silently switching to the latest season.
   const seasonOverrideValid = ovSeason
     && (allSummary.some(r => r.s === ovSeason) || seasonsDetailObj[ovSeason] !== undefined || seasonsDetailAllArr.some(r => r.season === ovSeason));
+  // Default (no manual override): the newest summary row that actually has metrics
+  // behind it, not just the newest row that EXISTS — a brand-new season can have a
+  // display-only placeholder row (no minutes/score yet) before the player's first
+  // qualifying match, which used to win by sitting at allSummary[0] regardless.
+  // 2026-27 stays pickable via the manual override above; this only changes the
+  // automatic default.
+  const firstScoredSummary = allSummary.find(r => hasMetrics(seasonDetailExact(player, r.s, r.l)));
   const chosenSeasonKey = (seasonOverrideValid ? ovSeason : null)
+    || (firstScoredSummary && firstScoredSummary.s)
     || (allSummary[0] && allSummary[0].s)
     || Object.keys(seasonsDetailObj).sort().reverse()[0];
   // No club picked (Default, or a season without a league): the app-wide default club.
@@ -1190,8 +1198,14 @@ export function buildQuickCardElement(player, players, manual = {}) {
   const { xg: xgSeason, xa: xaSeason } = seasonXgXa(player, statsRow, sd);
   const fmt1 = (v) => (v == null ? '—' : v.toFixed(1));
   // Season tag on the stats line: the season of the row the figures come from, shown
-  // only when it isn't the player's latest season ("2023-24" -> "23-24", "2024" stays).
-  const statsSeasonTag = statsRow.s && allSummary[0] && statsRow.s !== allSummary[0].s
+  // whenever it isn't the CURRENT season (2026-27) — including when it's also the
+  // player's own latest season (e.g. a player whose newest data is 2025-26 still
+  // needs the "(25-26)" tag, since the card isn't showing 2026-27). Previously this
+  // compared against the player's own latest row (allSummary[0].s) instead of the
+  // real current season, so a player whose latest season WAS an old one silently
+  // suppressed the tag. seasonBucketMatch (not ===) so a calendar-league literal
+  // season ("2026") correctly counts as the same thing as the "2026-27" bucket.
+  const statsSeasonTag = statsRow.s && !seasonBucketMatch(statsRow.s, CURRENT_SEASON)
     ? (/^\d{4}-\d{2}$/.test(statsRow.s) ? statsRow.s.slice(2) : statsRow.s) : '';
 
   const rawPosToken = (player.position || '').split(',')[0].trim();
@@ -1407,7 +1421,7 @@ export function buildQuickCardElement(player, players, manual = {}) {
       <div style="position:absolute;left:1188px;top:36px;width:2px;height:210px;background:rgba(255,255,255,0.14);"></div>
 
       <!-- INFO BOX -->
-      ${[['Height:', manual.heightOverride || cmToFeet(player.height) || '—'], ['xValue:', manual.valueOverride || (player.xValue > 0 ? formatMV(player.xValue) : '—')], ['Contract:', manual.contractOverride || ((player.contractYear && player.contractYear !== 'nan') ? String(player.contractYear) : '—')], ['Agent:', manual.agentOverride || '—']].map(([k,v],i) => `
+      ${[['Height:', manual.heightOverride || cmToFeet(player.height) || '—'], ['xValue:', manual.valueOverride || (player.marketValue > 0 ? formatMV(player.xValue) : '—')], ['Contract:', manual.contractOverride || ((player.contractYear && player.contractYear !== 'nan') ? String(player.contractYear) : '—')], ['Agent:', manual.agentOverride || '—']].map(([k,v],i) => `
         <div style="position:absolute;left:1208px;top:${50 + i*48}px;font-size:18px;font-weight:500;color:#9aa3b8;white-space:nowrap;">${k}</div>
         <div style="position:absolute;left:1353px;top:${50 + i*48}px;font-size:18px;font-weight:600;color:#fff;white-space:nowrap;">${truncateText(v, 20)}</div>`).join('')}
 
@@ -1588,6 +1602,20 @@ export default function QuickCardModal({ player, players, onClose }) {
 
   const handleDownload = async () => {
     setDownloading(true);
+    // Montserrat must actually be loaded in the browser BEFORE the live card is
+    // built and cloned for export — html-to-image's clone step bakes each
+    // element's getComputedStyle().cssText (including its computed width) onto
+    // the clone. If Montserrat hasn't loaded yet, the live position/foot spans
+    // get measured in the fallback font, baking a width that doesn't match how
+    // wide the text actually paints once fontEmbedCSS renders it in Montserrat
+    // — producing a foot-label gap that drifts by a different amount per
+    // position label (longer/shorter labels have different fallback-vs-
+    // Montserrat width deltas). This file defined ensureMontserratEmbedded()
+    // but never called it, unlike every other card's download handler
+    // (PlayerScoutingCard.js, CoachCard.js, ScatterChart.js's PNG export) —
+    // that's the actual root cause the earlier live-DOM-only investigation
+    // missed.
+    await ensureMontserratEmbedded();
     const { toPng } = await import('html-to-image');
     // Never a blank photo: check the real photo loads (the same fetch html-to-image
     // will make); if it doesn't, use the app's silhouette.
@@ -1644,7 +1672,7 @@ export default function QuickCardModal({ player, players, onClose }) {
 
         <div style={{marginBottom:12}}>
           <label style={qcLabelStyle}>xValue</label>
-          <input style={qcInputStyle} value={valueOverride} onChange={e=>setValueOverride(e.target.value)} placeholder={player.xValue > 0 ? formatMV(player.xValue) : '—'} />
+          <input style={qcInputStyle} value={valueOverride} onChange={e=>setValueOverride(e.target.value)} placeholder={player.marketValue > 0 ? formatMV(player.xValue) : '—'} />
         </div>
 
         <div style={{marginBottom:12}}>

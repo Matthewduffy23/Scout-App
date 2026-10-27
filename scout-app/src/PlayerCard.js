@@ -1035,8 +1035,19 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
       .filter(s=>{const k=`${s.s}||${s.l}`;if(seen.has(k))return false;seen.add(k);return true;})
       .sort((a,b)=>{const ai=SEASON_ORDER_ARR.indexOf(a.s),bi=SEASON_ORDER_ARR.indexOf(b.s);return (ai===-1?99:ai)-(bi===-1?99:bi);});
   })();
+  // Default season: the newest row that actually has a score behind it, not just
+  // the newest row that EXISTS — a brand-new season can ship a display-only
+  // placeholder row (team/league known, no score yet) before a player's first
+  // qualifying match, which used to win by sitting at allStdRows[0] regardless
+  // and showed "Score: — · —" on open. Still fully pickable by hand via the
+  // season tabs below — this only changes the automatic default.
+  const firstScoredStdRow=allStdRows.find(r=>{
+    const m=(player.seasonsDetailAll||[]).find(x=>x.season===r.s&&x.league===r.l);
+    const d=m||(player.seasonsDetail||{})[r.s];
+    return d&&d.score!=null;
+  });
   // selS = "season||league" e.g. "2025-26||Czech1."
-  const defaultSelS=allStdRows.length>0?`${allStdRows[0].s}||${allStdRows[0].l}`:'';
+  const defaultSelS=firstScoredStdRow?`${firstScoredStdRow.s}||${firstScoredStdRow.l}`:(allStdRows.length>0?`${allStdRows[0].s}||${allStdRows[0].l}`:'');
   const [selS,setSelS]=useState(defaultSelS);
   const selSParts=selS.split('||');
   const selSKey=selSParts[0]||'';
@@ -1067,6 +1078,15 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
   // In normal mode, stars use absolute scale as always
   const seasonRoles=sd.roles||{};
   const roles=Object.keys(seasonRoles).length>0 ? seasonRoles : (player.latestRoles||player.roleCareerScores||{});
+  // The hexagon's own role set (QC_ROLES), NOT `roles` above — `roles`/sd.roles is a
+  // different, coarser 3-bucket app set. QuickCard's Style hexagon reads
+  // player.qcRoleCareerScores (falling back to qcLatestRoles) unconditionally — same
+  // source here, so these numbers can never disagree with the QuickCard's. Each key
+  // already carries whichever of the two names a given CM actually has (Anchor vs
+  // Destroyer) straight from the data — the pipeline only ever writes one of the two
+  // per player — so no extra renaming is needed to match the hexagon.
+  const qcRoles=player.qcRoleCareerScores||player.qcLatestRoles||{};
+  const qcSortedRoles=Object.entries(qcRoles).filter(([,v])=>v!=null).sort((a,b)=>b[1]-a[1]);
   const strengths=sd.strengths||player.latestStrengths||[];
   const weaknesses=sd.weaknesses||player.latestWeaknesses||[];
   const styles=sd.styles||player.latestStyles||[];
@@ -1177,7 +1197,13 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
                 <div style={{...SEC,marginBottom:8}}>xValue Analysis</div>
                 <div style={{display:'grid',gridTemplateColumns:isMobile?'repeat(2,1fr)':'repeat(3,1fr)',gap:10,marginBottom:10}}>
                   {[
-                    {label:'xValue',val:formatMV(player.xValue),color:'#93c5fd',sub:'model estimate'},
+                    // With no real MV behind it, xValue is just the fallback-league-median
+                    // base times the performance multiplier — not a usable estimate (see
+                    // Pipeline\build_players.py's LEAGUE_MEDIAN_MV, only populated for
+                    // English/Scottish/Irish/Welsh leagues; every other league falls back
+                    // to a flat £200k regardless of how strong it actually is). Show "—"
+                    // rather than a number that reads as precise but is actually arbitrary.
+                    {label:'xValue',val:player.marketValue?formatMV(player.xValue):'—',color:'#93c5fd',sub:player.marketValue?'model estimate':'no MV to base it on'},
                     {label:'Actual MV',val:player.marketValue?formatMV(player.marketValue):'No MV data',color:'#94a3b8',sub:player.xValueMvSource==='team_avg'?'used team avg base':player.xValueMvSource==='actual'?'transfermarkt':'estimated'},
                     {label:'Value Gap',val:player.marketValue>0?(player.xValueGapPct>0?'+':'')+player.xValueGapPct?.toFixed(0)+'%':'—',color:player.xValueGapPct>20?'#22c55e':player.xValueGapPct<-20?'#ef4444':'#94a3b8',sub:player.xValueGapPct>20?'Undervalued':player.xValueGapPct<-20?'Overvalued':'Fair value'},
                   ].map(({label,val,color,sub})=>(
@@ -1191,7 +1217,13 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
                 <div style={{display:'flex',gap:12,fontSize:10,color:'#64748b'}}>
                   <span>Performance: <strong style={{color:'#c8d4e8'}}>{player.rawPct?.toFixed(0) ?? player.perfPct?.toFixed(0)}th pct</strong> in league (raw)</span>
                   <span>Multiplier: <strong style={{color:'#c8d4e8'}}>{player.xMultiplier?.toFixed(2)}x</strong></span>
-                  <span>Contract: <strong style={{color:'#c8d4e8'}}>{player.xValueContractYrs} yrs</strong>{player.isEnglish&&<span style={{marginLeft:6}}>🏴󠁧󠁢󠁥󠁮󠁧󠁿 English +20%</span>}</span>
+                  {/* xValueContractYrs is never actually computed by the pipeline (Pipeline\build_players.py
+                      only forwards the previous build's own never-set value) — always null today, which
+                      rendered as a bare "yrs" with nothing in front of it. Show "—" instead so this reads
+                      as "no data" rather than a broken label. See item 5 diagnosis: this needs a pipeline
+                      code change (compute_xvalue() would need to actually return/surface contract years
+                      remaining) plus a full rebuild to populate real data — not fixed here. */}
+                  <span>Contract: <strong style={{color:'#c8d4e8'}}>{player.xValueContractYrs ?? '—'}{player.xValueContractYrs!=null?' yrs':''}</strong>{player.isEnglish&&<span style={{marginLeft:6}}>🏴󠁧󠁢󠁥󠁮󠁧󠁿 English +20%</span>}</span>
                 </div>
                 <div style={{marginTop:6,fontSize:9,color:'#334155'}}>
                   xValue = base MV adjusted by raw league percentile, then × (performance +50%/+30%) × age × nationality × contract. Gap vs Transfermarkt listing.
@@ -1253,6 +1285,32 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
                     {items.length>0?<div style={{display:'flex',flexWrap:'wrap',gap:4}}>{items.map(s=><span key={s} style={{padding:'2px 7px',borderRadius:5,background:bg,color,fontSize:10,fontWeight:600}}>{s}</span>)}</div>:<div style={{fontSize:10,color:'#334155'}}>—</div>}
                   </div>
                 ))}
+              </div>
+            )}
+
+            {/* Style scores — same QC_ROLES values as the QuickCard hexagon, shown
+                as bars so every role for this position is readable at once (the
+                hexagon itself only has room for 6). Shown /10 (the hexagon's own
+                raw score, divided by 10) per the sidebar Style filter's scale;
+                the bar fill still reflects the real 0-100 value underneath. */}
+            {qcSortedRoles.length>0&&(
+              <div>
+                <div style={SEC}>Style Scores — all {ROLE_KEY_LABELS[player.roleKey]||''} roles, high to low</div>
+                <div style={{display:'flex',flexDirection:'column',gap:5}}>
+                  {qcSortedRoles.map(([role,score])=>{
+                    const v=Math.round(score);
+                    return (
+                      <div key={role} style={{display:'flex',alignItems:'center',gap:8,minHeight:20}}>
+                        <div style={{width:138,fontSize:11,color:v>=70?'#e2e8f4':v<=30?'#f87171':'#94a3b8',textAlign:'right',flexShrink:0,fontWeight:v>=70?600:400}}>{role}</div>
+                        <div style={{flex:1,background:'#0c1120',borderRadius:3,height:7,position:'relative'}}>
+                          <div style={{width:`${v}%`,height:'100%',borderRadius:3,background:divColor(v),transition:'width 0.4s'}}/>
+                        </div>
+                        <div style={{width:30,fontSize:11,fontWeight:800,color:divColor(v),textAlign:'right',flexShrink:0}}>{(score/10).toFixed(1)}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{marginTop:6,fontSize:9.5,color:'#334155'}}>Same numbers as the QuickCard Style hexagon, shown /10</div>
               </div>
             )}
 

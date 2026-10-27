@@ -235,7 +235,7 @@ export function generateOnePager(player) {
       </div>
       <div style="display:flex;justify-content:space-between;font-size:11px">
         <span style="color:#9ca3af">xValue:</span>
-        <span style="color:#60a5fa;font-weight:600">${player.xValue>0?formatMV(player.xValue):'—'}</span>
+        <span style="color:#60a5fa;font-weight:600">${player.marketValue>0?formatMV(player.xValue):'—'}</span>
       </div>
     </div>
 
