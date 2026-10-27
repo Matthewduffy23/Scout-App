@@ -487,6 +487,15 @@ const HEADER_R     = 'rgb(17,22,42)';   // header gradient right (default, no cl
 const ACCENT_PINK  = '#ff66c4';         // spec
 const TREND_CYAN   = '#00cadc';         // spec trend line
 
+// NOTES section (Key Attributes / Development Areas / View) layout — shared
+// between buildCardElement's markup and fitNotesSection's measurement so the
+// two can never drift out of sync with each other.
+const NOTES_TOP = 311;
+const NOTES_GAP = 14; // minimum gap between bullets — justify-content:space-between only adds to this, never below it
+const NOTES_BOTTOM_MARGIN = 40; // fixed clearance kept between the notes section's own fixed-height box and CURRENT LEVEL
+const CURRENT_LEVEL_TOP = 894;
+const NOTES_HEIGHT = CURRENT_LEVEL_TOP - NOTES_BOTTOM_MARGIN - NOTES_TOP;
+
 function darkenHex(hex, amount = 0.35) {
   if (!hex || typeof hex !== 'string') return hex;
   const m = hex.trim().match(/^#?([0-9a-f]{6})$/i);
@@ -1140,31 +1149,53 @@ export function buildCardElement(player, manual = {}) {
         </div>
       </div>
 
-      <!-- NOTES (Key Attributes / Dev / View) — spread across the text box -->
-      <div style="position:absolute;top:311px;left:898px;width:616px;height:570px;padding:0 22px;box-sizing:border-box;display:flex;flex-direction:column;justify-content:space-between;">
+      <!-- NOTES (Key Attributes / Dev / View) — fixed-HEIGHT box (top to
+           ~NOTES_BOTTOM_MARGIN above CURRENT LEVEL) with
+           justify-content:space-between, so leftover vertical space (short
+           text) splits evenly between the 2 gaps and the section fills down
+           toward CURRENT LEVEL like the original design — gap:NOTES_GAP sets
+           the MINIMUM per modern flexbox (gap + space-between combine: gap is
+           the floor, space-between distributes anything beyond it), so a gap
+           is never pushed below 14px. See fitNotesSection: if the 3 bullets'
+           combined content can't fit in the fixed box even with every gap at
+           its 14px floor, the whole section shrinks by font-size instead —
+           never by compressing a gap below the floor. -->
+      <!-- html-to-image's clone can wrap this same text slightly narrower
+           than the live DOM measured it (sub-pixel/engine differences in its
+           SVG foreignObject render), painting fewer lines than fitNotesSection
+           saw — but the clone still carries each ROW's baked-in computed
+           height (and block-size, its logical-property twin) from the live
+           DOM, leaving a dead gap where the missing line was. A stylesheet
+           !important override placed in this same markup does NOT fix this —
+           confirmed empirically: the override was present and well-formed in
+           the serialized SVG, yet the exported PNG's gaps were pixel-for-pixel
+           identical with or without it. See stripNotesBakedHeights in
+           downloadScoutingCardPNG, which removes these inline declarations
+           from the serialized SVG string directly, after html-to-image has
+           already produced it — deliberately scoped to the 3 ROWS only, not
+           this container, whose own height is fixed by design, not a bug. -->
+      <div id="scc-notes" style="position:absolute;top:${NOTES_TOP}px;left:898px;width:616px;height:${NOTES_HEIGHT}px;padding:0 22px;box-sizing:border-box;display:flex;flex-direction:column;justify-content:space-between;gap:${NOTES_GAP}px;font-size:27.9px;">
         <div style="display:flex;gap:10px;">
-          <span style="color:#fff;font-size:27.9px;flex-shrink:0;line-height:1.5;">•</span>
-          <div style="font-size:27.9px;line-height:1.5;color:#fff;"><span style="color:${ACCENT_PINK};font-weight:700;">Key Attributes: </span><span style="font-weight:600;">${manual.keyAttributes || ''}</span></div>
+          <span style="color:#fff;font-size:inherit;flex-shrink:0;line-height:1.5;">•</span>
+          <div style="font-size:inherit;line-height:1.5;color:#fff;"><span style="color:${ACCENT_PINK};font-weight:700;">Key Attributes: </span><span style="font-weight:600;">${manual.keyAttributes || ''}</span></div>
         </div>
         <div style="display:flex;gap:10px;">
-          <span style="color:#fff;font-size:27.9px;flex-shrink:0;line-height:1.5;">•</span>
-          <div style="font-size:27.9px;line-height:1.5;color:#fff;"><span style="color:${ACCENT_PINK};font-weight:700;">Development Areas: </span><span style="font-weight:600;">${manual.devAreas || ''}</span></div>
+          <span style="color:#fff;font-size:inherit;flex-shrink:0;line-height:1.5;">•</span>
+          <div style="font-size:inherit;line-height:1.5;color:#fff;"><span style="color:${ACCENT_PINK};font-weight:700;">Development Areas: </span><span style="font-weight:600;">${manual.devAreas || ''}</span></div>
         </div>
         <div style="display:flex;gap:10px;">
-          <span style="color:#fff;font-size:27.9px;flex-shrink:0;line-height:1.5;">•</span>
-          <div style="font-size:27.9px;line-height:1.5;color:#fff;"><span style="color:${ACCENT_PINK};font-weight:700;">View: </span><span style="font-weight:600;">${manual.view || ''}</span></div>
+          <span style="color:#fff;font-size:inherit;flex-shrink:0;line-height:1.5;">•</span>
+          <div style="font-size:inherit;line-height:1.5;color:#fff;"><span style="color:${ACCENT_PINK};font-weight:700;">View: </span><span style="font-weight:600;">${manual.view || ''}</span></div>
         </div>
       </div>
 
       <!-- CURRENT / POTENTIAL LEVEL -->
-      <div style="position:absolute;top:894px;left:938px;font-size:26.6px;font-weight:700;color:#fff;">CURRENT LEVEL</div>
+      <div style="position:absolute;top:${CURRENT_LEVEL_TOP}px;left:938px;font-size:26.6px;font-weight:700;color:#fff;">CURRENT LEVEL</div>
       <div style="position:absolute;top:940px;left:941px;">${starsHtml(manual.currentScore ?? player.careerScore, 40, manual.currentStarsOverride != null && manual.currentStarsOverride !== '' ? Number(manual.currentStarsOverride) : null, svgStars)}</div>
       <div style="position:absolute;top:948px;left:${svgStars ? '1163px' : '1133px'};font-size:20px;font-weight:500;color:#c0c0c0;">${manual.currentLevel || scoreLabel(player.careerScore)}</div>
       <div style="position:absolute;top:995px;left:938px;font-size:26.6px;font-weight:700;color:#fff;">POTENTIAL LEVEL</div>
       <div style="position:absolute;top:1033px;left:937px;">${starsHtml(manual.potentialScore ?? player.potentialScore ?? player.careerScore, 40, manual.potentialStarsOverride != null && manual.potentialStarsOverride !== '' ? Number(manual.potentialStarsOverride) : null, svgStars)}</div>
       <div style="position:absolute;top:1039px;left:${svgStars ? '1163px' : '1133px'};font-size:20px;font-weight:500;color:#c0c0c0;">${manual.potentialLevel || scoreLabel(player.potentialScore || player.careerScore)}</div>
-
-      <!-- TEMP build marker (remove once font is confirmed) -->
 
     </div>
   `;
@@ -1173,38 +1204,112 @@ export function buildCardElement(player, manual = {}) {
   return container;
 }
 
-// html2canvas renders the card in a cloned context that does NOT inherit fonts
-// loaded via a stylesheet <link> (woff2 loads async and loses the race), so captures
-// fall back to Arial. Fix: Montserrat (weights 400/500/600/700/900, latin) is inlined
-// above as base64 @font-face CSS — embedded synchronously, no network needed. We add it
-// to the document and force every weight to load before capture, and re-inject it into
-// html2canvas's clone via onclone so getComputedStyle resolves Montserrat there too.
-let _montserratEmbedPromise = null;
-function ensureMontserratEmbedded() {
-  if (_montserratEmbedPromise) return _montserratEmbedPromise;
-  _montserratEmbedPromise = (async () => {
-    if (!document.getElementById('scc-montserrat-embed')) {
-      const style = document.createElement('style');
-      style.id = 'scc-montserrat-embed';
-      style.textContent = MONTSERRAT_EMBED_CSS;
-      document.head.appendChild(style);
-    }
-    try {
-      await Promise.all([400, 500, 600, 700, 900].map(w => document.fonts.load(`${w} 16px Montserrat`)));
-      await document.fonts.ready;
-    } catch (e) {
-      await new Promise(r => setTimeout(r, 300));
-    }
-  })();
-  return _montserratEmbedPromise;
+// Shrinks the NOTES section's font-size (never its gaps — those stay at
+// their NOTES_GAP floor; justify-content:space-between only ever ADDS to
+// that floor when content is short) as one unit until its real content fits
+// the section's fixed NOTES_HEIGHT box. notes.scrollHeight reads at most
+// NOTES_HEIGHT whenever content comfortably fits (nothing overflows a
+// fixed-height, overflow:visible box with room to spare — space-between
+// just stretches the gaps to fill it), and only exceeds it once the 3
+// bullets can't fit even at every gap's 14px floor — exactly the shrink
+// trigger we want. Safe to call immediately after buildCardElement:
+// Montserrat is preloaded globally in public/index.html, long before the app
+// ever reaches the export button, so scrollHeight here already reflects
+// real Montserrat line-wrapping rather than a race against the font still
+// loading. No-op when the text already fits at the default size.
+function fitNotesSection(container) {
+  const notes = container.querySelector('#scc-notes');
+  if (!notes) return;
+  const minFontSize = 16;
+  let fontSize = 27.9;
+  while (notes.scrollHeight > NOTES_HEIGHT && fontSize > minFontSize) {
+    fontSize = Math.max(minFontSize, fontSize - 0.5);
+    notes.style.fontSize = `${fontSize}px`;
+  }
+}
+
+const MONTSERRAT_WEIGHTS = [400, 500, 600, 700, 900];
+
+// Montserrat's bytes are preloaded globally from the first paint (see
+// public/index.html), but preload only prefetches bytes into the HTTP cache
+// — it does not register the face as loaded/ready in document.fonts, since
+// nothing else on the page ever uses font-family:Montserrat to trigger that
+// on its own. Confirmed directly on a live deployment: document.fonts.check
+// reads false right after page load even with the preload already having
+// fired, and calling load()+ready explicitly resolves in ~3ms once the bytes
+// are cached (vs. an unbounded wait before the preload existed). This is a
+// correctness requirement of the Font Loading API, not a timing guess: the
+// face is registered statically in index.html, so unlike the earlier
+// dynamically-injected <style> version, this match cannot silently fail.
+async function ensureMontserratReady() {
+  try {
+    await Promise.all(MONTSERRAT_WEIGHTS.map(w => document.fonts.load(`${w} 16px Montserrat`)));
+    await document.fonts.ready;
+  } catch (e) {
+    console.error('[card] Montserrat load check failed', e);
+  }
+}
+
+// html-to-image's clone-node.js copies getComputedStyle(nativeNode).cssText
+// onto every cloned element's own style attribute — a stylesheet !important
+// override placed inside the captured markup does not win against this in
+// html-to-image's SVG/foreignObject rendering (confirmed empirically: the
+// override is present, well-formed, and targets both height and its logical
+// twin block-size, yet the output is pixel-identical with or without it).
+// So instead of fighting that from inside the DOM, this edits html-to-image's
+// OWN finished SVG string directly, after the fact: strips every baked
+// height/block-size (and their min-/max- variants) from the 3 bullet ROWS
+// only — NOT the #scc-notes container itself, whose own fixed height is
+// deliberate (see NOTES_HEIGHT) and renders correctly as-is, since it's an
+// explicit value from the template, not an auto/content-derived one that
+// could get baked wrong. Only the region AFTER the container's own opening
+// tag is touched, so its own style attribute is never modified.
+function stripNotesBakedHeights(svgText) {
+  const startIdx = svgText.indexOf('id="scc-notes"');
+  if (startIdx === -1) return svgText;
+  const childrenStart = svgText.indexOf('>', startIdx) + 1;
+  const endIdx = svgText.indexOf('CURRENT LEVEL', childrenStart);
+  if (endIdx === -1) return svgText;
+  const region = svgText
+    .slice(childrenStart, endIdx)
+    .replace(/\s*(?:height|block-size|min-height|min-block-size|max-height|max-block-size):\s*[^;"]+;/g, '');
+  return svgText.slice(0, childrenStart) + region + svgText.slice(endIdx);
+}
+
+// Replicates html-to-image's own toCanvas()->toPng() (load the SVG as an
+// Image, draw it to a canvas, read back a PNG data URL) against our
+// post-processed SVG url instead of calling toPng() directly, since toPng()
+// always renders html-to-image's own unmodified SVG.
+function svgUrlToPng(svgUrl, opts) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.decoding = 'async';
+    img.onload = () => {
+      img.decode().then(() => requestAnimationFrame(() => {
+        const ratio = opts.pixelRatio || 1;
+        const canvas = document.createElement('canvas');
+        canvas.width = opts.width * ratio;
+        canvas.height = opts.height * ratio;
+        const ctx = canvas.getContext('2d');
+        if (opts.backgroundColor) {
+          ctx.fillStyle = opts.backgroundColor;
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL());
+      })).catch(reject);
+    };
+    img.onerror = reject;
+    img.src = svgUrl;
+  });
 }
 
 export async function downloadScoutingCardPNG(player, manual = {}) {
-  const { toPng } = await import('html-to-image');
-
-  await ensureMontserratEmbedded();
+  await ensureMontserratReady();
 
   const el = buildCardElement(player, manual);
+  fitNotesSection(el);
 
   // background-image has no onerror — preload the real photo URL manually and
   // swap to the fallback image if it 404s, before html2canvas captures the card.
@@ -1268,10 +1373,14 @@ export async function downloadScoutingCardPNG(player, manual = {}) {
         'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
     };
 
+    const { toSvg } = await import('html-to-image');
+
     // First pass can come back blank before fonts/images are inlined into the
     // clone, so render once to warm up, then capture for real.
-    await toPng(cardNode, opts);
-    const dataUrl = await toPng(cardNode, opts);
+    await toSvg(cardNode, opts);
+    const svgUrl = await toSvg(cardNode, opts);
+    const fixedSvgUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(stripNotesBakedHeights(decodeURIComponent(svgUrl.split(',')[1])))}`;
+    const dataUrl = await svgUrlToPng(fixedSvgUrl, opts);
 
     await deliverPng(dataUrl, `${player.name.replace(/\s+/g, '_')}_scouting_card.png`);
   } finally {
