@@ -33,6 +33,9 @@ export const LEAGUE_STRENGTHS = {
   'Czech 3.':20.00,'Denmark 4.':20.00,'Germany 5.':25.00,'Germany 6.':20.00,
   'Italy 5.':25.00,'Portugal 4.':25.00,'Serbia 3.':15.00,
   'Switzerland 3.':35.00,
+  // 2026-10-27: average of this dict's own Poland 2./Korea 2./Israel 2.
+  // (46.27/43.53/38.04) — matched to the same tier per Matty's instruction.
+  'Luxembourg 1.':42.61,
 };
 
 export const HIDDEN_LEAGUES = new Set([
@@ -87,7 +90,7 @@ export const COUNTRY_TO_REGION = {
   'North Macedonia':'Europe','Latvia':'Europe','Montenegro':'Europe','Denmark':'Europe',
   'Estonia':'Europe','Northern Ireland':'Europe','Wales':'Europe','Russia':'Europe',
   'Kazakhstan':'Europe','Lithuania':'Europe','Malta':'Europe','Moldova':'Europe',
-  'Israel':'Europe','Andorra':'Europe','Faroe Islands':'Europe',
+  'Israel':'Europe','Andorra':'Europe','Faroe Islands':'Europe','Luxembourg':'Europe',
   'Brazil':'South America','Argentina':'South America','Colombia':'South America',
   'Ecuador':'South America','Paraguay':'South America','Uruguay':'South America',
   'Chile':'South America','Bolivia':'South America','Peru':'South America',
