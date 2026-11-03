@@ -1568,15 +1568,19 @@ export default function QuickCardModal({ player, players, onClose }) {
   // pattern) so a player with two entries in one season (e.g. a January transfer,
   // 25-26 at both club A and club B) shows as two separate, labeled options —
   // not one generic "25-26" that silently resolves to whichever club comes first.
+  // Domestic league (standard/hidden/youth) rows sort before continental/
+  // international rows within the same season, so e.g. "Czech 1." lists above
+  // "Europa League Qualifiers" instead of whichever came first in the source data.
+  const _rowTypeRank = (row) => ({ continental: 1, international: 2 }[row && row.type] ?? 0);
   const availableSeasons = (() => {
     const seen = new Set();
     return (player.allSeasonsSummary || [])
       .filter(row => row && row.s)
       .filter(row => { const k = `${row.s}||${row.l}`; if (seen.has(k)) return false; seen.add(k); return true; })
-      .sort((a, b) => SEASON_ORDER.indexOf(b.s) - SEASON_ORDER.indexOf(a.s))
+      .sort((a, b) => (SEASON_ORDER.indexOf(b.s) - SEASON_ORDER.indexOf(a.s)) || (_rowTypeRank(a) - _rowTypeRank(b)))
       .map(row => ({
         key: `${row.s}||${row.l || ''}`,
-        label: row.team ? `${row.s} — ${row.team}` : row.s,
+        label: row.team ? `${row.s} — ${row.team}${row.l ? ` (${row.l})` : ''}` : row.s,
       }));
   })();
 

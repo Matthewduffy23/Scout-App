@@ -2,7 +2,7 @@
 // Small modal collecting the manual fields (notes, physical, form, club colour)
 // then calls downloadScoutingCardPNG from PlayerScoutingCard.js
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useIsMobile } from './utils';
 import { downloadScoutingCardPNG } from './PlayerScoutingCard';
 
@@ -12,8 +12,11 @@ const inputStyle = {
 };
 const labelStyle = { fontSize: 10, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4, display: 'block' };
 const sectionStyle = { marginBottom: 14 };
+// Matches PlayerScoutingCard.js's own TREND_SEASON_ORDER (not exported from there) —
+// keep in sync each season transition, same as the lists in QuickCard.js/PlayerCard.js.
+const SEASON_ORDER = ['2018-19','2019-20','2020-21','2021','2021-22','2022','2022-23','2023','2023-24','2024','2024-25','2025','2025-26','2026','2026-27'];
 
-export default function ScoutingCardModal({ player, onClose }) {
+export default function ScoutingCardModal({ player, players, onClose }) {
   const isMobile = useIsMobile();
   const [keyAttributes, setKeyAttributes] = useState('');
   const [devAreas, setDevAreas] = useState('');
@@ -55,6 +58,28 @@ export default function ScoutingCardModal({ player, onClose }) {
   const [selectedLeague, setSelectedLeague] = useState('');
   const [seasonStatsLabel, setSeasonStatsLabel] = useState('');
   const [busy, setBusy] = useState(false);
+  // Team / badge override — same component/logic as QuickCard's "Display Club"
+  // picker: teamOverride is free-text team NAME only; teamPick (from search)
+  // swaps name + badge + league + flag together. Neither touches which
+  // season's stats are shown (selectedSeasonKey/selectedLeague above).
+  const [teamOverride, setTeamOverride] = useState('');
+  const [teamPick, setTeamPick] = useState(null);
+  const [teamPickQuery, setTeamPickQuery] = useState('');
+  const teamPickChoices = useMemo(() => {
+    const fold = (s) => String(s || '').normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase();
+    const q = fold(teamPickQuery.trim());
+    if (q.length < 2) return [];
+    const seen = new Set();
+    const out = [];
+    for (const p of (players || [])) {
+      if (!p || !p.team || seen.has(p.team)) continue;
+      if (!fold(p.team).includes(q)) continue;
+      seen.add(p.team);
+      out.push({ team: p.team, league: p.league || '', fotmobId: p.teamFotmobId || '' });
+      if (out.length >= 10) break;
+    }
+    return out;
+  }, [players, teamPickQuery]);
 
   const handlePosImage = (e) => {
     const file = e.target.files[0];
@@ -103,6 +128,8 @@ export default function ScoutingCardModal({ player, onClose }) {
         selectedSeasonKey: selectedSeasonKey || undefined,
         selectedLeague: selectedLeague || undefined,
         seasonStatsLabel: seasonStatsLabel || undefined,
+        teamOverride: teamOverride || undefined,
+        teamPick,
       });
     } catch (err) {
       alert('Failed to generate card: ' + err.message);
@@ -140,13 +167,20 @@ export default function ScoutingCardModal({ player, onClose }) {
             }}>
               <option value="auto||auto">Auto (most recent)</option>
               {(()=>{
+                // Every row the player has (youth, continental, international included) —
+                // same source and no type filter as QuickCard's season picker. The
+                // Performance Trend chart below applies its OWN separate 400+ min,
+                // standard/hidden-only qualifying filter; that's a quality gate on the
+                // trend line, not a reason to hide these rows from the picker.
                 const seen=new Set();
+                const rowTypeRank = (s) => ({ continental: 1, international: 2 }[s && s.type] ?? 0);
                 return (player.allSeasonsSummary || [])
-                  .filter(s => s.type === 'standard' || s.type === 'hidden' || !s.type) // league seasons, as the Performance Trend
+                  .filter(s => s && s.s)
                   .filter(s => { const k=`${s.s}||${s.l}`; if(seen.has(k)) return false; seen.add(k); return true; })
+                  .sort((a,b) => (SEASON_ORDER.indexOf(b.s) - SEASON_ORDER.indexOf(a.s)) || (rowTypeRank(a) - rowTypeRank(b)))
                 .map((s, i) => (
                   <option key={`${s.s}-${s.l}-${i}`} value={`${s.s}||${s.l}`}>
-                    {s.s} — {s.team} ({(s.l||'').replace('England ','Eng ').replace('Scotland ','Sco ')})
+                    {s.s} — {s.team}{s.l ? ` (${(s.l||'').replace('England ','Eng ').replace('Scotland ','Sco ')})` : ''}
                   </option>
                 ))})()}
             </select>
@@ -200,6 +234,48 @@ export default function ScoutingCardModal({ player, onClose }) {
               <option value="On Loan">On Loan</option>
             </select>
           </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
+          <div style={{ flex: 1 }}>
+            <label style={labelStyle}>Team Name</label>
+            <input style={inputStyle} value={teamOverride} onChange={e => setTeamOverride(e.target.value)} placeholder={player.team} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <label style={labelStyle}>Badge (search any club)</label>
+            {teamPick ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ ...inputStyle, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {teamPick.team}<span style={{ color: '#64748b' }}> — {teamPick.league || '—'}</span>
+                  </span>
+                </div>
+                <button type="button" onClick={() => { setTeamPick(null); setTeamPickQuery(''); }}
+                  style={{ padding: '6px 10px', background: 'none', border: '1px solid #1e2d45', borderRadius: 6, color: '#f87171', fontSize: 11, cursor: 'pointer', flexShrink: 0 }}>✕</button>
+              </div>
+            ) : (
+              <>
+                <input style={inputStyle} value={teamPickQuery}
+                  onChange={e => setTeamPickQuery(e.target.value)} placeholder="Search any club…" />
+                {teamPickQuery.trim().length >= 2 && (
+                  <div style={{ border: '1px solid #1e2d45', borderRadius: 6, marginTop: 4, maxHeight: 168, overflowY: 'auto', background: '#0e1e38' }}>
+                    {teamPickChoices.length ? teamPickChoices.map(t => (
+                      <div key={`${t.team}|${t.league}`}
+                        onClick={() => { setTeamPick(t); setTeamPickQuery(''); }}
+                        style={{ padding: '6px 9px', fontSize: 11.5, color: '#e2e8f4', cursor: 'pointer', borderBottom: '1px solid #13233d' }}>
+                        {t.team}<span style={{ color: '#64748b' }}> — {t.league || '—'}</span>
+                      </div>
+                    )) : (
+                      <div style={{ padding: '6px 9px', fontSize: 11, color: '#64748b' }}>No match.</div>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+        <div style={{ marginTop: -8, marginBottom: 14, fontSize: 10, color: '#6b7a99' }}>
+          Swaps club name, badge, league name and flag. Stats stay from the selected season above.
         </div>
 
         <div style={sectionStyle}>

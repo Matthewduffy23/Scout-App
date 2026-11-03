@@ -1522,7 +1522,7 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
           {tab==='forecast'&&<ForecastTab player={player}/>}
         </div>
       </div>
-      {showScoutingCard&&<ScoutingCardModal player={player} onClose={()=>setShowScoutingCard(false)}/>}
+      {showScoutingCard&&<ScoutingCardModal player={player} players={players} onClose={()=>setShowScoutingCard(false)}/>}
       {showQuickCard&&<QuickCardModal player={player} players={players} onClose={()=>setShowQuickCard(false)}/>}
       {showPlayerPager&&<PlayerPagerModal player={player} players={players} onClose={()=>setShowPlayerPager(false)}/>}
     </div>
