@@ -1013,7 +1013,7 @@ function CareerTab({ player, players }) {
 }
 
 
-export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=false}) {
+export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=false,styleScoreMode='career'}) {
   const isMobile=useIsMobile();
   // Duplicates build_players.py's SEASON_ORDER (backend source of truth) — keep in sync
   // each season transition, same as the lists in PlayerScoutingCard.js/QuickCard.js.
@@ -1079,14 +1079,18 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
   const seasonRoles=sd.roles||{};
   const roles=Object.keys(seasonRoles).length>0 ? seasonRoles : (player.latestRoles||player.roleCareerScores||{});
   // The hexagon's own role set (QC_ROLES), NOT `roles` above — `roles`/sd.roles is a
-  // different, coarser 3-bucket app set. QuickCard's Style hexagon reads
-  // player.qcRoleCareerScores (falling back to qcLatestRoles) unconditionally — same
-  // source here, so these numbers can never disagree with the QuickCard's. Each key
-  // already carries whichever of the two names a given CM actually has (Anchor vs
-  // Destroyer) straight from the data — the pipeline only ever writes one of the two
-  // per player — so no extra renaming is needed to match the hexagon.
-  const qcRoles=player.qcRoleCareerScores||player.qcLatestRoles||{};
-  const qcSortedRoles=Object.entries(qcRoles).filter(([,v])=>v!=null).sort((a,b)=>b[1]-a[1]);
+  // different, coarser 3-bucket app set. Career blend (default) reads
+  // player.qcRoleCareerScores (falling back to qcLatestRoles), same source QuickCard's
+  // hexagon uses, so these numbers can never disagree with the QuickCard's. "This
+  // season" (styleScoreMode prop, one toggle shared with the sidebar Style filter and
+  // the QuickCard hexagon) reads sd.qcRoles instead — the Profile's OWN currently
+  // selected season tab's per-season hexagon scores — null when that season has none,
+  // shown as "—" rather than silently falling back to career. Each key already carries
+  // whichever of the two names a given CM actually has (Anchor vs Destroyer) straight
+  // from the data — the pipeline only ever writes one of the two per player — so no
+  // extra renaming is needed to match the hexagon either way.
+  const qcRoles=styleScoreMode==='season' ? (sd.qcRoles||null) : (player.qcRoleCareerScores||player.qcLatestRoles||null);
+  const qcSortedRoles=Object.entries(qcRoles||{}).filter(([,v])=>v!=null).sort((a,b)=>b[1]-a[1]);
   const strengths=sd.strengths||player.latestStrengths||[];
   const weaknesses=sd.weaknesses||player.latestWeaknesses||[];
   const styles=sd.styles||player.latestStyles||[];
@@ -1294,9 +1298,9 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
                 hexagon itself only has room for 6). Shown /10 (the hexagon's own
                 raw score, divided by 10) per the sidebar Style filter's scale;
                 the bar fill still reflects the real 0-100 value underneath. */}
-            {qcSortedRoles.length>0&&(
+            {qcSortedRoles.length>0?(
               <div>
-                <div style={SEC}>Style Scores — all {ROLE_KEY_LABELS[player.roleKey]||''} roles, high to low</div>
+                <div style={SEC}>Style Scores — all {ROLE_KEY_LABELS[player.roleKey]||''} roles, high to low{styleScoreMode==='season'?` (${selSKey})`:''}</div>
                 <div style={{display:'flex',flexDirection:'column',gap:5}}>
                   {qcSortedRoles.map(([role,score])=>{
                     const v=Math.round(score);
@@ -1311,9 +1315,14 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
                     );
                   })}
                 </div>
-                <div style={{marginTop:6,fontSize:9.5,color:'#334155'}}>Same numbers as the QuickCard Style hexagon, shown /10</div>
+                <div style={{marginTop:6,fontSize:9.5,color:'#334155'}}>Same numbers as the QuickCard Style hexagon, shown /10{styleScoreMode==='season'?' (This season)':''}</div>
               </div>
-            )}
+            ):(styleScoreMode==='season'&&(
+              <div>
+                <div style={SEC}>Style Scores — all {ROLE_KEY_LABELS[player.roleKey]||''} roles, high to low ({selSKey})</div>
+                <div style={{fontSize:12,color:'#64748b'}}>— no style data for this season</div>
+              </div>
+            ))}
 
             {/* Metric groups */}
             {Object.keys(groups).length>0&&(
@@ -1523,7 +1532,7 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
         </div>
       </div>
       {showScoutingCard&&<ScoutingCardModal player={player} players={players} onClose={()=>setShowScoutingCard(false)}/>}
-      {showQuickCard&&<QuickCardModal player={player} players={players} onClose={()=>setShowQuickCard(false)}/>}
+      {showQuickCard&&<QuickCardModal player={player} players={players} onClose={()=>setShowQuickCard(false)} styleScoreMode={styleScoreMode}/>}
       {showPlayerPager&&<PlayerPagerModal player={player} players={players} onClose={()=>setShowPlayerPager(false)}/>}
     </div>
   );

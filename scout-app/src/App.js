@@ -6,7 +6,7 @@ import TeamIndex from './TeamIndex';
 import CustomScatter from './CustomScatter';
 import ScatterChart from './ScatterChart';
 import { Photo, Crest, photoUrl, useIsMobile, deliverJson } from './utils';
-import { scoreBandColor, formatMV, formatFoot, ROLE_KEY_LABELS, ROLES_BY_KEY, POSITION_ATTRIBUTES, playerHasAttribute, ALL_LEAGUES, DEFAULT_LEAGUES, HIDDEN_LEAGUES, YOUTH_LEAGUES, PRESET_LEAGUES, COUNTRY_TO_REGION, GBE_LEAGUE_BANDS, leagueToRegion, leagueToBand, scoreLabel, scoreToStars, promotionBadge, ALL_SEASONS, CURRENT_SEASON, PREV_SEASON, seasonRoleKeyFor, seasonBucketMatch, seasonDetailFor, seasonRowFor, seasonEntryFor, seasonClubFor, leagueSeasonMatch, seasonLeagueFor, metricFromDetail, METRIC_OPTIONS, LEAGUE_STRENGTHS, CAREER_POSITION_GROUPS } from './constants';
+import { scoreBandColor, formatMV, formatFoot, ROLE_KEY_LABELS, ROLES_BY_KEY, POSITION_ATTRIBUTES, playerHasAttribute, ALL_LEAGUES, DEFAULT_LEAGUES, HIDDEN_LEAGUES, YOUTH_LEAGUES, PRESET_LEAGUES, COUNTRY_TO_REGION, GBE_LEAGUE_BANDS, leagueToRegion, leagueToBand, scoreLabel, scoreToStars, promotionBadge, ALL_SEASONS, CURRENT_SEASON, PREV_SEASON, seasonRoleKeyFor, seasonBucketMatch, seasonDetailFor, seasonRowFor, seasonEntryFor, seasonClubFor, leagueSeasonMatch, seasonLeagueFor, metricFromDetail, METRIC_OPTIONS, LEAGUE_STRENGTHS, CAREER_POSITION_GROUPS, styleRolesFor, styleScoreDisplay } from './constants';
 
 // Re-exported so anything that already imports these from App.js keeps working —
 // but there is now ONE implementation, in utils.js, rather than a second copy here.
@@ -310,12 +310,15 @@ export default function App(){
   const [roleFilter,setRoleFilter]=useState('');
   const [roleScoreMin,setRoleScoreMin]=useState(50);
   // "Style" filter — separate from the Role filter above (which reads
-  // p.roleCareerScores, the coarse APP role set). This one reads
-  // p.qcRoleCareerScores, the same QC_ROLES set the QuickCard hexagon and
-  // the Profile tab's Style Scores panel use — scored /10 here to match
-  // those. Up to 2 entries, ANDed together.
+  // p.roleCareerScores, the coarse APP role set). This one reads the QC_ROLES set
+  // the QuickCard hexagon and the Profile tab's Style Scores panel use — scored /10
+  // here to match those. Any number of rows, all ANDed together.
   const [styleFilters,setStyleFilters]=useState([]); // [{role,min}]
-  const addStyleFilter=()=>setStyleFilters(f=>f.length<2?[...f,{role:'',min:7}]:f);
+  // Career blend (default) vs This season — single source of truth shared with the
+  // QuickCard hexagon and the Profile tab's Style Scores panel (passed down as a
+  // prop); see styleRolesFor in constants.js.
+  const [styleScoreMode,setStyleScoreMode]=useState('career');
+  const addStyleFilter=()=>setStyleFilters(f=>[...f,{role:'',min:7}]);
   const updateStyleFilter=(i,patch)=>setStyleFilters(f=>f.map((x,idx)=>idx===i?{...x,...patch}:x));
   const removeStyleFilter=i=>setStyleFilters(f=>f.filter((_,idx)=>idx!==i));
   const [scoreMode,setScoreMode]=useState('complete');
@@ -625,15 +628,17 @@ export default function App(){
         if(roleScoreMin>0&&rs<roleScoreMin) return false;
         if(!roleScoreMin&&!rs) return false;
       }
-      // Style filter: QC_ROLES (hexagon) scores, not the roleFilter(s) above —
-      // ANDed across up to 2 rows, each scored /10 (the pipeline stores 0-100;
-      // divide by 10 to match the sidebar's and Profile tab's /10 scale).
+      // Style filter: QC_ROLES (hexagon) scores, not the roleFilter(s) above — ANDed
+      // across any number of rows. Compared against the ROUNDED /10 value the
+      // hexagon/Profile bar actually show (styleScoreDisplay), not the raw score, so
+      // "min 6" keeps every player who SHOWS as 6+ (5.5-6.49 raw), not just raw>=6.
       if(styleFilters.length>0){
-        const qc=p.qcRoleCareerScores||p.qcLatestRoles||{};
+        const qc=styleRolesFor(p,styleScoreMode,seasonFilter,leagues);
         for(const sf of styleFilters){
           if(!sf.role) continue;
-          const score10=(qc[sf.role]||0)/10;
-          if(score10<sf.min) return false;
+          const raw=qc?qc[sf.role]:null;
+          if(raw==null) return false; // no data for this role (or no qualifying season in 'This season' mode)
+          if(styleScoreDisplay(raw)<sf.min) return false;
         }
       }
       if(onlyElite&&!promotionBadge(p.careerScore,sl)) return false;
@@ -671,7 +676,7 @@ export default function App(){
       return true;
     });
     return {list,below};
-  },[all,search,pos,leagues,ageMin,ageMax,heightMin,heightMax,foot,minScore,minSeas,showMvFilter,mvMax,showContractFilter,contractBefore,roleFilter,roleScoreMin,seasonFilter,metricFilters,xValueFilter,onlyElite,versatileOnly,getDisplayScore,recentOnly,showXValueFilter,xValueMin,xValueMax,attrFilters,minMins,showCareerMinsFilter,careerMinMins,currentLeagueOnly,playedSeasons,potentialMin,lsMin,lsMax,escOnly,gbeMin,natFilter,softMode,roleFilters,shortlist,showShortlist,notPlayingOnly,domesticOnly,internationalOnly,tierFilters,sideFilter,rk,careerPosFilters,careerPosTokenGroups,styleFilters]);
+  },[all,search,pos,leagues,ageMin,ageMax,heightMin,heightMax,foot,minScore,minSeas,showMvFilter,mvMax,showContractFilter,contractBefore,roleFilter,roleScoreMin,seasonFilter,metricFilters,xValueFilter,onlyElite,versatileOnly,getDisplayScore,recentOnly,showXValueFilter,xValueMin,xValueMax,attrFilters,minMins,showCareerMinsFilter,careerMinMins,currentLeagueOnly,playedSeasons,potentialMin,lsMin,lsMax,escOnly,gbeMin,natFilter,softMode,roleFilters,shortlist,showShortlist,notPlayingOnly,domesticOnly,internationalOnly,tierFilters,sideFilter,rk,careerPosFilters,careerPosTokenGroups,styleFilters,styleScoreMode]);
   const filtered=filterRes.list, belowMinScore=filterRes.below;
 
   const sorted=useMemo(()=>{
@@ -835,9 +840,17 @@ export default function App(){
               </div>
             )}
             {/* Style filter: QuickCard hexagon (QC_ROLES) scores, /10 — separate
-                from "Filter by Role" above. Up to 2 rows, ANDed. */}
+                from "Filter by Role" above. Any number of rows, all ANDed. */}
             <div style={T.fg}>
               <span style={T.fl}>Style</span>
+              <div style={{display:'flex',gap:4,marginBottom:4}}>
+                {['career','season'].map(m=>(
+                  <button key={m} onClick={()=>{setStyleScoreMode(m);setPage(0);}}
+                    style={{flex:1,background:styleScoreMode===m?'#3b7de8':'#0d1220',border:'1px solid '+(styleScoreMode===m?'#3b7de8':'#1e2d45'),color:styleScoreMode===m?'#fff':'#94a3b8',borderRadius:5,fontSize:10,fontWeight:600,padding:'4px 6px',cursor:'pointer'}}>
+                    {m==='career'?'Career blend':'This season'}
+                  </button>
+                ))}
+              </div>
               {styleFilters.map((sf,i)=>(
                 <div key={i} style={{display:'flex',gap:4,alignItems:'center',marginTop:i>0?4:0}}>
                   <select style={{...T.sel,flex:1}} value={sf.role} onChange={e=>{updateStyleFilter(i,{role:e.target.value});setPage(0);}}>
@@ -849,11 +862,9 @@ export default function App(){
                   <button onClick={()=>{removeStyleFilter(i);setPage(0);}} style={{background:'none',border:'none',color:'#64748b',cursor:'pointer',fontSize:13,padding:'0 4px'}}>✕</button>
                 </div>
               ))}
-              {styleFilters.length<2&&(
-                <button onClick={addStyleFilter} style={{marginTop:4,background:'none',border:'1px dashed #2a3950',color:'#60a5fa',borderRadius:5,fontSize:10,padding:'3px 8px',cursor:'pointer'}}>
-                  + {styleFilters.length?'Add second style (AND)':'Add style filter'}
-                </button>
-              )}
+              <button onClick={addStyleFilter} style={{marginTop:4,background:'none',border:'1px dashed #2a3950',color:'#60a5fa',borderRadius:5,fontSize:10,padding:'3px 8px',cursor:'pointer'}}>
+                + {styleFilters.length?'Add another style (AND)':'Add style filter'}
+              </button>
             </div>
           </>)}
 
@@ -1430,7 +1441,7 @@ export default function App(){
         </main>
       </div>)}
 
-      {sel&&<PlayerCard player={sel} players={all} onClose={()=>setSel(null)} rawMode={rawMode}/>}
+      {sel&&<PlayerCard player={sel} players={all} onClose={()=>setSel(null)} rawMode={rawMode} styleScoreMode={styleScoreMode}/>}
     </div>
   );
 }

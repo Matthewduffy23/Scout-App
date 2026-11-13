@@ -1341,11 +1341,22 @@ export function buildQuickCardElement(player, players, manual = {}) {
 
   const STYLE_PANEL_W = Math.floor((920 - PANEL_GAP_H) / 2); // 448
   const CAREER_PANEL_W = 920 - PANEL_GAP_H - STYLE_PANEL_W;  // 448
-  const qcRoles = player.qcRoleCareerScores || player.qcLatestRoles;
+  // Career blend (default) vs This season — one toggle shared with the sidebar Style
+  // filter and the Profile tab's Style Scores panel (see styleRolesFor in
+  // constants.js for the sidebar's version). Here, "selected season" is whichever
+  // season this card is already showing (sd/chosenSeasonKey above, from the card's
+  // own Season picker or its most-recent-with-data default) — not a second,
+  // independent season choice.
+  const styleScoreMode = manual.styleScoreMode === 'season' ? 'season' : 'career';
+  const qcRolesSeason = (sd.qcRoles && Object.keys(sd.qcRoles).length) ? sd.qcRoles : null;
+  const qcRoles = styleScoreMode === 'season' ? qcRolesSeason : (player.qcRoleCareerScores || player.qcLatestRoles);
   const realRoles = qcRoles && Object.keys(qcRoles).length
     ? Object.entries(qcRoles).sort((a, b) => b[1] - a[1]).slice(0, 6)
     : PLACEHOLDER_ROLES;
   const rolesRankedHtml = rolesRankedSvgHtml(STYLE_PANEL_W - PANEL_PAD * 2, realRoles);
+  const styleNote = styleScoreMode === 'season'
+    ? (qcRolesSeason ? `Style: ${chosenSeasonKey}` : 'Style: — (no data this season)')
+    : '';
 
   const STYLE_TOP = 322;
   const STYLE_HEADER_H = 40;
@@ -1379,7 +1390,7 @@ export function buildQuickCardElement(player, players, manual = {}) {
       <div style="position:absolute;left:248px;top:24px;width:560px;font-size:53.2px;font-weight:700;line-height:1.05;letter-spacing:-0.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${manual.nameOverride || player.name}</div>
       <div style="position:absolute;left:248px;top:90px;display:flex;align-items:center;">
         <span style="font-size:26.6px;font-weight:600;color:#fff;white-space:nowrap;">${manual.posLabelOverride || POSITION_LABELS[rawPosToken] || rawPosToken}</span>
-        ${(cardFoot && cardFoot !== 'unknown' && cardFoot !== 'nan') ? `<span style="font-size:21.3px;color:#c0c0c0;white-space:nowrap;margin-left:30px;">${formatFoot(cardFoot)}</span>` : ''}
+        ${(cardFoot && cardFoot !== 'unknown' && cardFoot !== 'nan') ? `<span style="font-size:21.3px;color:#c0c0c0;white-space:nowrap;margin-left:14px;">${formatFoot(cardFoot)}</span>` : ''}
       </div>
       <div style="position:absolute;left:248px;top:148px;display:flex;align-items:center;gap:10px;">
         ${countryToIso2(player.birthCountry) ? `<div style="width:36px;height:22px;flex-shrink:0;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(player.birthCountry)}.png');border-radius:2px;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15);"></div>` : ''}
@@ -1483,7 +1494,10 @@ export function buildQuickCardElement(player, players, manual = {}) {
 
       <!-- STYLE panel -->
       <div style="position:absolute;top:${STYLE_TOP}px;left:984px;width:${STYLE_PANEL_W}px;height:${ROW1_PANEL_H}px;background:${PANEL_BG};border:1px solid ${PANEL_BORDER};border-radius:${PANEL_RADIUS}px;padding:${PANEL_PAD}px;box-sizing:border-box;overflow:hidden;box-shadow:${PANEL_SHADOW};">
-        <div style="font-size:22px;font-weight:700;color:${ACCENT_PINK};margin-bottom:14px;">Style</div>
+        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:14px;">
+          <div style="font-size:22px;font-weight:700;color:${ACCENT_PINK};">Style</div>
+          ${styleNote ? `<div style="font-size:13px;font-weight:600;color:#9aa3b8;">${styleNote}</div>` : ''}
+        </div>
         ${rolesRankedHtml}
       </div>
 
@@ -1520,7 +1534,7 @@ const qcInputStyle = {
 };
 const qcLabelStyle = { fontSize: 10, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4, display: 'block', textAlign: 'left' };
 
-export default function QuickCardModal({ player, players, onClose }) {
+export default function QuickCardModal({ player, players, onClose, styleScoreMode = 'career' }) {
   const isMobile = useIsMobile();
   const [downloading, setDownloading] = useState(false);
   const [agentOverride, setAgentOverride] = useState('');
@@ -1629,7 +1643,7 @@ export default function QuickCardModal({ player, players, onClose }) {
       const ok = await fetch(real).then(r => r.ok).catch(() => false);
       resolvedPhotoUrl = ok ? real : PHOTO_FALLBACK;
     }
-    const el = buildQuickCardElement(player, players, { resolvedPhotoUrl, footOverride, agentOverride, nameOverride, valueOverride, heightOverride, contractOverride, teamOverride, teamPick, posLabelOverride, uploadedPhotoDataUrl, biography, halfTeamContext, showForecast, scoutStatus, showScorePills, headerColorOverride, showPitchPosition, pitchStyle, heatmapDataUrl, heatOpacity: Number(heatOpacity) / 100, useBestRoleCareer, seasonOverride, headerTextNudge, badgeNudge, escOverride, escReason, positionColors, gbeOv });
+    const el = buildQuickCardElement(player, players, { resolvedPhotoUrl, footOverride, agentOverride, nameOverride, valueOverride, heightOverride, contractOverride, teamOverride, teamPick, posLabelOverride, uploadedPhotoDataUrl, biography, halfTeamContext, showForecast, scoutStatus, showScorePills, headerColorOverride, showPitchPosition, pitchStyle, heatmapDataUrl, heatOpacity: Number(heatOpacity) / 100, useBestRoleCareer, seasonOverride, headerTextNudge, badgeNudge, escOverride, escReason, positionColors, gbeOv, styleScoreMode });
     try {
       const cardNode = el.querySelector('#qc-card-root') || el;
       const opts = {
