@@ -2,7 +2,7 @@
 // Engine + method notes live in teamSimilarity.js. Computed client-side against every
 // team-season in teams_final.json.
 import React, { useState, useMemo } from 'react';
-import { findSimilarTeams, prepareTeamSim, leagueStrength, normLeague, leagueRegion } from './teamSimilarity';
+import { findSimilarTeams, prepareTeamSim, leagueStrength, normLeague, leagueRegion, sortSeasons, teamCountry, teamKey } from './teamSimilarity';
 import { useIsMobile, deliverPng } from './utils';
 import { ensureMontserratEmbedded, MONTSERRAT_EMBED_CSS } from './CoachCard';
 import { preloadImages } from './TeamReport';
@@ -35,7 +35,7 @@ function WhyLine({ m, good }) {
   );
 }
 
-export default function TeamSimilarCalc({ subject, allTeams = [], getCrest = () => '', onOpenTeam }) {
+export default function TeamSimilarCalc({ subject: profile, allTeams = [], getCrest = () => '', onOpenTeam }) {
   const isMobile = useIsMobile();
   const P = useMemo(() => (allTeams.length ? prepareTeamSim(allTeams) : null), [allTeams]);
   const allSeasons = P ? P.seasons : [];
@@ -44,6 +44,22 @@ export default function TeamSimilarCalc({ subject, allTeams = [], getCrest = () 
     for (const t of allTeams) if (!m.has(normLeague(t.league))) m.set(normLeague(t.league), t.league);
     return [...m.entries()].sort((a, b) => leagueStrength(b[1]) - leagueStrength(a[1]) || a[1].localeCompare(b[1]));
   }, [allTeams]);
+
+  // "Compare from season": every season this club has full style data for, newest first.
+  // Defaults to the newest COMPLETED one — P.current holds the in-progress split-year
+  // season (2026-27) and the in-progress calendar year (2026), so a calendar club lands
+  // on its last full year and a European one on 2025-26.
+  const clubSeasons = useMemo(() => {
+    if (!P) return [];
+    const club = profile.team + '|' + teamCountry(profile.league);
+    const rows = P.rows.filter(r => r.club === club).map(r => r.t);
+    const order = sortSeasons([...new Set(rows.map(t => String(t.season)))]).reverse();
+    return rows.sort((a, b) => order.indexOf(String(a.season)) - order.indexOf(String(b.season)));
+  }, [P, profile.team, profile.league]);
+  const [fromKey, setFromKey] = useState(null);
+  const subject = clubSeasons.find(t => teamKey(t) === fromKey)
+    || clubSeasons.find(t => !P.current.has(String(t.season)))
+    || clubSeasons[0] || profile;
 
   const [seasons, setSeasons] = useState(null); // null = all
   const [lsMin, setLsMin] = useState(0);
@@ -116,10 +132,20 @@ export default function TeamSimilarCalc({ subject, allTeams = [], getCrest = () 
 
   return (
     <div data-testid="similar-calc">
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, gap: 8 }}>
         <div style={{ fontSize: 9, fontWeight: 700, color: '#c8d4e8', letterSpacing: '0.12em', textTransform: 'uppercase' }}>Similar Teams Calculator — all seasons</div>
         <button onClick={exportPng} disabled={busy || !out || !out.results.length} style={chip(false)}>{busy ? 'Exporting…' : '⬇ Download PNG'}</button>
       </div>
+      {clubSeasons.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+          <span style={{ ...lbl, marginBottom: 0 }}>Compare from season</span>
+          <select aria-label="Compare from season" value={teamKey(subject)} onChange={e => setFromKey(e.target.value)} style={{ ...inp, width: 'auto', fontSize: 12, fontWeight: 700, padding: '4px 8px', borderColor: '#3b7de8' }}>
+            {clubSeasons.map(t => (
+              <option key={teamKey(t)} value={teamKey(t)}>{t.season} · {t.league}{P.current.has(String(t.season)) ? ' (in progress)' : ''}</option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* Filters */}
       <div style={{ background: '#07090f', border: '1px solid #131c2e', borderRadius: 8, padding: isMobile ? 10 : 12, display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 10 }}>
@@ -209,6 +235,10 @@ export default function TeamSimilarCalc({ subject, allTeams = [], getCrest = () 
       {/* Results */}
       {out && out.missing && <div style={{ fontSize: 11, color: '#64748b' }}>Not enough style metrics on file for {subject.team} {subject.season}.</div>}
       {out && !out.missing && !out.results.length && <div style={{ fontSize: 11, color: '#64748b' }}>No team-seasons match these filters.</div>}
+      <div data-testid="similar-header" style={{ fontSize: 14, fontWeight: 800, color: '#f1f5f9', margin: '2px 0 8px', letterSpacing: '-0.01em' }}>
+        Teams most similar to {subject.team} <span style={{ color: '#60a5fa' }}>{subject.season}</span>
+        <span style={{ fontSize: 10.5, fontWeight: 500, color: '#64748b' }}> · {subject.league}</span>
+      </div>
       {out && !out.missing && out.results.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
           {out.results.map((r, i) => {
@@ -263,7 +293,7 @@ export function buildExportElement(subject, results, imgs, getCrest, summary) {
     <div style="display:flex;align-items:center;gap:18px;margin-bottom:8px">
       ${crestImg(subject.team, 64)}
       <div>
-        <div style="font-size:13px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:#64748b">Most similar teams</div>
+        <div style="font-size:13px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:#64748b">Teams most similar to</div>
         <div style="font-size:34px;font-weight:800;letter-spacing:-0.02em">${esc(subject.team)} <span style="color:#64748b;font-weight:600">· ${esc(subject.season)} · ${esc(subject.league)}</span></div>
       </div>
     </div>

@@ -362,7 +362,7 @@ export default function TeamCard({ team, allTeamSeasons = [], allTeams = [], onO
 
           {/* Similar Teams calculator — every team-season on file, filterable (TeamSimilarCalc.js) */}
           {allTeams.length > 0 && (
-            <TeamSimilarCalc key={`${activeTeam.team}|${activeTeam.league}|${activeTeam.season}`} subject={activeTeam} allTeams={allTeams} getCrest={getCrest} onOpenTeam={onOpenTeam} />
+            <TeamSimilarCalc subject={activeTeam} allTeams={allTeams} getCrest={getCrest} onOpenTeam={onOpenTeam} />
           )}
 
         </div>
