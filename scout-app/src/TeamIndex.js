@@ -985,8 +985,11 @@ export default function TeamIndex({ players = [] }) {
       </main>
       {selTeam && (
         <TeamCard
+          key={`${selTeam.team}|${selTeam.league}|${selTeam.season}`}
           team={selTeam}
           allTeamSeasons={all.filter(t => t.team === selTeam.team && teamCountry(t.league) === teamCountry(selTeam.league)).map(t => ({ ...t, crest: undefined }))}
+          allTeams={all}
+          onOpenTeam={t => setSelTeam({ ...t, crest: teamCrest(t.team), avgXValue: getAvgXValue(t.team, t.league), totalMV: getTotalMV(t.team, t.league), mvPerf: getMVPerf(t.team, t.league) })}
           onClose={() => setSelTeam(null)}
         />
       )}
