@@ -492,7 +492,7 @@ const TREND_CYAN   = '#00cadc';         // spec trend line
 // two can never drift out of sync with each other.
 const NOTES_TOP = 311;
 const NOTES_GAP = 14; // minimum gap between bullets — justify-content:space-between only adds to this, never below it
-const NOTES_BOTTOM_MARGIN = 40; // fixed clearance kept between the notes section's own fixed-height box and CURRENT LEVEL
+const NOTES_BOTTOM_MARGIN = 27; // fixed clearance kept between the notes section's own fixed-height box and CURRENT LEVEL
 const CURRENT_LEVEL_TOP = 894;
 const NOTES_HEIGHT = CURRENT_LEVEL_TOP - NOTES_BOTTOM_MARGIN - NOTES_TOP;
 
@@ -880,6 +880,15 @@ export function buildCardElement(player, manual = {}) {
   const crestId = sdTeam === player.team
     ? player.teamFotmobId
     : (TEAM_FOTMOB_MAP[sdTeam] || TEAM_FOTMOB_MAP[_normTeam(sdTeam)] || '');
+  // Team identity override — same as QuickCard's "Display Club" picker: a club
+  // picked from search replaces the displayed club name, crest, league name and
+  // flag, WITHOUT touching which season's stats are shown (sd/statsRow above).
+  const pick = (manual.teamPick && manual.teamPick.team) ? manual.teamPick : null;
+  const hdrTeam = manual.teamOverride || (pick ? pick.team : sdTeam);
+  const hdrLeague = pick ? (pick.league || sdLeague) : sdLeague;
+  const hdrCrestId = pick
+    ? (pick.fotmobId || TEAM_FOTMOB_MAP[pick.team] || TEAM_FOTMOB_MAP[_normTeam(pick.team)] || '')
+    : crestId;
   const rcs = player.roleCareerScores || {};
   // Best Role: see scoutingCardRoles (group from the role scores, not the position token).
   const { sortedRoles } = scoutingCardRoles(player, sd);
@@ -888,6 +897,7 @@ export function buildCardElement(player, manual = {}) {
   const isGK = (player.position || '').split(',')[0].trim() === 'GK' || (player.roleKey || '').startsWith('GK');
   const photo = manual.playerPhotoUrl || photoUrl(player.name, player.team);
   const crest = crestId ? `${CREST_BASE}${crestId}.png` : '';
+  const hdrCrest = hdrCrestId ? `${CREST_BASE}${hdrCrestId}.png` : '';
 
   // Performance trend: see scoutingCardTrend.
   const trendData = scoutingCardTrend(player);
@@ -1014,11 +1024,11 @@ export function buildCardElement(player, manual = {}) {
       ${[['Profile ▸',267,true],['Performance ▾',442,false],['Similar Players ▾',697,false],['Club Fit ▾',977,false],['Video ▾',1174,false],['Compare ▾',1318,false]].map(([t,x,act]) => `<div style="position:absolute;left:${x}px;top:227px;font-size:27.9px;font-weight:700;color:${act ? '#fff' : '#b4b4b4'};">${t}</div>`).join('')}
 
       <!-- CLUB CREST / NAME / LEAGUE -->
-      ${(crest && !manual.hideTeamBadge) ? `<div style="position:absolute;left:756px;top:39px;width:118px;height:164px;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${crest}');"></div>` : ''}
-      <div style="position:absolute;left:884px;top:57px;font-size:26.6px;font-weight:700;color:#fff;${sdTeam.length >= 16 ? 'letter-spacing:-0.8px;' : ''}">${sdTeam}</div>
+      ${(hdrCrest && !manual.hideTeamBadge) ? `<div style="position:absolute;left:756px;top:39px;width:118px;height:164px;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url('${hdrCrest}');"></div>` : ''}
+      <div style="position:absolute;left:884px;top:57px;font-size:26.6px;font-weight:700;color:#fff;${hdrTeam.length >= 16 ? 'letter-spacing:-0.8px;' : ''}">${hdrTeam}</div>
       <div style="position:absolute;left:884px;top:97px;display:flex;align-items:center;gap:10px;">
-        <span style="font-size:21.3px;font-weight:500;color:#fff;white-space:nowrap;">${LEAGUE_DISPLAY_NAMES[sdLeague] || sdLeague}</span>
-        ${countryToIso2(leagueToCountry(sdLeague)) ? `<div style="width:31px;height:19px;flex-shrink:0;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(leagueToCountry(sdLeague))}.png');"></div>` : ''}
+        <span style="font-size:21.3px;font-weight:500;color:#fff;white-space:nowrap;">${LEAGUE_DISPLAY_NAMES[hdrLeague] || hdrLeague}</span>
+        ${countryToIso2(leagueToCountry(hdrLeague)) ? `<div style="width:31px;height:19px;flex-shrink:0;background-size:cover;background-position:center;background-image:url('https://flagcdn.com/w80/${countryToIso2(leagueToCountry(hdrLeague))}.png');"></div>` : ''}
       </div>
       <div style="position:absolute;left:884px;top:147px;font-size:21.3px;color:#d9d9d9;">${manual.importanceOverride || playerImportanceLabel(player)}</div>
 

@@ -205,6 +205,30 @@ export function seasonDetailFor(player,season,leagues){
   }
   return null;
 }
+// Style (QC_ROLES hexagon) scores — single source of truth for the sidebar Style
+// filter, shared with the QuickCard hexagon and the Profile tab's Style Scores panel
+// (those two already resolve their own "selected season" sd via quickCardSeason /
+// PlayerCard's own season tabs and read sd.qcRoles directly in 'season' mode — same
+// rule, applied to the season each surface already has in hand). mode 'season' reads
+// that season's own seasonsDetail[season].qcRoles (incl. Anchor/Destroyer — the
+// pipeline only ever writes one of the two per player, never both, so no renaming is
+// needed); mode 'career' (default) reads the career-blended qcRoleCareerScores.
+// Returns null when 'season' has no qc data for that player — the caller shows "—"
+// and excludes them from the filter, rather than silently falling back to career.
+export function styleRolesFor(player,mode,season,leagues){
+  if(mode==='season'){
+    const sd=seasonDetailFor(player,season,leagues);
+    return (sd&&sd.qcRoles&&Object.keys(sd.qcRoles).length)?sd.qcRoles:null;
+  }
+  return player.qcRoleCareerScores||player.qcLatestRoles||null;
+}
+// Rounds a raw 0-100 QC_ROLES score to the /10 integer the hexagon's fill count (and
+// the Profile bar's rounded value) visually show — Math.round(raw/10) — so a sidebar
+// "min N" filter keeps exactly the players who SHOW as N or higher, not just the ones
+// whose raw score is >= N*10.
+export function styleScoreDisplay(raw){
+  return Math.round(raw/10);
+}
 // A player's real rows (p.sh) in a season, best first. A player can have several:
 // a calendar-year row counts toward the split-year season (2026 -> 2026-27), and a
 // mid-season move gives two leagues. Display-only rows carry no score and are
