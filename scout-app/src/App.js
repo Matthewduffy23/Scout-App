@@ -5,7 +5,7 @@ import ClubTool from './ClubTool';
 import TeamIndex from './TeamIndex';
 import CustomScatter from './CustomScatter';
 import ScatterChart from './ScatterChart';
-import { buildLeagueRanks, leagueRankFor, rankTag, RANK_TIERS, RANK_MIN_MINS } from './leagueRank';
+import { buildLeagueRanks, leagueRankFor, rankTag, RANK_TIERS } from './leagueRank';
 import { Photo, Crest, photoUrl, useIsMobile, deliverJson } from './utils';
 import { scoreBandColor, formatMV, formatFoot, ROLE_KEY_LABELS, ROLES_BY_KEY, POSITION_ATTRIBUTES, playerHasAttribute, ALL_LEAGUES, DEFAULT_LEAGUES, HIDDEN_LEAGUES, YOUTH_LEAGUES, PRESET_LEAGUES, COUNTRY_TO_REGION, GBE_LEAGUE_BANDS, leagueToRegion, leagueToBand, scoreLabel, scoreToStars, promotionBadge, ALL_SEASONS, CURRENT_SEASON, PREV_SEASON, seasonRoleKeyFor, seasonBucketMatch, seasonDetailFor, seasonRowFor, seasonEntryFor, seasonClubFor, leagueSeasonMatch, seasonLeagueFor, metricFromDetail, METRIC_OPTIONS, LEAGUE_STRENGTHS, CAREER_POSITION_GROUPS } from './constants';
 
@@ -511,6 +511,7 @@ export default function App(){
   // ALL players — never the filtered list — so other filters can't move the cut.
   // Mirrors getDisplayScore branch for branch (outlier role mode is career z even
   // with a season picked, exactly as the list does).
+  const rankMinMins=minMins>0?(youthActive?100:minMins):0;
   const leagueRanks=useMemo(()=>{
     if(rankTier==='all') return null;
     const careerScore=p=>{
@@ -524,8 +525,11 @@ export default function App(){
       if(rawMode) return h.r??h.sc;
       return h.sc;
     };
-    return buildLeagueRanks(all,seasonFilter,{rowScore,careerScore});
-  },[all,seasonFilter,rankTier,rawMode,outlierMode,scoreMode]);
+    // Pool minutes follow the Min Minutes slider — the same threshold the list applies
+    // (0 = off; youth leagues use 100), so "Top 10%" means top 10% of players who
+    // clear the slider in that league/position/season.
+    return buildLeagueRanks(all,seasonFilter,{rowScore,careerScore,minMins:rankMinMins});
+  },[all,seasonFilter,rankTier,rawMode,outlierMode,scoreMode,rankMinMins]);
   const rankOf=useCallback(p=>leagueRanks?leagueRankFor(leagueRanks,p,seasonFilter,leagues):null,[leagueRanks,seasonFilter,leagues]);
 
   const addMetricFilter=()=>{if(metricFilters.length<10)setMetricFilters(f=>[...f,{key:'',label:'',min:0,max:100}]);};
@@ -907,7 +911,7 @@ export default function App(){
                 <div style={T.cb(onlyElite)}>{onlyElite&&<span style={{color:'#fff',fontSize:8}}>✓</span>}</div>
                 <span style={T.cl(onlyElite)}>Elite in division only</span>
               </label>
-              <div title={`Main score vs every player in the same league, position group and season with ${RANK_MIN_MINS}+ minutes — not just the filtered list`}>
+              <div title={`Main score vs every player in the same league, position group and season with ${rankMinMins.toLocaleString()}+ minutes (Min Minutes) — not just the filtered list`}>
                 <div style={{fontSize:9.5,color:'#94a3b8',marginBottom:4}}>League rank</div>
                 <div style={{display:'flex',gap:3}}>
                   {[['all','All'],['top20','Top 20%'],['top10','Top 10%']].map(([v,l])=>(

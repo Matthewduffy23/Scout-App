@@ -9,8 +9,9 @@
 //     as the Position Group filter: seasonRoleKeyFor/posToRk), minutes = that row's.
 //   - All seasons: career score, current league + current roleKey, grouped by the
 //     player's latest season (bucketed, so calendar 2026 sits with 2026-27).
-// Only players with >= RANK_MIN_MINS in that season count — both as pool members
-// and as qualifiers — so low-minute players don't skew the cut.
+// Only players with >= minMins in that season count — both as pool members and as
+// qualifiers — so low-minute players don't skew the cut. App.js passes the Min
+// Minutes slider value; RANK_MIN_MINS is just the default when none is given.
 import { seasonBucketMatch, seasonEntryFor, posToRk, seasonRowFor } from './constants';
 
 export const RANK_MIN_MINS = 500; // the app's default Min Minutes
