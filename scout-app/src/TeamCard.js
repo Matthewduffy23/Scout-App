@@ -6,6 +6,7 @@
 import React, { useRef, useEffect, useMemo, useState } from 'react';
 import { scoreBandColor, scoreLabel, divColor, scoreToStars, starLabel } from './constants';
 import { useIsMobile } from './utils';
+import TeamSimilarCalc from './TeamSimilarCalc';
 
 function Stars({ score, size = 14 }) {
   const stars = scoreToStars(score);
@@ -152,7 +153,7 @@ const CATEGORY_BARS = [
   ['completeScore', 'Overall'], ['attack', 'Attack'], ['defence', 'Defence'], ['possession', 'Possession'], ['pressing', 'Pressing'],
 ];
 
-export default function TeamCard({ team, allTeamSeasons = [], onClose }) {
+export default function TeamCard({ team, allTeamSeasons = [], allTeams = [], onOpenTeam, onClose }) {
   const isMobile = useIsMobile();
   // Season selector — defaults to whichever row was clicked, but the user can switch
   // to any season on file for this team (same pattern as PlayerCard.js's Season
@@ -357,6 +358,11 @@ export default function TeamCard({ team, allTeamSeasons = [], onClose }) {
                 ))}
               </div>
             </div>
+          )}
+
+          {/* Similar Teams calculator — every team-season on file, filterable (TeamSimilarCalc.js) */}
+          {allTeams.length > 0 && (
+            <TeamSimilarCalc subject={activeTeam} allTeams={allTeams} getCrest={getCrest} onOpenTeam={onOpenTeam} />
           )}
 
         </div>

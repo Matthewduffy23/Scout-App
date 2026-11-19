@@ -294,6 +294,7 @@ import { FOTMOB_PHOTO_BASE, countryToIso2, computeAge, fadeHexToBG } from './Coa
 import { computeCoachScore } from './CoachQuickCard';
 import { useIsMobile, deliverPng, loadSquad } from './utils';
 import { LEAGUE_STRENGTHS } from './constants';
+import { TEAM_SIM_FEATURES } from './teamSimilarity';
 
 // ─── Canvas geometry ───────────────────────────────────────────────────────
 const W = 1920;
@@ -1591,15 +1592,8 @@ export function resolveSimilarTeams(team, allTeams, n = 3) {
 // within about a point and can swap two near-identical neighbours. Close enough to
 // rank by; not close enough to use for the default, which is why the default still
 // reads the stored list.
-const SIM_FEATURES = [
-  ['Attack', 'Crosses', 1], ['Attack', 'Goals Scored', 1], ['Attack', 'xG', 1],
-  ['Attack', 'Touches in Box', 1],
-  ['Defence', 'Goals Against', 1], ['Defence', 'xG Against', 1],
-  ['Defence', 'Defensive Duels', 1], ['Defence', 'PPDA', 2],
-  ['Possession', 'Possession', 2], ['Possession', 'Passes', 2],
-  ['Possession', 'Passing Accuracy %', 2], ['Possession', 'Long Passes', 2],
-  ['Possession', 'Passes to Final 3rd', 1], ['Possession', 'Progressive Passes', 1],
-];
+// Shared with the all-seasons calculator (teamSimilarity.js) so the two can't drift.
+const SIM_FEATURES = TEAM_SIM_FEATURES;
 const SIM_W = (() => {
   const total = SIM_FEATURES.reduce((a, f) => a + f[2], 0);
   return SIM_FEATURES.map(f => f[2] / total);
