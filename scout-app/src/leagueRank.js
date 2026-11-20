@@ -30,6 +30,9 @@ export const seasonBucket = s => {
  * careerScore(p): score with All seasons.
  */
 export function buildLeagueRanks(players, season, { rowScore, careerScore, minMins = RANK_MIN_MINS }) {
+  // minMins: a number, or league => minutes (the profile's per-season ranks use the
+  // slider for senior leagues and 100 for youth leagues, row by row).
+  const minFor = typeof minMins === 'function' ? minMins : () => minMins;
   const pools = new Map();
   const add = (key, id, league, score) => {
     if (score == null || !isFinite(score)) return;
@@ -38,14 +41,14 @@ export function buildLeagueRanks(players, season, { rowScore, careerScore, minMi
   };
   for (const p of players) {
     if (!season || season === 'all') {
-      if ((p.minutesLatest || 0) < minMins) continue;
+      if ((p.minutesLatest || 0) < minFor(p.league)) continue;
       add(`${p.league}|${p.roleKey}|${seasonBucket(p.season)}`, p.id, p.league, careerScore(p));
       continue;
     }
     for (const h of p.sh || []) {
       if (h.displayOnly || !seasonBucketMatch(h.s, season)) continue;
       const e = seasonEntryFor(p, h);
-      if ((e?.minutes || 0) < minMins) continue;
+      if ((e?.minutes || 0) < minFor(h.l)) continue;
       const rk = posToRk(e?.position || p.position) || p.roleKey;
       add(`${h.l}|${rk}`, p.id, h.l, rowScore(p, h));
     }

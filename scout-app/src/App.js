@@ -5,7 +5,7 @@ import ClubTool from './ClubTool';
 import TeamIndex from './TeamIndex';
 import CustomScatter from './CustomScatter';
 import ScatterChart from './ScatterChart';
-import { buildLeagueRanks, leagueRankFor, rankTag, RANK_TIERS } from './leagueRank';
+import { buildLeagueRanks, leagueRankFor, rankTag, RANK_TIERS, seasonBucket } from './leagueRank';
 import { Photo, Crest, photoUrl, useIsMobile, deliverJson } from './utils';
 import { scoreBandColor, formatMV, formatFoot, ROLE_KEY_LABELS, ROLES_BY_KEY, POSITION_ATTRIBUTES, playerHasAttribute, ALL_LEAGUES, DEFAULT_LEAGUES, HIDDEN_LEAGUES, YOUTH_LEAGUES, PRESET_LEAGUES, COUNTRY_TO_REGION, GBE_LEAGUE_BANDS, leagueToRegion, leagueToBand, scoreLabel, scoreToStars, promotionBadge, ALL_SEASONS, CURRENT_SEASON, PREV_SEASON, seasonRoleKeyFor, seasonBucketMatch, seasonDetailFor, seasonRowFor, seasonEntryFor, seasonClubFor, leagueSeasonMatch, seasonLeagueFor, metricFromDetail, METRIC_OPTIONS, LEAGUE_STRENGTHS, CAREER_POSITION_GROUPS, styleRolesFor, styleScoreDisplay } from './constants';
 
@@ -515,6 +515,13 @@ export default function App(){
   // Mirrors getDisplayScore branch for branch (outlier role mode is career z even
   // with a season picked, exactly as the list does).
   const rankMinMins=minMins>0?(youthActive?100:minMins):0;
+  // One season row's score for the League rank pools — the same branch getDisplayScore
+  // takes with a season selected. Shared by the filter and the profile's per-season ranks.
+  const rankRowScore=useCallback((p,h)=>{
+    if(outlierMode) return scoreMode!=='complete'?(p.zRoles||{})[scoreMode]??null:h.z??null;
+    if(rawMode) return h.r??h.sc;
+    return h.sc;
+  },[outlierMode,scoreMode,rawMode]);
   const leagueRanks=useMemo(()=>{
     if(rankTier==='all') return null;
     const careerScore=p=>{
@@ -523,17 +530,27 @@ export default function App(){
       if(scoreMode!=='complete') return (p.roleCareerScores||{})[scoreMode]||null;
       return p.careerScore;
     };
-    const rowScore=(p,h)=>{
-      if(outlierMode) return scoreMode!=='complete'?(p.zRoles||{})[scoreMode]??null:h.z??null;
-      if(rawMode) return h.r??h.sc;
-      return h.sc;
-    };
+    const rowScore=rankRowScore;
     // Pool minutes follow the Min Minutes slider — the same threshold the list applies
     // (0 = off; youth leagues use 100), so "Top 10%" means top 10% of players who
     // clear the slider in that league/position/season.
     return buildLeagueRanks(all,seasonFilter,{rowScore,careerScore,minMins:rankMinMins});
-  },[all,seasonFilter,rankTier,rawMode,outlierMode,scoreMode,rankMinMins]);
+  },[all,seasonFilter,rankTier,rawMode,outlierMode,scoreMode,rankMinMins,rankRowScore]);
   const rankOf=useCallback(p=>leagueRanks?leagueRankFor(leagueRanks,p,seasonFilter,leagues):null,[leagueRanks,seasonFilter,leagues]);
+  // Player profile: league rank for each season row ("7/82"). Same pools and score as the
+  // League rank filter — same league + position group + season, at or above Min Minutes
+  // (youth leagues 100; slider off = everyone) — built lazily per season and cached until
+  // the data, a score mode or the slider changes.
+  const seasonRankCache=useMemo(()=>new Map(),[all,rankRowScore,minMins]);
+  const seasonRankFor=useCallback((p,season,league)=>{
+    const b=seasonBucket(season);
+    let ranks=seasonRankCache.get(b);
+    if(!ranks){
+      ranks=buildLeagueRanks(all,b,{rowScore:rankRowScore,careerScore:()=>null,minMins:lg=>minMins>0?(YOUTH_LEAGUES.has(lg)?100:minMins):0});
+      seasonRankCache.set(b,ranks);
+    }
+    return ranks.get(`${p.id}|${league}`)||null;
+  },[seasonRankCache,all,rankRowScore,minMins]);
 
   const addMetricFilter=()=>{if(metricFilters.length<10)setMetricFilters(f=>[...f,{key:'',label:'',min:0,max:100}]);};
 
@@ -1479,7 +1496,7 @@ export default function App(){
         </main>
       </div>)}
 
-      {sel&&<PlayerCard player={sel} players={all} onClose={()=>setSel(null)} rawMode={rawMode} styleScoreMode={styleScoreMode}/>}
+      {sel&&<PlayerCard player={sel} players={all} onClose={()=>setSel(null)} rawMode={rawMode} styleScoreMode={styleScoreMode} seasonRankFor={seasonRankFor} rankMinMins={minMins}/>}
     </div>
   );
 }

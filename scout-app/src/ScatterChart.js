@@ -183,8 +183,9 @@ function niceStep(raw) {
 }
 // Tight range: the data plus 4% each side (not rounded out to a whole step, which
 // used to leave ~40% of the plot empty). Ticks sit on round steps inside it.
-function axisDomain(vals, field) {
-  if (field.pctDomain) return { lo:0, hi:100, step:20 };
+function axisDomain(vals, field, edgePad = 0) {
+  // edgePad (badge mode): room past 0 and 100 so a crest at the extreme isn't cut off.
+  if (field.pctDomain) return { lo:-edgePad, hi:100 + edgePad, step:20 };
   let lo = Math.min(...vals), hi = Math.max(...vals);
   if (lo === hi) { lo -= 1; hi += 1; }
   const pad = (hi - lo) * 0.04;
@@ -213,12 +214,12 @@ function valueText(v, field) {
 // Pure layout: scales + padding for a W x H canvas. Shared by drawing and hit-testing.
 const EXPORT_PAD = { r:70, b:140, l:140 };
 const GRAD_W = 260; // width of the gradient bar in the export legend
-function computeLayout(W, H, forExport, pts, xf, yf, exportTop, stripX = xf.scoreScale ? 2 : 0) {
+function computeLayout(W, H, forExport, pts, xf, yf, exportTop, stripX = xf.scoreScale ? 2 : 0, edgePad = 0) {
   const fs = forExport ? W / 800 : 1;
   // Live: a strip above the plot carries the X-axis band names (two rows) when X is a score.
   const pad = forExport ? { ...EXPORT_PAD, t: exportTop } : { t: 12 + [0, 20, 32][stripX ? Number(stripX) : 0], r:16, b:46, l:60 };
   const pw = W - pad.l - pad.r, ph = H - pad.t - pad.b;
-  const xd = axisDomain(pts.map(d => d.x), xf), yd = axisDomain(pts.map(d => d.y), yf);
+  const xd = axisDomain(pts.map(d => d.x), xf, edgePad), yd = axisDomain(pts.map(d => d.y), yf, edgePad);
   const xS = v => pad.l + ((v - xd.lo) / (xd.hi - xd.lo)) * pw;
   const yS = v => pad.t + ph - ((v - yd.lo) / (yd.hi - yd.lo)) * ph;
   // Both axes scores -> quadrants. One score axis -> band shading along it. Neither -> plain.
@@ -236,7 +237,7 @@ const overlaps = (a, b) => a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b
 // clear of the plot edge, every dot and every label already placed, and a leader
 // may not cross another dot or label. Labels are fed in priority order; a
 // `force` label (the highlighted player) always gets placed.
-function placeLabels(ctx, items, dots, bounds, taken, fs, budget = Infinity) {
+function placeLabels(ctx, items, dots, bounds, taken, fs, budget = Infinity, extras = [0, 10*fs]) {
   const placed = [...taken];
   const DIRS = [[1,0],[-1,0],[0,-1],[0,1],[1,-1],[-1,-1],[1,1],[-1,1]];
   const clear = b => b.x0 >= bounds.x0 && b.x1 <= bounds.x1 && b.y0 >= bounds.y0 && b.y1 <= bounds.y1
@@ -258,7 +259,7 @@ function placeLabels(ctx, items, dots, bounds, taken, fs, budget = Infinity) {
     ctx.font = it.font;
     const w = ctx.measureText(it.text).width + 4, h = it.px * 1.3;
     let choice = null;
-    for (const extra of [0, 10*fs]) {
+    for (const extra of extras) {
       for (const [dx, dy] of DIRS) {
         const k = dx && dy ? 0.75 : 1, dist = (it.r + 3*fs + extra) * k;
         const cx = it.x + dx*dist, cy = it.y + dy*dist;
@@ -326,8 +327,43 @@ function exportHeader(ctx, W, FONT, title, subtitle, legend, xIsScore, showCount
 // Most items that can be highlighted at once (every highlighted name is drawn).
 export const HL_MAX = 10;
 
+// ── Club badges (Team chart "Badges") ────────────────────────────────────────
+// Same source as TeamCard/TeamReport (cardAssets.teamCrest). Fetched as a blob — the
+// same CORS fetch TeamReport uses to inline crests for its export — and drawn from a
+// same-origin object URL, so the canvas is never tainted and the PNG export keeps them.
+// No crest on file, or one that won't load: that item falls back to its normal dot.
+const BADGE_CACHE = new Map(); // url -> { img, done, p }
+export function loadBadge(url) {
+  if (!url) return Promise.resolve(null);
+  const hit = BADGE_CACHE.get(url);
+  if (hit) return hit.p;
+  const rec = { img: null, done: false };
+  rec.p = Promise.resolve()
+    .then(() => fetch(url, { mode: 'cors', cache: 'force-cache' }))
+    .then(r => (r && r.ok ? r.blob() : null))
+    .then(b => (b && typeof URL !== 'undefined' && URL.createObjectURL ? new Promise(res => {
+      const img = new Image(); img.onload = () => res(img); img.onerror = () => res(null); img.src = URL.createObjectURL(b);
+    }) : null))
+    .catch(() => null)
+    .then(img => { rec.img = img || null; rec.done = true; return rec.img; });
+  BADGE_CACHE.set(url, rec);
+  return rec.p;
+}
+const badgeImg = url => (url && BADGE_CACHE.get(url)?.img) || null;
+export const BADGE_SIZES = { s: 18, m: 26, l: 36 }; // badge box in live px; the export scales it with the canvas
+
+// Mid-rank percentile of v within a sorted pool (0-100, the pool median = 50).
+function pctIn(sorted, v) {
+  const n = sorted.length;
+  let lo = 0, hi = n;
+  while (lo < hi) { const m = (lo + hi) >> 1; if (sorted[m] < v) lo = m + 1; else hi = m; }
+  let up = lo;
+  while (up < n && sorted[up] === v) up++;
+  return 100 * (lo + (up - lo) / 2) / n;
+}
+
 export function drawScatter(canvas, W, H, dpr, forExport, o) {
-  const { pts, xf, yf, hidden, hoverId, highlightIds = [], showNames, soloLabel, title, subtitle, footer, legend, quad: Q, median, group, groupFullLabels, highlightStyle = 'full', theme: themeName = 'dark', quadThemeKey = 'tealLilac', labelledKeys, fadeOthers, showCounts = true } = o;
+  const { pts, xf, yf, hidden, hoverId, highlightIds = [], showNames, soloLabel, title, subtitle, footer, legend, quad: Q, median, group, groupFullLabels, highlightStyle = 'full', theme: themeName = 'dark', quadThemeKey = 'tealLilac', labelledKeys, fadeOthers, showCounts = true, badges = null } = o;
   const T = THEMES[themeName];
   const FONT = forExport ? 'Montserrat, Inter, sans-serif' : 'Inter, sans-serif';
   canvas.width = W*dpr; canvas.height = H*dpr;
@@ -341,7 +377,7 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
 
   const stripX = xf.scoreScale ? 2 : median && median.x != null ? 1 : 0; // rows of labels above the plot
   const head = forExport ? exportHeader(ctx, W, FONT, title, subtitle, legend, stripX, showCounts, T) : null;
-  const L = computeLayout(W, H, forExport, pts, xf, yf, head && head.plotTop, stripX);
+  const L = computeLayout(W, H, forExport, pts, xf, yf, head && head.plotTop, stripX, badges ? { s: 4, m: 5, l: 7 }[badges.key] || 5 : 0);
   const { fs, pad, pw, ph, xd, yd, xS, yS, shade } = L;
   const quad = Q || null; // score quadrants (both axes scores) or median quadrants (neither is)
   const f = (px, weight = 400) => `${weight} ${px*fs}px ${FONT}`;
@@ -402,13 +438,19 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
   ctx.restore();
 
   const r = (pts.length > 200 ? 4 : 5.5) * fs;
+  // Badge mode: a point with a loaded crest is drawn as the crest (radius bR, 1.3x when
+  // highlighted) and every size-dependent thing — label distance, leader start, rings —
+  // reads rOf(); a point without one keeps its dot.
+  const bR = badges ? badges.size * fs / 2 : 0;
+  const imgOf = d => (badges ? badgeImg(d.badge) : null);
+  const rOf = (d, big) => (imgOf(d) ? bR * (big ? 1.3 : 1) : big ? r*1.6 : r);
   // Highlighted items (several can be picked), in the order they were picked.
   const hlSet = new Set(highlightIds);
   const hls = highlightIds.map(id => pts.find(d => pid(d) === id)).filter(Boolean);
   const isHl = d => hlSet.has(pid(d));
   const hl = hls.length > 0;
   const visible = pts.filter(d => isHl(d) || !hidden.has(d.g));
-  const dots = visible.map(d => ({ x: xS(d.x), y: yS(d.y), r: isHl(d) ? r*1.6 : r }));
+  const dots = visible.map(d => ({ x: xS(d.x), y: yS(d.y), r: rOf(d, isHl(d)) }));
   const hitsDot = b => dots.some(o => o.x + o.r > b.x0 && o.x - o.r < b.x1 && o.y + o.r > b.y0 && o.y - o.r < b.y1);
 
   // Quadrant and band names are collected here and drawn AFTER the dots with a
@@ -540,6 +582,14 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
   // simple highlightIds case.
   const labelStyle = highlightStyle === 'label';
   const ringDot = (d, rad, alpha) => {
+    const img = imgOf(d);
+    if (img) {
+      const s = bR * 2 * (rad > r ? 1.3 : 1), k = Math.min(s / img.width, s / img.height), w = img.width * k, h = img.height * k;
+      ctx.globalAlpha = d.muted && !labelStyle ? Math.min(alpha, 0.35) : alpha;
+      ctx.drawImage(img, xS(d.x) - w/2, yS(d.y) - h/2, w, h);
+      ctx.globalAlpha = 1;
+      return;
+    }
     ctx.globalAlpha = alpha;
     ctx.beginPath(); ctx.arc(xS(d.x), yS(d.y), rad, 0, Math.PI*2);
     ctx.fillStyle = (d.muted && !labelStyle) ? T.muted : d.plain ? T.plain : d.color; ctx.fill();
@@ -597,16 +647,16 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
   // ── Name labels ──────────────────────────────────────────────────────────
   const bounds = { x0: pad.l + 2, y0: pad.t + 2, x1: pad.l + pw - 2, y1: pad.t + ph - 2 };
   const items = [];
-  if (labelOnly) for (const h of hls) items.push({ x: xS(h.x), y: yS(h.y), r, force: true, px: 9.5*fs, font: f(9.5, T.wLabel), text: pname(h) });
-  else if (!redDot) for (const h of hls) items.push({ x: xS(h.x), y: yS(h.y), r: r*1.6, force: true, px: 11*fs, font: f(11, 700),
+  if (labelOnly) for (const h of hls) items.push({ x: xS(h.x), y: yS(h.y), r: rOf(h), force: true, px: 9.5*fs, font: f(9.5, T.wLabel), text: pname(h) });
+  else if (!redDot) for (const h of hls) items.push({ x: xS(h.x), y: yS(h.y), r: rOf(h, true), force: true, px: 11*fs, font: f(11, 700),
     text: pname(h) + (h.extra && h.rank != null ? `  #${h.rank}` : ''), hl: true });
   // Red dot keeps the normal name style, but a highlighted name is placed first, so
   // nearby names make way for it rather than it being the one dropped.
-  else if (showNames) for (const h of hls) items.push({ x: xS(h.x), y: yS(h.y), r, force: true, px: 9.5*fs, font: f(9.5, T.wLabel), text: pname(h) });
+  else if (showNames) for (const h of hls) items.push({ x: xS(h.x), y: yS(h.y), r: rOf(h), force: true, px: 9.5*fs, font: f(9.5, T.wLabel), text: pname(h) });
   // Names: walk the list in rank order and keep placing until the budget of
   // *placed* names is used, so names that can't fit in a cluster don't use up
   // the allowance and sparse areas still get labelled.
-  const budget = group ? Infinity : Math.max(12, Math.min(90, Math.round(pw*ph / (4500*fs*fs))));
+  const budget = group || badges ? Infinity : Math.max(12, Math.min(90, Math.round(pw*ph / (4500*fs*fs))));
   if (showNames && !solo) {
     if (group) {
       // Group members first — they get first claim on clear spots (pushed
@@ -614,7 +664,7 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
       // clear, same as the hls force items below (small, known set: one squad).
       for (const d of visible) {
         if (isHl(d) || d.muted) continue;
-        items.push({ x: xS(d.x), y: yS(d.y), r, px: 9.5*fs, font: f(9.5, T.wLabel), text: pname(d), force: true });
+        items.push({ x: xS(d.x), y: yS(d.y), r: rOf(d), px: 9.5*fs, font: f(9.5, T.wLabel), text: pname(d), force: true });
       }
       // Optional full-sample labeling: everyone else too, pushed AFTER the
       // group so group labels never get bumped for them — not forced UNLESS
@@ -623,14 +673,14 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
       if (groupFullLabels) {
         for (const d of visible) {
           if (isHl(d) || !d.muted) continue;
-          items.push({ x: xS(d.x), y: yS(d.y), r, px: 9.5*fs, font: f(9.5, T.wLabel), text: pname(d), force: isArchLabelled(d) });
+          items.push({ x: xS(d.x), y: yS(d.y), r: rOf(d), px: 9.5*fs, font: f(9.5, T.wLabel), text: pname(d), force: isArchLabelled(d) });
         }
       } else if (hasArchSel) {
         // groupFullLabels off: non-members normally get no label at all, but
         // an archetype-legend selection still forces its matching dots.
         for (const d of visible) {
           if (isHl(d) || !d.muted || !isArchLabelled(d)) continue;
-          items.push({ x: xS(d.x), y: yS(d.y), r, px: 9.5*fs, font: f(9.5, T.wLabel), text: pname(d), force: true, archSel: true });
+          items.push({ x: xS(d.x), y: yS(d.y), r: rOf(d), px: 9.5*fs, font: f(9.5, T.wLabel), text: pname(d), force: true, archSel: true });
         }
       }
     } else {
@@ -639,15 +689,16 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
       // placement contest; everyone else keeps the existing budgeted pass.
       if (hasArchSel) for (const d of visible) {
         if (isHl(d) || !isArchLabelled(d)) continue;
-        items.push({ x: xS(d.x), y: yS(d.y), r, px: 9.5*fs, font: f(9.5, T.wLabel), text: pname(d), force: true, archSel: true });
+        items.push({ x: xS(d.x), y: yS(d.y), r: rOf(d), px: 9.5*fs, font: f(9.5, T.wLabel), text: pname(d), force: true, archSel: true });
       }
       for (const d of visible.slice(0, 400)) {
         if (isHl(d) || isArchLabelled(d)) continue;
-        items.push({ x: xS(d.x), y: yS(d.y), r, px: 9.5*fs, font: f(9.5, T.wLabel), text: pname(d) });
+        items.push({ x: xS(d.x), y: yS(d.y), r: rOf(d), px: 9.5*fs, font: f(9.5, T.wLabel), text: pname(d) });
       }
     }
   }
-  const labels = placeLabels(ctx, items, dots, bounds, taken, fs, budget);
+  // Badges: a third, further-out ring of spots (with a leader line) so crowded crests still get names.
+  const labels = placeLabels(ctx, items, dots, bounds, taken, fs, budget, badges ? [0, 8*fs, 20*fs, 34*fs] : undefined);
   L.labels = labels; L.dots = dots; L.bounds = bounds; L.taken = taken;
   ctx.lineJoin = 'round'; ctx.textAlign = 'left';
   for (const lb of labels) {
@@ -685,12 +736,12 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
     if (redDot) { ringDot({ ...h, muted: false, plain: false, color: GROUP_RED }, r, 1); continue; } // same size, just red
     if (group || labelOnly) { ringDot({ ...h, muted: false, plain: false, color: dotColor(h) }, r, 1); continue; } // same size, normal colour, no selection ring
     ringDot(h, r*1.6, 1);
-    ctx.beginPath(); ctx.arc(xS(h.x), yS(h.y), r*1.6 + 3*fs, 0, Math.PI*2);
+    ctx.beginPath(); ctx.arc(xS(h.x), yS(h.y), rOf(h, true) + 3*fs, 0, Math.PI*2);
     ctx.strokeStyle = T.hl; ctx.lineWidth = 2*fs; ctx.stroke();
   }
   const hv = hoverId != null && !hlSet.has(hoverId) && visible.find(d => pid(d) === hoverId);
   if (hv) {
-    ctx.beginPath(); ctx.arc(xS(hv.x), yS(hv.y), r + 2.5*fs, 0, Math.PI*2);
+    ctx.beginPath(); ctx.arc(xS(hv.x), yS(hv.y), rOf(hv) + 2.5*fs, 0, Math.PI*2);
     ctx.strokeStyle = T.hl; ctx.lineWidth = 1.5*fs; ctx.stroke();
   }
 
@@ -747,6 +798,64 @@ const sidePhrase = (f, up) => {
   const more = up === upIsMore(f);
   return f.words ? f.words[more ? 0 : 1] : `${more ? 'High' : 'Low'} ${baseName(f)}`;
 };
+// Percentile ("Index") axes, Team chart: every axis becomes a 0-100 percentile within
+// the pool, lower-is-better metrics flipped so higher always reads better / more
+// intense. hi/lo = how the top/bottom half of the axis is named in quadrant labels.
+const INDEX_SPECIAL = { 'mg:Defence:PPDA': { label: 'Pressing Index (PPDA)', short: 'Pressing', hi: 'High press', lo: 'Low press' } };
+export function indexMeta(f) {
+  if (INDEX_SPECIAL[f.key]) return INDEX_SPECIAL[f.key];
+  const base = baseName(f);
+  if (f.words) return { label: `${base} Index`, short: base, hi: f.words[0], lo: f.words[1] };
+  return f.lowerBetter && !f.neutral
+    ? { label: `${base} Index (lower = higher)`, short: base, hi: `Low ${base}`, lo: `High ${base}` }
+    : { label: `${base} Index`, short: base, hi: `High ${base}`, lo: `Low ${base}` };
+}
+const roundFmt = v => String(Math.round(v));
+
+// Percentile pool over `pool` items, optionally split by scopeOf(item) (own league).
+// field(f) -> (item, forced) => 0-100, lower-is-better (non-neutral) fields flipped.
+// make(key, valOf, flip) does the same for any value function. An item outside the
+// pool is placed against it rather than joining it.
+export function percentilePool(pool, scopeOf) {
+  const cache = new Map();
+  const make = (key, valOf, flip) => {
+    if (cache.has(key)) return cache.get(key);
+    const groups = new Map();
+    for (const p of pool) {
+      const v = valOf(p); if (!Number.isFinite(v)) continue;
+      const g = scopeOf ? scopeOf(p) : ''; if (!groups.has(g)) groups.set(g, []); groups.get(g).push(v);
+    }
+    for (const a of groups.values()) a.sort((x, y) => x - y);
+    const fn = (p, forced) => {
+      const v = valOf(p, forced); if (!Number.isFinite(v)) return null;
+      const arr = groups.get(scopeOf ? scopeOf(p) : ''); if (!arr || !arr.length) return null;
+      const q = pctIn(arr, v); return flip ? 100 - q : q;
+    };
+    cache.set(key, fn); return fn;
+  };
+  return { field: f => make('f:' + f.key, (p, forced) => f.get(p, forced), !!f.lowerBetter && !f.neutral), make };
+}
+
+// A saved custom metric {id, name, parts:[{key, w}]} as an axis field: each part ->
+// percentile in the pool (flipped if lower is better), weighted average, then that
+// average -> a final 0-100 percentile in the same pool. Null if < 2 usable parts.
+export function customMetricField(cm, baseFields, pp) {
+  const parts = cm.parts.map(pt => ({ f: baseFields.find(f => f.key === pt.key && !f.hint), w: Number(pt.w) > 0 ? Number(pt.w) : 1 })).filter(x => x.f);
+  if (parts.length < 2) return null;
+  const avg = (p, forced) => {
+    let sum = 0, ws = 0;
+    for (const { f, w } of parts) { const v = pp.field(f)(p, forced); if (v == null) return null; sum += v * w; ws += w; }
+    return sum / ws;
+  };
+  const word = cm.name.replace(/\s+index$/i, '').trim() || cm.name;
+  return { key: 'cm:' + cm.id, group: 'Custom metrics', label: cm.name, short: cm.name, custom: true, pctDomain: true, fmt: roundFmt,
+    hiLo: [`High ${word}`, `Low ${word}`], get: pp.make('cm:' + cm.id + ':' + cm.parts.map(p => p.key + '*' + p.w).join(','), avg, false) };
+}
+const CUSTOM_DEFAULT_KEY = 'scoutIndex.teamChart.customMetrics.v1';
+function readCustomMetrics(key) {
+  try { const v = JSON.parse(window.localStorage.getItem(key) || '[]'); return Array.isArray(v) ? v.filter(m => m && m.id && m.name && Array.isArray(m.parts)) : []; } catch (e) { return []; }
+}
+
 // Median quadrant names. Each corner names the axes it is better on (or, for the
 // corner that is worse on both, describes both), so a low-xG-Against corner reads
 // "Low xG Against", never a technically-true-but-backwards "High xG Against".
@@ -859,7 +968,7 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
   metricLabel = 'Per-90 value', colorModes, colorOf: colorOfMode, legendBase, scoreQuad, targetTiers, groups = [], leagueOf,
   noun = 'player', openLabel = 'Open profile', onSelect, onClose, contextLabel, defaultMedianOn = true, defaultSample = 50, archetypeSeasonLabel,
   axesSeasonLabel, showAxesModeToggle, axesMode, setAxesMode, showArchetypeDetailToggle, archetypeDetail, setArchetypeDetail, genericSeasonLabel,
-  showLeaning, setShowLeaning, shortSubtitle = false }) {
+  showLeaning, setShowLeaning, shortSubtitle = false, badgeOf = null, indexMode = false, customMetricsKey = CUSTOM_DEFAULT_KEY }) {
   // searchPool: an unfiltered roster to search for the "ignores filters" add — falls
   // back to items (no override) when the caller doesn't have one (e.g. Team Index).
   const pool = searchPool && searchPool.length ? searchPool : items;
@@ -931,10 +1040,49 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
   const H = isMobile ? 400 : 580;
   const Noun = noun[0].toUpperCase() + noun.slice(1);
 
-  const fields = useMemo(() => buildFieldsFor(metricMode), [buildFieldsFor, metricMode]);
+  // Badges (needs badgeOf), Raw/Percentile values, pool scope and custom combined metrics
+  // (indexMode) — Team chart only; the player chart passes none of these props.
+  const [badgeOn, setBadgeOn] = useState(false);
+  const [badgeSize, setBadgeSize] = useState('s');
+  const [badgeTick, setBadgeTick] = useState(0);
+  const [valueMode, setValueMode] = useState('raw'); // 'raw' | 'pct'
+  const [pctScope, setPctScope] = useState('chart'); // 'chart' = every item plotted | 'league' = within own league
+  const [customMetrics, setCustomMetrics] = useState(() => (indexMode ? readCustomMetrics(customMetricsKey) : []));
+  useEffect(() => { if (indexMode) { try { window.localStorage.setItem(customMetricsKey, JSON.stringify(customMetrics)); } catch (e) { /* private mode etc. */ } } }, [indexMode, customMetricsKey, customMetrics]);
+  const [cmOpen, setCmOpen] = useState(false);
+  const blankDraft = () => ({ name: '', parts: [{ key: '', w: 1 }, { key: '', w: 1 }] });
+  const [cmDraft, setCmDraft] = useState(blankDraft);
+  const isIndex = !!indexMode && valueMode === 'pct';
+
+  // The plotted set (Sample minus removed items) — also the percentile pool.
+  const sample = useMemo(() => items.slice(0, Math.max(1, n)), [items, n]);
+  const top = useMemo(() => (excluded.size ? sample.filter(p => !excluded.has(idOf(p))) : sample), [sample, excluded, idOf]);
+  const removedHere = sample.length - top.length;
+
+  const baseFields = useMemo(() => buildFieldsFor(metricMode), [buildFieldsFor, metricMode]);
+  // Percentile of a field's value within the pool: the teams on the chart, or only those
+  // in the same league. Lower-is-better fields are flipped (100 - pct), neutral ones
+  // (age, value) never are. An item outside the pool (highlighted beyond the Sample) is
+  // placed against the pool rather than joining it.
+  const scopeOf = indexMode && pctScope === 'league' && leagueOf ? leagueOf : null;
+  const pctFor = useMemo(() => percentilePool(top, scopeOf), [top, scopeOf]);
+  // Custom combined metrics (customMetricField above).
+  const customFields = useMemo(() => (indexMode ? customMetrics.map(cm => customMetricField(cm, baseFields, pctFor)).filter(Boolean) : []),
+    [indexMode, customMetrics, baseFields, pctFor]);
+  const fields = useMemo(() => (customFields.length ? [...baseFields, ...customFields] : baseFields), [baseFields, customFields]);
   const real = fields.filter(f => !f.hint);
   const pickField = (k, dflt) => real.find(f => f.key === k) || real.find(f => f.key === dflt) || real[0];
-  const xf = pickField(xKey, defaultX), yf = pickField(yKey, defaultY), cf = pickField(colorKey, defaultY);
+  const toIndex = useCallback(f => {
+    if (!isIndex || f.custom) return f;
+    const m = indexMeta(f);
+    return { ...f, label: m.label, short: m.short, hiLo: [m.hi, m.lo], pctDomain: true, scoreScale: false, fmt: roundFmt,
+      lowerBetter: false, pctInverted: false, invertedDirection: false, words: undefined, index: true, get: pctFor.field(f) };
+  }, [isIndex, pctFor]);
+  const xf = useMemo(() => toIndex(pickField(xKey, defaultX)), [toIndex, fields, xKey, defaultX]);
+  const yf = useMemo(() => toIndex(pickField(yKey, defaultY)), [toIndex, fields, yKey, defaultY]);
+  const cf = pickField(colorKey, defaultY);
+  // Percentile mode: four coloured quadrants, so switch to the four-colour theme on entry.
+  useEffect(() => { if (isIndex) setQuadThemeKey('four'); }, [isIndex]);
   // A field can disappear (e.g. role scores when the position group changes, or the
   // improvement axes in weighted mode): go back to the defaults rather than silently
   // showing whatever field happens to be first.
@@ -980,10 +1128,6 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
     addHighlight(id);
     setForceQuery('');
   };
-
-  const sample = useMemo(() => items.slice(0, Math.max(1, n)), [items, n]);
-  const top = useMemo(() => (excluded.size ? sample.filter(p => !excluded.has(idOf(p))) : sample), [sample, excluded, idOf]);
-  const removedHere = sample.length - top.length;
 
   // Group highlight: Sample-only membership test.
   const inGroup = useMemo(() => {
@@ -1039,7 +1183,15 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
   // Defensive — fixed 50/50 split, not scoreScale) can suppress the median
   // lines too, the same way the built-in current/potential quadrant already
   // does via the scoreScale check below.
-  const sQuad = useMemo(() => (scoreQuad ? scoreQuad(xf, yf, topPtsXY, targetMin) : null), [scoreQuad, xf, yf, topPtsXY, targetMin]);
+  // Percentile mode: fixed 50/50 split, each corner named from both axes (X first),
+  // e.g. "HIGH PACE + HIGH PRESS".
+  const indexQuad = useMemo(() => {
+    if (!isIndex) return null;
+    const [xh, xl] = xf.hiLo || [`High ${baseName(xf)}`, `Low ${baseName(xf)}`], [yh, yl] = yf.hiLo || [`High ${baseName(yf)}`, `Low ${baseName(yf)}`];
+    const names = { tr: `${xh} + ${yh}`, tl: `${xl} + ${yh}`, br: `${xh} + ${yl}`, bl: `${xl} + ${yl}` };
+    return { xSplit: 50, ySplit: 50, names, alt: { tr: 'High both', tl: yh, br: xh, bl: 'Low both' }, tint: { tr: 'best', br: 'x', tl: 'y', bl: null } };
+  }, [isIndex, xf, yf]);
+  const sQuad = useMemo(() => indexQuad || (scoreQuad ? scoreQuad(xf, yf, topPtsXY, targetMin) : null), [indexQuad, scoreQuad, xf, yf, topPtsXY, targetMin]);
   // Medians of the PLOTTED items, on each non-score axis — of whatever the axis
   // shows (raw value or percentile). "Colour by Quadrant" needs this split to
   // mean anything, so it's still computed with the Median split DISPLAY toggle
@@ -1194,7 +1346,7 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
     const labelledNames = colorBy === 'archetype' && labelledKeys.size
       ? legend.filter(it => labelledKeys.has(it.key)).map(it => it.label)
       : [];
-    autoSubtitle = `${sample.length} Sample · ${contextLabel}${archActive ? ` · Archetypes: ${archetypeSeasonLabel}` : ''}${axesActive ? ` · Axes: ${axesSeasonLabel}` : ''}${inGroup ? ` · highlighted: ${groupLabel} (${groupCount})` : ''}${hlNames.length ? ` · highlighted: ${hlNames.length > 4 ? `${hlNames.slice(0, 4).join(', ')} +${hlNames.length - 4} more` : hlNames.join(', ')}` : ''}${labelledNames.length ? ` · labelled: ${labelledNames.join(', ')}` : ''}`;
+    autoSubtitle = `${sample.length} Sample · ${contextLabel}${isIndex ? ` · Percentiles ${pctScope === 'league' ? 'within own league' : 'within chart'}` : ''}${archActive ? ` · Archetypes: ${archetypeSeasonLabel}` : ''}${axesActive ? ` · Axes: ${axesSeasonLabel}` : ''}${inGroup ? ` · highlighted: ${groupLabel} (${groupCount})` : ''}${hlNames.length ? ` · highlighted: ${hlNames.length > 4 ? `${hlNames.slice(0, 4).join(', ')} +${hlNames.length - 4} more` : hlNames.join(', ')}` : ''}${labelledNames.length ? ` · labelled: ${labelledNames.join(', ')}` : ''}`;
   }
   const subtitle = customSubtitle.trim() || autoSubtitle;
 
@@ -1206,11 +1358,22 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
   }, []);
 
   const archLabelledKeys = colorBy === 'archetype' ? labelledKeys : null;
-  const drawOpts = { pts, xf, yf, hidden, highlightIds, showNames, soloLabel, quad, median, group: !!inGroup, groupFullLabels, highlightStyle, labelledKeys: archLabelledKeys, fadeOthers, showCounts, quadThemeKey };
+  const useBadges = !!(badgeOn && badgeOf);
+  const drawPts = useMemo(() => (useBadges ? pts.map(d => ({ ...d, badge: badgeOf(d.p) })) : pts), [pts, useBadges, badgeOf]);
+  // Load crests for whatever is plotted; redraw (batched) as they arrive.
+  useEffect(() => {
+    if (!useBadges) return undefined;
+    let live = true, timer = null;
+    const bump = () => { if (!timer) timer = setTimeout(() => { timer = null; if (live) setBadgeTick(t => t + 1); }, 120); };
+    for (const u of new Set(drawPts.map(d => d.badge).filter(Boolean))) if (!BADGE_CACHE.get(u)?.done) loadBadge(u).then(bump);
+    return () => { live = false; if (timer) clearTimeout(timer); };
+  }, [useBadges, drawPts]);
+  const drawOpts = { pts: drawPts, xf, yf, hidden, highlightIds, showNames, soloLabel, quad, median, group: !!inGroup, groupFullLabels, highlightStyle, labelledKeys: archLabelledKeys, fadeOthers, showCounts, quadThemeKey,
+    badges: useBadges ? { size: BADGE_SIZES[badgeSize], key: badgeSize } : null };
   useEffect(() => {
     if (!canvasRef.current) return;
     layoutRef.current = drawScatter(canvasRef.current, width, H, window.devicePixelRatio || 1, false, { ...drawOpts, hoverId: hover?.d.id });
-  }, [pts, xf, yf, hidden, hover, highlightIds, showNames, soloLabel, quad, median, inGroup, groupFullLabels, highlightStyle, archLabelledKeys, fadeOthers, width, H, quadThemeKey]);
+  }, [drawPts, xf, yf, hidden, hover, highlightIds, showNames, soloLabel, quad, median, inGroup, groupFullLabels, highlightStyle, archLabelledKeys, fadeOthers, width, H, quadThemeKey, useBadges, badgeSize, badgeTick]);
 
   useEffect(() => {
     if (!highlightIds.length) return;
@@ -1258,6 +1421,9 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
       // show their own values on the chart, so this is just the date now.
       const date = new Date().toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
       const footer = showDate ? date : '';
+      // Every crest must be loaded before the PNG is drawn (10 s cap; a crest that never
+      // arrives is a dot, same as on screen).
+      if (useBadges) await Promise.race([Promise.all(drawPts.map(d => loadBadge(d.badge))), new Promise(res => setTimeout(res, 10000))]);
       const off = document.createElement('canvas');
       drawScatter(off, EXPORT_W, EXPORT_H, 1, true, { ...drawOpts, hoverId: null, title, subtitle, footer, legend: exportLegend ? legend : [], theme: exportTheme });
       await deliverPng(off.toDataURL('image/png'), `${base}_${exportTheme}.png`);
@@ -1402,12 +1568,45 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
             </select>
           </label>
         )}
-        {usesMetric && (
+        {usesMetric && !indexMode && (
           <div style={{ display:'flex', gap:3 }}>
             <button style={btn(metricMode==='val')} onClick={() => setMetricMode('val')}>{metricLabel}</button>
             <button style={btn(metricMode==='pct')} onClick={() => setMetricMode('pct')}>Percentile</button>
           </div>
         )}
+        {indexMode && (
+          <label style={col}><span style={lbl}>Values</span>
+            <div style={{ display:'flex', gap:0 }}>
+              {[['raw', 'Raw'], ['pct', 'Percentile']].map(([k, l], i) => (
+                <button key={k} aria-pressed={valueMode === k} onClick={() => setValueMode(k)} title={k === 'pct' ? 'Each axis as a 0-100 percentile (Index); lower-is-better metrics flipped so higher is always better / more intense; 50 = quadrant split' : 'Raw values'}
+                  style={{ ...btn(valueMode === k), borderRadius: i ? '0 5px 5px 0' : '5px 0 0 5px' }}>{l}</button>
+              ))}
+            </div>
+          </label>
+        )}
+        {indexMode && (isIndex || xf.custom || yf.custom) && (
+          <label style={col}><span style={lbl}>Percentile pool</span>
+            <div style={{ display:'flex', gap:0 }}>
+              {[['chart', 'Teams on chart'], ['league', 'Within own league']].map(([k, l], i) => (
+                <button key={k} aria-pressed={pctScope === k} onClick={() => setPctScope(k)}
+                  style={{ ...btn(pctScope === k), borderRadius: i ? '0 5px 5px 0' : '5px 0 0 5px' }}>{l}</button>
+              ))}
+            </div>
+          </label>
+        )}
+        {badgeOf && (
+          <label style={col}><span style={lbl}>Badges</span>
+            <div style={{ display:'flex', gap:3 }}>
+              <button style={btn(badgeOn)} aria-pressed={badgeOn} onClick={() => setBadgeOn(v => !v)} title="Show club badges instead of dots (no badge on file = dot)">Badges</button>
+              {badgeOn && (
+                <select aria-label="Badge size" style={{ ...sel, width:84 }} value={badgeSize} onChange={e => setBadgeSize(e.target.value)}>
+                  <option value="s">Small</option><option value="m">Medium</option><option value="l">Large</option>
+                </select>
+              )}
+            </div>
+          </label>
+        )}
+        {indexMode && <button style={btn(cmOpen)} aria-pressed={cmOpen} onClick={() => setCmOpen(v => !v)} title="Build a combined metric from 2+ metrics">Custom metric{customMetrics.length ? ` (${customMetrics.length})` : ''}</button>}
         <button style={btn(showNames)} onClick={() => setShowNames(s => !s)}>Names</button>
         {inGroup && <button style={{ ...btn(groupFullLabels), opacity: showNames ? 1 : 0.5 }} aria-pressed={groupFullLabels} disabled={!showNames}
           title={`Label every ${noun} on the plot, not just ${groupLabel || 'the group'} — group names always keep their spot over these`}
@@ -1495,6 +1694,53 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
         )}
         {hlItems.length > 0 && <span style={{ fontSize:10, color:'#64748b' }}>{hlItems.length >= HL_MAX ? `max ${HL_MAX} — remove one to add another` : `Shift-click to add more (max ${HL_MAX})`}</span>}
       </div>
+
+      {indexMode && cmOpen && (() => {
+        const partOpts = baseFields.filter(f => !f.hint);
+        const groupsOf = [...new Set(partOpts.map(f => f.group))];
+        const valid = cmDraft.name.trim() && cmDraft.parts.filter(p => p.key).length >= 2;
+        const setPart = (i, patch) => setCmDraft(d => ({ ...d, parts: d.parts.map((p, j) => (j === i ? { ...p, ...patch } : p)) }));
+        const save = () => {
+          const parts = cmDraft.parts.filter(p => p.key).map(p => ({ key: p.key, w: Number(p.w) > 0 ? Number(p.w) : 1 }));
+          const cm = { id: Date.now().toString(36), name: cmDraft.name.trim(), parts };
+          setCustomMetrics(list => [...list, cm]); setCmDraft(blankDraft()); setYKey('cm:' + cm.id);
+        };
+        return (
+          <div data-custom-metric-panel style={{ display:'flex', flexDirection:'column', gap:6, padding:'8px 10px', border:'1px solid #1e2d45', borderRadius:6, background:'#0a1020' }}>
+            <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:6 }}>
+              <span style={lbl}>New metric</span>
+              <input aria-label="Custom metric name" placeholder="Name, e.g. Pace Index" value={cmDraft.name} onChange={e => setCmDraft(d => ({ ...d, name: e.target.value }))} style={{ ...sel, width:170, padding:'5px 7px' }}/>
+              {cmDraft.parts.map((p, i) => (
+                <span key={i} style={{ display:'flex', gap:3, alignItems:'center' }}>
+                  <select aria-label={`Custom metric part ${i + 1}`} style={sel} value={p.key} onChange={e => setPart(i, { key: e.target.value })}>
+                    <option value="">Pick metric…</option>
+                    {groupsOf.map(g => <optgroup key={g} label={g}>{partOpts.filter(f => f.group === g).map(f => <option key={f.key} value={f.key}>{f.label}{f.lowerBetter && !f.neutral ? ' (flipped)' : ''}</option>)}</optgroup>)}
+                  </select>
+                  <input aria-label={`Custom metric weight ${i + 1}`} type="number" min={0.1} step={0.5} value={p.w} title="Weight (default equal)" onChange={e => setPart(i, { w: e.target.value })} style={{ ...sel, width:52 }}/>
+                  {cmDraft.parts.length > 2 && <button aria-label={`Remove part ${i + 1}`} onClick={() => setCmDraft(d => ({ ...d, parts: d.parts.filter((_, j) => j !== i) }))} style={{ ...btn(false), padding:'3px 7px' }}>✕</button>}
+                </span>
+              ))}
+              <button onClick={() => setCmDraft(d => ({ ...d, parts: [...d.parts, { key: '', w: 1 }] }))} style={{ ...btn(false), padding:'4px 8px' }}>+ Metric</button>
+              <button disabled={!valid} onClick={save} style={{ ...btn(!!valid), padding:'4px 10px', opacity: valid ? 1 : 0.5 }}>Save &amp; plot on Y</button>
+            </div>
+            {customMetrics.length > 0 && (
+              <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:6 }}>
+                <span style={lbl}>Saved</span>
+                {customMetrics.map(cm => (
+                  <span key={cm.id} data-custom-metric={cm.name} style={{ display:'flex', alignItems:'center', gap:4, padding:'2px 4px 2px 8px', border:'1px solid #26456f', borderRadius:12, fontSize:10.5, color:'#dbeafe' }}
+                    title={cm.parts.map(p => `${(baseFields.find(f => f.key === p.key) || { label: p.key }).label} ×${p.w}`).join(' · ')}>
+                    {cm.name}
+                    <button onClick={() => setYKey('cm:' + cm.id)} style={{ ...btn(yKey === 'cm:' + cm.id), padding:'1px 6px' }}>Y</button>
+                    <button onClick={() => setXKey('cm:' + cm.id)} style={{ ...btn(xKey === 'cm:' + cm.id), padding:'1px 6px' }}>X</button>
+                    <button aria-label={`Delete ${cm.name}`} onClick={() => setCustomMetrics(list => list.filter(m => m.id !== cm.id))} style={{ ...btn(false), padding:'1px 6px' }}>✕</button>
+                  </span>
+                ))}
+              </div>
+            )}
+            <span style={{ fontSize:9.5, color:'#64748b' }}>Each metric becomes a percentile in the pool above (lower-is-better ones flipped), then the weighted average becomes a final 0–100 percentile. Saved in this browser.</span>
+          </div>
+        );
+      })()}
 
       {autoQuad && (
         <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:6 }}>

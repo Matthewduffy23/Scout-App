@@ -824,7 +824,7 @@ export default function TeamIndex({ players = [] }) {
         </div>
 
         {mainView === 'scatter' ? (
-          <TeamScatter teams={sorted} getDisplayScore={getDisplayScore} scoreLabel={scoreMode === 'Overall' && rawMode ? 'Overall (raw)' : scoreMode}
+          <TeamScatter teams={sorted} allTeams={all} getDisplayScore={getDisplayScore} scoreLabel={scoreMode === 'Overall' && rawMode ? 'Overall (raw)' : scoreMode}
             styleColors={STYLE_COLORS} getAvgXValue={getAvgXValue} getTotalMV={getTotalMV} getMVPerf={getMVPerf}
             getImprovement={getImprovement} improvedMode={improvedMode} improvementAnchored={improvementAnchored}
             onSelect={t => setSelTeam({ ...t, crest: teamCrest(t.team), avgXValue: getAvgXValue(t.team, t.league), totalMV: getTotalMV(t.team, t.league), mvPerf: getMVPerf(t.team, t.league) })}
