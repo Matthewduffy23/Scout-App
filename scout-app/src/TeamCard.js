@@ -6,6 +6,7 @@
 import React, { useRef, useEffect, useMemo, useState } from 'react';
 import { scoreBandColor, scoreLabel, divColor, scoreToStars, starLabel } from './constants';
 import { useIsMobile } from './utils';
+import { buildTeamSeasonMetrics, teamSeasonMetricsFor, signed } from './teamSeasonMetrics';
 import TeamSimilarCalc from './TeamSimilarCalc';
 
 function Stars({ score, size = 14 }) {
@@ -166,6 +167,10 @@ export default function TeamCard({ team, allTeamSeasons = [], allTeams = [], onO
   }, [allTeamSeasons, selSeasonKey, team]);
 
   // Sorted season history for this team (oldest -> newest, for the trend chart and table).
+  // xPos Δ / Table Δ for the Season History table (teamSeasonMetrics.js). Every team row
+  // when we have them (the xG fallback ranks a whole league); the team's own seasons
+  // otherwise, which is all the previous-season comparison needs.
+  const seasonMetrics = useMemo(() => buildTeamSeasonMetrics(allTeams.length ? allTeams : allTeamSeasons), [allTeams, allTeamSeasons]);
   const history = useMemo(() => {
     return [...allTeamSeasons]
       .filter(t => t.completeScore != null)
@@ -274,7 +279,7 @@ export default function TeamCard({ team, allTeamSeasons = [], allTeams = [], onO
               <div style={{ background: '#07090f', border: '1px solid #131c2e', borderRadius: 7, overflowX: isMobile ? 'auto' : 'hidden', overflowY: 'hidden', WebkitOverflowScrolling: 'touch' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: isMobile ? 720 : undefined }}>
                   <thead><tr style={{ background: '#0d1220' }}>
-                    {['Season', 'League', 'Overall', 'Attack', 'Defence', 'Possession', 'Pressing', 'Pts', 'Pts Rank', 'xPts Rank', 'GF', 'GA'].map(h => (
+                    {['Season', 'League', 'Overall', 'Attack', 'Defence', 'Possession', 'Pressing', 'Pts', 'Pts Rank', 'xPts Rank', 'xPos Δ', 'Table Δ', 'GF', 'GA'].map(h => (
                       <th key={h} style={{ padding: '5px 8px', textAlign: 'left', fontSize: 9, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.08em', textTransform: 'uppercase', borderBottom: '1px solid #131c2e' }}>{h}</th>
                     ))}
                   </tr></thead>
@@ -294,6 +299,11 @@ export default function TeamCard({ team, allTeamSeasons = [], allTeams = [], onO
                           <td style={{ padding: '5px 8px', fontSize: 11, color: '#e2e8f4', borderBottom: '1px solid #0d1525' }}>{s.points ?? '—'}</td>
                           <td style={{ padding: '5px 8px', fontSize: 11, color: '#e2e8f4', borderBottom: '1px solid #0d1525' }}>{s.pointsRank != null ? `${s.pointsRank}/${s.leagueSize}` : '—'}</td>
                           <td style={{ padding: '5px 8px', fontSize: 11, color: '#94a3b8', borderBottom: '1px solid #0d1525' }}>{s.xPointsRank != null ? `${s.xPointsRank}/${s.leagueSize}` : '—'}</td>
+                          {(() => { const m = teamSeasonMetricsFor(seasonMetrics, s); const c = v => (v == null ? '#475569' : v > 0 ? '#4ade80' : v < 0 ? '#f87171' : '#94a3b8');
+                            return (<>
+                              <td data-xpos-diff title={m?.xPosDiff != null ? `xPts position ${s.xPointsRank} − actual ${s.pointsRank}: ${m.xPosDiff > 0 ? 'finished above' : m.xPosDiff < 0 ? 'finished below' : 'finished exactly on'} its xPts position` : 'No points / xPts for this season'} style={{ padding: '5px 8px', fontSize: 11, color: c(m?.xPosDiff), borderBottom: '1px solid #0d1525' }}>{signed(m?.xPosDiff)}</td>
+                              <td data-table-diff title={m?.tableDiff != null ? `${m.prevRank}/${m.prevSize} last season → ${s.pointsRank}/${s.leagueSize}` : 'No previous season in this league'} style={{ padding: '5px 8px', fontSize: 11, color: c(m?.tableDiff), borderBottom: '1px solid #0d1525' }}>{signed(m?.tableDiff)}</td>
+                            </>); })()}
                           <td style={{ padding: '5px 8px', fontSize: 11, color: '#4ade80', borderBottom: '1px solid #0d1525' }}>{s.goalsFor ?? '—'}</td>
                           <td style={{ padding: '5px 8px', fontSize: 11, color: '#f87171', borderBottom: '1px solid #0d1525' }}>{s.goalsAgainst ?? '—'}</td>
                         </tr>

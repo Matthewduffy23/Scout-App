@@ -1,6 +1,8 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import Papa from 'papaparse';
 import { ScatterView } from './ScatterChart';
+import { TEAM_FOTMOB_MAP, CREST_BASE, teamCrest } from './cardAssets';
+import { matchTeamName, readBadgeFixes, writeBadgeFixes, fixKey, foldName } from './teamNameMatch';
 
 // Custom Scatter: upload any CSV (one label column + any number of numeric
 // columns) and plot it with the same engine as the real scatter charts —
@@ -69,6 +71,51 @@ function parseCsvText(text) {
   return { items, numericCols, labelCol, rowCount: items.length };
 }
 
+// Show badges only when the label column looks like club names.
+const MIN_BADGE_MATCHES = 3, MIN_BADGE_SHARE = 0.3;
+
+// Same search as the Scouting Card's "Badge (search any club)" picker: any club in
+// the data (name — league), plus any other club in the crest map.
+function ClubBadgePicker({ players, onPick, autoFocus }) {
+  const [q, setQ] = useState('');
+  const choices = useMemo(() => {
+    const fq = foldName(q.trim());
+    if (fq.length < 2) return [];
+    const seen = new Set(), out = [];
+    const add = (team, league, url) => {
+      const k = team.toLowerCase();
+      if (seen.has(k) || !url || !foldName(team).includes(fq)) return;
+      seen.add(k); out.push({ team, league, url });
+    };
+    for (const p of (players || [])) {
+      if (out.length >= 10) break;
+      if (p && p.team) add(p.team, p.league || '', teamCrest(p.team) || (p.teamFotmobId ? `${CREST_BASE}${p.teamFotmobId}.png` : ''));
+    }
+    for (const [team, id] of Object.entries(TEAM_FOTMOB_MAP)) {
+      if (out.length >= 10) break;
+      if (team !== team.toLowerCase() || !/[a-z]/.test(team)) add(team, '', `${CREST_BASE}${id}.png`);
+    }
+    return out;
+  }, [players, q]);
+  return (
+    <div style={{ position:'relative', width:240 }}>
+      <input aria-label="Badge (search any club)" autoFocus={autoFocus} value={q} onChange={e => setQ(e.target.value)} placeholder="Badge (search any club)…"
+        style={{ background:'#0d1220', border:'1px solid #1e2d45', borderRadius:5, color:'#e2e8f4', padding:'4px 7px', fontSize:11, outline:'none', width:'100%' }}/>
+      {q.trim().length >= 2 && (
+        <div style={{ position:'absolute', zIndex:20, left:0, right:0, border:'1px solid #1e2d45', borderRadius:6, marginTop:2, maxHeight:168, overflowY:'auto', background:'#0e1e38' }}>
+          {choices.length ? choices.map(t => (
+            <div key={`${t.team}|${t.league}`} onClick={() => { onPick(t); setQ(''); }}
+              style={{ display:'flex', alignItems:'center', gap:6, padding:'5px 8px', fontSize:11, color:'#e2e8f4', cursor:'pointer', borderBottom:'1px solid #13233d' }}>
+              <img src={t.url} alt="" style={{ width:16, height:16, objectFit:'contain' }} onError={e => { e.target.style.visibility = 'hidden'; }}/>
+              {t.team}<span style={{ color:'#64748b' }}> — {t.league || '—'}</span>
+            </div>
+          )) : <div style={{ padding:'6px 9px', fontSize:11, color:'#64748b' }}>No match.</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const noColorOf = () => ({ g: 'all', color: '#64748b' });
 const noLegend = () => [];
 const customId = p => p.__id;
@@ -76,7 +123,7 @@ const customName = p => p.__label;
 const customSub = () => '';
 const customTip = () => [];
 
-export default function CustomScatter() {
+export default function CustomScatter({ players = [] }) {
   const [fileName, setFileName] = useState('');
   const [parsed, setParsed] = useState(null); // { items, numericCols, labelCol, rowCount }
   const [error, setError] = useState('');
@@ -120,7 +167,7 @@ export default function CustomScatter() {
 
   const clear = useCallback(() => {
     setParsed(null); setFileName(''); setError(''); setPasteText('');
-    setLabelOverrides({}); setInvertCols(new Set()); setShowColumnEditor(false);
+    setLabelOverrides({}); setInvertCols(new Set()); setShowColumnEditor(false); setBadgePanel(false); setFixing(null);
   }, []);
 
   const renameCol = useCallback((key, value) => setLabelOverrides(prev => ({ ...prev, [key]: value })), []);
@@ -149,6 +196,33 @@ export default function CustomScatter() {
     });
   }, [parsed, labelOverrides, invertCols]);
 
+  // ── Badges by team name ────────────────────────────────────────────────
+  const [badgeFixes, setBadgeFixes] = useState(readBadgeFixes); // manual fixes, saved in this browser
+  const [badgePanel, setBadgePanel] = useState(false);
+  const [fixing, setFixing] = useState(null); // name whose picker is open
+  const setFix = useCallback((name, v) => setBadgeFixes(prev => {
+    const next = { ...prev };
+    if (v === undefined) delete next[fixKey(name)]; else next[fixKey(name)] = v;
+    writeBadgeFixes(next);
+    return next;
+  }), []);
+  const badgeMatches = useMemo(() => {
+    if (!parsed || !parsed.labelCol) return null;
+    const names = [...new Set(parsed.items.map(p => p.__label))];
+    const byName = new Map();
+    for (const name of names) {
+      const fix = badgeFixes[fixKey(name)];
+      if (fix) byName.set(name, fix.none ? { url: null, how: 'manual', manualNone: true } : { url: fix.url, key: fix.team, how: 'manual' });
+      else byName.set(name, matchTeamName(name) || { url: null });
+    }
+    const matched = names.filter(n => byName.get(n).url).length;
+    const autoMatched = names.filter(n => byName.get(n).url && byName.get(n).how !== 'manual').length;
+    const looksLikeTeams = autoMatched >= Math.min(MIN_BADGE_MATCHES, names.length) && autoMatched / names.length >= MIN_BADGE_SHARE;
+    return { names, byName, matched, looksLikeTeams };
+  }, [parsed, badgeFixes]);
+  const badgeOf = useMemo(() => (badgeMatches && (badgeMatches.looksLikeTeams || (Object.keys(badgeFixes).length > 0 && badgeMatches.matched > 0))
+    ? p => badgeMatches.byName.get(p.__label)?.url || null : null), [badgeMatches, badgeFixes]);
+
   const [defaultX, defaultY] = useMemo(() => {
     if (!parsed) return [null, null];
     return [parsed.numericCols[0].key, parsed.numericCols[1].key];
@@ -164,7 +238,7 @@ export default function CustomScatter() {
           <div style={{ fontSize:16, fontWeight:700, color:'#f8fafc' }}>Custom Scatter</div>
           <div style={{ fontSize:11.5, color:'#94a3b8', marginTop:4 }}>
             Upload any CSV — a name/label column plus any number of numeric columns. Plotted as-is: no
-            scoring, no tiers, nothing merged into real data. Nothing here is saved between visits.
+            scoring, no tiers, nothing merged into real data. Your data isn't saved between visits (only badge fixes are, in this browser).
           </div>
         </div>
         <label style={{ ...btn, display:'inline-flex', alignItems:'center', gap:8, width:'fit-content', cursor: busy ? 'wait' : 'pointer', opacity: busy ? 0.6 : 1 }}>
@@ -204,13 +278,51 @@ export default function CustomScatter() {
           ))}
         </div>
       )}
+      {badgeOf && badgePanel && (() => {
+        const unmatched = badgeMatches.names.filter(n => !badgeMatches.byName.get(n).url);
+        const matched = badgeMatches.names.filter(n => badgeMatches.byName.get(n).url);
+        const row = (n, m) => (
+          <div key={n} data-badge-row={n} style={{ display:'flex', alignItems:'center', gap:8, minHeight:26 }}>
+            {m.url ? <img src={m.url} alt="" style={{ width:18, height:18, objectFit:'contain' }}/> : <span style={{ width:18, height:18, display:'inline-flex', alignItems:'center', justifyContent:'center', color:'#64748b' }}>●</span>}
+            <span style={{ fontSize:11, color:'#e2e8f4', width:200, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }} title={n}>{n}</span>
+            <span style={{ fontSize:10, color:'#64748b', width:210, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+              {m.url ? `→ ${m.key}${m.how === 'manual' ? ' (your fix)' : m.how === 'exact' ? '' : ` (${m.how})`}` : m.manualNone ? 'dot (your choice)' : 'no confident match — dot'}
+            </span>
+            {fixing === n
+              ? <ClubBadgePicker players={players} autoFocus onPick={t => { setFix(n, { team: t.team, url: t.url }); setFixing(null); }}/>
+              : <button style={{ ...btn, padding:'3px 8px' }} onClick={() => setFixing(n)}>{m.url ? 'Change' : 'Fix'}</button>}
+            {m.url && m.how !== 'manual' && <button style={{ ...btn, padding:'3px 8px' }} title="Wrong club — show a plain dot" onClick={() => setFix(n, { none: true })}>Use dot</button>}
+            {m.how === 'manual' && <button style={{ ...btn, padding:'3px 8px', color:'#f87171' }} title="Remove your fix (back to automatic)" onClick={() => setFix(n, undefined)}>✕</button>}
+          </div>
+        );
+        return (
+          <div data-badge-panel style={{ display:'flex', flexDirection:'column', gap:4, padding:'10px 16px', borderBottom:'1px solid #1e2d45', background:'#0a0f1a', maxHeight:320, overflowY:'auto' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+              <span style={{ fontSize:11, color:'#e2e8f4', fontWeight:600 }}>Badges: {badgeMatches.matched} of {badgeMatches.names.length} matched</span>
+              <span style={{ fontSize:10, color:'#64748b' }}>Fixes are saved in this browser.</span>
+              <button style={{ ...btn, marginLeft:'auto', padding:'3px 8px' }} onClick={() => { setBadgePanel(false); setFixing(null); }}>Close</button>
+            </div>
+            <div style={{ fontSize:10, color:'#94a3b8', marginTop:4 }}>Unmatched ({unmatched.length})</div>
+            {unmatched.length ? unmatched.map(n => row(n, badgeMatches.byName.get(n))) : <div style={{ fontSize:10.5, color:'#64748b' }}>None.</div>}
+            <div style={{ fontSize:10, color:'#94a3b8', marginTop:6 }}>Matched ({matched.length}) — check any that look wrong</div>
+            {matched.map(n => row(n, badgeMatches.byName.get(n)))}
+          </div>
+        );
+      })()}
       <ScatterView
         items={parsed.items} idOf={customId} nameOf={customName} subOf={customSub} tooltipLines={customTip}
         buildFields={buildFields} defaultX={defaultX} defaultY={defaultY} metricLabel="Value"
         colorModes={[]} colorOf={noColorOf} legendBase={noLegend}
-        scoreQuad={null} targetTiers={null} groups={[]} noun="team"
+        scoreQuad={null} targetTiers={null} groups={[]} noun={badgeMatches && badgeMatches.looksLikeTeams ? 'team' : 'player'}
         defaultMedianOn={false} defaultSample={parsed.rowCount}
         contextLabel={`${fileName} · ${parsed.rowCount} rows`} shortSubtitle
+        badgeOf={badgeOf} badgeLabel="Show badges"
+        badgeNote={badgeMatches && (
+          <button data-badge-note onClick={() => setBadgePanel(v => !v)} title="See unmatched names and fix them"
+            style={{ ...btn, padding:'3px 8px', fontWeight:500, color: badgeMatches.matched < badgeMatches.names.length ? '#fbbf24' : '#94a3b8' }}>
+            {badgeMatches.matched} of {badgeMatches.names.length} matched
+          </button>
+        )}
       />
     </div>
   );

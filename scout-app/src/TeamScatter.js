@@ -1,6 +1,8 @@
 import React, { useMemo, useCallback, useRef } from 'react';
 import { ScatterView } from './ScatterChart';
 import { TEAM_SCORE_STEPS, TEAM_SCORE_LOW, teamScoreColor } from './constants';
+import { teamCrest } from './cardAssets';
+import { buildTeamSeasonMetrics, teamSeasonMetricsFor } from './teamSeasonMetrics';
 
 // Team Index scatter chart: the shared ScatterView (same engine as the player
 // chart) with team axes, colours, tooltip and group conditions. Results are per
@@ -41,13 +43,18 @@ const teamId = t => `${t.team}|${t.league}|${t.season}`;
 const teamName = t => t.team;
 const teamSub = t => `${t.league} · ${t.season}`;
 const teamLeague = t => t.league;
+const teamBadge = t => teamCrest(t.team);
 const teamTip = t => [`${t.league} · ${t.season}`, `${t.style || 'No style'}${t.pointsRank ? ` · ${t.pointsRank}/${t.leagueSize || '?'} in league` : ''}`];
 
-export default function TeamScatter({ teams, getDisplayScore, scoreLabel, styleColors, getAvgXValue, getTotalMV, getMVPerf, getImprovement, improvedMode, improvementAnchored, onSelect, onClose, contextLabel }) {
+export default function TeamScatter({ teams, allTeams = [], getDisplayScore, scoreLabel, styleColors, getAvgXValue, getTotalMV, getMVPerf, getImprovement, improvedMode, improvementAnchored, onSelect, onClose, contextLabel }) {
   // Latest lookup functions via a ref, so axis getters stay current without
   // rebuilding every field on each Team Index render.
   const fns = useRef({});
   fns.current = { getDisplayScore, getAvgXValue, getTotalMV, getMVPerf, getImprovement };
+  // xPosition / league-table differences per team-season (teamSeasonMetrics.js), over
+  // every team row so the previous season is always there to compare with.
+  const seasonMetrics = useMemo(() => buildTeamSeasonMetrics(allTeams.length ? allTeams : teams), [allTeams, teams]);
+  const sm = useRef(seasonMetrics); sm.current = seasonMetrics;
 
   const buildFields = useCallback(mode => {
     const f = [
@@ -63,6 +70,10 @@ export default function TeamScatter({ teams, getDisplayScore, scoreLabel, styleC
       { key: 'gapm', group: 'Results (per match)', label: 'Goals against per match', short: 'Goals Against', lowerBetter: true, get: t => perMatch(t, 'goalsAgainst') },
       { key: 'gdpm', group: 'Results (per match)', label: 'Goal difference per match', short: 'Goal Diff', get: t => (t.goalsFor != null && t.goalsAgainst != null && t.matches > 0 ? (t.goalsFor - t.goalsAgainst) / t.matches : null) },
       { key: 'luck', group: 'Results (per match)', label: 'Points minus xPts per match', short: 'Pts − xPts', get: t => (t.points != null && t.expectedPoints != null && t.matches > 0 ? (t.points - t.expectedPoints) / t.matches : null) },
+      { key: 'xPosDiff', group: 'League table', label: 'xPosition difference (xPts position − actual)', short: 'xPosition Δ',
+        get: t => teamSeasonMetricsFor(sm.current, t)?.xPosDiff ?? null },
+      { key: 'tableDiff', group: 'League table', label: 'League table difference (places climbed vs previous season)', short: 'Table Δ',
+        get: t => teamSeasonMetricsFor(sm.current, t)?.tableDiff ?? null },
       { key: 'winPct', group: 'Results (per match)', label: 'Win %', short: 'Win %', get: t => (t.wins != null && t.matches > 0 ? 100 * t.wins / t.matches : null) },
       { key: 'lossPct', group: 'Results (per match)', label: 'Loss %', short: 'Loss %', lowerBetter: true, get: t => (t.losses != null && t.matches > 0 ? 100 * t.losses / t.matches : null) },
       { key: 'avgAge', group: 'Squad', label: 'Average age', words: ['Older', 'Younger'], neutral: true, get: t => t.avgAge },
@@ -110,6 +121,7 @@ export default function TeamScatter({ teams, getDisplayScore, scoreLabel, styleC
     <ScatterView items={teams} idOf={teamId} nameOf={teamName} subOf={teamSub} tooltipLines={teamTip} leagueOf={teamLeague}
       buildFields={buildFields} defaultX="xppm" defaultY="ppm" metricLabel="Raw value"
       colorModes={colorModes} colorOf={colorOf} legendBase={legendBase} scoreQuad={null} targetTiers={null}
-      groups={TEAM_GROUPS} noun="team" openLabel="Open team card" onSelect={onSelect} onClose={onClose} contextLabel={contextLabel}/>
+      groups={TEAM_GROUPS} noun="team" openLabel="Open team card" onSelect={onSelect} onClose={onClose} contextLabel={contextLabel}
+      badgeOf={teamBadge} indexMode/>
   );
 }

@@ -118,6 +118,16 @@ export const QUADRANT_THEMES = {
     },
     dot: { tr: '#D4A017', tl: '#94A3B8', br: '#94A3B8', bl: '#94A3B8' },
   },
+  // Four distinct quadrant tints (Team chart Percentile mode default): every corner gets
+  // its own colour, so a four-way style split (e.g. HIGH PACE + HIGH PRESS) reads at a glance.
+  four: {
+    label: 'Four colours',
+    bg: {
+      dark:  { tr: 'rgba(34,197,94,0.15)', tl: 'rgba(59,130,246,0.14)', br: 'rgba(245,158,11,0.14)', bl: 'rgba(244,63,94,0.12)' },
+      light: { tr: 'rgba(22,163,74,0.12)', tl: 'rgba(37,99,235,0.10)', br: 'rgba(217,119,6,0.11)', bl: 'rgba(225,29,72,0.09)' },
+    },
+    dot: { tr: '#22C55E', tl: '#3B82F6', br: '#F59E0B', bl: '#F43F5E' },
+  },
   none: {
     label: 'None',
     bg: {
@@ -128,4 +138,4 @@ export const QUADRANT_THEMES = {
     dot: { tr: '#16A34A', tl: '#D97706', br: '#D97706', bl: '#DC2626' },
   },
 };
-export const QUADRANT_THEME_ORDER = ['tealLilac', 'traffic', 'neutral', 'none'];
+export const QUADRANT_THEME_ORDER = ['tealLilac', 'traffic', 'neutral', 'four', 'none'];

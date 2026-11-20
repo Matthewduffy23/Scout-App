@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { scoreBandColor, formatMV, formatFoot, ROLE_KEY_LABELS, divColor, LEAGUE_STRENGTHS, scoreLabel, scoreToStars, starLabel, POSITION_ATTRIBUTES, playerHasAttribute, GBE_LEAGUE_BANDS, CURRENT_SEASON, latestSeasonDetail, POS_COLORS, metricLabel } from './constants';
+import { YOUTH_LEAGUES, scoreBandColor, formatMV, formatFoot, ROLE_KEY_LABELS, divColor, LEAGUE_STRENGTHS, scoreLabel, scoreToStars, starLabel, POSITION_ATTRIBUTES, playerHasAttribute, GBE_LEAGUE_BANDS, CURRENT_SEASON, latestSeasonDetail, POS_COLORS, metricLabel } from './constants';
 
 const APP_ROLES = {
   GK:  ['Shot Stopper GK','Ball Playing GK','Sweeper GK'],
@@ -1013,7 +1013,7 @@ function CareerTab({ player, players }) {
 }
 
 
-export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=false,styleScoreMode='career'}) {
+export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=false,styleScoreMode='career',seasonRankFor=null,rankMinMins=500}) {
   const isMobile=useIsMobile();
   // Duplicates build_players.py's SEASON_ORDER (backend source of truth) — keep in sync
   // each season transition, same as the lists in PlayerScoutingCard.js/QuickCard.js.
@@ -1261,7 +1261,7 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
                   <tbody>
                     {(()=>{const seen=new Set();return (player.allSeasonsSummary||[]).filter(s=>{const k=`${s.s}-${s.l}-${s.team}-${s.mins}`;if(seen.has(k))return false;seen.add(k);return true;}).sort((a,b)=>{const ai=SEASON_ORDER_ARR.indexOf(a.s);const bi=SEASON_ORDER_ARR.indexOf(b.s);return (ai===-1?99:ai)-(bi===-1?99:bi);}).map((s,i)=>(
                       <tr key={`${s.s}-${s.l}-${s.team}`} style={{background:i%2===0?'transparent':'#07090f'}}>
-                        <td style={{padding:'5px 8px',fontSize:11,color:'#e2e8f4',fontWeight:selSKey===s.s?700:400,borderBottom:'1px solid #0d1525'}}>{s.s}</td>
+                        <td style={{padding:'5px 8px',fontSize:11,color:'#e2e8f4',fontWeight:selSKey===s.s?700:400,borderBottom:'1px solid #0d1525',whiteSpace:'nowrap'}}>{s.s}{(()=>{const r=seasonRankFor&&(s.type==='standard'||!s.type)?seasonRankFor(player,s.s,s.l):null;return r?<span data-season-rank title={`League rank: ${r.rank} of ${r.n} in ${s.l} (same position group, ${s.s}, ${rankMinMins>0?`${YOUTH_LEAGUES.has(s.l)?100:rankMinMins}+ mins`:'any minutes'})`} style={{marginLeft:6,fontSize:9.5,fontWeight:400,color:'#64748b'}}>{r.rank}/{r.n}</span>:null;})()}</td>
                         <td style={{padding:'5px 8px',fontSize:11,color:'#94a3b8',borderBottom:'1px solid #0d1525'}}>{s.team}</td>
                         <td style={{padding:'5px 8px',fontSize:10,color:'#64748b',borderBottom:'1px solid #0d1525'}}>{(s.l||'').replace('England','Eng').replace('Scotland','Sco').replace(' ','')}</td>
                         <td style={{padding:'5px 8px',fontSize:11,color:'#e2e8f4',borderBottom:'1px solid #0d1525'}}>{s.m}</td>
