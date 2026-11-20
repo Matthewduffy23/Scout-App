@@ -80,7 +80,11 @@ const quadOf = (q, d) => q.names[(d.y >= q.ySplit ? 't' : 'b') + (d.x >= q.xSpli
 
 const scoreBucketKey = v => { const s = SCORE_DOT_STEPS.find(t => v >= t.min); return s ? 's'+s.min : 'slow'; };
 
-const PLAYER_LOWER_BETTER = new Set(['Goals Conceded', 'xG Against']);
+// GK conceded/against metrics: lower is better. Goals Conceded and xG Against percentiles
+// are already flipped in the data (high pct = fewer); Shots Against's are not (checked:
+// corr(pct, value) = +0.81 vs -0.81), so it is lower-better on a normal percentile.
+const PLAYER_LOWER_BETTER = new Set(['Goals Conceded', 'xG Against', 'Shots Against']);
+const PLAYER_PCT_FLIPPED = new Set(['Goals Conceded', 'xG Against']);
 
 // Is the table's score on the level-band scale? Not in raw/outlier mode, and not a
 // role score (role mode with all seasons): role scores are 0-100 relative to the
@@ -166,8 +170,8 @@ function buildFields(ctx) {
   for (const m of [...METRIC_OPTIONS, ...METRIC_OPTIONS_EXTRA]) {
     f.push({
       key:'m:'+m.key, group:`Per-90 metrics (${seasonTag})`, metric:true, short:m.label.replace(/ per 90$/, ''),
-      // GK Goals Conceded / xG Against: lower is better, and their percentiles are already flipped
-      ...(PLAYER_LOWER_BETTER.has(m.key) ? { lowerBetter:true, pctInverted:true } : {}),
+      // GK Goals Conceded / xG Against / Shots Against: lower is better (see PLAYER_LOWER_BETTER)
+      ...(PLAYER_LOWER_BETTER.has(m.key) ? { lowerBetter:true, pctInverted: PLAYER_PCT_FLIPPED.has(m.key) } : {}),
       label: ctx.metricMode === 'pct' ? `${m.label} (percentile)` : m.label,
       get: p => { const r = metricFromDetail(seasonDetailFor(p, ctx.seasonFilter, ctx.leagues), m.key); return r ? (ctx.metricMode === 'pct' ? r.pct : r.val) : null; },
       pctDomain: ctx.metricMode === 'pct',
@@ -1431,7 +1435,7 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
   let autoSubtitle;
   if (shortSubtitle) {
     // Custom Scatter: no CSV file name, no row count, no "Sample" wording.
-    autoSubtitle = `Custom Scatter "${sample.length} players"`;
+    autoSubtitle = `Custom Scatter "${sample.length} ${noun}s"`;
   } else if (genericSeasonLabel != null) {
     const seasonPart = (archActive && axesActive)
       ? (archetypeSeasonLabel === axesSeasonLabel ? capitalize1(archetypeSeasonLabel) : `Axes: ${seasonTag(axesSeasonLabel)} · Archetypes: ${seasonTag(archetypeSeasonLabel)}`)

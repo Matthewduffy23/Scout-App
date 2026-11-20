@@ -313,7 +313,7 @@ export default function CustomScatter({ players = [] }) {
         items={parsed.items} idOf={customId} nameOf={customName} subOf={customSub} tooltipLines={customTip}
         buildFields={buildFields} defaultX={defaultX} defaultY={defaultY} metricLabel="Value"
         colorModes={[]} colorOf={noColorOf} legendBase={noLegend}
-        scoreQuad={null} targetTiers={null} groups={[]} noun="team"
+        scoreQuad={null} targetTiers={null} groups={[]} noun={badgeMatches && badgeMatches.looksLikeTeams ? 'team' : 'player'}
         defaultMedianOn={false} defaultSample={parsed.rowCount}
         contextLabel={`${fileName} · ${parsed.rowCount} rows`} shortSubtitle
         badgeOf={badgeOf} badgeLabel="Show badges"
