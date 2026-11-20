@@ -200,13 +200,17 @@ function ticksOf(d) {
   for (let i = Math.ceil(d.lo / d.step - 1e-9); i * d.step <= d.hi + 1e-9; i++) out.push(+(i * d.step).toFixed(6));
   return out;
 }
+// field.neg: a lower-is-better axis drawn inverted in Raw mode — the plotted value is
+// -v so "better" is up/right, but every number shown is the real one.
 function tickText(v, field, step) {
+  if (field.neg) v = -v + 0; // + 0 turns -0 into 0
   if (field.fmt) return field.fmt(v);
   // as many decimals as the step itself has (0.25 -> 2), so 1.25 never shows as "1.3"
   const dp = Math.min(3, (String(+step.toFixed(6)).split('.')[1] || '').length);
   return v.toFixed(dp);
 }
 function valueText(v, field) {
+  if (field.neg) v = -v + 0;
   if (field.fmt) return field.fmt(v);
   return Number.isInteger(v) ? String(v) : v.toFixed(2);
 }
@@ -237,11 +241,13 @@ const overlaps = (a, b) => a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b
 // clear of the plot edge, every dot and every label already placed, and a leader
 // may not cross another dot or label. Labels are fed in priority order; a
 // `force` label (the highlighted player) always gets placed.
-function placeLabels(ctx, items, dots, bounds, taken, fs, budget = Infinity, extras = [0, 10*fs]) {
+function placeLabels(ctx, items, dots, bounds, taken, fs, budget = Infinity, extras = [0, 10*fs], dense = false) {
   const placed = [...taken];
   const DIRS = [[1,0],[-1,0],[0,-1],[0,1],[1,-1],[-1,-1],[1,1],[-1,1]];
+  // dense (badges): names keep a gap from each other, so two never read as one.
+  const gap = dense ? 5*fs : 0;
   const clear = b => b.x0 >= bounds.x0 && b.x1 <= bounds.x1 && b.y0 >= bounds.y0 && b.y1 <= bounds.y1
-    && !placed.some(q => overlaps(b, q))
+    && !placed.some(q => overlaps(gap ? { x0: b.x0 - gap, y0: b.y0 - gap/3, x1: b.x1 + gap, y1: b.y1 + gap/3 } : b, q))
     && !dots.some(o => o.x + o.r > b.x0 && o.x - o.r < b.x1 && o.y + o.r > b.y0 && o.y - o.r < b.y1);
   const leaderClear = (it, b) => {
     const tx = Math.max(b.x0, Math.min(it.x, b.x1)), ty = Math.max(b.y0, Math.min(it.y, b.y1));
@@ -252,14 +258,64 @@ function placeLabels(ctx, items, dots, bounds, taken, fs, budget = Infinity, ext
     }
     return true;
   };
+  // Badge mode ("dense"): every name gets placed and must clearly belong to its badge.
+  //  A) 16 directions x distances in small steps. Touching its badge (no leader) only if
+  //     no other badge is nearly as close to the name; anything further out gets a leader,
+  //     whose path may not cross another badge or name.
+  //  B) same spots, but the leader may pass over other badges.
+  //  C) last resort: the nearest free spot anywhere in the plot, with a leader.
+  const rectDist = (o, b) => Math.hypot(Math.max(b.x0 - o.x, 0, o.x - b.x1), Math.max(b.y0 - o.y, 0, o.y - b.y1));
+  const unambiguous = (it, b) => {
+    const own = rectDist(it, b) - it.r;
+    return !dots.some(o => (o.x !== it.x || o.y !== it.y) && rectDist(o, b) - o.r < own + 6*fs);
+  };
+  const leaderClearOfNames = (it, b) => {
+    const tx = Math.max(b.x0, Math.min(it.x, b.x1)), ty = Math.max(b.y0, Math.min(it.y, b.y1));
+    for (let k = 1; k < 12; k++) {
+      const px = it.x + (tx - it.x) * k / 12, py = it.y + (ty - it.y) * k / 12;
+      if (placed.some(q => px > q.x0 && px < q.x1 && py > q.y0 && py < q.y1)) return false;
+    }
+    return true;
+  };
+  const DIRS16 = Array.from({ length: 16 }, (_, a) => [Math.cos(a * Math.PI / 8), Math.sin(a * Math.PI / 8)]);
+  const boxAt = (it, dx, dy, extra, w, h) => {
+    const dist = it.r + 3*fs + extra, cx = it.x + dx*dist, cy = it.y + dy*dist;
+    const x0 = dx > 0.35 ? cx : dx < -0.35 ? cx - w : cx - w/2;
+    const y0 = dy > 0.35 ? cy : dy < -0.35 ? cy - h : cy - h/2;
+    return { x0, y0, x1: x0 + w, y1: y0 + h };
+  };
+  const placeDense = (it, w, h) => {
+    // near spots first (clean leader, then a leader over other crests), then far ones
+    for (const [strict, maxE] of [[true, 40*fs], [false, 40*fs], [true, 150*fs], [false, 150*fs]]) {
+      for (let extra = 0; extra <= maxE; extra += 5*fs) {
+        for (const [dx, dy] of DIRS16) {
+          const b = boxAt(it, dx, dy, extra, w, h);
+          if (!clear(b)) continue;
+          if (extra === 0) { if (unambiguous(it, b)) return { b, leader: false }; continue; }
+          if (strict ? leaderClear(it, b) : leaderClearOfNames(it, b)) return { b, leader: true };
+        }
+      }
+    }
+    const g = 6*fs, cand = [];
+    for (let y0 = bounds.y0; y0 + h <= bounds.y1; y0 += g) for (let x0 = bounds.x0; x0 + w <= bounds.x1; x0 += g) {
+      const b = { x0, y0, x1: x0 + w, y1: y0 + h };
+      cand.push([rectDist(it, b), b]);
+    }
+    cand.sort((a, c) => a[0] - c[0]);
+    for (const [, b] of cand) if (clear(b)) return { b, leader: true };
+    return null;
+  };
   const out = [];
   let named = 0;
-  for (const it of items) {
+  // dense: most crowded badges choose first (fewest free spots), highlighted ones still lead.
+  const crowd = it => dots.filter(o => (o.x - it.x) ** 2 + (o.y - it.y) ** 2 < (60*fs) ** 2).length;
+  const order = dense ? [...items].sort((a, b) => (b.hl ? 1 : 0) - (a.hl ? 1 : 0) || crowd(b) - crowd(a)) : items;
+  for (const it of order) {
     if (!it.force && named >= budget) continue;
     ctx.font = it.font;
     const w = ctx.measureText(it.text).width + 4, h = it.px * 1.3;
-    let choice = null;
-    for (const extra of extras) {
+    let choice = dense ? placeDense(it, w, h) : null;
+    if (!dense) for (const extra of extras) {
       for (const [dx, dy] of DIRS) {
         const k = dx && dy ? 0.75 : 1, dist = (it.r + 3*fs + extra) * k;
         const cx = it.x + dx*dist, cy = it.y + dy*dist;
@@ -561,9 +617,12 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
     ctx.beginPath(); ctx.moveTo(xS(v), pad.t + ph); ctx.lineTo(xS(v), pad.t + ph + 4*fs); ctx.stroke();
   }
   ctx.font = f(10.5, T.wAxisTitle); ctx.fillStyle = T.axisTitle; ctx.textAlign = 'center';
-  ctx.fillText(xf.label, pad.l + pw/2, pad.t + ph + 36*fs);
+  // Inverted axis: note + arrow towards "better". The Y title is drawn rotated -90deg, so
+  // its arrow is written as → and shows as ↑ on the chart.
+  const axisTitle = af => (af.neg ? `${af.label} (lower = ${af.lowerNote || 'better'}) →` : af.label);
+  ctx.fillText(axisTitle(xf), pad.l + pw/2, pad.t + ph + 36*fs);
   ctx.save(); ctx.translate(pad.l - 44*fs, pad.t + ph/2); ctx.rotate(-Math.PI/2);
-  ctx.fillText(yf.label, 0, 0); ctx.restore();
+  ctx.fillText(axisTitle(yf), 0, 0); ctx.restore();
 
   // ── Dots ─────────────────────────────────────────────────────────────────
   // d.kind (Archetype colour mode only — undefined everywhere else, so this
@@ -697,8 +756,8 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
       }
     }
   }
-  // Badges: a third, further-out ring of spots (with a leader line) so crowded crests still get names.
-  const labels = placeLabels(ctx, items, dots, bounds, taken, fs, budget, badges ? [0, 8*fs, 20*fs, 34*fs] : undefined);
+  // Badges: dense placement — every crest named, unambiguously (see placeLabels).
+  const labels = placeLabels(ctx, items, dots, bounds, taken, fs, budget, undefined, !!badges);
   L.labels = labels; L.dots = dots; L.bounds = bounds; L.taken = taken;
   ctx.lineJoin = 'round'; ctx.textAlign = 'left';
   for (const lb of labels) {
@@ -802,11 +861,25 @@ const sidePhrase = (f, up) => {
 // the pool, lower-is-better metrics flipped so higher always reads better / more
 // intense. hi/lo = how the top/bottom half of the axis is named in quadrant labels.
 const INDEX_SPECIAL = { 'mg:Defence:PPDA': { label: 'Pressing Index (PPDA)', short: 'Pressing', hi: 'High press', lo: 'Low press' } };
+// THE lower-is-better test — Raw invert, Percentile flip and custom-metric parts all use it.
+export const isLowerBetter = f => !!f.lowerBetter && !f.neutral;
+// [top/right phrase, bottom/left phrase] for an axis as drawn (inverted or not).
+export function axisSides(f) {
+  if (f.hiLo) return f.hiLo; // Percentile / custom: up = high index
+  const m = indexMeta(f), lb = isLowerBetter(f);
+  const more = lb ? m.lo : m.hi, less = lb ? m.hi : m.lo;
+  return upIsMore(f) ? [more, less] : [less, more];
+}
+// Team chart quadrant names: always both axes, Y first, e.g. "HIGH PRESS + LOW XG AGAINST".
+export function bothAxesNames(xf, yf) {
+  const [yu, yd] = axisSides(yf), [xr, xl] = axisSides(xf);
+  return { tr: `${yu} + ${xr}`, tl: `${yu} + ${xl}`, br: `${yd} + ${xr}`, bl: `${yd} + ${xl}` };
+}
 export function indexMeta(f) {
   if (INDEX_SPECIAL[f.key]) return INDEX_SPECIAL[f.key];
   const base = baseName(f);
   if (f.words) return { label: `${base} Index`, short: base, hi: f.words[0], lo: f.words[1] };
-  return f.lowerBetter && !f.neutral
+  return isLowerBetter(f)
     ? { label: `${base} Index (lower = higher)`, short: base, hi: `Low ${base}`, lo: `High ${base}` }
     : { label: `${base} Index`, short: base, hi: `High ${base}`, lo: `Low ${base}` };
 }
@@ -833,7 +906,7 @@ export function percentilePool(pool, scopeOf) {
     };
     cache.set(key, fn); return fn;
   };
-  return { field: f => make('f:' + f.key, (p, forced) => f.get(p, forced), !!f.lowerBetter && !f.neutral), make };
+  return { field: f => make('f:' + f.key, (p, forced) => f.get(p, forced), isLowerBetter(f)), make };
 }
 
 // A saved custom metric {id, name, parts:[{key, w}]} as an axis field: each part ->
@@ -1046,6 +1119,7 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
   const [badgeSize, setBadgeSize] = useState('s');
   const [badgeTick, setBadgeTick] = useState(0);
   const [valueMode, setValueMode] = useState('raw'); // 'raw' | 'pct'
+  const [invertLB, setInvertLB] = useState(true); // Raw mode: lower-is-better axes drawn inverted (better = up/right)
   const [pctScope, setPctScope] = useState('chart'); // 'chart' = every item plotted | 'league' = within own league
   const [customMetrics, setCustomMetrics] = useState(() => (indexMode ? readCustomMetrics(customMetricsKey) : []));
   useEffect(() => { if (indexMode) { try { window.localStorage.setItem(customMetricsKey, JSON.stringify(customMetrics)); } catch (e) { /* private mode etc. */ } } }, [indexMode, customMetricsKey, customMetrics]);
@@ -1078,8 +1152,16 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
     return { ...f, label: m.label, short: m.short, hiLo: [m.hi, m.lo], pctDomain: true, scoreScale: false, fmt: roundFmt,
       lowerBetter: false, pctInverted: false, invertedDirection: false, words: undefined, index: true, get: pctFor.field(f) };
   }, [isIndex, pctFor]);
-  const xf = useMemo(() => toIndex(pickField(xKey, defaultX)), [toIndex, fields, xKey, defaultX]);
-  const yf = useMemo(() => toIndex(pickField(yKey, defaultY)), [toIndex, fields, yKey, defaultY]);
+  // Raw mode, "Invert lower-is-better": plot -value (so better = up/right) and show the
+  // real numbers (field.neg). Same isLowerBetter list as Percentile and custom metrics.
+  const toAxis = useCallback(f => {
+    if (isIndex) return toIndex(f);
+    if (!indexMode || !invertLB || f.pctDomain || !isLowerBetter(f)) return f;
+    return { ...f, neg: true, invertedDirection: true, lowerNote: f.key === 'mg:Defence:PPDA' ? 'more intense' : 'better',
+      get: (p, forced) => { const v = f.get(p, forced); return Number.isFinite(v) ? -v : v; } };
+  }, [isIndex, toIndex, indexMode, invertLB]);
+  const xf = useMemo(() => toAxis(pickField(xKey, defaultX)), [toAxis, fields, xKey, defaultX]);
+  const yf = useMemo(() => toAxis(pickField(yKey, defaultY)), [toAxis, fields, yKey, defaultY]);
   const cf = pickField(colorKey, defaultY);
   // Percentile mode: four coloured quadrants, so switch to the four-colour theme on entry.
   useEffect(() => { if (isIndex) setQuadThemeKey('four'); }, [isIndex]);
@@ -1183,13 +1265,12 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
   // Defensive — fixed 50/50 split, not scoreScale) can suppress the median
   // lines too, the same way the built-in current/potential quadrant already
   // does via the scoreScale check below.
-  // Percentile mode: fixed 50/50 split, each corner named from both axes (X first),
-  // e.g. "HIGH PACE + HIGH PRESS".
+  // Percentile mode: fixed 50/50 split, each corner named from both axes (Y first),
+  // e.g. "HIGH PRESS + HIGH PACE".
   const indexQuad = useMemo(() => {
     if (!isIndex) return null;
-    const [xh, xl] = xf.hiLo || [`High ${baseName(xf)}`, `Low ${baseName(xf)}`], [yh, yl] = yf.hiLo || [`High ${baseName(yf)}`, `Low ${baseName(yf)}`];
-    const names = { tr: `${xh} + ${yh}`, tl: `${xl} + ${yh}`, br: `${xh} + ${yl}`, bl: `${xl} + ${yl}` };
-    return { xSplit: 50, ySplit: 50, names, alt: { tr: 'High both', tl: yh, br: xh, bl: 'Low both' }, tint: { tr: 'best', br: 'x', tl: 'y', bl: null } };
+    const names = bothAxesNames(xf, yf);
+    return { xSplit: 50, ySplit: 50, names, alt: { tr: 'High both', tl: axisSides(yf)[0], br: axisSides(xf)[0], bl: 'Low both' }, tint: { tr: 'best', br: 'x', tl: 'y', bl: null } };
   }, [isIndex, xf, yf]);
   const sQuad = useMemo(() => indexQuad || (scoreQuad ? scoreQuad(xf, yf, topPtsXY, targetMin) : null), [indexQuad, scoreQuad, xf, yf, topPtsXY, targetMin]);
   // Medians of the PLOTTED items, on each non-score axis — of whatever the axis
@@ -1202,7 +1283,13 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
     const mx = xf.scoreScale ? null : medianOf(topPtsXY.map(d => d.x)), my = yf.scoreScale ? null : medianOf(topPtsXY.map(d => d.y));
     return { x: mx, y: my, xText: mx == null ? '' : valueText(mx, xf), yText: my == null ? '' : valueText(my, yf) };
   }, [medianOn, colorBy, topPtsXY, xf, yf, sQuad]);
-  const autoQuad = sQuad || (median && median.x != null && median.y != null ? medianQuadrant(xf, yf, median.x, median.y) : null);
+  // Team chart (indexMode): median quadrants name both axes too, same wording as Percentile.
+  const autoQuad = useMemo(() => {
+    if (sQuad) return sQuad;
+    if (!median || median.x == null || median.y == null) return null;
+    const mq = medianQuadrant(xf, yf, median.x, median.y);
+    return indexMode ? { ...mq, names: bothAxesNames(xf, yf) } : mq;
+  }, [sQuad, median, xf, yf, indexMode]);
   useEffect(() => { setQuadNames({}); }, [xKey, yKey]);
   const quad = useMemo(() => {
     if (!autoQuad) return null;
@@ -1584,6 +1671,10 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
             </div>
           </label>
         )}
+        {indexMode && !isIndex && (
+          <button style={btn(invertLB)} aria-pressed={invertLB} onClick={() => setInvertLB(v => !v)}
+            title="Draw lower-is-better axes (PPDA, xG Against, goals against, shots against, loss %) reversed, so better is always up / right. Numbers stay real.">Invert lower-is-better</button>
+        )}
         {indexMode && (isIndex || xf.custom || yf.custom) && (
           <label style={col}><span style={lbl}>Percentile pool</span>
             <div style={{ display:'flex', gap:0 }}>
@@ -1714,7 +1805,7 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
                 <span key={i} style={{ display:'flex', gap:3, alignItems:'center' }}>
                   <select aria-label={`Custom metric part ${i + 1}`} style={sel} value={p.key} onChange={e => setPart(i, { key: e.target.value })}>
                     <option value="">Pick metric…</option>
-                    {groupsOf.map(g => <optgroup key={g} label={g}>{partOpts.filter(f => f.group === g).map(f => <option key={f.key} value={f.key}>{f.label}{f.lowerBetter && !f.neutral ? ' (flipped)' : ''}</option>)}</optgroup>)}
+                    {groupsOf.map(g => <optgroup key={g} label={g}>{partOpts.filter(f => f.group === g).map(f => <option key={f.key} value={f.key}>{f.label}{isLowerBetter(f) ? ' (flipped)' : ''}</option>)}</optgroup>)}
                   </select>
                   <input aria-label={`Custom metric weight ${i + 1}`} type="number" min={0.1} step={0.5} value={p.w} title="Weight (default equal)" onChange={e => setPart(i, { w: e.target.value })} style={{ ...sel, width:52 }}/>
                   {cmDraft.parts.length > 2 && <button aria-label={`Remove part ${i + 1}`} onClick={() => setCmDraft(d => ({ ...d, parts: d.parts.filter((_, j) => j !== i) }))} style={{ ...btn(false), padding:'3px 7px' }}>✕</button>}
