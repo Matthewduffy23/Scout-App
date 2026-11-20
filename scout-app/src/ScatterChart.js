@@ -241,8 +241,11 @@ const overlaps = (a, b) => a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b
 // clear of the plot edge, every dot and every label already placed, and a leader
 // may not cross another dot or label. Labels are fed in priority order; a
 // `force` label (the highlighted player) always gets placed.
-function placeLabels(ctx, items, dots, bounds, taken, fs, budget = Infinity, extras = [0, 10*fs], dense = false) {
+// leaders=false ("Label lines" Off): no leader lines at all — a name is shown only
+// when it can sit right beside its own dot/badge (dense: with no other badge as close).
+function placeLabels(ctx, items, dots, bounds, taken, fs, budget = Infinity, extras = [0, 10*fs], dense = false, leaders = true) {
   const placed = [...taken];
+  if (!leaders) extras = [0];
   const DIRS = [[1,0],[-1,0],[0,-1],[0,1],[1,-1],[-1,-1],[1,1],[-1,1]];
   // dense (badges): names keep a gap from each other, so two never read as one.
   const gap = dense ? 5*fs : 0;
@@ -284,9 +287,9 @@ function placeLabels(ctx, items, dots, bounds, taken, fs, budget = Infinity, ext
     const y0 = dy > 0.35 ? cy : dy < -0.35 ? cy - h : cy - h/2;
     return { x0, y0, x1: x0 + w, y1: y0 + h };
   };
-  const placeDense = (it, w, h) => {
+  const placeDense = (it, w, h, adjOnly) => {
     // near spots first (clean leader, then a leader over other crests), then far ones
-    for (const [strict, maxE] of [[true, 40*fs], [false, 40*fs], [true, 150*fs], [false, 150*fs]]) {
+    for (const [strict, maxE] of leaders && !adjOnly ? [[true, 40*fs], [false, 40*fs], [true, 150*fs], [false, 150*fs]] : [[true, 0]]) {
       for (let extra = 0; extra <= maxE; extra += 5*fs) {
         for (const [dx, dy] of DIRS16) {
           const b = boxAt(it, dx, dy, extra, w, h);
@@ -296,6 +299,7 @@ function placeLabels(ctx, items, dots, bounds, taken, fs, budget = Infinity, ext
         }
       }
     }
+    if (!leaders || adjOnly) return null;
     const g = 6*fs, cand = [];
     for (let y0 = bounds.y0; y0 + h <= bounds.y1; y0 += g) for (let x0 = bounds.x0; x0 + w <= bounds.x1; x0 += g) {
       const b = { x0, y0, x1: x0 + w, y1: y0 + h };
@@ -310,11 +314,17 @@ function placeLabels(ctx, items, dots, bounds, taken, fs, budget = Infinity, ext
   // dense: most crowded badges choose first (fewest free spots), highlighted ones still lead.
   const crowd = it => dots.filter(o => (o.x - it.x) ** 2 + (o.y - it.y) ** 2 < (60*fs) ** 2).length;
   const order = dense ? [...items].sort((a, b) => (b.hl ? 1 : 0) - (a.hl ? 1 : 0) || crowd(b) - crowd(a)) : items;
-  for (const it of order) {
+  // dense + leaders: two rounds — first every badge that can have its name right beside it
+  // takes that spot, then the rest get leaders into what's left (so a leader name never
+  // takes the only spot beside an isolated badge).
+  const done = new Set();
+  for (const round of dense && leaders ? [1, 2] : [0]) for (const it of order) {
+    if (done.has(it)) continue;
     if (!it.force && named >= budget) continue;
     ctx.font = it.font;
     const w = ctx.measureText(it.text).width + 4, h = it.px * 1.3;
-    let choice = dense ? placeDense(it, w, h) : null;
+    let choice = dense ? placeDense(it, w, h, round === 1) : null;
+    if (round === 1 && !choice) continue;
     if (!dense) for (const extra of extras) {
       for (const [dx, dy] of DIRS) {
         const k = dx && dy ? 0.75 : 1, dist = (it.r + 3*fs + extra) * k;
@@ -322,15 +332,16 @@ function placeLabels(ctx, items, dots, bounds, taken, fs, budget = Infinity, ext
         const x0 = dx > 0 ? cx : dx < 0 ? cx - w : cx - w/2;
         const y0 = dy > 0 ? cy : dy < 0 ? cy - h : cy - h/2;
         const b = { x0, y0, x1: x0 + w, y1: y0 + h };
-        if (clear(b) && (!extra || leaderClear(it, b))) { choice = { b, leader: extra > 0 }; break; }
+        if (clear(b) && (extra ? leaderClear(it, b) : (leaders || unambiguous(it, b)))) { choice = { b, leader: extra > 0 }; break; }
       }
       if (choice) break;
     }
     if (!choice && it.force) {
       const x0 = Math.min(it.x + it.r + 3*fs, bounds.x1 - w), y0 = Math.max(bounds.y0, it.y - h - it.r);
-      choice = { b: { x0, y0, x1: x0 + w, y1: y0 + h }, leader: true };
+      choice = { b: { x0, y0, x1: x0 + w, y1: y0 + h }, leader: leaders };
     }
     if (!choice) continue;
+    done.add(it);
     if (!it.force) named++;
     placed.push(choice.b);
     if (choice.leader) { // reserve the leader's path so later names can't sit on it
@@ -419,7 +430,7 @@ function pctIn(sorted, v) {
 }
 
 export function drawScatter(canvas, W, H, dpr, forExport, o) {
-  const { pts, xf, yf, hidden, hoverId, highlightIds = [], showNames, soloLabel, title, subtitle, footer, legend, quad: Q, median, group, groupFullLabels, highlightStyle = 'full', theme: themeName = 'dark', quadThemeKey = 'tealLilac', labelledKeys, fadeOthers, showCounts = true, badges = null } = o;
+  const { pts, xf, yf, hidden, hoverId, highlightIds = [], showNames, soloLabel, title, subtitle, footer, legend, quad: Q, median, group, groupFullLabels, highlightStyle = 'full', theme: themeName = 'dark', quadThemeKey = 'tealLilac', labelledKeys, fadeOthers, showCounts = true, badges = null, leaders = true } = o;
   const T = THEMES[themeName];
   const FONT = forExport ? 'Montserrat, Inter, sans-serif' : 'Inter, sans-serif';
   canvas.width = W*dpr; canvas.height = H*dpr;
@@ -757,7 +768,7 @@ export function drawScatter(canvas, W, H, dpr, forExport, o) {
     }
   }
   // Badges: dense placement — every crest named, unambiguously (see placeLabels).
-  const labels = placeLabels(ctx, items, dots, bounds, taken, fs, budget, undefined, !!badges);
+  const labels = placeLabels(ctx, items, dots, bounds, taken, fs, budget, undefined, !!badges, leaders);
   L.labels = labels; L.dots = dots; L.bounds = bounds; L.taken = taken;
   ctx.lineJoin = 'round'; ctx.textAlign = 'left';
   for (const lb of labels) {
@@ -1041,7 +1052,7 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
   metricLabel = 'Per-90 value', colorModes, colorOf: colorOfMode, legendBase, scoreQuad, targetTiers, groups = [], leagueOf,
   noun = 'player', openLabel = 'Open profile', onSelect, onClose, contextLabel, defaultMedianOn = true, defaultSample = 50, archetypeSeasonLabel,
   axesSeasonLabel, showAxesModeToggle, axesMode, setAxesMode, showArchetypeDetailToggle, archetypeDetail, setArchetypeDetail, genericSeasonLabel,
-  showLeaning, setShowLeaning, shortSubtitle = false, badgeOf = null, indexMode = false, customMetricsKey = CUSTOM_DEFAULT_KEY }) {
+  showLeaning, setShowLeaning, shortSubtitle = false, badgeOf = null, indexMode = false, customMetricsKey = CUSTOM_DEFAULT_KEY, badgeLabel = 'Badges', badgeNote = null }) {
   // searchPool: an unfiltered roster to search for the "ignores filters" add — falls
   // back to items (no override) when the caller doesn't have one (e.g. Team Index).
   const pool = searchPool && searchPool.length ? searchPool : items;
@@ -1116,6 +1127,7 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
   // Badges (needs badgeOf), Raw/Percentile values, pool scope and custom combined metrics
   // (indexMode) — Team chart only; the player chart passes none of these props.
   const [badgeOn, setBadgeOn] = useState(false);
+  const [labelLines, setLabelLines] = useState(true); // leader lines from names to dots/badges
   const [badgeSize, setBadgeSize] = useState('s');
   const [badgeTick, setBadgeTick] = useState(0);
   const [valueMode, setValueMode] = useState('raw'); // 'raw' | 'pct'
@@ -1456,11 +1468,11 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
     return () => { live = false; if (timer) clearTimeout(timer); };
   }, [useBadges, drawPts]);
   const drawOpts = { pts: drawPts, xf, yf, hidden, highlightIds, showNames, soloLabel, quad, median, group: !!inGroup, groupFullLabels, highlightStyle, labelledKeys: archLabelledKeys, fadeOthers, showCounts, quadThemeKey,
-    badges: useBadges ? { size: BADGE_SIZES[badgeSize], key: badgeSize } : null };
+    badges: useBadges ? { size: BADGE_SIZES[badgeSize], key: badgeSize } : null, leaders: labelLines };
   useEffect(() => {
     if (!canvasRef.current) return;
     layoutRef.current = drawScatter(canvasRef.current, width, H, window.devicePixelRatio || 1, false, { ...drawOpts, hoverId: hover?.d.id });
-  }, [drawPts, xf, yf, hidden, hover, highlightIds, showNames, soloLabel, quad, median, inGroup, groupFullLabels, highlightStyle, archLabelledKeys, fadeOthers, width, H, quadThemeKey, useBadges, badgeSize, badgeTick]);
+  }, [drawPts, xf, yf, hidden, hover, highlightIds, showNames, soloLabel, quad, median, inGroup, groupFullLabels, highlightStyle, archLabelledKeys, fadeOthers, width, H, quadThemeKey, useBadges, badgeSize, badgeTick, labelLines]);
 
   useEffect(() => {
     if (!highlightIds.length) return;
@@ -1688,17 +1700,20 @@ export function ScatterView({ items, searchPool, idOf, nameOf, subOf, tooltipLin
         {badgeOf && (
           <label style={col}><span style={lbl}>Badges</span>
             <div style={{ display:'flex', gap:3 }}>
-              <button style={btn(badgeOn)} aria-pressed={badgeOn} onClick={() => setBadgeOn(v => !v)} title="Show club badges instead of dots (no badge on file = dot)">Badges</button>
+              <button style={btn(badgeOn)} aria-pressed={badgeOn} onClick={() => setBadgeOn(v => !v)} title="Show club badges instead of dots (no badge on file = dot)">{badgeLabel}</button>
               {badgeOn && (
                 <select aria-label="Badge size" style={{ ...sel, width:84 }} value={badgeSize} onChange={e => setBadgeSize(e.target.value)}>
                   <option value="s">Small</option><option value="m">Medium</option><option value="l">Large</option>
                 </select>
               )}
+              {badgeOn && badgeNote}
             </div>
           </label>
         )}
         {indexMode && <button style={btn(cmOpen)} aria-pressed={cmOpen} onClick={() => setCmOpen(v => !v)} title="Build a combined metric from 2+ metrics">Custom metric{customMetrics.length ? ` (${customMetrics.length})` : ''}</button>}
         <button style={btn(showNames)} onClick={() => setShowNames(s => !s)}>Names</button>
+        <button style={btn(labelLines)} aria-pressed={labelLines} aria-label="Label lines" onClick={() => setLabelLines(v => !v)}
+          title="On: a name that can't sit beside its dot/badge gets a line to it. Off: no lines — such names are left off, so nothing floats away from its own dot.">Label lines: {labelLines ? 'On' : 'Off'}</button>
         {inGroup && <button style={{ ...btn(groupFullLabels), opacity: showNames ? 1 : 0.5 }} aria-pressed={groupFullLabels} disabled={!showNames}
           title={`Label every ${noun} on the plot, not just ${groupLabel || 'the group'} — group names always keep their spot over these`}
           onClick={() => setGroupFullLabels(v => !v)}>Label everyone</button>}

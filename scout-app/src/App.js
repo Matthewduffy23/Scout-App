@@ -780,7 +780,7 @@ export default function App(){
         {!isMobile&&<div style={{marginLeft:'auto',fontSize:9,color:'#94a3b8',background:'#0d1220',border:'1px solid #1e2d45',borderRadius:4,padding:'2px 6px'}}>{all.length.toLocaleString()} players</div>}
       </div>
 
-      {activeTab==='team'?<TeamIndex players={all}/>:activeTab==='club'?<ClubTool players={all}/>:activeTab==='custom'?<CustomScatter/>:(<div style={T.layout}>
+      {activeTab==='team'?<TeamIndex players={all}/>:activeTab==='club'?<ClubTool players={all}/>:activeTab==='custom'?<CustomScatter players={all}/>:(<div style={T.layout}>
         {/* Mobile: the drawer is only mounted while open, so its inputs can't steal
             focus or be tab-reachable behind the scrim. Desktop mounts as before. */}
         {isMobile&&filtersOpen&&<div style={T.scrim} onClick={()=>setFiltersOpen(false)}/>}
