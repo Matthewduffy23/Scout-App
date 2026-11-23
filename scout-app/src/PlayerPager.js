@@ -34,7 +34,7 @@ import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   MONTSERRAT_EMBED_CSS, leagueDisplayName, leagueLogo, leagueFlag, teamCrest,
 } from './cardAssets';
-import { formatMV, formatFoot, seasonXgXa, defaultSeasonLeague, seasonDetailExact } from './constants';
+import { formatMV, formatFoot, seasonXgXa, defaultSeasonLeague, seasonDetailExact, seasonTeamContext } from './constants';
 import { useIsMobile, deliverPng, photoUrl } from './utils';
 import {
   scoreWheel, headerInk, preloadImages, fitNameSize, pillHtml,
@@ -340,8 +340,7 @@ function teamContextBody(w, h, player, posKey, sd) {
   // Season context if the pipeline stored any for this season, else the player's
   // own. A 2025 export was describing the 2026 club otherwise — and for a player
   // who moved, that is a different club entirely.
-  const tc = (sd && sd.teamContext && Object.keys(sd.teamContext).length)
-    ? sd.teamContext : (player.teamContext || {});
+  const tc = seasonTeamContext(player, sd);
   const n = cats.filter(c => tc[c] != null && TEAM_CONTEXT_BANDS[c]).length;
   if (!n) {
     return `<div style="position:absolute;inset:0;display:flex;align-items:center;

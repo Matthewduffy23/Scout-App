@@ -1,6 +1,6 @@
 // QuickCard v69 - Heat-style pitch option (Player Pager pitch + heatmap upload); Team Context follows selected season.
 import React, { useState, useMemo } from 'react';
-import { scoreLabel, formatFoot, formatMV, GBE_LEAGUE_BANDS, METRIC_DISPLAY, seasonXgXa, defaultSeasonLeague, seasonDetailExact, CURRENT_SEASON, seasonBucketMatch, hasMetrics, leagueShortCode } from './constants';
+import { scoreLabel, formatFoot, formatMV, GBE_LEAGUE_BANDS, METRIC_DISPLAY, seasonXgXa, defaultSeasonLeague, seasonDetailExact, CURRENT_SEASON, seasonBucketMatch, hasMetrics, leagueShortCode, seasonTeamContext } from './constants';
 import { useIsMobile, deliverPng } from './utils';
 
 // Player photo naming lives in photoName.js — a character-for-character port of
@@ -1176,8 +1176,7 @@ export function buildQuickCardElement(player, players, manual = {}) {
   // player's current-club context is only the fallback for rows the pipeline
   // didn't store one for. Without this, a 24-25 card described the 25-26 club —
   // and for a player who moved, that's a different club entirely.
-  const tcSource = (sd.teamContext && Object.keys(sd.teamContext).length)
-    ? sd.teamContext : (player.teamContext || {});
+  const tcSource = seasonTeamContext(player, sd);
 
   // The heat-style pitch (positionPitchSvg) collapses LCB/CB/RCB to a single CB
   // slot, so the classic picker's LCB/RCB choices are mapped onto CB here — the

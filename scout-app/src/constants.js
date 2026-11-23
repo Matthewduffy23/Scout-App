@@ -288,6 +288,12 @@ export function seasonDetailExact(player,season,league){
   const d=player.seasonsDetail?.[season];
   return d&&(!league||d.league===league)?d:null;
 }
+// Team Context card scores (Quality, Attack, Possession, Pressing, ...) for one season row:
+// the row's stored teamContext, else the player's own. The one rule the Quick Card,
+// Player Pager and the sidebar Team context filter all use.
+export function seasonTeamContext(player,sd){
+  return (sd&&sd.teamContext&&Object.keys(sd.teamContext).length)?sd.teamContext:(player.teamContext||{});
+}
 export function seasonEntryFor(player,row){
   if(!row) return null;
   const e=(player.seasonsDetailAll||[]).find(x=>x.season===row.s&&x.league===row.l);

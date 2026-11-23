@@ -6,6 +6,28 @@ import TeamIndex from './TeamIndex';
 import CustomScatter from './CustomScatter';
 import ScatterChart from './ScatterChart';
 import { buildLeagueRanks, leagueRankFor, rankTag, RANK_TIERS, seasonBucket } from './leagueRank';
+import { TEAM_CTX_CATS, buildTeamContextPools, teamContextPcts, passesTeamContext } from './teamContextFilter';
+
+// Team context filter: one dual-thumb percentile slider (0-100) per category.
+const TC_CSS = `.tc-dual{position:relative;height:18px}
+.tc-dual input{position:absolute;left:0;top:0;width:100%;height:18px;margin:0;pointer-events:none;background:none;-webkit-appearance:none;appearance:none}
+.tc-dual input::-webkit-slider-runnable-track{background:transparent;height:18px}
+.tc-dual input::-moz-range-track{background:transparent}
+.tc-dual input::-webkit-slider-thumb{pointer-events:auto;-webkit-appearance:none;width:13px;height:13px;margin-top:2.5px;border-radius:50%;background:#3b7de8;border:2px solid #07090f;cursor:pointer}
+.tc-dual input::-moz-range-thumb{pointer-events:auto;width:10px;height:10px;border-radius:50%;background:#3b7de8;border:2px solid #07090f;cursor:pointer}
+.tc-dual.off input::-webkit-slider-thumb{background:#475569}
+.tc-dual.off input::-moz-range-thumb{background:#475569}`;
+function TcRange({cat,min,max,on,onChange}){
+  return (
+    <div className={`tc-dual${on?'':' off'}`}>
+      <div style={{position:'absolute',left:0,right:0,top:7,height:4,borderRadius:2,background:'#1e2d45'}}/>
+      <div style={{position:'absolute',left:`${min}%`,width:`${Math.max(0,max-min)}%`,top:7,height:4,borderRadius:2,background:on?'#3b7de8':'#334155'}}/>
+      <input type="range" aria-label={`${cat} percentile min`} min={0} max={100} step={5} value={min} onChange={e=>onChange(Math.min(Number(e.target.value),max),max)}/>
+      <input type="range" aria-label={`${cat} percentile max`} min={0} max={100} step={5} value={max} onChange={e=>onChange(min,Math.max(Number(e.target.value),min))}/>
+    </div>
+  );
+}
+const tcRangeText=(min,max)=>min<=0&&max>=100?'any':min<=0?`bottom ${max}%`:max>=100?`top ${100-min}%`:`${min}–${max} pct`;
 import { Photo, Crest, photoUrl, useIsMobile, deliverJson } from './utils';
 import { scoreBandColor, formatMV, formatFoot, ROLE_KEY_LABELS, ROLES_BY_KEY, POSITION_ATTRIBUTES, playerHasAttribute, ALL_LEAGUES, DEFAULT_LEAGUES, HIDDEN_LEAGUES, YOUTH_LEAGUES, PRESET_LEAGUES, COUNTRY_TO_REGION, GBE_LEAGUE_BANDS, leagueToRegion, leagueToBand, scoreLabel, scoreToStars, promotionBadge, ALL_SEASONS, CURRENT_SEASON, PREV_SEASON, seasonRoleKeyFor, seasonBucketMatch, seasonDetailFor, seasonRowFor, seasonEntryFor, seasonClubFor, leagueSeasonMatch, seasonLeagueFor, metricFromDetail, METRIC_OPTIONS, LEAGUE_STRENGTHS, CAREER_POSITION_GROUPS, styleRolesFor, styleScoreDisplay } from './constants';
 
@@ -419,6 +441,12 @@ export default function App(){
   const [rawMode,setRawMode]=useState(false); // no league weight
   const [outlierMode,setOutlierMode]=useState(false); // z-score, within-league only
   const [onlyElite,setOnlyElite]=useState(false); // only elite in their division
+  // Team context filter (teamContextFilter.js): percentile ranges on the Team Context
+  // card scores of the club the player played for in the season shown.
+  const [tcOn,setTcOn]=useState(false);
+  const [tcPool,setTcPool]=useState('league'); // 'league' = within own league-season, 'all' = all teams that season
+  const [tcFilters,setTcFilters]=useState(()=>TEAM_CTX_CATS.map(cat=>({cat,on:false,min:0,max:100})));
+  const setTcFilter=(i,patch)=>{setTcFilters(fs=>fs.map((f,j)=>j===i?{...f,...patch}:f));setPage(0);};
   const [rankTier,setRankTier]=useState('all'); // 'all'|'top20'|'top10' — League rank filter, see leagueRank.js
   const [versatileOnly,setVersatileOnly]=useState(false); // played 5+ distinct positions across career
   const [careerPosFilters,setCareerPosFilters]=useState(new Set()); // display-group labels from CAREER_POSITION_GROUPS; AND between selections, each matched against the player's whole career
@@ -574,10 +602,12 @@ export default function App(){
 
   // Min Score is checked LAST so an empty table can say how many players match
   // everything except it ("N players match but score below Min Score").
+  const tcActive=tcOn&&tcFilters.some(f=>f.on);
+  const tcPools=useMemo(()=>tcActive?buildTeamContextPools(all):null,[tcActive,all]);
   const filterRes=useMemo(()=>{
     const _norm=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
     const q=_norm(search.trim());
-    let below=0;
+    let below=0,tcRemoved=0;
     const list=all.filter(p=>{
       if(q&&!_norm(p.name).includes(q)&&!_norm(p.team).includes(q)) return false;
       // RecentOnly: skip if no recent data, BUT allow all if a specific season is selected
@@ -717,12 +747,15 @@ export default function App(){
         if(!m) return false; // no data for this metric in the selected season -> can't meet the filter
         if(m.pct<mf.min||m.pct>mf.max) return false;
       }
+      // Team context: checked after every other filter, so tcRemoved = players who
+      // would show (Min Score included) but fail one of the active ranges.
+      if(tcActive&&!passesTeamContext(teamContextPcts(tcPools,p,seasonFilter,leagues,tcPool),tcFilters)){if(!scoreLow)tcRemoved++;return false;}
       if(scoreLow){below++;return false;}
       return true;
     });
-    return {list,below};
-  },[all,search,pos,leagues,ageMin,ageMax,heightMin,heightMax,foot,minScore,minSeas,showMvFilter,mvMax,showContractFilter,contractBefore,roleFilter,roleScoreMin,seasonFilter,metricFilters,xValueFilter,onlyElite,versatileOnly,getDisplayScore,recentOnly,showXValueFilter,xValueMin,xValueMax,attrFilters,minMins,showCareerMinsFilter,careerMinMins,currentLeagueOnly,playedSeasons,potentialMin,lsMin,lsMax,escOnly,gbeMin,natFilter,softMode,roleFilters,shortlist,showShortlist,notPlayingOnly,domesticOnly,internationalOnly,tierFilters,sideFilter,rk,careerPosFilters,careerPosTokenGroups,styleFilters,styleScoreMode,rankTier,rankOf]);
-  const filtered=filterRes.list, belowMinScore=filterRes.below;
+    return {list,below,tcRemoved};
+  },[tcActive,tcPools,tcPool,tcFilters,all,search,pos,leagues,ageMin,ageMax,heightMin,heightMax,foot,minScore,minSeas,showMvFilter,mvMax,showContractFilter,contractBefore,roleFilter,roleScoreMin,seasonFilter,metricFilters,xValueFilter,onlyElite,versatileOnly,getDisplayScore,recentOnly,showXValueFilter,xValueMin,xValueMax,attrFilters,minMins,showCareerMinsFilter,careerMinMins,currentLeagueOnly,playedSeasons,potentialMin,lsMin,lsMax,escOnly,gbeMin,natFilter,softMode,roleFilters,shortlist,showShortlist,notPlayingOnly,domesticOnly,internationalOnly,tierFilters,sideFilter,rk,careerPosFilters,careerPosTokenGroups,styleFilters,styleScoreMode,rankTier,rankOf]);
+  const filtered=filterRes.list, belowMinScore=filterRes.below, tcRemoved=filterRes.tcRemoved;
 
   const sorted=useMemo(()=>{
     const a=[...filtered];
@@ -952,6 +985,40 @@ export default function App(){
                 <span style={T.cl(versatileOnly)}>Versatile (5+ positions played)</span>
               </label>
             </div>
+          </div>
+
+          {/* Team context: Team Context card scores of the season's club, as percentiles */}
+          <div style={T.fg} data-tc-filter>
+            <style>{TC_CSS}</style>
+            <label style={T.cr} data-tc-toggle onClick={()=>{setTcOn(v=>!v);setPage(0);}}>
+              <div style={T.cb(tcOn)}>{tcOn&&<span style={{color:'#fff',fontSize:8}}>✓</span>}</div>
+              <span style={{...T.cl(tcOn),fontWeight:600}}>Team context</span>
+              {tcActive&&<span data-tc-removed style={{marginLeft:'auto',fontSize:9.5,color:'#fbbf24'}}>−{tcRemoved.toLocaleString()} players</span>}
+            </label>
+            {tcOn&&(
+              <div style={{marginTop:7,display:'flex',flexDirection:'column',gap:7}}>
+                <div style={{display:'flex',gap:3}}>
+                  {[['league','Within own league'],['all','All teams']].map(([v,l])=>(
+                    <button key={v} data-tc-pool={v} onClick={()=>{setTcPool(v);setPage(0);}} style={{flex:1,padding:'3px 4px',borderRadius:5,border:`1px solid ${tcPool===v?'#3b7de8':'#1e2d45'}`,background:tcPool===v?'#0e2040':'transparent',color:tcPool===v?'#60a5fa':'#64748b',fontSize:10,fontWeight:600,cursor:'pointer'}}>{l}</button>
+                  ))}
+                </div>
+                {tcFilters.map((f,i)=>(
+                  <div key={f.cat} data-tc-cat={f.cat}>
+                    <div style={{display:'flex',alignItems:'center',gap:5,marginBottom:1}}>
+                      <label style={T.cr} aria-label={`Team context ${f.cat}`} onClick={()=>setTcFilter(i,{on:!f.on})}>
+                        <div style={T.cb(f.on)}>{f.on&&<span style={{color:'#fff',fontSize:8}}>✓</span>}</div>
+                        <span style={T.cl(f.on)}>{f.cat}</span>
+                      </label>
+                      <span style={{marginLeft:'auto',fontSize:9.5,color:f.on?'#60a5fa':'#475569',fontVariantNumeric:'tabular-nums'}}>{f.min}–{f.max} · {tcRangeText(f.min,f.max)}</span>
+                    </div>
+                    <TcRange cat={f.cat} min={f.min} max={f.max} on={f.on} onChange={(mn,mx)=>setTcFilter(i,{min:mn,max:mx,on:true})}/>
+                  </div>
+                ))}
+                <div style={{fontSize:9,color:'#475569',lineHeight:1.45}}>
+                  Percentile of the club's Team Context score ({tcPool==='league'?'vs teams in its league that season':'vs all teams that season'}). Club = the one he played for in the season shown{seasonFilter==='all'?' (current club with All seasons)':''}. Ticked rows must all hold.
+                </div>
+              </div>
+            )}
           </div>
 
           <div style={T.dv}/>
@@ -1496,7 +1563,7 @@ export default function App(){
         </main>
       </div>)}
 
-      {sel&&<PlayerCard player={sel} players={all} onClose={()=>setSel(null)} rawMode={rawMode} styleScoreMode={styleScoreMode} seasonRankFor={seasonRankFor} rankMinMins={minMins}/>}
+      {sel&&<PlayerCard key={sel.id} player={sel} players={all} onClose={()=>setSel(null)} onOpenPlayer={p=>setSel(p)} rawMode={rawMode} styleScoreMode={styleScoreMode} seasonRankFor={seasonRankFor} rankMinMins={minMins}/>}
     </div>
   );
 }

@@ -7,24 +7,24 @@ import { useIsMobile, deliverPng } from './utils';
 import { ensureMontserratEmbedded, MONTSERRAT_EMBED_CSS } from './CoachCard';
 import { preloadImages } from './TeamReport';
 
-const N_OPTIONS = [5, 10, 15, 20, 25];
-const BANDS = [1, 2, 3, 4, 5, 6];
-const REGIONS = ['Europe', 'South America', 'North America', 'Asia', 'Africa', 'Other'];
+export const N_OPTIONS = [5, 10, 15, 20, 25];
+export const BANDS = [1, 2, 3, 4, 5, 6];
+export const REGIONS = ['Europe', 'South America', 'North America', 'Asia', 'Africa', 'Other'];
 
-const simColor = v => v >= 70 ? '#22c55e' : v >= 50 ? '#f59e0b' : '#64748b';
-const fmt = v => (Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(Number.isInteger(v) ? 0 : 1));
+export const simColor = v => v >= 70 ? '#22c55e' : v >= 50 ? '#f59e0b' : '#64748b';
+export const fmt = v => (Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(Number.isInteger(v) ? 0 : 1));
 export const styleTags = t => {
   const a = (t.attributes || []).slice(0, 3);
   return a.length ? a : (t.style ? [t.style] : []);
 };
 
-const lbl = { fontSize: 8.5, fontWeight: 700, color: '#64748b', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 5 };
-const chip = on => ({ padding: '3px 8px', borderRadius: 5, border: `1px solid ${on ? '#3b7de8' : '#1e2d45'}`, background: on ? '#0e2040' : 'transparent', color: on ? '#60a5fa' : '#64748b', fontSize: 10, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' });
-const inp = { width: 52, background: '#0d1220', border: '1px solid #1e2d45', borderRadius: 5, color: '#e2e8f4', padding: '3px 6px', fontSize: 11, outline: 'none' };
+export const lbl = { fontSize: 8.5, fontWeight: 700, color: '#64748b', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 5 };
+export const chip = on => ({ padding: '3px 8px', borderRadius: 5, border: `1px solid ${on ? '#3b7de8' : '#1e2d45'}`, background: on ? '#0e2040' : 'transparent', color: on ? '#60a5fa' : '#64748b', fontSize: 10, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' });
+export const inp = { width: 52, background: '#0d1220', border: '1px solid #1e2d45', borderRadius: 5, color: '#e2e8f4', padding: '3px 6px', fontSize: 11, outline: 'none' };
 
-function toggleIn(set, v) { const s = new Set(set); s.has(v) ? s.delete(v) : s.add(v); return s; }
+export function toggleIn(set, v) { const s = new Set(set); s.has(v) ? s.delete(v) : s.add(v); return s; }
 
-function WhyLine({ m, good }) {
+export function WhyLine({ m, good }) {
   return (
     <div style={{ display: 'flex', gap: 6, fontSize: 10, color: '#94a3b8' }}>
       <span style={{ color: good ? '#4ade80' : '#f87171', width: 10 }}>{good ? '≈' : '≠'}</span>
@@ -119,7 +119,10 @@ export default function TeamSimilarCalc({ subject: profile, allTeams = [], getCr
       document.body.appendChild(el);
       try {
         const { toPng } = await import('html-to-image');
-        const opts = { width: el.offsetWidth || 1080, height: el.offsetHeight || 900, pixelRatio: 2, fontEmbedCSS: MONTSERRAT_EMBED_CSS };
+        // The node sits at left:-10000px to stay off screen; captured as-is it draws out of
+        // frame (a fully transparent PNG). Reset the position on the captured clone only.
+        const opts = { width: el.offsetWidth || 1080, height: el.offsetHeight || 900, pixelRatio: 2, fontEmbedCSS: MONTSERRAT_EMBED_CSS, style: { position: 'static', left: '0', top: '0' } };
+        await toPng(el, opts); // first pass warms font + image caches (same as the other cards)
         const dataUrl = await toPng(el, opts);
         const slug = s => String(s).replace(/[^\w]+/g, '_').replace(/^_|_$/g, '');
         if (dataUrl) await deliverPng(dataUrl, `similar_teams_${slug(subject.team)}_${slug(subject.season)}.png`);
@@ -279,7 +282,7 @@ export default function TeamSimilarCalc({ subject: profile, allTeams = [], getCr
   );
 }
 
-const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+export const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 export function buildExportElement(subject, results, imgs, getCrest, summary) {
   const crestImg = (team, size) => {
