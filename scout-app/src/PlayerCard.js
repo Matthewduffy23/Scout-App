@@ -29,6 +29,8 @@ function flagUrl(country) {
   return '';
 }
 import { openOnePager } from './PlayerOnePager';
+import { SIM_FEATURES, SIM_WEIGHTS, METRIC_TO_LABEL } from './playerSimilarity';
+import PlayerSimilarCalc from './PlayerSimilarCalc';
 import { Photo, Crest, useIsMobile, deliverPng } from './utils';
 import ScoutingCardModal from './ScoutingCardModal';
 import QuickCardModal from './QuickCard';
@@ -312,30 +314,8 @@ function ForecastTab({player}) {
 // Raw metric names below match server.py's *_SIM_FEATURES exactly; METRIC_TO_LABEL
 // maps each to the friendly label build_players.py's G_GROUPS stores them under
 // (needed to look them up in seasonsDetail[season].g.A/D/P).
-const SIM_FEATURES = {
-  GK:['Passes per 90','Accurate passes, %','Long passes per 90','Accurate long passes, %','Conceded goals per 90','Shots against per 90','Save rate, %','xG against per 90','Prevented goals per 90','Exits per 90'],
-  CB:['Defensive duels per 90','Defensive duels won, %','Aerial duels per 90','Aerial duels won, %','Shots blocked per 90','PAdj Interceptions','Dribbles per 90','Successful dribbles, %','Progressive runs per 90','Accelerations per 90','Passes per 90','Accurate passes, %','Forward passes per 90','Accurate forward passes, %','Long passes per 90','Accurate long passes, %','Passes to final third per 90','Accurate passes to final third, %','Progressive passes per 90'],
-  FB:['Defensive duels per 90','Defensive duels won, %','Aerial duels per 90','Aerial duels won, %','Shots blocked per 90','PAdj Interceptions','Dribbles per 90','Successful dribbles, %','Progressive runs per 90','Accelerations per 90','Passes per 90','Accurate passes, %','Forward passes per 90','Accurate forward passes, %','Passes to final third per 90','Accurate passes to final third, %','Progressive passes per 90','Crosses per 90','Accurate crosses, %','Passes to penalty area per 90','xA per 90','Touches in box per 90'],
-  CM:['Defensive duels per 90','Defensive duels won, %','Aerial duels per 90','Aerial duels won, %','Shots blocked per 90','PAdj Interceptions','Non-penalty goals per 90','xG per 90','Shots per 90','Dribbles per 90','Successful dribbles, %','Offensive duels per 90','Offensive duels won, %','Touches in box per 90','Progressive runs per 90','Passes per 90','Accurate passes, %','Forward passes per 90','Accurate forward passes, %','Long passes per 90','Accurate long passes, %','xA per 90','Smart passes per 90','Key passes per 90','Passes to final third per 90','Accurate passes to final third, %','Passes to penalty area per 90','Accurate passes to penalty area, %','Deep completions per 90','Progressive passes per 90'],
-  ATT:['Defensive duels per 90','Aerial duels per 90','Aerial duels won, %','PAdj Interceptions','xG per 90','Non-penalty goals per 90','Shots per 90','Crosses per 90','Accurate crosses, %','Dribbles per 90','Successful dribbles, %','Touches in box per 90','Progressive runs per 90','Accelerations per 90','Passes per 90','Accurate passes, %','xA per 90','Smart passes per 90','Key passes per 90','Passes to final third per 90','Accurate passes to final third, %','Passes to penalty area per 90','Accurate passes to penalty area, %','Deep completions per 90','Progressive passes per 90'],
-  CF:['Defensive duels per 90','Aerial duels per 90','Aerial duels won, %','Non-penalty goals per 90','xG per 90','Shots per 90','Crosses per 90','Dribbles per 90','Successful dribbles, %','Touches in box per 90','Progressive runs per 90','Passes per 90','Accurate passes, %','xA per 90','Smart passes per 90','Passes to penalty area per 90','Deep completions per 90'],
-};
-const SIM_WEIGHTS = {
-  GK:{'Prevented goals per 90':3,'Save rate, %':2,'xG against per 90':2,'Conceded goals per 90':2,'Exits per 90':2,'Accurate passes, %':2,'Accurate long passes, %':2},
-  CB:{'Passes per 90':2,'Accurate passes, %':2,'Progressive passes per 90':2,'Defensive duels per 90':2,'Defensive duels won, %':2,'Dribbles per 90':2,'PAdj Interceptions':1,'Progressive runs per 90':2,'Aerial duels per 90':2,'Aerial duels won, %':3},
-  FB:{'xA per 90':3,'Crosses per 90':2,'Dribbles per 90':2,'Progressive runs per 90':2,'Defensive duels won, %':2,'PAdj Interceptions':2,'Passes per 90':1,'Passes to penalty area per 90':2},
-  CM:{'Passes per 90':2,'Progressive runs per 90':2,'Progressive passes per 90':2,'Dribbles per 90':2,'xA per 90':2,'Touches in box per 90':2,'Accurate passes, %':2,'Aerial duels won, %':2,'Passes to penalty area per 90':2,'Defensive duels per 90':2},
-  ATT:{'Passes per 90':3,'Accurate passes, %':2,'Dribbles per 90':3,'Non-penalty goals per 90':2,'Shots per 90':2,'Successful dribbles, %':2,'Aerial duels won, %':2,'xA per 90':2,'xG per 90':2,'Touches in box per 90':2,'Passes to penalty area per 90':2,'Passes to final third per 90':2,'Crosses per 90':2},
-  CF:{'Passes per 90':2,'Dribbles per 90':2,'Non-penalty goals per 90':2,'Aerial duels per 90':2,'Aerial duels won, %':2,'xA per 90':2,'xG per 90':2,'Touches in box per 90':2},
-};
-const METRIC_TO_LABEL = {
-  GK:{'Exits per 90':'Exits','Prevented goals per 90':'Goals Prevented','Conceded goals per 90':'Goals Conceded','Save rate, %':'Save Rate','Shots against per 90':'Shots Against','xG against per 90':'xG Against','Long passes per 90':'Long Passes','Accurate long passes, %':'Long Pass %','Passes per 90':'Passes','Accurate passes, %':'Pass %'},
-  CB:{'Non-penalty goals per 90':'Goals: Non-Penalty','xG per 90':'xG','Offensive duels per 90':'Offensive Duels','Offensive duels won, %':'Offensive Duel %','Progressive runs per 90':'Progressive Runs','Aerial duels per 90':'Aerial Duels','Aerial duels won, %':'Aerial Duel %','Defensive duels per 90':'Defensive Duels','Defensive duels won, %':'Defensive Duel %','PAdj Interceptions':'PAdj Interceptions','Shots blocked per 90':'Shots Blocked','Accelerations per 90':'Accelerations','Dribbles per 90':'Dribbles','Successful dribbles, %':'Dribble %','Forward passes per 90':'Forward Passes','Accurate forward passes, %':'Forward Pass %','Long passes per 90':'Long Passes','Accurate long passes, %':'Long Pass %','Passes per 90':'Passes','Accurate passes, %':'Pass %','Passes to final third per 90':'Passes to F3rd','Accurate passes to final third, %':'Passes to F3rd %','Progressive passes per 90':'Progressive Passes'},
-  FB:{'Crosses per 90':'Crosses','Accurate crosses, %':'Cross %','Non-penalty goals per 90':'Goals: Non-Penalty','xG per 90':'xG','xA per 90':'xA','Offensive duels per 90':'Offensive Duels','Offensive duels won, %':'Offensive Duel %','Progressive runs per 90':'Progressive Runs','Touches in box per 90':'Touches in Box','Aerial duels per 90':'Aerial Duels','Aerial duels won, %':'Aerial Duel %','Defensive duels per 90':'Defensive Duels','Defensive duels won, %':'Defensive Duel %','Shots blocked per 90':'Shots Blocked','PAdj Interceptions':'PAdj Interceptions','Accelerations per 90':'Accelerations','Dribbles per 90':'Dribbles','Successful dribbles, %':'Dribble %','Forward passes per 90':'Forward Passes','Accurate forward passes, %':'Forward Pass %','Passes per 90':'Passes','Accurate passes, %':'Pass %','Passes to final third per 90':'Passes to F3rd','Accurate passes to final third, %':'Passes to F3rd %','Passes to penalty area per 90':'Passes to Box','Progressive passes per 90':'Progressive Passes'},
-  CM:{'Crosses per 90':'Crosses','Non-penalty goals per 90':'Goals: Non-Penalty','xG per 90':'xG','xA per 90':'xA','Offensive duels per 90':'Offensive Duels','Offensive duels won, %':'Offensive Duel %','Progressive runs per 90':'Progressive Runs','Shots per 90':'Shots','Touches in box per 90':'Touches in Box','Aerial duels per 90':'Aerial Duels','Aerial duels won, %':'Aerial Duel %','Defensive duels per 90':'Defensive Duels','Defensive duels won, %':'Defensive Duel %','Shots blocked per 90':'Shots Blocked','PAdj Interceptions':'PAdj Interceptions','Dribbles per 90':'Dribbles','Successful dribbles, %':'Dribble %','Forward passes per 90':'Forward Passes','Accurate forward passes, %':'Forward Pass %','Key passes per 90':'Key Passes','Long passes per 90':'Long Passes','Accurate long passes, %':'Long Pass %','Passes per 90':'Passes','Accurate passes, %':'Pass %','Passes to final third per 90':'Passes to F3rd','Accurate passes to final third, %':'Passes to F3rd %','Passes to penalty area per 90':'Passes to Box','Accurate passes to penalty area, %':'Passes to Box %','Progressive passes per 90':'Progressive Passes','Smart passes per 90':'Smart Passes'},
-  ATT:{'Crosses per 90':'Crosses','Accurate crosses, %':'Cross %','Non-penalty goals per 90':'Goals: Non-Penalty','xG per 90':'xG','xA per 90':'xA','Progressive runs per 90':'Progressive Runs','Shots per 90':'Shots','Touches in box per 90':'Touches in Box','Aerial duels per 90':'Aerial Duels','Aerial duels won, %':'Aerial Duel %','Defensive duels per 90':'Defensive Duels','PAdj Interceptions':'PAdj Interceptions','Accelerations per 90':'Accelerations','Dribbles per 90':'Dribbles','Successful dribbles, %':'Dribble %','Key passes per 90':'Key Passes','Passes per 90':'Passes','Accurate passes, %':'Pass %','Passes to final third per 90':'Passes to F3rd','Accurate passes to final third, %':'Passes to F3rd %','Passes to penalty area per 90':'Passes to Box','Accurate passes to penalty area, %':'Passes to Box %','Progressive passes per 90':'Progressive Passes','Smart passes per 90':'Smart Passes','Deep completions per 90':'Deep Completions'},
-  CF:{'Crosses per 90':'Crosses','Non-penalty goals per 90':'Goals: Non-Penalty','xG per 90':'xG','xA per 90':'xA','Progressive runs per 90':'Progressive Runs','Shots per 90':'Shots','Touches in box per 90':'Touches in Box','Aerial duels per 90':'Aerial Duels','Aerial duels won, %':'Aerial Duel %','Defensive duels per 90':'Defensive Duels','PAdj Interceptions':'PAdj Interceptions','Dribbles per 90':'Dribbles','Successful dribbles, %':'Dribble %','Passes per 90':'Passes','Accurate passes, %':'Pass %','Passes to penalty area per 90':'Passes to Box','Smart passes per 90':'Smart Passes','Deep completions per 90':'Deep Completions'},
-};
+// SIM_FEATURES / SIM_WEIGHTS / METRIC_TO_LABEL now live in playerSimilarity.js (shared
+// with the Similar Players calculator).
 const UK_LEAGUES = ['England 1.','England 2.','England 3.','Scotland 1.'];
 const SIM_MIN_MATCHED = 6; // minimum overlapping metrics required before a candidate counts
 
@@ -1013,7 +993,7 @@ function CareerTab({ player, players }) {
 }
 
 
-export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=false,styleScoreMode='career',seasonRankFor=null,rankMinMins=500}) {
+export default function PlayerCard({player,players,onClose,onOpenPlayer=null,rawMode:rawModeProp=false,styleScoreMode='career',seasonRankFor=null,rankMinMins=500}) {
   const isMobile=useIsMobile();
   // Duplicates build_players.py's SEASON_ORDER (backend source of truth) — keep in sync
   // each season transition, same as the lists in PlayerScoutingCard.js/QuickCard.js.
@@ -1403,6 +1383,9 @@ export default function PlayerCard({player,players,onClose,rawMode:rawModeProp=f
                 </div>
               );
             })()}
+
+            {/* Similar Players calculator — every player-season on file, filterable (PlayerSimilarCalc.js) */}
+            <PlayerSimilarCalc player={player} players={players||[]} onOpenPlayer={onOpenPlayer}/>
 
             {/* Trajectory */}
             {player.sh&&player.sh.length>=2&&(

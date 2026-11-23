@@ -51,7 +51,32 @@ export const teamCountry = (l) => String(l || '').trim().replace(/\s+\d+\.?$/, '
 export const leagueStrength = (l) => LEAGUE_STRENGTHS[dotLeague(l)] || 0;   // same as the Team Index LS filter
 export const leagueBand = (l) => GBE_LEAGUE_BANDS[dotLeague(l)] || 6;       // same as leagueToBand()
 export const leagueRegion = (l) => COUNTRY_TO_REGION[String(l || '').trim().replace(/\s+\d+\.?$/, '')] || 'Other';
-const simStrength = (l) => Math.max(LEAGUE_STRENGTHS[dotLeague(l)] || 30, 1e-6); // port's fallback
+export const simStrength = (l) => Math.max(LEAGUE_STRENGTHS[dotLeague(l)] || 30, 1e-6); // port's fallback
+
+// ── Shared with playerSimilarity.js ─────────────────────────────────────────
+// Weighted-L1 distances -> 0-100 similarity: 50% percentile half, 50% z-score half,
+// then the league-strength discount (floor + (1-floor)·min/max strength ratio).
+export function blendSimilarity(pctDist, zDist, simLsA, simLsB, floor = SIM_LEAGUE_FLOOR) {
+  const sim = Math.exp(-2.8 * pctDist) * 50 + Math.exp(-0.6 * zDist) * 50;
+  return sim * (floor + (1 - floor) * Math.min(simLsA / simLsB, simLsB / simLsA));
+}
+// Population mean / sd of each column over the given rows (NaN values skipped; sd 0 -> 1).
+export function columnStats(vectors, k) {
+  const mean = new Float64Array(k), sd = new Float64Array(k), cnt = new Float64Array(k);
+  for (const v of vectors) for (let c = 0; c < k; c++) if (isFinite(v[c])) { mean[c] += v[c]; cnt[c]++; }
+  for (let c = 0; c < k; c++) mean[c] = cnt[c] ? mean[c] / cnt[c] : 0;
+  for (const v of vectors) for (let c = 0; c < k; c++) if (isFinite(v[c])) sd[c] += (v[c] - mean[c]) ** 2;
+  for (let c = 0; c < k; c++) sd[c] = Math.sqrt(cnt[c] ? sd[c] / cnt[c] : 0) || 1;
+  return { mean, sd };
+}
+// "Why similar": the 3 closest and 2 furthest features by percentile gap.
+// cols: [{ label, a, b, aPct (0-1), bPct (0-1) }]
+export function closestFurthest(cols, nClose = 3, nFar = 2) {
+  const d = cols.map(m => ({ label: m.label, diff: Math.abs(m.aPct - m.bPct), a: m.a, b: m.b,
+                              aPct: Math.round(m.aPct * 100), bPct: Math.round(m.bPct * 100) }));
+  d.sort((x, y) => x.diff - y.diff);
+  return { closest: d.slice(0, nClose), furthest: d.slice(-nFar).reverse() };
+}
 export const teamKey = (t) => `${t.team}|${normLeague(t.league)}|${t.season}`;
 
 const isCalendar = (s) => /^\d{4}$/.test(String(s));
@@ -108,15 +133,8 @@ export function prepareTeamSim(allTeams) {
   });
   for (const idxs of byLS.values()) for (let c = 0; c < K; c++) rankPct(rows, idxs, c);
   for (const idxs of bySeason.values()) {
-    for (let c = 0; c < K; c++) {
-      let mean = 0;
-      for (const i of idxs) mean += rows[i].v[c];
-      mean /= idxs.length;
-      let sd = 0;
-      for (const i of idxs) sd += (rows[i].v[c] - mean) ** 2;
-      sd = Math.sqrt(sd / idxs.length) || 1;
-      for (const i of idxs) rows[i].z[c] = (rows[i].v[c] - mean) / sd;
-    }
+    const { mean, sd } = columnStats(idxs.map(i => rows[i].v), K);
+    for (const i of idxs) for (let c = 0; c < K; c++) rows[i].z[c] = (rows[i].v[c] - mean[c]) / sd[c];
   }
   const index = new Map();
   rows.forEach((r, i) => index.set(teamKey(r.t), i));
@@ -140,13 +158,7 @@ export function sortSeasons(list) {
 }
 
 function whySimilar(a, b) {
-  const d = [];
-  for (let c = 0; c < K; c++) {
-    d.push({ label: TEAM_SIM_FEATURES[c][3], diff: Math.abs(a.pct[c] - b.pct[c]),
-             a: a.v[c], b: b.v[c], aPct: Math.round(a.pct[c] * 100), bPct: Math.round(b.pct[c] * 100) });
-  }
-  d.sort((x, y) => x.diff - y.diff);
-  return { closest: d.slice(0, 3), furthest: d.slice(-2).reverse() };
+  return closestFurthest(TEAM_SIM_FEATURES.map((f, c) => ({ label: f[3], a: a.v[c], b: b.v[c], aPct: a.pct[c], bPct: b.pct[c] })));
 }
 
 /**
@@ -185,9 +197,7 @@ export function findSimilarTeams(subject, allTeams, opts = {}) {
       pd += Math.abs(r.pct[c] - S.pct[c]) * W[c];
       ad += Math.abs(r.z[c] - S.z[c]) * W[c];
     }
-    let sim = Math.exp(-2.8 * pd) * 50 + Math.exp(-0.6 * ad) * 50;
-    sim *= SIM_LEAGUE_FLOOR + (1 - SIM_LEAGUE_FLOOR) * Math.min(r.simLs / lsSelf, lsSelf / r.simLs);
-    scored.push({ i, sim });
+    scored.push({ i, sim: blendSimilarity(pd, ad, r.simLs, lsSelf) });
   }
   scored.sort((a, b) => b.sim - a.sim);
   const results = [];
