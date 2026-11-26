@@ -54,6 +54,23 @@ export function groupFeatures(rk) {
   return feats.map(f => [lab[f] || f, w[f] || 1]);
 }
 
+// ── Custom weights (Edit weights panel) ─────────────────────────────────────
+// Stored as { [group]: { label: weight 0-3 } } in localStorage — one weight set
+// per position group, since the metric list itself differs by group.
+const PLAYER_WEIGHTS_KEY = 'scout_player_sim_weights';
+export const defaultPlayerWeights = (rk) => Object.fromEntries(groupFeatures(rk).map(([label, w]) => [label, w]));
+export function loadPlayerWeightOverrides() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(PLAYER_WEIGHTS_KEY) || '{}');
+    return (raw && typeof raw === 'object' && !Array.isArray(raw)) ? raw : {};
+  } catch { return {}; }
+}
+export function savePlayerWeightOverrides(obj) { try { localStorage.setItem(PLAYER_WEIGHTS_KEY, JSON.stringify(obj || {})); } catch {} }
+export function isCustomPlayerWeights(rk, groupOverrides) {
+  if (!groupOverrides) return false;
+  return groupFeatures(rk).some(([label, w]) => groupOverrides[label] != null && Number(groupOverrides[label]) !== w);
+}
+
 const isCalendar = s => /^\d{4}$/.test(String(s));
 const rowGroup = (p, sd) => posToRk(sd.position) || posToRk(p.position) || p.roleKey || '';
 // [label, pct, raw] rows of a season's bar-chart groups -> { label: [pct 0-1, raw] }
@@ -118,6 +135,162 @@ export function preparePlayerSim(allPlayers) {
   return out;
 }
 
+// ── Career comparison mode ──────────────────────────────────────────────────
+// One row per player per position group: every per-90/% feature and style-role
+// score is the MINUTES-WEIGHTED mean of that player's own qualifying season rows
+// (a feature missing on some seasons is averaged over just the seasons that have
+// it). League strength is averaged the same way; team/league/age/season shown on
+// the row come from the player's single highest-minutes season (the "representative"
+// row) since those are categorical, not something to blend. Column stats (for the
+// z-score half of the similarity blend) are taken across every player's career row
+// in the group — there's no season to split by, since a career row has none.
+const preparedCareer = new WeakMap();
+export function prepareCareerSim(allPlayers) {
+  if (preparedCareer.has(allPlayers)) return preparedCareer.get(allPlayers);
+  const P = preparePlayerSim(allPlayers);
+  const groups = {};
+  for (const rk of SIM_GROUPS) {
+    const src = P.groups[rk];
+    const byPlayer = new Map();
+    for (const r of src.rows) {
+      if (!byPlayer.has(r.p.id)) byPlayer.set(r.p.id, []);
+      byPlayer.get(r.p.id).push(r);
+    }
+    const nFeats = src.feats.length, nRoles = src.roleKeys.length;
+    const rows = [];
+    for (const seasonRows of byPlayer.values()) {
+      const totalMin = seasonRows.reduce((a, r) => a + (r.minutes || 0), 0);
+      if (totalMin <= 0) continue;
+      const v = new Float64Array(nFeats), pct = new Float64Array(nFeats);
+      for (let c = 0; c < nFeats; c++) {
+        let wsum = 0, vsum = 0, psum = 0;
+        for (const r of seasonRows) {
+          if (!isFinite(r.v[c])) continue;
+          const w = r.minutes || 0;
+          wsum += w; vsum += r.v[c] * w; psum += r.pct[c] * w;
+        }
+        v[c] = wsum ? vsum / wsum : NaN;
+        pct[c] = wsum ? psum / wsum : NaN;
+      }
+      const rv = new Float64Array(nRoles);
+      for (let c = 0; c < nRoles; c++) {
+        let wsum = 0, vsum = 0;
+        for (const r of seasonRows) {
+          if (!isFinite(r.rv[c])) continue;
+          const w = r.minutes || 0;
+          wsum += w; vsum += r.rv[c] * w;
+        }
+        rv[c] = wsum ? vsum / wsum : NaN;
+      }
+      const rep = seasonRows.slice().sort((a, b) => (b.minutes || 0) - (a.minutes || 0))[0];
+      const avgLs = seasonRows.reduce((a, r) => a + r.ls * (r.minutes || 0), 0) / totalMin;
+      const avgSimLs = seasonRows.reduce((a, r) => a + r.simLs * (r.minutes || 0), 0) / totalMin;
+      rows.push({
+        p: rep.p, repSd: rep.sd, v, pct, rv, minutes: totalMin, seasonCount: seasonRows.length,
+        age: rep.age, team: rep.sd && rep.sd.team, league: rep.league, norm: rep.norm,
+        ls: avgLs, simLs: avgSimLs, band: rep.band, region: rep.region,
+      });
+    }
+    groups[rk] = {
+      feats: src.feats, roleKeys: src.roleKeys, rows,
+      stats: columnStats(rows.map(r => r.v), nFeats),
+      rstats: columnStats(rows.map(r => r.rv), nRoles),
+    };
+  }
+  const out = { groups };
+  preparedCareer.set(allPlayers, out);
+  return out;
+}
+
+export function careerRowFor(allPlayers, rk, playerId) {
+  const CP = prepareCareerSim(allPlayers);
+  const G = CP.groups[rk];
+  return G ? (G.rows.find(r => r.p.id === playerId) || null) : null;
+}
+
+export const DEFAULT_CAREER_MINUTES = 1800;
+
+/**
+ * subject: { player } — the player whose career profile is compared.
+ * opts: group (default the player's own), lsMin, lsMax, bands, regions, leagues
+ *       (Set of normLeague), ageMin, ageMax, minMinutes (career total), n,
+ *       excludeSelf, useRoles, weightOverrides ({label: weight}|null)
+ * Returns { results: [{ p, career, sim, why }], ms, missing, poolSize, feats, roleKeys }
+ */
+export function findSimilarPlayersCareer(subject, allPlayers, opts = {}) {
+  const t0 = (typeof performance !== 'undefined' ? performance : Date).now();
+  const { player } = subject || {};
+  const empty = { results: [], ms: 0, missing: true, poolSize: 0, feats: [], roleKeys: [] };
+  if (!player) return empty;
+  const {
+    group = null, lsMin = 0, lsMax = 101, bands = null, regions = null, leagues = null,
+    ageMin = 0, ageMax = 99, minMinutes = DEFAULT_CAREER_MINUTES, n = 10, excludeSelf = true,
+    useRoles = true, weightOverrides = null,
+  } = opts;
+  const defRow = defaultFromRow(player);
+  const rk = group || (defRow ? subjectGroup(player, defRow) : (player.roleKey || ''));
+  const CP = prepareCareerSim(allPlayers);
+  const G = CP.groups[rk];
+  if (!G) return empty;
+  const selfRow = G.rows.find(r => r.p.id === player.id);
+  if (!selfRow) return empty;
+  const cols = [];
+  G.feats.forEach(([lab, w], c) => {
+    if (!isFinite(selfRow.v[c])) return;
+    const cw = weightOverrides && weightOverrides[lab];
+    cols.push({ c, lab, w: (cw != null && isFinite(cw)) ? Number(cw) : w, pct: selfRow.pct[c], raw: selfRow.v[c] });
+  });
+  if (cols.length < 5) return empty;
+  const rcols = [];
+  if (useRoles) G.roleKeys.forEach((k, c) => { if (isFinite(selfRow.rv[c])) rcols.push({ c, lab: k, raw: selfRow.rv[c] }); });
+  const fSum = cols.reduce((a, x) => a + x.w, 0);
+  const share = rcols.length ? ROLE_SHARE : 0;
+  cols.forEach(x => { x.nw = x.w / fSum * (1 - share); });
+  rcols.forEach(x => { x.nw = share / rcols.length; });
+  const zOf = (stats, c, v) => (stats ? (v - stats.mean[c]) / stats.sd[c] : 0);
+  cols.forEach(x => { x.z = zOf(G.stats, x.c, x.raw); });
+  rcols.forEach(x => { x.z = zOf(G.rstats, x.c, x.raw); });
+  const selfLs = selfRow.simLs;
+  const useBands = bands && bands.size, useRegions = regions && regions.size, useLeagues = leagues && leagues.size;
+  const scored = [];
+  for (let i = 0; i < G.rows.length; i++) {
+    const r = G.rows[i];
+    if (r === selfRow) continue;
+    if (excludeSelf && r.p.id === player.id) continue;
+    if (r.minutes < minMinutes) continue;
+    if (!(r.age >= ageMin && r.age <= ageMax)) continue;
+    if (r.ls < lsMin || r.ls > lsMax) continue;
+    if (useBands && !bands.has(r.band)) continue;
+    if (useRegions && !regions.has(r.region)) continue;
+    if (useLeagues && !leagues.has(r.norm)) continue;
+    let pd = 0, ad = 0, ok = true;
+    for (const x of cols) {
+      const v = r.v[x.c];
+      if (!isFinite(v)) { ok = false; break; }
+      pd += Math.abs(r.pct[x.c] - x.pct) * x.nw;
+      ad += Math.abs((v - G.stats.mean[x.c]) / G.stats.sd[x.c] - x.z) * x.nw;
+    }
+    if (!ok) continue;
+    for (const x of rcols) {
+      let v = r.rv[x.c];
+      if (!isFinite(v)) v = G.rstats.mean[x.c];
+      pd += Math.abs(v - x.raw) / 100 * x.nw;
+      ad += Math.abs((v - G.rstats.mean[x.c]) / G.rstats.sd[x.c] - x.z) * x.nw;
+    }
+    scored.push({ i, sim: blendSimilarity(pd, ad, r.simLs, selfLs) });
+  }
+  scored.sort((a, b) => b.sim - a.sim);
+  const results = [];
+  for (const s of scored) {
+    if (results.length >= n) break;
+    const r = G.rows[s.i];
+    const why = closestFurthest(cols.map(x => ({ label: x.lab, a: x.raw, b: r.v[x.c], aPct: x.pct, bPct: r.pct[x.c], w: x.nw })));
+    results.push({ p: r.p, career: r, sim: Math.round(s.sim * 10) / 10, why });
+  }
+  const ms = (typeof performance !== 'undefined' ? performance : Date).now() - t0;
+  return { results, ms, missing: false, poolSize: scored.length, feats: cols.map(x => [x.lab, x.w]), roleKeys: rcols.map(x => x.lab) };
+}
+
 // The player's own season rows with metrics, newest first (calendar year after split),
 // most minutes first within a season.
 export function playerSeasonRows(player) {
@@ -151,15 +324,20 @@ export function findSimilarPlayers(subject, allPlayers, opts = {}) {
   const {
     group = rowGroup(player, sd), seasons = null, lsMin = 0, lsMax = 101, bands = null, regions = null,
     leagues = null, ageMin = 0, ageMax = 99, minMinutes = 900, n = 10, onePerPlayer = true, excludeSelf = true,
-    useRoles = true,
+    useRoles = true, weightOverrides = null,
   } = opts;
   const G = P.groups[group];
   if (!G) return empty;
   const sm = metricsOf(sd);
   // Features = the group's list that the subject row actually has (another position
-  // group can ask for metrics the subject's own pool doesn't record).
+  // group can ask for metrics the subject's own pool doesn't record). A custom
+  // weight (Edit weights panel) overrides the built-in default for its label.
   const cols = [];
-  G.feats.forEach(([lab, w], c) => { if (sm[lab]) cols.push({ c, lab, w, pct: sm[lab][0], raw: sm[lab][1] }); });
+  G.feats.forEach(([lab, w], c) => {
+    if (!sm[lab]) return;
+    const cw = weightOverrides && weightOverrides[lab];
+    cols.push({ c, lab, w: (cw != null && isFinite(cw)) ? Number(cw) : w, pct: sm[lab][0], raw: sm[lab][1] });
+  });
   if (cols.length < 5) return empty;
   const rcols = [];
   if (useRoles && sd.qcRoles) G.roleKeys.forEach((k, c) => { const x = Number(sd.qcRoles[k]); if (isFinite(x)) rcols.push({ c, lab: k, raw: x }); });
@@ -208,7 +386,7 @@ export function findSimilarPlayers(subject, allPlayers, opts = {}) {
     if (results.length >= n) break;
     const r = G.rows[s.i];
     if (onePerPlayer) { if (seen.has(r.p.id)) continue; seen.add(r.p.id); }
-    const why = closestFurthest(cols.map(x => ({ label: x.lab, a: x.raw, b: r.v[x.c], aPct: x.pct, bPct: r.pct[x.c] })));
+    const why = closestFurthest(cols.map(x => ({ label: x.lab, a: x.raw, b: r.v[x.c], aPct: x.pct, bPct: r.pct[x.c], w: x.nw })));
     results.push({ p: r.p, sd: r.sd, sim: Math.round(s.sim * 10) / 10, why });
   }
   const ms = (typeof performance !== 'undefined' ? performance : Date).now() - t0;

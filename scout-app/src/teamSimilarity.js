@@ -39,6 +39,33 @@ const W = (() => {
 })();
 export const SIM_LEAGUE_FLOOR = 0.8;
 
+// ── Custom weights (Edit weights panel) ─────────────────────────────────────
+// Stored as {label: weight 0-3} in localStorage, keyed by the TEAM_SIM_FEATURES
+// display label. Missing/invalid entries fall back to the built-in default weight.
+const TEAM_WEIGHTS_KEY = 'scout_team_sim_weights';
+export const defaultTeamWeights = () => Object.fromEntries(TEAM_SIM_FEATURES.map(f => [f[3], f[2]]));
+export function loadTeamWeightOverrides() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(TEAM_WEIGHTS_KEY) || '{}');
+    return (raw && typeof raw === 'object' && !Array.isArray(raw)) ? raw : {};
+  } catch { return {}; }
+}
+export function saveTeamWeightOverrides(obj) { try { localStorage.setItem(TEAM_WEIGHTS_KEY, JSON.stringify(obj || {})); } catch {} }
+export function isCustomTeamWeights(custom) {
+  if (!custom) return false;
+  return TEAM_SIM_FEATURES.some(f => custom[f[3]] != null && Number(custom[f[3]]) !== f[2]);
+}
+// Normalised weight vector (sums to 1), same order as TEAM_SIM_FEATURES — the
+// default when `custom` is absent/empty is identical to the module constant W.
+function weightVector(custom) {
+  const raw = TEAM_SIM_FEATURES.map(f => {
+    const v = custom && custom[f[3]];
+    return (v != null && isFinite(v)) ? Number(v) : f[2];
+  });
+  const total = raw.reduce((a, b) => a + b, 0) || 1;
+  return raw.map(w => w / total);
+}
+
 const RESERVE_RE = /\s(II|B|U\d{2})$/;
 export const isReserveTeam = (name) => {
   const n = String(name || '').trim();
@@ -69,10 +96,13 @@ export function columnStats(vectors, k) {
   for (let c = 0; c < k; c++) sd[c] = Math.sqrt(cnt[c] ? sd[c] / cnt[c] : 0) || 1;
   return { mean, sd };
 }
-// "Why similar": the 3 closest and 2 furthest features by percentile gap.
-// cols: [{ label, a, b, aPct (0-1), bPct (0-1) }]
+// "Why similar": the 3 closest and 2 furthest features by percentile gap, ranked
+// by WEIGHTED gap when a per-feature weight (m.w) is supplied — so a heavily
+// weighted metric is more likely to show as a defining factor, and custom
+// weights change which rows the panel calls out (still displayed as raw %).
+// cols: [{ label, a, b, aPct (0-1), bPct (0-1), w? }]
 export function closestFurthest(cols, nClose = 3, nFar = 2) {
-  const d = cols.map(m => ({ label: m.label, diff: Math.abs(m.aPct - m.bPct), a: m.a, b: m.b,
+  const d = cols.map(m => ({ label: m.label, diff: Math.abs(m.aPct - m.bPct) * (m.w ?? 1), a: m.a, b: m.b,
                               aPct: Math.round(m.aPct * 100), bPct: Math.round(m.bPct * 100) }));
   d.sort((x, y) => x.diff - y.diff);
   return { closest: d.slice(0, nClose), furthest: d.slice(-nFar).reverse() };
@@ -157,14 +187,14 @@ export function sortSeasons(list) {
   });
 }
 
-function whySimilar(a, b) {
-  return closestFurthest(TEAM_SIM_FEATURES.map((f, c) => ({ label: f[3], a: a.v[c], b: b.v[c], aPct: a.pct[c], bPct: b.pct[c] })));
+function whySimilar(a, b, Wc) {
+  return closestFurthest(TEAM_SIM_FEATURES.map((f, c) => ({ label: f[3], a: a.v[c], b: b.v[c], aPct: a.pct[c], bPct: b.pct[c], w: Wc[c] })));
 }
 
 /**
  * opts: seasons (Set|null), lsMin, lsMax, bands (Set|null), regions (Set|null),
  *       leagues (Set of normLeague|null), minMatches, n, excludeSameClub,
- *       excludeCurrent, onePerClub
+ *       excludeCurrent, onePerClub, weightOverrides ({label: weight 0-3}|null)
  * Returns { results: [{ t, sim, why }], ms, missing } — missing = subject has no full vector.
  */
 export function findSimilarTeams(subject, allTeams, opts = {}) {
@@ -175,7 +205,9 @@ export function findSimilarTeams(subject, allTeams, opts = {}) {
   const {
     seasons = null, lsMin = 0, lsMax = 101, bands = null, regions = null, leagues = null,
     minMatches = 8, n = 10, excludeSameClub = true, excludeCurrent = false, onePerClub = true,
+    weightOverrides = null,
   } = opts;
+  const Wc = weightOverrides ? weightVector(weightOverrides) : W;
   const S = P.rows[self];
   const lsSelf = S.simLs;
   const useBands = bands && bands.size, useRegions = regions && regions.size, useLeagues = leagues && leagues.size;
@@ -194,8 +226,8 @@ export function findSimilarTeams(subject, allTeams, opts = {}) {
     if (useLeagues && !leagues.has(r.norm)) continue;
     let pd = 0, ad = 0;
     for (let c = 0; c < K; c++) {
-      pd += Math.abs(r.pct[c] - S.pct[c]) * W[c];
-      ad += Math.abs(r.z[c] - S.z[c]) * W[c];
+      pd += Math.abs(r.pct[c] - S.pct[c]) * Wc[c];
+      ad += Math.abs(r.z[c] - S.z[c]) * Wc[c];
     }
     scored.push({ i, sim: blendSimilarity(pd, ad, r.simLs, lsSelf) });
   }
@@ -210,7 +242,7 @@ export function findSimilarTeams(subject, allTeams, opts = {}) {
       if (seenClub.has(ck)) continue;
       seenClub.add(ck);
     }
-    results.push({ t, sim: Math.round(s.sim * 10) / 10, why: whySimilar(S, P.rows[s.i]) });
+    results.push({ t, sim: Math.round(s.sim * 10) / 10, why: whySimilar(S, P.rows[s.i], Wc) });
   }
   const ms = (typeof performance !== 'undefined' ? performance : Date).now() - t0;
   return { results, ms, missing: false, poolSize: scored.length };

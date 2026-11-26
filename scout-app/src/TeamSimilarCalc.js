@@ -2,7 +2,9 @@
 // Engine + method notes live in teamSimilarity.js. Computed client-side against every
 // team-season in teams_final.json.
 import React, { useState, useMemo } from 'react';
-import { findSimilarTeams, prepareTeamSim, leagueStrength, normLeague, leagueRegion, sortSeasons, teamCountry, teamKey } from './teamSimilarity';
+import { findSimilarTeams, prepareTeamSim, leagueStrength, normLeague, leagueRegion, sortSeasons, teamCountry, teamKey,
+         TEAM_SIM_FEATURES, loadTeamWeightOverrides, saveTeamWeightOverrides, isCustomTeamWeights } from './teamSimilarity';
+import { PRESET_LEAGUES } from './constants';
 import { useIsMobile, deliverPng } from './utils';
 import { ensureMontserratEmbedded, MONTSERRAT_EMBED_CSS } from './CoachCard';
 import { preloadImages } from './TeamReport';
@@ -77,13 +79,25 @@ export default function TeamSimilarCalc({ subject: profile, allTeams = [], getCr
   const [open, setOpen] = useState(null); // expanded "why similar" row key
   const [busy, setBusy] = useState(false);
 
+  // Edit weights: a single override set (one feature list for every team), persisted.
+  const [weightOverrides, setWeightOverrides] = useState(() => loadTeamWeightOverrides());
+  const [weightsOpen, setWeightsOpen] = useState(false);
+  const customWeights = isCustomTeamWeights(weightOverrides);
+  const setWeight = (label, val) => setWeightOverrides(prev => {
+    const next = { ...prev, [label]: val };
+    saveTeamWeightOverrides(next);
+    return next;
+  });
+  const resetWeights = () => { setWeightOverrides({}); saveTeamWeightOverrides({}); };
+
   const out = useMemo(() => {
     if (!P) return null;
     return findSimilarTeams(subject, allTeams, {
       seasons: seasons ? new Set(seasons) : null, lsMin, lsMax, bands, regions, leagues,
       minMatches: Number(minMatches) || 0, n, excludeSameClub, excludeCurrent, onePerClub,
+      weightOverrides: Object.keys(weightOverrides).length ? weightOverrides : null,
     });
-  }, [P, subject, allTeams, seasons, lsMin, lsMax, bands, regions, leagues, minMatches, n, excludeSameClub, excludeCurrent, onePerClub]);
+  }, [P, subject, allTeams, seasons, lsMin, lsMax, bands, regions, leagues, minMatches, n, excludeSameClub, excludeCurrent, onePerClub, weightOverrides]);
 
   const selfLs = leagueStrength(subject.league);
   const sameLevel = () => { setLsMin(Math.max(0, Math.floor(selfLs - 8))); setLsMax(Math.min(101, Math.ceil(selfLs + 8))); };
@@ -104,6 +118,7 @@ export default function TeamSimilarCalc({ subject: profile, allTeams = [], getCr
     if (leagues.size) parts.push(`${leagues.size} league${leagues.size > 1 ? 's' : ''}`);
     parts.push(`Min ${minMatches} matches`);
     if (excludeCurrent) parts.push(`excl. ${currentLabel}`);
+    if (customWeights) parts.push('custom weights');
     return parts.join(' · ');
   };
 
@@ -193,6 +208,8 @@ export default function TeamSimilarCalc({ subject: profile, allTeams = [], getCr
           <div style={{ position: 'relative' }}>
             <div style={lbl}>Leagues</div>
             <button style={chip(leagues.size > 0)} onClick={() => setLeaguesOpen(o => !o)}>{leagues.size ? `${leagues.size} selected` : 'Any league'} ▾</button>
+            <button style={{ ...chip(false), marginLeft: 4 }} onClick={() => setLeagues(new Set([...PRESET_LEAGUES.UK].map(normLeague)))}>UK</button>
+            <button style={{ ...chip(false), marginLeft: 4 }} onClick={() => setLeagues(new Set([...PRESET_LEAGUES['EFL (England 2–4)']].map(normLeague)))}>EFL</button>
             {leagues.size > 0 && <button style={{ ...chip(false), marginLeft: 4 }} onClick={() => setLeagues(new Set())}>Clear</button>}
             {leaguesOpen && (
               <div style={{ position: 'absolute', zIndex: 5, top: '100%', left: 0, marginTop: 4, width: 230, maxHeight: 260, overflowY: 'auto', background: '#0c1424', border: '1px solid #1e2d45', borderRadius: 7, padding: 6 }}>
@@ -232,7 +249,30 @@ export default function TeamSimilarCalc({ subject: profile, allTeams = [], getCr
               <input type="checkbox" checked={val} onChange={() => set(v => !v)} style={{ margin: 0, accentColor: '#3b7de8' }} />{label}
             </label>
           ))}
+          <button style={chip(weightsOpen || customWeights)} onClick={() => setWeightsOpen(o => !o)}>⚖ Edit weights{customWeights ? ' •' : ''}</button>
         </div>
+
+        {weightsOpen && (
+          <div style={{ borderTop: '1px solid #131c2e', paddingTop: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <div style={lbl}>Style metric weights (0–3, step 0.5)</div>
+              <button style={chip(false)} onClick={resetWeights} disabled={!customWeights}>Reset to default</button>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)', gap: '4px 16px', maxHeight: 260, overflowY: 'auto' }}>
+              {TEAM_SIM_FEATURES.map(([, , defaultW, label]) => {
+                const val = weightOverrides[label] != null ? weightOverrides[label] : defaultW;
+                return (
+                  <label key={label} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10.5, color: '#94a3b8' }}>
+                    <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+                    <input aria-label={`Weight: ${label}`} type="number" min={0} max={3} step={0.5} value={val}
+                      onChange={e => setWeight(label, e.target.value === '' ? defaultW : Number(e.target.value))}
+                      style={{ ...inp, width: 48 }} />
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Results */}
@@ -275,7 +315,7 @@ export default function TeamSimilarCalc({ subject: profile, allTeams = [], getCr
       )}
       {out && !out.missing && (
         <div style={{ marginTop: 6, fontSize: 9.5, color: '#334155' }}>
-          {out.poolSize.toLocaleString()} team-seasons compared in {out.ms.toFixed(0)} ms · 14 style metrics, percentiles within each league-season + season z-scores, league-strength adjusted (same method as ScoutBoard Pro) · click a row to open it.
+          {out.poolSize.toLocaleString()} team-seasons compared in {out.ms.toFixed(0)} ms · 14 style metrics{customWeights ? ' · custom weights' : ''}, percentiles within each league-season + season z-scores, league-strength adjusted (same method as ScoutBoard Pro) · click a row to open it.
         </div>
       )}
     </div>
