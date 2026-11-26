@@ -10,6 +10,7 @@ import { computeCoachTraits } from './coachMetrics';
 import { downloadCoachCardPNG } from './CoachCard';
 import { downloadCoachQuickCardPNG, CQC_BODY_PANELS } from './CoachQuickCard';
 import ManagerPagerModal from './ManagerPager';
+import CoachProfileModal from './CoachProfile';
 import { useIsMobile } from './utils';
 import { foldIncludes } from './TeamReport';
 
@@ -452,7 +453,7 @@ function CoachQuickOverrides({ coach, coachId, overrides, teams, onFieldChange, 
   );
 }
 
-function CoachRow({ coach, teams, generatingId, generatingQuickId, expandedOverride, cardOverrides, expandedQuick, quickOverrides, onGenerate, onGenerateQuick, onPager, onToggleOverride, onToggleQuick, onEdit, onDelete, onFieldChange, onClear, onQuickFieldChange, onQuickClear }) {
+function CoachRow({ coach, teams, generatingId, generatingQuickId, expandedOverride, cardOverrides, expandedQuick, quickOverrides, onGenerate, onGenerateQuick, onPager, onProfile, onToggleOverride, onToggleQuick, onEdit, onDelete, onFieldChange, onClear, onQuickFieldChange, onQuickClear }) {
   var isMobile = useIsMobile();
   var tenureCount = (coach.tenures || []).length;
   var sorted = (coach.tenures || []).slice().sort(function(a, b) { return a.season < b.season ? 1 : -1; });
@@ -493,6 +494,13 @@ function CoachRow({ coach, teams, generatingId, generatingQuickId, expandedOverr
           style={{ padding: '5px 10px', borderRadius: 5, border: '1px solid #a855f7', background: isGenQuick ? '#1e2d45' : 'transparent', color: '#c084fc', fontSize: 11, fontWeight: 600, cursor: isGenQuick ? 'default' : 'pointer', whiteSpace: 'nowrap' }}
         >
           {isGenQuick ? 'Generating…' : '⚡ Quick'}
+        </button>
+        <button
+          onClick={function() { onProfile(coach); }}
+          style={{ padding: '5px 10px', borderRadius: 5, border: '1px solid #34d399', background: 'transparent', color: '#6ee7b7', fontSize: 11, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
+          title="Browse this coach's seasons — team, league, results and metrics"
+        >
+          👤 Profile
         </button>
         <button
           onClick={function() { onPager(coach); }}
@@ -620,6 +628,7 @@ export default function CoachPanel({ allTeams, allPlayers, onClose }) {
   // own inputs (formation, panel choice, view, similar teams), the way the player
   // pager does, so the row only has to resolve the data and hand it over.
   var [pagerCtx, setPagerCtx] = useState(null);
+  var [profileCtx, setProfileCtx] = useState(null);
 
   function refresh() { setCoaches(loadCoaches()); }
 
@@ -863,6 +872,10 @@ export default function CoachPanel({ allTeams, allPlayers, onClose }) {
     });
   }
 
+  function handleOpenProfile(coach) {
+    setProfileCtx({ coach: coach, tenureRows: resolveTenureRows(coach) });
+  }
+
   function handleImportFile(file) {
     importCoachesFile(file, function() { refresh(); });
   }
@@ -908,6 +921,7 @@ export default function CoachPanel({ allTeams, allPlayers, onClose }) {
                 onGenerate={handleGenerateCard}
                 onGenerateQuick={handleGenerateQuickCard}
                 onPager={handleOpenPager}
+                onProfile={handleOpenProfile}
                 onToggleOverride={handleToggleOverride}
                 onToggleQuick={handleToggleQuick}
                 onEdit={handleEdit}
@@ -922,6 +936,15 @@ export default function CoachPanel({ allTeams, allPlayers, onClose }) {
         </div>
 
       </div>
+
+      {profileCtx && (
+        <CoachProfileModal
+          coach={profileCtx.coach}
+          tenureRows={profileCtx.tenureRows}
+          teams={teams}
+          onClose={function() { setProfileCtx(null); }}
+        />
+      )}
 
       {pagerCtx && (
         <ManagerPagerModal

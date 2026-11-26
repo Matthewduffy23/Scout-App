@@ -440,6 +440,7 @@ export default function App(){
   };
   const [rawMode,setRawMode]=useState(false); // no league weight
   const [outlierMode,setOutlierMode]=useState(false); // z-score, within-league only
+  const [minScoreBasis,setMinScoreBasis]=useState('z'); // 'z'|'career' — only consulted while outlierMode is on; which score Min Score filters against
   const [onlyElite,setOnlyElite]=useState(false); // only elite in their division
   // Team context filter (teamContextFilter.js): percentile ranges on the Team Context
   // card scores of the club the player played for in the season shown.
@@ -650,7 +651,10 @@ export default function App(){
       if(foot!=='Any'&&p.foot!==foot) return false;
       const ds=getDisplayScore(p);
       if(ds===null) return false; // no data for that season
-      const scoreLow=ds<minScore;
+      // Outlier mode ranks by z-score, but Min Score can filter on either scale:
+      // the z-score itself, or the player's ordinary career score (so you can rank
+      // by best outliers while still only seeing players above a career-score floor).
+      const scoreLow=(outlierMode&&minScoreBasis==='career')?(p.careerScore??0)<minScore:ds<minScore;
       if(p.seasons<minSeas) return false;
       if(potentialMin>40&&(p.potentialScore||p.careerScore)<potentialMin) return false;
       // Played in: OR across ticked seasons, league-aware — needs a real row in that
@@ -754,7 +758,7 @@ export default function App(){
       return true;
     });
     return {list,below,tcRemoved};
-  },[tcActive,tcPools,tcPool,tcFilters,all,search,pos,leagues,ageMin,ageMax,heightMin,heightMax,foot,minScore,minSeas,showMvFilter,mvMax,showContractFilter,contractBefore,roleFilter,roleScoreMin,seasonFilter,metricFilters,xValueFilter,onlyElite,versatileOnly,getDisplayScore,recentOnly,showXValueFilter,xValueMin,xValueMax,attrFilters,minMins,showCareerMinsFilter,careerMinMins,currentLeagueOnly,playedSeasons,potentialMin,lsMin,lsMax,escOnly,gbeMin,natFilter,softMode,roleFilters,shortlist,showShortlist,notPlayingOnly,domesticOnly,internationalOnly,tierFilters,sideFilter,rk,careerPosFilters,careerPosTokenGroups,styleFilters,styleScoreMode,rankTier,rankOf]);
+  },[tcActive,tcPools,tcPool,tcFilters,all,search,pos,leagues,ageMin,ageMax,heightMin,heightMax,foot,minScore,minScoreBasis,minSeas,showMvFilter,mvMax,showContractFilter,contractBefore,roleFilter,roleScoreMin,seasonFilter,metricFilters,xValueFilter,onlyElite,versatileOnly,getDisplayScore,recentOnly,showXValueFilter,xValueMin,xValueMax,attrFilters,minMins,showCareerMinsFilter,careerMinMins,currentLeagueOnly,playedSeasons,potentialMin,lsMin,lsMax,escOnly,gbeMin,natFilter,softMode,roleFilters,shortlist,showShortlist,notPlayingOnly,domesticOnly,internationalOnly,tierFilters,sideFilter,rk,careerPosFilters,careerPosTokenGroups,styleFilters,styleScoreMode,rankTier,rankOf]);
   const filtered=filterRes.list, belowMinScore=filterRes.below, tcRemoved=filterRes.tcRemoved;
 
   const sorted=useMemo(()=>{
@@ -1206,6 +1210,16 @@ export default function App(){
           <div style={T.fg}>
             <span style={T.fl}>Min Score: <strong style={{color:'#60a5fa'}}>{minScore}</strong></span>
             <input type="range" style={T.sl} min={0} max={85} step={1} value={minScore} onChange={e=>{setMinScore(Number(e.target.value));setPage(0);}}/>
+            {outlierMode&&(
+              <div style={{marginTop:6}}>
+                <div style={{fontSize:9,color:'#64748b',marginBottom:3}}>Min score uses</div>
+                <div style={{display:'flex',gap:3}}>
+                  {[['z','Z-score'],['career','Career score']].map(([v,l])=>(
+                    <button key={v} data-min-score-basis={v} onClick={()=>{setMinScoreBasis(v);setPage(0);}} style={{flex:1,padding:'3px 4px',borderRadius:5,border:`1px solid ${minScoreBasis===v?'#3b7de8':'#1e2d45'}`,background:minScoreBasis===v?'#0e2040':'transparent',color:minScoreBasis===v?'#60a5fa':'#64748b',fontSize:10,fontWeight:600,cursor:'pointer'}}>{l}</button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
           <div style={T.fg}>
             <span style={T.fl}>Min Potential: <strong style={{color:'#60a5fa'}}>{potentialMin<=40?'Any':potentialMin}</strong></span>

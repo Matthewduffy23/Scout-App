@@ -2,10 +2,13 @@
 // Same look and controls as TeamSimilarCalc (whose style helpers and Why row it imports);
 // engine + method notes live in playerSimilarity.js. Computed client-side against every
 // player-season row in players_final.json.
-import React, { useState, useMemo, useDeferredValue } from 'react';
-import { findSimilarPlayers, preparePlayerSim, playerSeasonRows, defaultFromRow, subjectGroup, seasonRowKey, SIM_GROUPS, ROLE_SHARE } from './playerSimilarity';
-import { leagueStrength, leagueRegion } from './teamSimilarity';
+import React, { useState, useMemo, useEffect, useDeferredValue } from 'react';
+import { findSimilarPlayers, findSimilarPlayersCareer, careerRowFor, DEFAULT_CAREER_MINUTES,
+         preparePlayerSim, playerSeasonRows, defaultFromRow, subjectGroup, seasonRowKey, SIM_GROUPS, ROLE_SHARE,
+         groupFeatures, loadPlayerWeightOverrides, savePlayerWeightOverrides, isCustomPlayerWeights } from './playerSimilarity';
+import { leagueStrength, leagueRegion, normLeague } from './teamSimilarity';
 import { N_OPTIONS, BANDS, REGIONS, simColor, lbl, chip, inp, toggleIn, WhyLine, esc } from './TeamSimilarCalc';
+import { PRESET_LEAGUES } from './constants';
 import { useIsMobile, deliverPng, Photo, photoUrl } from './utils';
 import { teamCrest } from './cardAssets';
 import { ensureMontserratEmbedded, MONTSERRAT_EMBED_CSS } from './CoachCard';
@@ -50,19 +53,55 @@ export default function PlayerSimilarCalc({ player, players = [], onOpenPlayer }
   const [busy, setBusy] = useState(false);
   const activeGroup = group || ownGroup;
 
+  // Compare basis: a single season row (default) or the player's whole career
+  // profile (minutes-weighted mean across every qualifying season, vs other
+  // players' career profiles the same way). Season-only filters (Seasons,
+  // One season per player) don't apply in career mode.
+  const [compareBasis, setCompareBasis] = useState('season'); // 'season'|'career'
+  const careerRow = useMemo(() => (compareBasis === 'career' && P) ? careerRowFor(players, activeGroup, player.id) : null,
+    [compareBasis, P, players, activeGroup, player.id]);
+  // Career totals run much higher than one season — nudge the Min minutes default
+  // when switching basis, but only while it's still at the OTHER basis's default
+  // (a value the user picked by hand is left alone either way).
+  useEffect(() => {
+    if (compareBasis === 'career' && Number(minMinutes) === 900) setMinMinutes(DEFAULT_CAREER_MINUTES);
+    else if (compareBasis === 'season' && Number(minMinutes) === DEFAULT_CAREER_MINUTES) setMinMinutes(900);
+  }, [compareBasis]);
+
+  // Edit weights: per-position-group overrides, persisted across sessions.
+  const [allWeights, setAllWeights] = useState(() => loadPlayerWeightOverrides());
+  const [weightsOpen, setWeightsOpen] = useState(false);
+  const groupWeights = allWeights[activeGroup] || null;
+  const customWeights = isCustomPlayerWeights(activeGroup, groupWeights);
+  const setGroupWeight = (label, val) => setAllWeights(prev => {
+    const next = { ...prev, [activeGroup]: { ...(prev[activeGroup] || {}), [label]: val } };
+    savePlayerWeightOverrides(next);
+    return next;
+  });
+  const resetGroupWeights = () => setAllWeights(prev => {
+    const next = { ...prev };
+    delete next[activeGroup];
+    savePlayerWeightOverrides(next);
+    return next;
+  });
+
   const query = useMemo(() => ({
     sdKey: sd ? rowKeyOf(player, sd) : '', group: activeGroup, seasons, lsMin, lsMax, bands, regions, leagues,
-    ageMin: Number(ageMin) || 0, ageMax: ageMax === '' ? 99 : Number(ageMax), minMinutes: Number(minMinutes) || 0,
-    n, onePerPlayer, excludeSelf, useRoles,
-  }), [player, sd, activeGroup, seasons, lsMin, lsMax, bands, regions, leagues, ageMin, ageMax, minMinutes, n, onePerPlayer, excludeSelf, useRoles]);
+    ageMin: Number(ageMin) || 0, ageMax: ageMax === '' ? 99 : Number(ageMax),
+    minMinutes: Number(minMinutes) || 0, n, onePerPlayer, excludeSelf, useRoles, weightOverrides: groupWeights,
+  }), [player, sd, activeGroup, seasons, lsMin, lsMax, bands, regions, leagues, ageMin, ageMax, minMinutes, n, onePerPlayer, excludeSelf, useRoles, groupWeights]);
   const q = useDeferredValue(query); // typing in a box doesn't wait on a 50k-row scan
   const out = useMemo(() => {
     if (!P || !sd) return null;
+    if (compareBasis === 'career') {
+      return findSimilarPlayersCareer({ player }, players, { ...q, group: activeGroup });
+    }
     return findSimilarPlayers({ player, sd }, players, { ...q, seasons: q.seasons ? new Set(q.seasons) : null });
-  }, [P, player, sd, players, q]);
+  }, [P, player, sd, players, q, compareBasis, activeGroup]);
 
   const selfLs = sd ? leagueStrength(sd.league) : 0;
-  const sameLevel = () => { setLsMin(Math.max(0, Math.floor(selfLs - 8))); setLsMax(Math.min(101, Math.ceil(selfLs + 8))); };
+  const effectiveSelfLs = (compareBasis === 'career' && careerRow) ? careerRow.ls : selfLs;
+  const sameLevel = () => { setLsMin(Math.max(0, Math.floor(effectiveSelfLs - 8))); setLsMax(Math.min(101, Math.ceil(effectiveSelfLs + 8))); };
   const seasonOn = s => !seasons || seasons.includes(s);
   const toggleSeason = s => {
     const cur = seasons || allSeasons;
@@ -70,16 +109,27 @@ export default function PlayerSimilarCalc({ player, players = [], onOpenPlayer }
     setSeasons(next.length === allSeasons.length ? null : next);
   };
 
+  // Display row for one result, season-mode or career-mode, so the rest of the
+  // UI (and the PNG export) can read team/league/season/age/minutes the same way
+  // regardless of which basis produced the result.
+  const displayOf = r => compareBasis === 'career'
+    ? { team: r.career.team, league: r.career.league,
+        season: `Career · ${r.career.seasonCount} season${r.career.seasonCount === 1 ? '' : 's'}`,
+        age: r.career.age, minutes: r.career.minutes }
+    : { team: r.sd.team, league: r.sd.league, season: r.sd.season, age: r.sd.age, minutes: r.sd.minutes };
+  const resultKey = r => compareBasis === 'career' ? `career|${r.p.id}` : rowKeyOf(r.p, r.sd);
+
   const filterSummary = () => {
-    const parts = [GROUP_LABEL[activeGroup] || activeGroup];
-    parts.push(seasons ? `Seasons: ${seasons.length} selected` : 'All seasons');
+    const parts = [GROUP_LABEL[activeGroup] || activeGroup, compareBasis === 'career' ? 'Career profile' : 'Season'];
+    if (compareBasis === 'season') parts.push(seasons ? `Seasons: ${seasons.length} selected` : 'All seasons');
     if (lsMin > 0 || lsMax < 101) parts.push(`League strength ${lsMin}–${Math.min(lsMax, 100)}`);
     if (bands.size) parts.push(`GBE band ${[...bands].sort().join('/')}`);
     if (regions.size) parts.push([...regions].join(', '));
     if (leagues.size) parts.push(`${leagues.size} league${leagues.size > 1 ? 's' : ''}`);
     parts.push(`Age ${query.ageMin}–${query.ageMax}`);
-    parts.push(`Min ${query.minMinutes}'`);
+    parts.push(`Min ${query.minMinutes}' ${compareBasis === 'career' ? 'career' : ''}`.trim());
     if (useRoles) parts.push('+ style roles');
+    if (customWeights) parts.push('custom weights');
     return parts.join(' · ');
   };
 
@@ -88,11 +138,15 @@ export default function PlayerSimilarCalc({ player, players = [], onOpenPlayer }
     setBusy(true);
     try {
       await ensureMontserratEmbedded();
-      const urls = [photoUrl(player.name, player.team), teamCrest(sd.team),
-        ...out.results.flatMap(r => [photoUrl(r.p.name, r.p.team), teamCrest(r.sd.team)])].filter(Boolean);
+      const subjectSd = compareBasis === 'career' && careerRow
+        ? { team: careerRow.team, league: careerRow.league, season: `Career · ${careerRow.seasonCount} seasons`, age: careerRow.age, minutes: careerRow.minutes }
+        : sd;
+      const resultsShim = out.results.map(r => ({ ...r, sd: displayOf(r) }));
+      const urls = [photoUrl(player.name, player.team), teamCrest(subjectSd.team),
+        ...resultsShim.flatMap(r => [photoUrl(r.p.name, r.p.team), teamCrest(r.sd.team)])].filter(Boolean);
       let imgs = {};
       try { imgs = await preloadImages([...new Set(urls)]); } catch (e) { /* image-less beats no export */ }
-      const el = buildPlayerExportElement(player, sd, out.results, imgs, filterSummary());
+      const el = buildPlayerExportElement(player, subjectSd, resultsShim, imgs, filterSummary());
       document.body.appendChild(el);
       try {
         const { toPng } = await import('html-to-image');
@@ -102,7 +156,7 @@ export default function PlayerSimilarCalc({ player, players = [], onOpenPlayer }
         await toPng(el, opts); // first pass warms font + image caches (same as the other cards)
         const dataUrl = await toPng(el, opts);
         const slug = s => String(s).replace(/[^\w]+/g, '_').replace(/^_|_$/g, '');
-        if (dataUrl) await deliverPng(dataUrl, `similar_players_${slug(player.name)}_${slug(sd.season)}.png`);
+        if (dataUrl) await deliverPng(dataUrl, `similar_players_${slug(player.name)}_${slug(subjectSd.season)}.png`);
       } finally { el.remove(); }
     } finally { setBusy(false); }
   };
@@ -119,17 +173,34 @@ export default function PlayerSimilarCalc({ player, players = [], onOpenPlayer }
         <button onClick={exportPng} disabled={busy || !out || !out.results.length} style={chip(false)}>{busy ? 'Exporting…' : '⬇ Download PNG'}</button>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
-        <span style={{ ...lbl, marginBottom: 0 }}>Compare from season</span>
-        <select aria-label="Compare from season" value={rowKeyOf(player, sd)} onChange={e => { setFromKey(e.target.value); setGroup(null); }}
-          style={{ ...inp, width: 'auto', fontSize: 12, fontWeight: 700, padding: '4px 8px', borderColor: '#3b7de8' }}>
-          {ownRows.map(r => (
-            <option key={rowKeyOf(player, r)} value={rowKeyOf(player, r)}>{r.season} · {r.team} · {r.league} · {r.minutes}'{P.current.has(String(r.season)) ? ' (in progress)' : ''}</option>
+        <span style={{ ...lbl, marginBottom: 0 }}>Compare basis</span>
+        <div style={{ display: 'flex', gap: 3 }}>
+          {[['season', 'Season'], ['career', 'Career']].map(([v, l]) => (
+            <button key={v} data-compare-basis={v} style={chip(compareBasis === v)} onClick={() => setCompareBasis(v)}>{l}</button>
           ))}
-        </select>
+        </div>
+        {compareBasis === 'season' && (<>
+          <span style={{ ...lbl, marginBottom: 0 }}>Compare from season</span>
+          <select aria-label="Compare from season" value={rowKeyOf(player, sd)} onChange={e => { setFromKey(e.target.value); setGroup(null); }}
+            style={{ ...inp, width: 'auto', fontSize: 12, fontWeight: 700, padding: '4px 8px', borderColor: '#3b7de8' }}>
+            {ownRows.map(r => (
+              <option key={rowKeyOf(player, r)} value={rowKeyOf(player, r)}>{r.season} · {r.team} · {r.league} · {r.minutes}'{P.current.has(String(r.season)) ? ' (in progress)' : ''}</option>
+            ))}
+          </select>
+        </>)}
+        {compareBasis === 'career' && careerRow && (
+          <span style={{ fontSize: 11, color: '#64748b' }}>
+            {careerRow.team} · {careerRow.league} · {careerRow.minutes.toLocaleString()}' across {careerRow.seasonCount} season{careerRow.seasonCount === 1 ? '' : 's'}
+          </span>
+        )}
+        {compareBasis === 'career' && !careerRow && (
+          <span style={{ fontSize: 11, color: '#64748b' }}>No qualifying seasons on file for {player.name}.</span>
+        )}
       </div>
 
       {/* Filters */}
       <div style={{ background: '#07090f', border: '1px solid #131c2e', borderRadius: 8, padding: isMobile ? 10 : 12, display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 10 }}>
+        {compareBasis === 'season' && (
         <div>
           <div style={lbl}>Seasons</div>
           <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
@@ -141,6 +212,7 @@ export default function PlayerSimilarCalc({ player, players = [], onOpenPlayer }
             <button style={chip(false)} onClick={() => setSeasons(null)}>All</button>
           </div>
         </div>
+        )}
 
         <div style={{ display: 'flex', gap: isMobile ? 10 : 18, flexWrap: 'wrap' }}>
           <div>
@@ -149,7 +221,7 @@ export default function PlayerSimilarCalc({ player, players = [], onOpenPlayer }
               <input aria-label="League strength min" type="number" min={0} max={101} value={lsMin} onChange={e => setLsMin(Number(e.target.value) || 0)} style={inp} />
               <span style={{ color: '#475569', fontSize: 11 }}>–</span>
               <input aria-label="League strength max" type="number" min={0} max={101} value={lsMax} onChange={e => setLsMax(e.target.value === '' ? 101 : Number(e.target.value))} style={inp} />
-              <button style={chip(false)} onClick={sameLevel} title={`${sd.league} = ${selfLs.toFixed(1)}`}>Same level ±8</button>
+              <button style={chip(false)} onClick={sameLevel} title={`${compareBasis === 'career' && careerRow ? careerRow.league : sd.league} = ${(compareBasis === 'career' && careerRow ? careerRow.ls : selfLs).toFixed(1)}`}>Same level ±8</button>
               {(lsMin > 0 || lsMax < 101) && <button style={chip(false)} onClick={() => { setLsMin(0); setLsMax(101); }}>Any</button>}
             </div>
           </div>
@@ -171,6 +243,8 @@ export default function PlayerSimilarCalc({ player, players = [], onOpenPlayer }
           <div style={{ position: 'relative' }}>
             <div style={lbl}>Leagues</div>
             <button style={chip(leagues.size > 0)} onClick={() => setLeaguesOpen(o => !o)}>{leagues.size ? `${leagues.size} selected` : 'Any league'} ▾</button>
+            <button style={{ ...chip(false), marginLeft: 4 }} onClick={() => setLeagues(new Set([...PRESET_LEAGUES.UK].map(normLeague)))}>UK</button>
+            <button style={{ ...chip(false), marginLeft: 4 }} onClick={() => setLeagues(new Set([...PRESET_LEAGUES['EFL (England 2–4)']].map(normLeague)))}>EFL</button>
             {leagues.size > 0 && <button style={{ ...chip(false), marginLeft: 4 }} onClick={() => setLeagues(new Set())}>Clear</button>}
             {leaguesOpen && (
               <div style={{ position: 'absolute', zIndex: 5, top: '100%', left: 0, marginTop: 4, width: 230, maxHeight: 260, overflowY: 'auto', background: '#0c1424', border: '1px solid #1e2d45', borderRadius: 7, padding: 6 }}>
@@ -219,20 +293,47 @@ export default function PlayerSimilarCalc({ player, players = [], onOpenPlayer }
               <option value="roles">Metrics + style roles</option>
             </select>
           </div>
-          {[['Exclude this player', excludeSelf, setExcludeSelf], ['One season per player', onePerPlayer, setOnePerPlayer]].map(([label, val, set]) => (
+          {[['Exclude this player', excludeSelf, setExcludeSelf],
+            ...(compareBasis === 'season' ? [['One season per player', onePerPlayer, setOnePerPlayer]] : [])].map(([label, val, set]) => (
             <label key={label} style={{ display: 'inline-flex', gap: 5, alignItems: 'center', fontSize: 10.5, color: val ? '#cbd5e1' : '#64748b', cursor: 'pointer', paddingBottom: 3 }}>
               <input type="checkbox" checked={val} onChange={() => set(v => !v)} style={{ margin: 0, accentColor: '#3b7de8' }} />{label}
             </label>
           ))}
+          <button style={chip(weightsOpen || customWeights)} onClick={() => setWeightsOpen(o => !o)}>⚖ Edit weights{customWeights ? ' •' : ''}</button>
         </div>
+
+        {weightsOpen && (
+          <div style={{ borderTop: '1px solid #131c2e', paddingTop: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <div style={lbl}>Metric weights — {GROUP_LABEL[activeGroup]} (0–3, step 0.5)</div>
+              <button style={chip(false)} onClick={resetGroupWeights} disabled={!customWeights}>Reset to default</button>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)', gap: '4px 16px', maxHeight: 260, overflowY: 'auto' }}>
+              {groupFeatures(activeGroup).map(([label, defaultW]) => {
+                const val = (groupWeights && groupWeights[label] != null) ? groupWeights[label] : defaultW;
+                return (
+                  <label key={label} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10.5, color: '#94a3b8' }}>
+                    <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+                    <input aria-label={`Weight: ${label}`} type="number" min={0} max={3} step={0.5} value={val}
+                      onChange={e => setGroupWeight(label, e.target.value === '' ? defaultW : Number(e.target.value))}
+                      style={{ ...inp, width: 48 }} />
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Results */}
-      {out && out.missing && <div style={{ fontSize: 11, color: '#64748b' }}>Not enough {GROUP_LABEL[activeGroup] || ''} metrics on file for {player.name} {sd.season}.</div>}
-      {out && !out.missing && !out.results.length && <div style={{ fontSize: 11, color: '#64748b' }}>No player-seasons match these filters.</div>}
+      {out && out.missing && <div style={{ fontSize: 11, color: '#64748b' }}>Not enough {GROUP_LABEL[activeGroup] || ''} metrics on file for {player.name}{compareBasis === 'season' ? ` ${sd.season}` : ''}.</div>}
+      {out && !out.missing && !out.results.length && <div style={{ fontSize: 11, color: '#64748b' }}>No player{compareBasis === 'career' ? 's' : '-seasons'} match these filters.</div>}
       <div data-testid="player-similar-header" style={{ fontSize: 14, fontWeight: 800, color: '#f1f5f9', margin: '2px 0 8px', letterSpacing: '-0.01em', opacity: stale ? 0.6 : 1 }}>
-        Players most similar to {player.name} <span style={{ color: '#60a5fa' }}>{sd.season}</span>
-        <span style={{ fontSize: 10.5, fontWeight: 500, color: '#64748b' }}> · {sd.team} · {sd.league}</span>
+        {compareBasis === 'career' ? 'Career profiles' : 'Players'} most similar to {player.name}{' '}
+        <span style={{ color: '#60a5fa' }}>{compareBasis === 'career' ? 'Career' : sd.season}</span>
+        <span style={{ fontSize: 10.5, fontWeight: 500, color: '#64748b' }}>
+          {compareBasis === 'career' ? (careerRow ? ` · ${careerRow.team} · ${careerRow.league}` : '') : ` · ${sd.team} · ${sd.league}`}
+        </span>
       </div>
       {out && !out.missing && out.results.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 5, opacity: stale ? 0.6 : 1 }}>
@@ -244,7 +345,7 @@ export default function PlayerSimilarCalc({ player, players = [], onOpenPlayer }
             </div>
           )}
           {out.results.map((r, i) => {
-            const key = rowKeyOf(r.p, r.sd), isOpen = open === key;
+            const key = resultKey(r), isOpen = open === key, rd = displayOf(r);
             return (
               <div key={key} data-testid="player-similar-row" style={{ background: '#07090f', border: '1px solid #131c2e', borderRadius: 8 }}>
                 <div onClick={() => onOpenPlayer && onOpenPlayer(r.p)} title="Open this player" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px', cursor: onOpenPlayer ? 'pointer' : 'default' }}>
@@ -252,17 +353,17 @@ export default function PlayerSimilarCalc({ player, players = [], onOpenPlayer }
                   <Photo name={r.p.name} team={r.p.team} size={28} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 12, fontWeight: 700, color: '#e2e8f4', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.p.name}</div>
-                    <div style={{ fontSize: 10, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.sd.team} · {r.sd.league} · {r.sd.season}{isMobile ? ` · ${r.sd.age} · ${r.sd.minutes}'` : ''}</div>
+                    <div style={{ fontSize: 10, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{rd.team} · {rd.league} · {rd.season}{isMobile ? ` · ${rd.age} · ${rd.minutes}'` : ''}</div>
                   </div>
-                  {!isMobile && <div style={{ width: 34, textAlign: 'right', fontSize: 11, color: '#94a3b8', flexShrink: 0 }}>{r.sd.age ?? '—'}</div>}
-                  {!isMobile && <div style={{ width: 50, textAlign: 'right', fontSize: 11, color: '#94a3b8', flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>{Number(r.sd.minutes).toLocaleString()}</div>}
+                  {!isMobile && <div style={{ width: 34, textAlign: 'right', fontSize: 11, color: '#94a3b8', flexShrink: 0 }}>{rd.age ?? '—'}</div>}
+                  {!isMobile && <div style={{ width: 50, textAlign: 'right', fontSize: 11, color: '#94a3b8', flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>{Number(rd.minutes).toLocaleString()}</div>}
                   <div style={{ fontSize: 14, fontWeight: 800, color: simColor(r.sim), width: 52, textAlign: 'right', flexShrink: 0 }}>{Math.round(r.sim)}%</div>
                   <button onClick={e => { e.stopPropagation(); setOpen(isOpen ? null : key); }} title="Why similar" aria-label="Why similar"
                     style={{ ...chip(isOpen), padding: '2px 7px', flexShrink: 0, width: 38 }}>{isOpen ? '▴' : 'Why'}</button>
                 </div>
                 {isOpen && (
                   <div style={{ padding: '2px 12px 9px 44px', display: 'flex', flexDirection: 'column', gap: 3 }}>
-                    <div style={{ fontSize: 9, color: '#475569' }}>{player.name} {sd.season} vs {r.p.name} {r.sd.season} · raw per 90 / % · league-season pct</div>
+                    <div style={{ fontSize: 9, color: '#475569' }}>{player.name} {compareBasis === 'career' ? 'Career' : sd.season} vs {r.p.name} {rd.season} · raw per 90 / % · league-season pct</div>
                     {r.why.closest.map(m => <WhyLine key={m.label} m={m} good />)}
                     {r.why.furthest.map(m => <WhyLine key={m.label} m={m} />)}
                   </div>
@@ -274,7 +375,7 @@ export default function PlayerSimilarCalc({ player, players = [], onOpenPlayer }
       )}
       {out && !out.missing && (
         <div style={{ marginTop: 6, fontSize: 9.5, color: '#334155' }}>
-          {out.poolSize.toLocaleString()} player-seasons compared in {out.ms.toFixed(0)} ms · {out.feats.length} {activeGroup} metrics{out.roleKeys.length ? ` + ${out.roleKeys.length} style roles` : ''}, league-season percentiles + season z-scores, league-strength adjusted (same method as Similar Teams) · click a row to open the player.
+          {out.poolSize.toLocaleString()} {compareBasis === 'career' ? 'player careers' : 'player-seasons'} compared in {out.ms.toFixed(0)} ms · {out.feats.length} {activeGroup} metrics{out.roleKeys.length ? ` + ${out.roleKeys.length} style roles` : ''}{customWeights ? ' · custom weights' : ''}, {compareBasis === 'career' ? 'minutes-weighted percentiles + z-scores across each career' : 'league-season percentiles + season z-scores'}, league-strength adjusted (same method as Similar Teams) · click a row to open the player.
         </div>
       )}
     </div>
